@@ -10,6 +10,7 @@ members = [
   "crates/ingestion-gateway",
   "crates/ingestion-service",
   "crates/normalization-service",
+  "crates/observability",
   "crates/query-gateway",
   "crates/retention-service",
   "crates/trigger-engine",

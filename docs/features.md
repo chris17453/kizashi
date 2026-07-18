@@ -441,3 +441,38 @@ Entry format:
   overall, ratchet holds.
 - **PR:** (opened in this branch's PR)
 - **ADR:** docs/adr/0011-retention-archival-service-v1-scope-self-hosted-s3-archival-self-owned-policy-store.md
+
+---
+
+## [2026-07-18] feature/0011-observability — Platform Observability
+
+- **Type:** feature
+- **Branch:** feature/0011-observability
+- **Summary:** New crate `crates/observability` (spec §6, service #13). `GET /v1/health`
+  fans `GET /healthz` out concurrently to every service in an operator-configured
+  `SERVICE_REGISTRY` (`name=url` pairs) and reports per-service up/down plus an overall
+  platform status (503 if any one service is down, so the endpoint itself doubles as an
+  external liveness check). `GET /v1/backlog` reads per-stage queue depths from RabbitMQ's
+  management HTTP API (already enabled in docker-compose) for the four pipeline queues
+  (`normalization-service.record.ingested`, `analysis-service.record.normalized`,
+  `trigger-engine.record.analyzed`, `action-executor.event.created`), giving a single ordered
+  view of where the ingest → normalize → analyze → act chain is backing up. Per-service
+  `/metrics` request/latency instrumentation is deliberately deferred — it needs a shared
+  `common` instrumentation helper and touches every existing service, which is its own scoped
+  follow-up, not something to gesture at with stub endpoints here (ADR-0012).
+- **Tests:** `cargo test --workspace --lib --bins` — all thirteen crates green (20 unit tests in
+  observability alone: registry parsing, health fan-out aggregation logic against an in-memory
+  checker double, and both the HTTP health checker and RabbitMQ backlog reader against real
+  stub axum servers). Live integration test
+  (`tests/rabbitmq_backlog_integration_test.rs`) against a real RabbitMQ management API —
+  confirms one depth entry per pipeline stage and correctly reports zero backlog for
+  not-yet-declared queues rather than erroring. Beyond automated tests, ran a genuine
+  end-to-end smoke test with the real `observability` binary: registered a mix of a real
+  running `ingestion-service` and two intentionally-unreachable services, confirmed
+  `/v1/health` correctly reported the real service up, the fake ones down, and 503 overall;
+  confirmed `/v1/backlog` returned all four pipeline stages against live RabbitMQ. `cargo
+  clippy --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all
+  --check` — clean. `cargo audit` / `cargo deny check` — clean, no new advisories. `cargo
+  llvm-cov` — 94.27% overall, ratchet holds.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0012-platform-observability-v1-scope-health-aggregation-and-rabbitmq-backlog-visibility.md
