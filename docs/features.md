@@ -612,3 +612,60 @@ Entry format:
   clean, no new advisories (no new dependencies added).
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a (operational tooling, not an architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Containerize all services, connectors, and the UI
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** `scripts/run-local.sh` (prior chore) launched every binary as a plain background
+  process on the host — `docker ps` only ever showed the four infra containers
+  (Postgres/RabbitMQ/ClickHouse/MinIO), not the actual application. This adds one shared
+  multi-stage root `Dockerfile` (builder stage compiles `--bin "${BIN}"`, runtime stage is
+  `debian:bookworm-slim` running as non-root `kizashi`), reused across all 20 binaries via
+  `--build-arg BIN=<name>` rather than 20 near-identical Dockerfiles, plus `.dockerignore`, and
+  extends `docker-compose.yml` with a `build:`+`healthcheck:`+`depends_on:` entry for each of the
+  13 services and `kizashi-ui` (internal port always 8080; host ports match the map
+  `scripts/run-local.sh` already established), and the 6 connectors under a `connectors` compose
+  profile (one-shot CronJob-shaped binaries invoked via `docker compose run --rm`, not
+  long-running services, so they don't auto-start with `docker compose up`). `depends_on:
+  condition: service_healthy` chains encode both ordinary HTTP-dependency order and the AMQP
+  exchange-declaration order discovered in the prior local-launcher PR (ingestion-service →
+  normalization-service → analysis-service → trigger-engine → action-executor — each stage's
+  publisher declares its own exchange on startup, so a consumer starting first panics with
+  `NOT_FOUND - no exchange`).
+- **What building/running it for real found**: every migration-running service reads its
+  migrations directory via `env!("CARGO_MANIFEST_DIR")` — an absolute build-time source path —
+  so a runtime image containing only the compiled binary would panic at startup with a missing
+  migrations directory; fixed by also copying the `crates/` source tree into the runtime stage
+  (`COPY --from=builder /app/crates /app/crates`), verified by actually running the built
+  `ingestion-service` image against real containerized Postgres/RabbitMQ and confirming
+  `/healthz` returned 200 (i.e. migrations genuinely ran). Separately, `clickhouse/clickhouse-server`
+  came up `unhealthy` under `docker compose up` even though the server itself was fine: its
+  `[::]` (IPv6 wildcard) listener fails at startup in this Docker networking environment ("DNS
+  error: Address family for hostname not supported"), and the pre-existing healthcheck
+  (`wget --spider -q localhost:8123/ping`) resolved `localhost` to `::1` first and got
+  connection-refused, even though the server was correctly listening and serving on
+  `0.0.0.0:8123` the whole time — fixed by pointing the healthcheck at `127.0.0.1` explicitly
+  (confirmed the app-service healthchecks don't share this problem: `curl`, unlike `wget`,
+  falls through to the next resolved address on refusal). This ClickHouse healthcheck bug
+  predates this branch but was only surfaced by actually bringing the full stack up as
+  containers with `depends_on: condition: service_healthy` gating on it.
+- **Tests:** `docker compose up -d --build` — all 17 containers (4 infra + 13 services) reached
+  `healthy`. Ran a real end-to-end smoke test through the *containerized* stack, not the host
+  processes: `scripts/seed-local-demo.sh` against the containerized Postgres (via
+  `docker compose exec`), logged into the containerized Console UI's `/login` (200), hit
+  `GET /healthz` on both `kizashi-ui` and `ingestion-gateway` through their published host
+  ports, then `POST /v1/ingest` through the containerized `ingestion-gateway` with the seeded
+  API key and confirmed via direct Postgres query the row reached
+  `ingestion_service.raw_records` correctly tenant-scoped and correctly left un-normalized (no
+  `NormalizationMapping` configured for that connector/source-type — the correct no-op, not a
+  bug). Ran the full local CI gate (`scripts/ci-local.sh`) with `.env` loaded and a throwaway
+  local `mssql` container standing in for the CI-only Fabric/TDS integration test dependency
+  (mirroring `.github/workflows/`'s own `docker run mcr.microsoft.com/mssql/server` step, not a
+  new dependency): `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` clean, `cargo test --workspace --all-features` all green,
+  `cargo llvm-cov` 94.73% line coverage (85% floor), `cargo audit` / `cargo deny check` clean,
+  no new advisories.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a (deployment packaging of already-decided architecture, not a new architectural
+  decision — Kubernetes/Helm, the actual "how do we deploy" decision per spec §10, is a
+  follow-up item in the approved gap-closing roadmap, not part of this change)
