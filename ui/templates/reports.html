@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Reports</h1>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+<div class="section-title">Ingestion volume by connector</div>
+<table>
+  <thead>
+    <tr><th>Connector ID</th><th>Records</th><th>Last Ingested</th></tr>
+  </thead>
+  <tbody>
+    {% for row in connector_stats %}
+    <tr>
+      <td>{{ row.connector_id }}</td>
+      <td>{{ row.record_count }}</td>
+      <td>{{ row.last_ingested_at }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="section-title">Events by type</div>
+<table>
+  <thead>
+    <tr><th>Event Type</th><th>Count</th></tr>
+  </thead>
+  <tbody>
+    {% for row in event_counts %}
+    <tr>
+      <td>{{ row.event_type }}</td>
+      <td>{{ row.count }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

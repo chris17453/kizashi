@@ -711,3 +711,50 @@ Entry format:
 - **ADR:** n/a (the `tenants` table is additive schema, not a change to the multi-tenancy
   model itself — `tenant_id` remains the system-wide scoping key everywhere except this one
   human-facing login form)
+
+## [2026-07-18] feature/0014-docker-images — Agent registry, live status, drill-down, and reports
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Closes the largest gap this session's live audit surfaced: there was no
+  first-class "Agent" concept anywhere in the system — the 6 connector binaries were
+  configured only by env vars, with no service that knew of their existence, no way to
+  register/list/disable one, and no way to see what a given connector had actually ingested.
+  Adds `common::Agent` (id, tenant_id, connector_type, name, config, enabled) and a full
+  CRUD registry in Config/Admin Service (`agents` table, `AgentRepository`, audit-logged
+  create/update/delete like every other admin entity) at `/v1/agents`. Since connectors don't
+  self-report a heartbeat anywhere, "live status" is derived rather than tracked separately:
+  Ingestion Service gained `GET /v1/records/stats` (per-`connector_id` record count and
+  last-ingested time, aggregated straight off `raw_records`) and
+  `GET /v1/records/by-connector` (recent records for one connector, tenant-scoped). The
+  matching convention this establishes: an agent's registered `name` is what the deployed
+  connector's own `CONNECTOR_ID` env var must be set to, so a registration can be joined
+  against real ingestion activity without any new bookkeeping table. Console UI gained three
+  pages: `/agents` (register form + live status table, join done in `agents_handler.rs`),
+  `/agents/:id` (per-agent drill-down — its own recent records), and `/reports` (ingestion
+  volume per connector alongside event counts per type, reusing the existing events feed). Also
+  gave the whole UI a second visual pass: form styling (`.panel`, `form.inline`), a `.btn-danger`
+  for destructive actions, and nav links for the two new pages.
+- **Tests:** `cargo test -p config-admin-service --lib` — 35 passed (12 new: `agent_repository`
+  CRUD + tenant scoping + not-found cases, `agent_handlers` tenant-mismatch/404/500 cases).
+  `cargo test -p ingestion-service --lib` — 39 passed (10 new: `stats_by_connector` aggregation
+  + tenant scoping, `list_by_connector` ordering/limit/tenant scoping, both handlers'
+  success/400/500 cases). `cargo test -p kizashi-ui --lib` — 56 passed (19 new across
+  `agents_client`, `ingestion_stats_client`, `agents_handler`, `agent_detail_handler`,
+  `reports_handler`). Beyond unit tests: rebuilt and redeployed the `config-admin-service`,
+  `ingestion-service`, and `kizashi-ui` containers and drove the entire feature through the real
+  running stack — logged in, registered a `zendesk`/`support-poller` agent (status correctly
+  showed "never run"), posted a real record through `POST /v1/ingest` with `connector_id:
+  support-poller`, confirmed the Agents page's status flipped to "active" with a record count
+  of 1 (proving the name/connector_id join actually works against live data, not just mocks),
+  confirmed the drill-down page showed that record, confirmed the Reports page showed the same
+  connector's volume, then deleted the agent and confirmed removal. Full local CI gate
+  (`.env` loaded, throwaway local `mssql` for the Fabric/TDS test): `cargo fmt --all --check`
+  clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean,
+  `cargo test --workspace --all-features` all green, `cargo llvm-cov` 94.11% line coverage
+  (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (Agent is additive schema/API following the exact CRUD+audit-log pattern
+  TriggerDefinition/NormalizationMapping already established in ADR-0010, not a new
+  architectural decision. Deferred/out of scope for this change, tracked separately: a data
+  viewer/search page, AI-assisted prompt generation for agent config, and dynamic
+  EventTypeDefinition/trigger-condition authoring in the UI.)

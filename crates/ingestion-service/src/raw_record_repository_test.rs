@@ -57,6 +57,49 @@ impl RawRecordRepository for InMemoryRawRecordRepository {
         records.retain(|r| !(r.id == record_id && r.tenant_id == tenant_id));
         Ok(records.len() < before)
     }
+
+    async fn stats_by_connector(
+        &self,
+        tenant_id: uuid::Uuid,
+    ) -> Result<Vec<ConnectorStats>, RepositoryError> {
+        let records = self.records.lock().unwrap();
+        let mut by_connector: std::collections::BTreeMap<
+            String,
+            (i64, chrono::DateTime<chrono::Utc>),
+        > = std::collections::BTreeMap::new();
+        for r in records.iter().filter(|r| r.tenant_id == tenant_id) {
+            let entry = by_connector.entry(r.connector_id.clone()).or_insert((0, r.ingested_at));
+            entry.0 += 1;
+            if r.ingested_at > entry.1 {
+                entry.1 = r.ingested_at;
+            }
+        }
+        Ok(by_connector
+            .into_iter()
+            .map(|(connector_id, (record_count, last_ingested_at))| ConnectorStats {
+                connector_id,
+                record_count,
+                last_ingested_at,
+            })
+            .collect())
+    }
+
+    async fn list_by_connector(
+        &self,
+        tenant_id: uuid::Uuid,
+        connector_id: &str,
+        limit: i64,
+    ) -> Result<Vec<RawRecord>, RepositoryError> {
+        let records = self.records.lock().unwrap();
+        let mut matching: Vec<RawRecord> = records
+            .iter()
+            .filter(|r| r.tenant_id == tenant_id && r.connector_id == connector_id)
+            .cloned()
+            .collect();
+        matching.sort_by_key(|r| std::cmp::Reverse(r.ingested_at));
+        matching.truncate(limit as usize);
+        Ok(matching)
+    }
 }
 
 pub struct FailingRawRecordRepository;
@@ -89,6 +132,22 @@ impl RawRecordRepository for FailingRawRecordRepository {
         _tenant_id: uuid::Uuid,
         _record_id: uuid::Uuid,
     ) -> Result<bool, RepositoryError> {
+        Err(RepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn stats_by_connector(
+        &self,
+        _tenant_id: uuid::Uuid,
+    ) -> Result<Vec<ConnectorStats>, RepositoryError> {
+        Err(RepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn list_by_connector(
+        &self,
+        _tenant_id: uuid::Uuid,
+        _connector_id: &str,
+        _limit: i64,
+    ) -> Result<Vec<RawRecord>, RepositoryError> {
         Err(RepositoryError::Backend("simulated failure".to_string()))
     }
 }
@@ -244,4 +303,85 @@ async fn delete_returns_false_when_tenant_does_not_match() {
 
     assert!(!deleted);
     assert_eq!(repo.records.lock().unwrap().len(), 1);
+}
+
+fn record_for_connector(
+    tenant_id: uuid::Uuid,
+    connector_id: &str,
+    ingested_at: chrono::DateTime<chrono::Utc>,
+) -> RawRecord {
+    let mut record =
+        RawRecord::new(connector_id, common::SourceType::Ticket, tenant_id, serde_json::json!({}));
+    record.ingested_at = ingested_at;
+    record
+}
+
+#[tokio::test]
+async fn stats_by_connector_aggregates_count_and_latest_ingested_at() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    repo.insert(&record_for_connector(tenant_id, "zendesk", now - chrono::Duration::days(1)))
+        .await
+        .unwrap();
+    repo.insert(&record_for_connector(tenant_id, "zendesk", now)).await.unwrap();
+    repo.insert(&record_for_connector(tenant_id, "sql", now)).await.unwrap();
+
+    let mut stats = repo.stats_by_connector(tenant_id).await.unwrap();
+    stats.sort_by(|a, b| a.connector_id.cmp(&b.connector_id));
+
+    assert_eq!(stats.len(), 2);
+    assert_eq!(stats[0].connector_id, "sql");
+    assert_eq!(stats[0].record_count, 1);
+    assert_eq!(stats[1].connector_id, "zendesk");
+    assert_eq!(stats[1].record_count, 2);
+    assert_eq!(stats[1].last_ingested_at, now);
+}
+
+#[tokio::test]
+async fn stats_by_connector_is_scoped_to_tenant() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    repo.insert(&record_for_connector(tenant_id, "zendesk", now)).await.unwrap();
+    repo.insert(&record_for_connector(uuid::Uuid::new_v4(), "zendesk", now)).await.unwrap();
+
+    let stats = repo.stats_by_connector(tenant_id).await.unwrap();
+    assert_eq!(stats.len(), 1);
+    assert_eq!(stats[0].record_count, 1);
+}
+
+#[tokio::test]
+async fn list_by_connector_returns_only_matching_connector_newest_first() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    let older = record_for_connector(tenant_id, "zendesk", now - chrono::Duration::days(1));
+    let newer = record_for_connector(tenant_id, "zendesk", now);
+    let other_connector = record_for_connector(tenant_id, "sql", now);
+    repo.insert(&older).await.unwrap();
+    repo.insert(&newer).await.unwrap();
+    repo.insert(&other_connector).await.unwrap();
+
+    let found = repo.list_by_connector(tenant_id, "zendesk", 10).await.unwrap();
+    assert_eq!(found, vec![newer, older]);
+}
+
+#[tokio::test]
+async fn list_by_connector_respects_the_limit() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    for days_ago in 1..=5 {
+        repo.insert(&record_for_connector(
+            tenant_id,
+            "zendesk",
+            now - chrono::Duration::days(days_ago),
+        ))
+        .await
+        .unwrap();
+    }
+
+    let found = repo.list_by_connector(tenant_id, "zendesk", 2).await.unwrap();
+    assert_eq!(found.len(), 2);
 }

@@ -12,6 +12,17 @@ pub enum RepositoryError {
     Backend(String),
 }
 
+/// Per-connector aggregate derived from `raw_records` — this is how an Agent's live status
+/// (last run, volume) is computed. There is no separate "agent run" bookkeeping table; a
+/// connector's own ingested records are already the ground truth for whether/when it ran, so
+/// this reads that data rather than requiring connectors to self-report a heartbeat.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ConnectorStats {
+    pub connector_id: String,
+    pub record_count: i64,
+    pub last_ingested_at: chrono::DateTime<chrono::Utc>,
+}
+
 /// Persists RawRecords to the hot store (spec §5.1). Ingestion Service's only write path to
 /// Postgres — abstracted behind a trait so handler logic is unit-testable without a live DB,
 /// per CLAUDE.md §2's requirement that unit tests not require the docker-compose stack.
@@ -51,6 +62,22 @@ pub trait RawRecordRepository: Send + Sync {
         tenant_id: uuid::Uuid,
         record_id: uuid::Uuid,
     ) -> Result<bool, RepositoryError>;
+
+    /// Aggregates `raw_records` by `connector_id` for `tenant_id` — powers the Agent status
+    /// view (record count and last-ingested time per registered agent).
+    async fn stats_by_connector(
+        &self,
+        tenant_id: uuid::Uuid,
+    ) -> Result<Vec<ConnectorStats>, RepositoryError>;
+
+    /// Lists up to `limit` records for one `connector_id`/`tenant_id`, newest first — the
+    /// per-agent data drill-down view.
+    async fn list_by_connector(
+        &self,
+        tenant_id: uuid::Uuid,
+        connector_id: &str,
+        limit: i64,
+    ) -> Result<Vec<RawRecord>, RepositoryError>;
 }
 
 pub struct PostgresRawRecordRepository {
@@ -139,6 +166,57 @@ impl RawRecordRepository for PostgresRawRecordRepository {
             .await
             .map_err(|e| RepositoryError::Backend(e.to_string()))?;
         Ok(result.rows_affected() > 0)
+    }
+
+    async fn stats_by_connector(
+        &self,
+        tenant_id: uuid::Uuid,
+    ) -> Result<Vec<ConnectorStats>, RepositoryError> {
+        let rows: Vec<(String, i64, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+            r#"
+            SELECT connector_id, COUNT(*), MAX(ingested_at)
+            FROM raw_records
+            WHERE tenant_id = $1
+            GROUP BY connector_id
+            "#,
+        )
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Backend(e.to_string()))?;
+        Ok(rows
+            .into_iter()
+            .map(|(connector_id, record_count, last_ingested_at)| ConnectorStats {
+                connector_id,
+                record_count,
+                last_ingested_at,
+            })
+            .collect())
+    }
+
+    async fn list_by_connector(
+        &self,
+        tenant_id: uuid::Uuid,
+        connector_id: &str,
+        limit: i64,
+    ) -> Result<Vec<RawRecord>, RepositoryError> {
+        let rows: Vec<RawRecordRow> = sqlx::query_as(
+            r#"
+            SELECT id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
+                   normalized_payload, tenant_id
+            FROM raw_records
+            WHERE tenant_id = $1 AND connector_id = $2
+            ORDER BY ingested_at DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(connector_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Backend(e.to_string()))?;
+        Ok(rows.into_iter().map(row_to_record).collect())
     }
 }
 

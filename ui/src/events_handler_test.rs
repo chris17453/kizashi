@@ -35,6 +35,10 @@ async fn state_with_session() -> (AppState, String) {
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
+        agents_client: Arc::new(crate::agents_client::agents_client_test::InMemoryAgentsClient::default()),
+        stats_client: Arc::new(
+            crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
+        ),
     };
     (state, session_id)
 }

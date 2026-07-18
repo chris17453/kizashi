@@ -153,7 +153,8 @@ start kizashi-ui kizashi-ui \
   AUTH_SERVICE_URL="http://localhost:$AUTH_SERVICE_PORT" \
   QUERY_GATEWAY_URL="http://localhost:$QUERY_GATEWAY_PORT" \
   CONFIG_ADMIN_SERVICE_URL="http://localhost:$CONFIG_ADMIN_SERVICE_PORT" \
-  OBSERVABILITY_URL="http://localhost:$OBSERVABILITY_PORT"
+  OBSERVABILITY_URL="http://localhost:$OBSERVABILITY_PORT" \
+  INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT"
 sleep 2
 
 echo ""

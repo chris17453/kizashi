@@ -1,11 +1,15 @@
 use super::*;
+use crate::agents_client::agents_client_test::InMemoryAgentsClient;
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
-use crate::session::SessionStore;
-use crate::session::{InMemorySessionStore, Session};
-use crate::triggers_client::triggers_client_test::{FailingTriggersClient, InMemoryTriggersClient};
+use crate::ingestion_stats_client::ingestion_stats_client_test::{
+    FailingIngestionStatsClient, InMemoryIngestionStatsClient,
+};
+use crate::session::{InMemorySessionStore, Session, SessionStore};
+use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
+use crate::EventSummary;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::get;
@@ -15,7 +19,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/triggers", get(get_triggers)).with_state(state)
+    Router::new().route("/reports", get(get_reports)).with_state(state)
 }
 
 async fn state_with_session() -> (AppState, String) {
@@ -35,30 +39,36 @@ async fn state_with_session() -> (AppState, String) {
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
-        agents_client: Arc::new(crate::agents_client::agents_client_test::InMemoryAgentsClient::default()),
-        stats_client: Arc::new(
-            crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
-        ),
+        agents_client: Arc::new(InMemoryAgentsClient::default()),
+        stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
     };
     (state, session_id)
 }
 
 #[tokio::test]
-async fn renders_the_triggers_table_when_signed_in() {
+async fn renders_connector_stats_and_event_counts_when_signed_in() {
     let (mut state, session_id) = state_with_session().await;
-    let triggers_client = InMemoryTriggersClient::default();
-    triggers_client.triggers.lock().unwrap().push(TriggerSummary {
-        id: Uuid::new_v4(),
-        name: "high-volume-negative".to_string(),
-        event_type_match: "sentiment".to_string(),
-        enabled: true,
+    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
+    stats_client.stats.lock().unwrap().push(ConnectorStatSummary {
+        connector_id: "zendesk".to_string(),
+        record_count: 7,
+        last_ingested_at: chrono::Utc::now(),
     });
-    state.triggers_client = Arc::new(triggers_client);
+    state.stats_client = stats_client;
+    let events_client = Arc::new(InMemoryEventsClient::default());
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "sentiment".to_string(),
+        group_key: "cust-1".to_string(),
+        status: "open".to_string(),
+        occurred_at: chrono::Utc::now(),
+    });
+    state.events_client = events_client;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/triggers")
+                .uri("/reports")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -69,7 +79,8 @@ async fn renders_the_triggers_table_when_signed_in() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("high-volume-negative"));
+    assert!(body.contains("zendesk"));
+    assert!(body.contains("sentiment"));
 }
 
 #[tokio::test]
@@ -77,7 +88,7 @@ async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id) = state_with_session().await;
 
     let response = router(state)
-        .oneshot(Request::builder().uri("/triggers").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/reports").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -85,14 +96,14 @@ async fn redirects_to_login_when_not_signed_in() {
 }
 
 #[tokio::test]
-async fn shows_an_error_when_the_backend_fails() {
+async fn shows_an_error_when_stats_backend_fails() {
     let (mut state, session_id) = state_with_session().await;
-    state.triggers_client = Arc::new(FailingTriggersClient);
+    state.stats_client = Arc::new(FailingIngestionStatsClient);
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/triggers")
+                .uri("/reports")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),

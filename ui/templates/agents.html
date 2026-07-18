@@ -1,0 +1,58 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Agents</h1>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+<div class="panel">
+  <h2>Register a new agent</h2>
+  <form class="inline" method="post" action="/agents">
+    <label for="connector_type">Connector type</label>
+    <select id="connector_type" name="connector_type">
+      <option value="zendesk">Zendesk</option>
+      <option value="graph_mail">Microsoft Graph (Mail)</option>
+      <option value="graph_teams">Microsoft Graph (Teams)</option>
+      <option value="sql">SQL</option>
+      <option value="fabric">Fabric</option>
+      <option value="generic">Generic</option>
+    </select>
+    <label for="name">Name</label>
+    <input type="text" id="name" name="name" placeholder="support-poller" required>
+    <label for="config">Config (JSON)</label>
+    <textarea id="config" name="config" placeholder="{}"></textarea>
+    <button type="submit">Register</button>
+  </form>
+</div>
+
+<table>
+  <thead>
+    <tr><th>Name</th><th>Connector Type</th><th>Status</th><th>Records</th><th>Last Ingested</th><th>Enabled</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for agent in agents %}
+    <tr>
+      <td><a href="/agents/{{ agent.id }}">{{ agent.name }}</a></td>
+      <td>{{ agent.connector_type }}</td>
+      {% if let Some(count) = agent.record_count %}
+      <td class="status-up">active</td>
+      <td>{{ count }}</td>
+      {% if let Some(last) = agent.last_ingested_at %}
+      <td>{{ last }}</td>
+      {% else %}
+      <td class="muted">—</td>
+      {% endif %}
+      {% else %}
+      <td class="muted">never run</td>
+      <td class="muted">0</td>
+      <td class="muted">—</td>
+      {% endif %}
+      <td>{% if agent.enabled %}yes{% else %}no{% endif %}</td>
+      <td>
+        <form class="inline" method="post" action="/agents/{{ agent.id }}/delete" style="display:inline">
+          <button type="submit" class="btn-danger">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

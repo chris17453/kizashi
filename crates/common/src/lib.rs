@@ -4,6 +4,7 @@
 //! workspace-wide, so keep it schema-stable and additive where possible.
 
 pub mod action_execution;
+pub mod agent;
 pub mod analyzed_record;
 pub mod bus;
 pub mod connector;
@@ -15,6 +16,7 @@ pub mod raw_record;
 pub mod trigger_definition;
 
 pub use action_execution::{ActionExecution, ActionExecutionStatus};
+pub use agent::Agent;
 pub use analyzed_record::AnalyzedRecord;
 pub use bus::{
     EVENT_CREATED_EXCHANGE, RECORD_ANALYZED_EXCHANGE, RECORD_INGESTED_EXCHANGE,

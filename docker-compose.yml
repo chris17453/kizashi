@@ -236,12 +236,14 @@ services:
       QUERY_GATEWAY_URL: http://query-gateway:8080
       CONFIG_ADMIN_SERVICE_URL: http://config-admin-service:8080
       OBSERVABILITY_URL: http://observability:8080
+      INGESTION_SERVICE_URL: http://ingestion-service:8080
     ports: ["8093:8080"]
     depends_on:
       auth-service: { condition: service_healthy }
       query-gateway: { condition: service_healthy }
       config-admin-service: { condition: service_healthy }
       observability: { condition: service_healthy }
+      ingestion-service: { condition: service_healthy }
     healthcheck: *healthz
 
   # --- Connectors --------------------------------------------------------------------------

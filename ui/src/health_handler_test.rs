@@ -33,6 +33,10 @@ async fn state_with_session(health_client: Arc<dyn crate::HealthClient>) -> (App
         events_client: Arc::new(InMemoryEventsClient::default()),
         triggers_client: Arc::new(InMemoryTriggersClient::default()),
         health_client,
+        agents_client: Arc::new(crate::agents_client::agents_client_test::InMemoryAgentsClient::default()),
+        stats_client: Arc::new(
+            crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
+        ),
     };
     (state, session_id)
 }

@@ -11,6 +11,7 @@ name = "kizashi-ui"
 path = "src/main.rs"
 
 [dependencies]
+common = { path = "../crates/common" }
 axum = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }

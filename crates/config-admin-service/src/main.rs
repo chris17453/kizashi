@@ -1,6 +1,6 @@
 use config_admin_service::{
-    build_router, AdminState, PostgresAuditLogReader, PostgresNormalizationMappingRepository,
-    PostgresTriggerDefinitionRepository,
+    build_router, AdminState, AgentState, PostgresAgentRepository, PostgresAuditLogReader,
+    PostgresNormalizationMappingRepository, PostgresTriggerDefinitionRepository,
 };
 use std::sync::Arc;
 
@@ -25,10 +25,11 @@ async fn main() {
     let state = AdminState {
         trigger_repository: Arc::new(PostgresTriggerDefinitionRepository::new(pool.clone())),
         mapping_repository: Arc::new(PostgresNormalizationMappingRepository::new(pool.clone())),
-        audit_reader: Arc::new(PostgresAuditLogReader::new(pool)),
+        audit_reader: Arc::new(PostgresAuditLogReader::new(pool.clone())),
     };
+    let agent_state = AgentState { agent_repository: Arc::new(PostgresAgentRepository::new(pool)) };
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "config-admin-service listening");
-    axum::serve(listener, build_router(state)).await.expect("server error");
+    axum::serve(listener, build_router(state, agent_state)).await.expect("server error");
 }

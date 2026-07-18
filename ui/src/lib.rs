@@ -2,36 +2,49 @@
 //! build step, tested the same way as every other service in this repo
 //! (`tower::ServiceExt::oneshot` against an in-process router).
 
+mod agents_client;
 mod auth_client;
 mod events_client;
 mod health_client;
+mod ingestion_stats_client;
 mod session;
 mod session_guard;
 mod triggers_client;
 
+mod agent_detail_handler;
+mod agents_handler;
 mod events_handler;
 mod health_handler;
 mod healthz;
 mod login_handler;
 mod logout_handler;
+mod reports_handler;
 mod root_handler;
 mod triggers_handler;
 
+pub use agents_client::{AgentsClient, AgentsClientError, HttpAgentsClient};
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient};
 pub use events_client::{EventSummary, EventsClient, EventsClientError, HttpEventsClient};
 pub use health_client::{
     HealthClient, HealthClientError, HttpHealthClient, PlatformHealthSummary, ServiceHealthSummary,
+};
+pub use ingestion_stats_client::{
+    ConnectorStatSummary, HttpIngestionStatsClient, IngestionStatsClient,
+    IngestionStatsClientError, RecordSummary,
 };
 pub use session::{InMemorySessionStore, Session, SessionStore};
 pub use triggers_client::{
     HttpTriggersClient, TriggerSummary, TriggersClient, TriggersClientError,
 };
 
+pub use agent_detail_handler::get_agent_detail;
+pub use agents_handler::{get_agents, post_agents, post_delete_agent};
 pub use events_handler::get_events;
 pub use health_handler::get_health;
 pub use healthz::healthz;
 pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
+pub use reports_handler::get_reports;
 pub use root_handler::get_root;
 pub use triggers_handler::get_triggers;
 
@@ -48,6 +61,8 @@ pub struct AppState {
     pub events_client: Arc<dyn EventsClient>,
     pub triggers_client: Arc<dyn TriggersClient>,
     pub health_client: Arc<dyn HealthClient>,
+    pub agents_client: Arc<dyn AgentsClient>,
+    pub stats_client: Arc<dyn IngestionStatsClient>,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -59,5 +74,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/events", get(get_events))
         .route("/triggers", get(get_triggers))
         .route("/health", get(get_health))
+        .route("/agents", get(get_agents).post(post_agents))
+        .route("/agents/:id", get(get_agent_detail))
+        .route("/agents/:id/delete", axum::routing::post(post_delete_agent))
+        .route("/reports", get(get_reports))
         .with_state(state)
 }

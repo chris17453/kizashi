@@ -1,6 +1,6 @@
 use kizashi_ui::{
-    build_router, AppState, HttpAuthClient, HttpEventsClient, HttpHealthClient, HttpTriggersClient,
-    InMemorySessionStore,
+    build_router, AppState, HttpAgentsClient, HttpAuthClient, HttpEventsClient, HttpHealthClient,
+    HttpIngestionStatsClient, HttpTriggersClient, InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -16,6 +16,8 @@ async fn main() {
         std::env::var("CONFIG_ADMIN_SERVICE_URL").expect("CONFIG_ADMIN_SERVICE_URL must be set");
     let observability_url =
         std::env::var("OBSERVABILITY_URL").expect("OBSERVABILITY_URL must be set");
+    let ingestion_service_url =
+        std::env::var("INGESTION_SERVICE_URL").expect("INGESTION_SERVICE_URL must be set");
 
     let client = reqwest::Client::new();
     let state = AppState {
@@ -24,9 +26,11 @@ async fn main() {
         events_client: Arc::new(HttpEventsClient::new(client.clone(), query_gateway_url)),
         triggers_client: Arc::new(HttpTriggersClient::new(
             client.clone(),
-            config_admin_service_url,
+            config_admin_service_url.clone(),
         )),
-        health_client: Arc::new(HttpHealthClient::new(client, observability_url)),
+        health_client: Arc::new(HttpHealthClient::new(client.clone(), observability_url)),
+        agents_client: Arc::new(HttpAgentsClient::new(client.clone(), config_admin_service_url)),
+        stats_client: Arc::new(HttpIngestionStatsClient::new(client, ingestion_service_url)),
     };
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");

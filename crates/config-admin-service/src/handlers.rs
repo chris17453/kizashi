@@ -35,7 +35,9 @@ fn error_response(status: StatusCode, message: impl Into<String>) -> Response {
 /// Every handler trusts `X-Tenant-Id` as set by whatever gateway sits in front of this service
 /// (spec §8) — Config Admin Service never derives identity itself, matching Dashboard API's
 /// convention.
-fn tenant_id_from_headers(headers: &HeaderMap) -> Result<Uuid, (StatusCode, &'static str)> {
+pub(crate) fn tenant_id_from_headers(
+    headers: &HeaderMap,
+) -> Result<Uuid, (StatusCode, &'static str)> {
     let raw = headers
         .get("x-tenant-id")
         .and_then(|v| v.to_str().ok())
@@ -65,7 +67,7 @@ fn mapping_error_response(e: NormalizationMappingRepositoryError) -> Response {
     }
 }
 
-fn tenant_mismatch(headers: &HeaderMap, entity_tenant_id: Uuid) -> Option<Response> {
+pub(crate) fn tenant_mismatch(headers: &HeaderMap, entity_tenant_id: Uuid) -> Option<Response> {
     match tenant_id_from_headers(headers) {
         Ok(tenant_id) if tenant_id == entity_tenant_id => None,
         Ok(_) => {
