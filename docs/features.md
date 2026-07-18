@@ -386,3 +386,58 @@ Entry format:
   --fail-under-lines 85` — 94.37% overall, ratchet holds.
 - **PR:** (opened in this branch's PR)
 - **ADR:** docs/adr/0010-config-admin-service-v1-scope.md
+
+---
+
+## [2026-07-18] feature/0010-retention-service — Retention/Archival Service
+
+- **Type:** feature
+- **Branch:** feature/0010-retention-service
+- **Summary:** New crate `crates/retention-service` (spec §6, service #12): enforces per-tenant
+  retention policy by archiving `RawRecord` rows older than their TTL to S3-compatible object
+  storage in the ADR-0005 NDJSON+gzip format, then hard-deleting them from the hot store
+  (archive-then-delete, never the reverse), and supports reimport of an archived batch back
+  through the pipeline (spec §9). Ships with its own retention-policy CRUD + immutable audit
+  log (same in-same-transaction pattern as config-admin-service, CLAUDE.md §5) and a MinIO
+  container added to docker-compose as the self-hosted S3-compatible test/dev backend behind a
+  new `ArchiveStore` trait (`S3ArchiveStore` impl via `aws-sdk-s3`). Extends
+  `ingestion-service` with the two endpoints Retention Service needs to reach the raw store
+  without touching its Postgres schema directly (spec §2 principle 1): tenant-scoped
+  `GET /v1/records?older_than=&limit=` and `DELETE /v1/records/:id`. See ADR-0011 for the full
+  v1 scope decision (self-owned policy store, S3-compatible backend, why reimport bypasses
+  Ingestion Gateway).
+- **Bug found and fixed in this PR, not shipped:** the first cut of `list_older_than`/`delete`
+  on `ingestion-service` had no `tenant_id` scoping at all — any tenant's sweep would list and
+  delete every tenant's aged records, and a sweep batch could get mis-attributed to the wrong
+  tenant in the archive. Caught by the manual end-to-end smoke test (two tenants, only one with
+  a retention policy — the unpolicied tenant's equally-old record was being swept anyway),
+  invisible to per-service unit tests using tenant-blind stub data. Fixed by threading
+  `tenant_id` through the repository trait, both HTTP endpoints (via `X-Tenant-Id`, matching
+  every other tenant-scoped read path in this codebase), the `RawRecordClient` trait, and
+  `sweep`'s call sites; added `list_older_than_is_scoped_to_tenant` and
+  `delete_returns_false_when_tenant_does_not_match` regression tests in ingestion-service, plus
+  a tenant-scoping test in retention-service's own client test double, so this can't regress
+  silently again.
+- **Tests:** `cargo test --workspace --lib --bins` — all crates green (retention-service alone:
+  40 unit/handler tests covering repository CRUD + audit trail, archive encode/decode
+  round-trip, sweep pagination/disabled-policy/non-Raw-data-class/archive-failure paths,
+  reimport partial-failure handling, and full HTTP handler round trips). Live-infrastructure
+  integration tests: `retention_policy_integration_test.rs` (4 tests) against real Postgres,
+  same transactional-audit-row pattern verified as config-admin-service;
+  `s3_archive_store_integration_test.rs` (3 tests) against a real MinIO container — write/read
+  round trip, not-found handling, idempotent bucket creation. Beyond automated tests, ran a
+  genuine end-to-end smoke test with real `ingestion-service` and `retention-service` binaries
+  against live Postgres + MinIO: seeded old records for two different tenants, created a
+  retention policy for only one, triggered a sweep, and confirmed only that tenant's record was
+  archived and deleted while the other tenant's equally-old record was untouched (this is what
+  caught the tenant-isolation bug above) — then triggered reimport of the archived batch and
+  confirmed the record reappeared in the hot store with its original payload intact. `cargo
+  clippy --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all
+  --check` — clean. `cargo audit` / `cargo deny check` — clean after waiving three new
+  advisories (RUSTSEC-2026-0098/-0099/-0104, rustls-webpki 0.101.7 name-constraint/CRL bugs
+  transitive via `aws-sdk-s3`'s pinned old rustls stack — documented rationale in both
+  `.cargo/audit.toml` and `deny.toml`; not exploitable against a non-attacker-controlled S3
+  endpoint, no newer `aws-smithy-http-client` release exists yet). `cargo llvm-cov` — 94.11%
+  overall, ratchet holds.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0011-retention-archival-service-v1-scope-self-hosted-s3-archival-self-owned-policy-store.md

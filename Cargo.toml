@@ -11,6 +11,7 @@ members = [
   "crates/ingestion-service",
   "crates/normalization-service",
   "crates/query-gateway",
+  "crates/retention-service",
   "crates/trigger-engine",
 ]
 
@@ -42,6 +43,9 @@ futures-util = { version = "0.3" }
 sha2 = { version = "0.10" }
 argon2 = { version = "0.5" }
 oauth2 = { version = "4", default-features = false, features = ["reqwest"] }
+aws-sdk-s3 = { version = "1" }
+aws-config = { version = "1" }
+flate2 = { version = "1" }
 
 [profile.dev]
 debug = 1

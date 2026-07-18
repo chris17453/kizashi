@@ -12,4 +12,18 @@ ignore = [
     # version of `rsa` exists yet. Revisit when either rsa publishes a fix or sqlx restructures
     # its backend features so unused drivers aren't compiled in.
     "RUSTSEC-2023-0071",
+
+    # rustls-webpki 0.101.7 name-constraint parsing bugs (RUSTSEC-2026-0098, -0099, -0104),
+    # pulled in transitively via aws-smithy-http-client 1.2.0's "rustls-aws-lc" default feature
+    # (retention-service's S3 archival client, ADR-0011), which pins hyper-rustls 0.24.x → an
+    # old rustls 0.21/webpki 0.101 stack rather than the 0.27/0.103 stack the rest of this
+    # workspace already uses via reqwest. 1.2.0 is aws-smithy-http-client's latest published
+    # version as of this writing — there is no newer release to upgrade to. Exploiting these
+    # requires a malicious/attacker-controlled TLS server presenting a crafted name-constrained
+    # certificate; our S3 endpoint is either a self-hosted MinIO instance we control or AWS's
+    # own S3 endpoint, neither of which is attacker-controlled. Revisit when
+    # aws-smithy-http-client ships a release on rustls 0.23+/webpki 0.103+.
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
 ]
