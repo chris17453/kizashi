@@ -1,0 +1,20 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Events</h1>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+<table>
+  <thead>
+    <tr><th>Event Type</th><th>Group Key</th><th>Status</th><th>Occurred At</th></tr>
+  </thead>
+  <tbody>
+    {% for event in events %}
+    <tr>
+      <td>{{ event.event_type }}</td>
+      <td>{{ event.group_key }}</td>
+      <td class="status-{{ event.status }}">{{ event.status }}</td>
+      <td>{{ event.occurred_at }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

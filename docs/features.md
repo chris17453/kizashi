@@ -517,3 +517,41 @@ Entry format:
   llvm-cov` — 93.49% overall, ratchet holds.
 - **PR:** (opened in this branch's PR)
 - **ADR:** docs/adr/0013-connectors-v1-scope-shared-poller-runtime-env-driven-per-tenant-config-fabric-sql-endpoint-only.md
+
+---
+
+## [2026-07-18] feature/0013-console-ui — Console UI
+
+- **Type:** feature
+- **Branch:** feature/0013-console-ui
+- **Summary:** New `ui/` crate (spec §7, the last of the thirteen planned services/components)
+  — a server-rendered Rust web app (`axum` + `askama` compile-time-checked templates), not a
+  WASM SPA (ADR-0014): every other service in this repo is tested via
+  `tower::ServiceExt::oneshot` with zero browser-automation tooling anywhere in the stack, and a
+  WASM SPA's natural test story needs a headless browser driver this environment doesn't have —
+  so the console is built to fit the same proven test methodology instead of introducing a new
+  one for the highest-uncertainty piece of the platform. Ships: a dark-mode console shell (left
+  nav, OpenShift/Instana-direction styling), a login page posting to Auth Service's local-login
+  endpoint with Console UI's own `HttpOnly`-cookie session layer (in-memory session store keyed
+  by a random id — Auth Service has no session/cookie layer of its own, ADR-0009 said that's
+  this UI's job), and three authenticated read views: Events (via Query Gateway), Triggers (via
+  Config/Admin Service), and Platform Health (via Observability). Topology graph, configurable
+  dashboards, reporting, event type management, a real trigger builder, data lifecycle UI, and
+  RBAC/admin UI are explicitly deferred, documented follow-ups (ADR-0014) — not stub pages.
+- **Tests:** `cargo test --workspace --lib --bins` — all twenty-one crates green (35 tests in
+  `kizashi-ui`: session store CRUD, cookie-parsing/session-guard redirect logic, every HTTP
+  client (auth/events/triggers/health) against real stub servers matching each backend's real
+  response shape, and every page handler — signed-in render, signed-out redirect, and
+  backend-failure error display — via `tower::ServiceExt::oneshot`, the same pattern as every
+  other service in this repo). Beyond automated tests, ran a genuine end-to-end smoke test with
+  the real `kizashi-ui` binary against six other real running services (auth-service,
+  query-gateway, dashboard-api, config-admin-service, observability, Postgres): logged in with
+  a real Argon2id-hashed local user, confirmed the session cookie was set, loaded `/events`,
+  `/triggers` (seeded a real trigger via Config/Admin Service and confirmed it rendered), and
+  `/health` (showing real live service status) all while signed in, then logged out and
+  confirmed both the expired cookie and unauthenticated requests correctly redirect to
+  `/login`. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo audit` / `cargo deny check` — clean, no new
+  advisories. `cargo llvm-cov` — 93.78% overall, ratchet holds.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0014-console-ui-v1-scope-server-rendered-rust-web-app-shell-plus-read-only-events-triggers-health-views.md

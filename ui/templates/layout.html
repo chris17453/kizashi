@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Kizashi Console</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #101214; color: #e0e0e0; display: flex; min-height: 100vh;
+    }
+    nav {
+      width: 200px; background: #17191c; border-right: 1px solid #2a2d31;
+      padding: 1rem 0; flex-shrink: 0;
+    }
+    nav a {
+      display: block; padding: 0.6rem 1.2rem; color: #b8bcc2; text-decoration: none;
+    }
+    nav a:hover { background: #24272b; color: #fff; }
+    main { flex: 1; padding: 1.5rem 2rem; }
+    h1 { font-size: 1.4rem; margin-top: 0; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 0.5rem 0.8rem; border-bottom: 1px solid #2a2d31; }
+    th { color: #9aa0a6; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; }
+    .status-up, .status-open { color: #4caf50; }
+    .status-down, .status-closed { color: #f44336; }
+    .error { color: #f44336; padding: 0.5rem 0; }
+    form.login { max-width: 320px; }
+    form.login label { display: block; margin: 0.6rem 0 0.2rem; }
+    form.login input {
+      width: 100%; padding: 0.4rem; background: #17191c; border: 1px solid #2a2d31;
+      color: #e0e0e0; box-sizing: border-box;
+    }
+    form.login button {
+      margin-top: 1rem; padding: 0.5rem 1rem; background: #2563eb; color: #fff;
+      border: none; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  {% if show_nav %}
+  <nav>
+    <a href="/events">Events</a>
+    <a href="/triggers">Triggers</a>
+    <a href="/health">Platform Health</a>
+    <a href="/logout">Log out</a>
+  </nav>
+  {% endif %}
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
