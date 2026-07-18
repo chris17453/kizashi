@@ -18,6 +18,17 @@ pub enum RepositoryError {
 #[async_trait]
 pub trait RawRecordRepository: Send + Sync {
     async fn insert(&self, record: &RawRecord) -> Result<(), RepositoryError>;
+
+    /// Sets `normalized_payload` for a previously-ingested record. This is the only write
+    /// path onto `raw_records` from outside Ingestion Service — Normalization Service calls
+    /// it over HTTP rather than touching Postgres directly (spec §2 principle 1, "API-mediated
+    /// everything"). Returns `Ok(false)` if no record with that id exists, rather than an
+    /// error, so callers can distinguish "not found" from a backend failure.
+    async fn update_normalized_payload(
+        &self,
+        record_id: uuid::Uuid,
+        normalized_payload: &serde_json::Value,
+    ) -> Result<bool, RepositoryError>;
 }
 
 pub struct PostgresRawRecordRepository {
@@ -53,5 +64,19 @@ impl RawRecordRepository for PostgresRawRecordRepository {
         .await
         .map_err(|e| RepositoryError::Backend(e.to_string()))?;
         Ok(())
+    }
+
+    async fn update_normalized_payload(
+        &self,
+        record_id: uuid::Uuid,
+        normalized_payload: &serde_json::Value,
+    ) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("UPDATE raw_records SET normalized_payload = $1 WHERE id = $2")
+            .bind(normalized_payload)
+            .bind(record_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Backend(e.to_string()))?;
+        Ok(result.rows_affected() > 0)
     }
 }

@@ -4,6 +4,7 @@ members = [
   "crates/common",
   "crates/ingestion-gateway",
   "crates/ingestion-service",
+  "crates/normalization-service",
 ]
 
 [workspace.package]
