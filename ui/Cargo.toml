@@ -1,0 +1,28 @@
+[package]
+name = "kizashi-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "kizashi-ui"
+path = "src/main.rs"
+
+[dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+reqwest = { workspace = true }
+uuid = { workspace = true }
+askama = { version = "0.12" }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tower = { workspace = true }

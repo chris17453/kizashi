@@ -21,6 +21,7 @@ members = [
   "crates/query-gateway",
   "crates/retention-service",
   "crates/trigger-engine",
+  "ui",
 ]
 
 [workspace.package]

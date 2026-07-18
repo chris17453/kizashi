@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Platform Health</h1>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if let Some(status) = platform_status %}
+<p>Overall status: <span class="status-{{ status }}">{{ status }}</span></p>
+<table>
+  <thead>
+    <tr><th>Service</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    {% for service in services %}
+    <tr>
+      <td>{{ service.name }}</td>
+      <td class="status-{{ service.status }}">{{ service.status }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
