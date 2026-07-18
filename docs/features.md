@@ -476,3 +476,44 @@ Entry format:
   llvm-cov` — 94.27% overall, ratchet holds.
 - **PR:** (opened in this branch's PR)
 - **ADR:** docs/adr/0012-platform-observability-v1-scope-health-aggregation-and-rabbitmq-backlog-visibility.md
+
+---
+
+## [2026-07-18] feature/0012-connectors — Connectors (zendesk, graph-mail, graph-teams, sql, fabric, generic)
+
+- **Type:** feature
+- **Branch:** feature/0012-connectors
+- **Summary:** Six new connector crates under `crates/connectors/` (spec §6, service #1) plus
+  a shared `connector-runtime` library (ADR-0013): `HttpIngestionClient` (posts polled records
+  to Ingestion Gateway's `POST /v1/ingest`), `run_poll_cycle` (one CronJob poll cycle — poll,
+  post every record, count successes/failures without aborting the batch on one failure), and
+  `entra_client_credentials::fetch_access_token` (the OAuth2 client-credentials/app-only flow
+  ADR-0003 specifies, shared by the three Entra-backed connectors). `generic` polls a
+  configurable JSON HTTP endpoint. `sql` runs an operator-configured `SELECT` against any
+  Postgres-wire-protocol database via a dynamic row-to-JSON mapper. `zendesk` polls the
+  Incremental Ticket Export API (HTTP Basic `{email}/token`). `graph-mail`/`graph-teams` poll
+  Microsoft Graph mail/channel messages via Entra app-only auth. `fabric` polls Fabric's SQL
+  analytics endpoint over real TDS (`tiberius` crate) with an Entra AAD token in place of a
+  username/password, reusing the `sql` connector's row-mapping approach — OneLake and
+  connector-config-via-Config/Admin-Service remain deferred follow-ups (ADR-0013).
+- **Tests:** `cargo test --workspace --lib --bins` — all twenty crates green (connector-runtime:
+  12 tests against real stub HTTP servers; each connector: unit tests against real stub HTTP
+  servers matching its source API's shape — Zendesk incremental-export JSON, Graph's `{value:
+  [...]}` list shape, generic's bare JSON array — covering the happy path, auth failure, rate
+  limiting, and unreachable-source cases). `sql`'s live Postgres integration test creates a real
+  temp table and confirms row→JSON mapping end to end. `fabric`'s live integration test proves
+  the real TCP connect + TDS handshake + `AuthMethod::aad_token` login attempt against a real
+  SQL Server container (standing in for Fabric, since both speak TDS) and confirms a rejected
+  AAD login is correctly classified `ConnectorError::AuthFailed` — the happy-path query against
+  real Fabric data can't be proven without a real Fabric tenant, the same inherent limitation
+  ADR-0009 already documents for OIDC's browser hop (no `raw_record_contract_test.rs` exists
+  for `fabric` for this reason, documented in its `lib.rs`). Beyond automated tests, ran two
+  genuine end-to-end smoke tests with real binaries: `connector-generic` against a real stub
+  HTTP source through a live `ingestion-gateway` (API-key auth) → `ingestion-service` → real
+  Postgres, and `connector-sql` against real seeded Postgres rows through the same chain — both
+  confirmed the exact source records landed in the hot store under the correct tenant. `cargo
+  clippy --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all
+  --check` — clean. `cargo audit` / `cargo deny check` — clean, no new advisories. `cargo
+  llvm-cov` — 93.49% overall, ratchet holds.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0013-connectors-v1-scope-shared-poller-runtime-env-driven-per-tenant-config-fabric-sql-endpoint-only.md

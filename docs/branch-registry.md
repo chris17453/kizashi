@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0012         |
+| feature       | `feature/` | 0013         |
 | fix           | `fix/`     | 0002        |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -36,3 +36,4 @@ manually created branches.
 | 0009 | `feature/0009-config-admin-service` | feature | 2026-07-18 | open | pending | |
 | 0010 | `feature/0010-retention-service` | feature | 2026-07-18 | open | pending | |
 | 0011 | `feature/0011-observability` | feature | 2026-07-18 | open | pending | |
+| 0012 | `feature/0012-connectors` | feature | 2026-07-18 | open | pending | |
