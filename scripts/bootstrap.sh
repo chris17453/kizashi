@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Spin up the local dev stack (Postgres, RabbitMQ, ClickHouse) and run migrations.
+# Spin up the local dev stack (Postgres, RabbitMQ, ClickHouse, MinIO) and run migrations.
 #
 # Usage: scripts/bootstrap.sh
 set -euo pipefail
@@ -12,8 +12,8 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
-echo "==> starting docker-compose stack (postgres, rabbitmq, clickhouse)"
-docker compose up -d postgres rabbitmq clickhouse
+echo "==> starting docker-compose stack (postgres, rabbitmq, clickhouse, minio)"
+docker compose up -d postgres rabbitmq clickhouse minio
 
 echo "==> waiting for postgres to accept connections"
 until docker compose exec -T postgres pg_isready -U kizashi >/dev/null 2>&1; do
@@ -22,6 +22,11 @@ done
 
 echo "==> waiting for clickhouse to accept connections"
 until docker compose exec -T clickhouse clickhouse-client --query "SELECT 1" >/dev/null 2>&1; do
+  sleep 1
+done
+
+echo "==> waiting for minio to accept connections"
+until docker compose exec -T minio curl -sf http://localhost:9000/minio/health/live >/dev/null 2>&1; do
   sleep 1
 done
 
@@ -38,4 +43,4 @@ else
   echo "==> no migrations found yet, skipping"
 fi
 
-echo "==> local dev stack is up. Postgres: localhost:5432, RabbitMQ: localhost:5672 (mgmt: 15672), ClickHouse: localhost:8123"
+echo "==> local dev stack is up. Postgres: localhost:5432, RabbitMQ: localhost:5672 (mgmt: 15672), ClickHouse: localhost:8123, MinIO: localhost:9100 (console: 9101)"

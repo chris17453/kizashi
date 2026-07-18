@@ -29,6 +29,34 @@ impl RawRecordRepository for InMemoryRawRecordRepository {
             None => Ok(false),
         }
     }
+
+    async fn list_older_than(
+        &self,
+        tenant_id: uuid::Uuid,
+        cutoff: chrono::DateTime<chrono::Utc>,
+        limit: i64,
+    ) -> Result<Vec<RawRecord>, RepositoryError> {
+        let records = self.records.lock().unwrap();
+        let mut matching: Vec<RawRecord> = records
+            .iter()
+            .filter(|r| r.tenant_id == tenant_id && r.ingested_at < cutoff)
+            .cloned()
+            .collect();
+        matching.sort_by_key(|r| r.ingested_at);
+        matching.truncate(limit as usize);
+        Ok(matching)
+    }
+
+    async fn delete(
+        &self,
+        tenant_id: uuid::Uuid,
+        record_id: uuid::Uuid,
+    ) -> Result<bool, RepositoryError> {
+        let mut records = self.records.lock().unwrap();
+        let before = records.len();
+        records.retain(|r| !(r.id == record_id && r.tenant_id == tenant_id));
+        Ok(records.len() < before)
+    }
 }
 
 pub struct FailingRawRecordRepository;
@@ -43,6 +71,23 @@ impl RawRecordRepository for FailingRawRecordRepository {
         &self,
         _record_id: uuid::Uuid,
         _normalized_payload: &serde_json::Value,
+    ) -> Result<bool, RepositoryError> {
+        Err(RepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn list_older_than(
+        &self,
+        _tenant_id: uuid::Uuid,
+        _cutoff: chrono::DateTime<chrono::Utc>,
+        _limit: i64,
+    ) -> Result<Vec<RawRecord>, RepositoryError> {
+        Err(RepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn delete(
+        &self,
+        _tenant_id: uuid::Uuid,
+        _record_id: uuid::Uuid,
     ) -> Result<bool, RepositoryError> {
         Err(RepositoryError::Backend("simulated failure".to_string()))
     }
@@ -103,4 +148,100 @@ async fn update_normalized_payload_returns_false_for_unknown_record() {
     let updated =
         repo.update_normalized_payload(uuid::Uuid::new_v4(), &serde_json::json!({})).await.unwrap();
     assert!(!updated);
+}
+
+fn record_for_tenant_ingested_at(
+    tenant_id: uuid::Uuid,
+    ingested_at: chrono::DateTime<chrono::Utc>,
+) -> RawRecord {
+    let mut record =
+        RawRecord::new("zendesk", common::SourceType::Ticket, tenant_id, serde_json::json!({}));
+    record.ingested_at = ingested_at;
+    record
+}
+
+fn record_ingested_at(ingested_at: chrono::DateTime<chrono::Utc>) -> RawRecord {
+    record_for_tenant_ingested_at(uuid::Uuid::new_v4(), ingested_at)
+}
+
+#[tokio::test]
+async fn list_older_than_returns_only_records_before_the_cutoff_oldest_first() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    let old = record_for_tenant_ingested_at(tenant_id, now - chrono::Duration::days(10));
+    let older = record_for_tenant_ingested_at(tenant_id, now - chrono::Duration::days(20));
+    let recent = record_for_tenant_ingested_at(tenant_id, now);
+    repo.insert(&old).await.unwrap();
+    repo.insert(&older).await.unwrap();
+    repo.insert(&recent).await.unwrap();
+
+    let cutoff = now - chrono::Duration::days(5);
+    let found = repo.list_older_than(tenant_id, cutoff, 10).await.unwrap();
+
+    assert_eq!(found, vec![older, old]);
+}
+
+#[tokio::test]
+async fn list_older_than_is_scoped_to_tenant() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    let mine = record_for_tenant_ingested_at(tenant_id, now - chrono::Duration::days(10));
+    let someone_elses =
+        record_for_tenant_ingested_at(uuid::Uuid::new_v4(), now - chrono::Duration::days(10));
+    repo.insert(&mine).await.unwrap();
+    repo.insert(&someone_elses).await.unwrap();
+
+    let found = repo.list_older_than(tenant_id, now, 10).await.unwrap();
+    assert_eq!(found, vec![mine]);
+}
+
+#[tokio::test]
+async fn list_older_than_respects_the_limit() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    for days_ago in 1..=5 {
+        repo.insert(&record_for_tenant_ingested_at(
+            tenant_id,
+            now - chrono::Duration::days(days_ago),
+        ))
+        .await
+        .unwrap();
+    }
+
+    let found = repo.list_older_than(tenant_id, now, 2).await.unwrap();
+    assert_eq!(found.len(), 2);
+}
+
+#[tokio::test]
+async fn delete_removes_a_known_record_and_returns_true() {
+    let repo = InMemoryRawRecordRepository::default();
+    let record = record_ingested_at(chrono::Utc::now());
+    repo.insert(&record).await.unwrap();
+
+    let deleted = repo.delete(record.tenant_id, record.id).await.unwrap();
+
+    assert!(deleted);
+    assert!(repo.records.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn delete_returns_false_for_unknown_record() {
+    let repo = InMemoryRawRecordRepository::default();
+    let deleted = repo.delete(uuid::Uuid::new_v4(), uuid::Uuid::new_v4()).await.unwrap();
+    assert!(!deleted);
+}
+
+#[tokio::test]
+async fn delete_returns_false_when_tenant_does_not_match() {
+    let repo = InMemoryRawRecordRepository::default();
+    let record = record_ingested_at(chrono::Utc::now());
+    repo.insert(&record).await.unwrap();
+
+    let deleted = repo.delete(uuid::Uuid::new_v4(), record.id).await.unwrap();
+
+    assert!(!deleted);
+    assert_eq!(repo.records.lock().unwrap().len(), 1);
 }

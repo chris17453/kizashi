@@ -47,6 +47,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # minio/minio's image needs an explicit `server /data` command, which the `services:`
+      # block above can't override (no `command:` key in that schema) — so it's started as a
+      # plain docker run step instead, same image as docker-compose.yml's minio service
+      # (ADR-0011, retention-service's S3-compatible archival backend). The root password is
+      # generated fresh each run rather than hardcoded, so no secret-shaped literal ever lives
+      # in this file (this is a throwaway per-run credential for a container with no data worth
+      # protecting, not a real secret — generating it avoids relying on static-secret-scanner
+      # path allowlisting, which doesn't reliably suppress new literals here).
+      - name: Start MinIO
+        run: |
+          MINIO_PASSWORD="ci-$(openssl rand -hex 16)"
+          docker run -d --name minio -p 9100:9000 \
+            -e MINIO_ROOT_USER=kizashi \
+            -e MINIO_ROOT_PASSWORD="$MINIO_PASSWORD" \
+            minio/minio:latest server /data
+          until curl -sf http://localhost:9100/minio/health/live >/dev/null; do sleep 1; done
+          echo "AWS_SECRET_ACCESS_KEY=$MINIO_PASSWORD" >> "$GITHUB_ENV"
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -68,4 +86,9 @@ jobs:
           DATABASE_URL: postgres://kizashi:kizashi@localhost:5432/kizashi
           RABBITMQ_URL: amqp://kizashi:kizashi@localhost:5672/%2f
           CLICKHOUSE_URL: http://kizashi:kizashi@localhost:8123
+          AWS_REGION: us-east-1
+          S3_ENDPOINT_URL: http://localhost:9100
+          AWS_S3_BUCKET: kizashi-archive
+          AWS_ACCESS_KEY_ID: kizashi
+          # AWS_SECRET_ACCESS_KEY is set by the "Start MinIO" step via $GITHUB_ENV
         run: ./scripts/ci-local.sh
