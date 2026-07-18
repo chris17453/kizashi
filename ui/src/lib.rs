@@ -14,6 +14,7 @@ mod health_handler;
 mod healthz;
 mod login_handler;
 mod logout_handler;
+mod root_handler;
 mod triggers_handler;
 
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient};
@@ -31,6 +32,7 @@ pub use health_handler::get_health;
 pub use healthz::healthz;
 pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
+pub use root_handler::get_root;
 pub use triggers_handler::get_triggers;
 
 use axum::routing::get;
@@ -50,6 +52,7 @@ pub struct AppState {
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        .route("/", get(get_root))
         .route("/healthz", get(healthz))
         .route("/login", get(get_login).post(post_login))
         .route("/logout", get(get_logout))

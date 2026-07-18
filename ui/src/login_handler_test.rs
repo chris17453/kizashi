@@ -11,6 +11,7 @@ use axum::routing::get;
 use axum::Router;
 use std::sync::Arc;
 use tower::ServiceExt;
+use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
     Router::new().route("/login", get(get_login).post(post_login)).with_state(state)
@@ -44,9 +45,9 @@ async fn get_login_renders_the_form() {
 #[tokio::test]
 async fn post_login_with_valid_credentials_sets_a_session_cookie_and_redirects() {
     let auth_client = InMemoryAuthClient::default();
-    *auth_client.token.lock().unwrap() = Some("issued-token".to_string());
-    let state = AppState { auth_client: Arc::new(auth_client), ..default_state() };
     let tenant_id = Uuid::new_v4();
+    *auth_client.result.lock().unwrap() = Some(("issued-token".to_string(), tenant_id));
+    let state = AppState { auth_client: Arc::new(auth_client), ..default_state() };
 
     let response = router(state)
         .oneshot(
@@ -54,9 +55,7 @@ async fn post_login_with_valid_credentials_sets_a_session_cookie_and_redirects()
                 .method("POST")
                 .uri("/login")
                 .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from(format!(
-                    "tenant_id={tenant_id}&username=alice&password=correct-password"
-                )))
+                .body(Body::from("tenant_name=acme&username=alice&password=correct-password"))
                 .unwrap(),
         )
         .await
@@ -79,10 +78,7 @@ async fn post_login_with_invalid_credentials_rerenders_the_form_with_an_error() 
                 .method("POST")
                 .uri("/login")
                 .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from(format!(
-                    "tenant_id={}&username=alice&password=wrong",
-                    Uuid::new_v4()
-                )))
+                .body(Body::from("tenant_name=acme&username=alice&password=wrong"))
                 .unwrap(),
         )
         .await
@@ -91,18 +87,23 @@ async fn post_login_with_invalid_credentials_rerenders_the_form_with_an_error() 
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Invalid tenant, username, or password"));
+    assert!(body.contains("Invalid workspace, username, or password"));
 }
 
 #[tokio::test]
-async fn post_login_with_a_non_uuid_tenant_id_rerenders_the_form_with_an_error() {
-    let response = router(default_state())
+async fn post_login_with_an_unknown_workspace_rerenders_the_form_with_an_error() {
+    let state =
+        AppState { auth_client: Arc::new(InMemoryAuthClient::default()), ..default_state() };
+
+    let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/login")
                 .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from("tenant_id=not-a-uuid&username=alice&password=correct-password"))
+                .body(Body::from(
+                    "tenant_name=nonexistent&username=alice&password=correct-password",
+                ))
                 .unwrap(),
         )
         .await
@@ -111,5 +112,5 @@ async fn post_login_with_a_non_uuid_tenant_id_rerenders_the_form_with_an_error()
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("must be a valid UUID"));
+    assert!(body.contains("Invalid workspace, username, or password"));
 }

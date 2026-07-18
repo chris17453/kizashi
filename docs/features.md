@@ -669,3 +669,45 @@ Entry format:
 - **ADR:** n/a (deployment packaging of already-decided architecture, not a new architectural
   decision — Kubernetes/Helm, the actual "how do we deploy" decision per spec §10, is a
   follow-up item in the approved gap-closing roadmap, not part of this change)
+
+## [2026-07-18] feature/0014-docker-images — Fix `/` 404, tenant-UUID login, and Console UI branding
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** Real usage of the just-containerized stack (this branch) surfaced three
+  independent UX defects in the Console UI, fixed together since all three sit on the same
+  login/landing path: (1) `GET /` was entirely unrouted and 404'd — the exact URL a person
+  types first — fixed with a new `root_handler.rs` that redirects `/` to `/events`, which
+  itself already bounces an unauthenticated visitor to `/login`; (2) local login required
+  typing a raw tenant UUID, which no human can be expected to know, because there was no
+  first-class `Tenant` entity anywhere in the system — every service only ever carried a bare
+  `tenant_id` foreign key. Added a new `tenants` table + `TenantRepository` to auth-service
+  (`crates/auth-service/migrations/0002_create_tenants.sql`), changed
+  `POST /v1/auth/local/login` to accept `tenant_name` and resolve it internally (still returns
+  a generic 401 for unknown-workspace/unknown-username/wrong-password alike, so none of the
+  three is enumerable), and threaded the rename through Console UI's `AuthClient`/login form
+  (now labeled "Workspace"); (3) the UI had no visual identity at all — no logo/wordmark, no
+  centered login layout, table/nav styling was minimal to the point of looking broken. Gave
+  `layout.html` a real theme (CSS custom properties, a "&#9670; Kizashi" wordmark, a centered
+  login card with focus states, zebra/hover table rows, a data-URI SVG favicon so the browser
+  tab isn't blank) without adding any new dependency (still zero JS, per ADR-0014).
+- **Tests:** New: `root_handler_test.rs` (`root_redirects_to_events`),
+  `tenant_repository_test.rs` (`finds_a_tenant_id_by_name`,
+  `returns_none_for_an_unknown_tenant_name`), plus new/updated cases in
+  `local_login_handler_test.rs` (`unknown_tenant_name_is_rejected_with_401_not_404`,
+  `tenant_repository_failure_returns_500`), `auth_client_test.rs`
+  (`http_client_returns_the_token_and_tenant_id_on_valid_credentials`), and
+  `login_handler_test.rs` (`post_login_with_an_unknown_workspace_rerenders_the_form_with_an_error`).
+  `cargo test -p auth-service --lib` — 33 passed. `cargo test -p kizashi-ui --lib` — 37 passed.
+  Rebuilt and redeployed the `auth-service` and `kizashi-ui` containers, re-ran
+  `scripts/seed-local-demo.sh` (now also seeds a `tenants` row, workspace name `acme`), and
+  drove a real login through the actual running containers end to end: `GET /` → 303 to
+  `/events` (previously 404), `POST /login` with `tenant_name=acme` → 303 to `/events` with a
+  valid session cookie, `GET /events` with that cookie → 200. Full local CI gate
+  (`scripts/ci-local.sh`, `.env` loaded, throwaway local `mssql` for the Fabric/TDS test) —
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green, `cargo llvm-cov` 94.72%
+  line coverage (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (the `tenants` table is additive schema, not a change to the multi-tenancy
+  model itself — `tenant_id` remains the system-wide scoping key everywhere except this one
+  human-facing login form)

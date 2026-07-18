@@ -7,7 +7,6 @@ use askama::Template;
 use axum::extract::{Form, State};
 use axum::http::header::SET_COOKIE;
 use axum::response::{Html, IntoResponse, Redirect, Response};
-use uuid::Uuid;
 
 #[derive(Template)]
 #[template(path = "login.html")]
@@ -22,7 +21,7 @@ pub async fn get_login() -> Response {
 
 #[derive(serde::Deserialize)]
 pub struct LoginForm {
-    tenant_id: String,
+    tenant_name: String,
     username: String,
     password: String,
 }
@@ -36,16 +35,14 @@ fn login_error(message: impl Into<String>) -> Response {
 /// then establishes its own session (ADR-0014, since Auth Service has no session/cookie layer
 /// of its own per ADR-0009).
 pub async fn post_login(State(state): State<AppState>, Form(form): Form<LoginForm>) -> Response {
-    let tenant_id: Uuid = match form.tenant_id.parse() {
-        Ok(id) => id,
-        Err(_) => return login_error("Tenant ID must be a valid UUID"),
+    let (bearer_token, tenant_id) = match state
+        .auth_client
+        .local_login(&form.tenant_name, &form.username, &form.password)
+        .await
+    {
+        Ok(result) => result,
+        Err(_) => return login_error("Invalid workspace, username, or password"),
     };
-
-    let bearer_token =
-        match state.auth_client.local_login(tenant_id, &form.username, &form.password).await {
-            Ok(token) => token,
-            Err(_) => return login_error("Invalid tenant, username, or password"),
-        };
 
     let session = Session { bearer_token, tenant_id, username: form.username };
     let session_id = state.session_store.create(session).await;

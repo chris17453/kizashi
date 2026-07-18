@@ -96,7 +96,7 @@ pub async fn callback(
         .mint_session(req.tenant_id, &format!("oidc:{provider}:{}", userinfo.subject))
         .await
     {
-        Ok(token) => Json(LoginResponse { token }).into_response(),
+        Ok(token) => Json(LoginResponse { token, tenant_id: req.tenant_id }).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "session mint failed");
             error_response(StatusCode::BAD_GATEWAY, "failed to establish session")

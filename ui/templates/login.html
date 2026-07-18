@@ -1,14 +1,18 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Sign in</h1>
+<div class="brand">
+  <span class="brand-mark">&#9670;</span>
+  <span class="brand-name">Kizashi</span>
+</div>
+<h1>Sign in to your workspace</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 <form class="login" method="post" action="/login">
-  <label for="tenant_id">Tenant ID</label>
-  <input type="text" id="tenant_id" name="tenant_id" required>
+  <label for="tenant_name">Workspace</label>
+  <input type="text" id="tenant_name" name="tenant_name" placeholder="acme" autocapitalize="off" autocomplete="organization" required>
   <label for="username">Username</label>
-  <input type="text" id="username" name="username" required>
+  <input type="text" id="username" name="username" autocomplete="username" required>
   <label for="password">Password</label>
-  <input type="password" id="password" name="password" required>
+  <input type="password" id="password" name="password" autocomplete="current-password" required>
   <button type="submit">Sign in</button>
 </form>
 {% endblock %}

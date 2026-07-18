@@ -2,52 +2,127 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kizashi Console</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23101418'/%3E%3Cpath d='M8 20 L16 8 L24 20' stroke='%2322d3ee' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <style>
-    :root { color-scheme: dark; }
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --surface: #14171b;
+      --surface-raised: #1a1e23;
+      --border: #262b31;
+      --text: #e6e8eb;
+      --text-dim: #8b939c;
+      --accent: #22d3ee;
+      --accent-dim: #0e7490;
+      --danger: #f56565;
+      --success: #4ade80;
+    }
+    * { box-sizing: border-box; }
     body {
       margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: #101214; color: #e0e0e0; display: flex; min-height: 100vh;
+      background: var(--bg); color: var(--text); display: flex; min-height: 100vh;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0 1.2rem 1rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border);
+    }
+    .brand-mark {
+      width: 1.6rem; height: 1.6rem; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--accent); font-size: 1.2rem; line-height: 1;
+    }
+    .brand-name {
+      font-weight: 700; font-size: 1.05rem; letter-spacing: 0.02em; color: var(--text);
     }
     nav {
-      width: 200px; background: #17191c; border-right: 1px solid #2a2d31;
-      padding: 1rem 0; flex-shrink: 0;
+      width: 220px; background: var(--surface); border-right: 1px solid var(--border);
+      padding: 1.2rem 0; flex-shrink: 0;
     }
     nav a {
-      display: block; padding: 0.6rem 1.2rem; color: #b8bcc2; text-decoration: none;
+      display: block; margin: 0.15rem 0.6rem; padding: 0.55rem 0.8rem; border-radius: 6px;
+      color: var(--text-dim); text-decoration: none; font-size: 0.92rem; transition: background 0.12s, color 0.12s;
     }
-    nav a:hover { background: #24272b; color: #fff; }
-    main { flex: 1; padding: 1.5rem 2rem; }
-    h1 { font-size: 1.4rem; margin-top: 0; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { text-align: left; padding: 0.5rem 0.8rem; border-bottom: 1px solid #2a2d31; }
-    th { color: #9aa0a6; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; }
-    .status-up, .status-open { color: #4caf50; }
-    .status-down, .status-closed { color: #f44336; }
-    .error { color: #f44336; padding: 0.5rem 0; }
-    form.login { max-width: 320px; }
-    form.login label { display: block; margin: 0.6rem 0 0.2rem; }
+    nav a:hover { background: var(--surface-raised); color: var(--text); }
+    main { flex: 1; padding: 2rem 2.5rem; }
+    h1 { font-size: 1.5rem; margin-top: 0; margin-bottom: 1.2rem; font-weight: 600; }
+    table {
+      border-collapse: collapse; width: 100%; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    }
+    th, td { text-align: left; padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--surface-raised); }
+    th {
+      color: var(--text-dim); font-weight: 600; font-size: 0.78rem;
+      text-transform: uppercase; letter-spacing: 0.04em; background: var(--surface-raised);
+    }
+    .status-up, .status-open { color: var(--success); font-weight: 600; }
+    .status-down, .status-closed { color: var(--danger); font-weight: 600; }
+    .error {
+      color: var(--danger); background: rgba(245, 101, 101, 0.1);
+      border: 1px solid rgba(245, 101, 101, 0.3); border-radius: 6px;
+      padding: 0.6rem 0.8rem; margin-bottom: 1rem; font-size: 0.9rem;
+    }
+
+    .login-page {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 1.5rem;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.08), transparent 40%),
+        var(--bg);
+    }
+    .login-card {
+      width: 100%; max-width: 360px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 12px; padding: 2rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    }
+    .login-card .brand { border-bottom: none; margin-bottom: 1.5rem; padding: 0; justify-content: center; }
+    .login-card .brand-mark { font-size: 1.6rem; width: 2rem; height: 2rem; }
+    .login-card .brand-name { font-size: 1.3rem; }
+    .login-card h1 { text-align: center; font-size: 1.1rem; color: var(--text-dim); font-weight: 500; margin-bottom: 1.5rem; }
+    form.login label {
+      display: block; margin: 0.9rem 0 0.3rem; font-size: 0.85rem; color: var(--text-dim);
+    }
+    form.login label:first-of-type { margin-top: 0; }
     form.login input {
-      width: 100%; padding: 0.4rem; background: #17191c; border: 1px solid #2a2d31;
-      color: #e0e0e0; box-sizing: border-box;
+      width: 100%; padding: 0.55rem 0.7rem; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 0.95rem; transition: border-color 0.12s;
+    }
+    form.login input:focus {
+      outline: none; border-color: var(--accent);
     }
     form.login button {
-      margin-top: 1rem; padding: 0.5rem 1rem; background: #2563eb; color: #fff;
-      border: none; cursor: pointer;
+      width: 100%; margin-top: 1.5rem; padding: 0.65rem 1rem;
+      background: var(--accent); color: #04252c; font-weight: 600;
+      border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;
+      transition: background 0.12s;
     }
+    form.login button:hover { background: #67e3f5; }
   </style>
 </head>
 <body>
   {% if show_nav %}
   <nav>
+    <div class="brand">
+      <span class="brand-mark">&#9670;</span>
+      <span class="brand-name">Kizashi</span>
+    </div>
     <a href="/events">Events</a>
     <a href="/triggers">Triggers</a>
     <a href="/health">Platform Health</a>
     <a href="/logout">Log out</a>
   </nav>
-  {% endif %}
   <main>
     {% block content %}{% endblock %}
   </main>
+  {% else %}
+  <div class="login-page">
+    <div class="login-card">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+  {% endif %}
 </body>
 </html>
