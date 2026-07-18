@@ -65,6 +65,23 @@ jobs:
           until curl -sf http://localhost:9100/minio/health/live >/dev/null; do sleep 1; done
           echo "AWS_SECRET_ACCESS_KEY=$MINIO_PASSWORD" >> "$GITHUB_ENV"
 
+      # Same rationale as MinIO above: connector-fabric's live integration test needs a real
+      # TDS server (a plain SQL Server stands in for Fabric's SQL analytics endpoint, since
+      # both speak TDS — ADR-0013). Started via `docker run` rather than `services:` so the SA
+      # password can be generated at runtime instead of a literal in this file.
+      - name: Start SQL Server (TDS stand-in for Fabric)
+        run: |
+          MSSQL_PASSWORD="Ci-$(openssl rand -hex 16)"
+          docker run -d --name mssql -p 14330:1433 \
+            -e ACCEPT_EULA=Y \
+            -e MSSQL_SA_PASSWORD="$MSSQL_PASSWORD" \
+            mcr.microsoft.com/mssql/server:2022-latest
+          for i in $(seq 1 60); do
+            (echo > /dev/tcp/127.0.0.1/14330) >/dev/null 2>&1 && break
+            sleep 1
+          done
+          sleep 15
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -92,4 +109,6 @@ jobs:
           AWS_S3_BUCKET: kizashi-archive
           AWS_ACCESS_KEY_ID: kizashi
           # AWS_SECRET_ACCESS_KEY is set by the "Start MinIO" step via $GITHUB_ENV
+          FABRIC_TEST_HOST: 127.0.0.1
+          FABRIC_TEST_PORT: "14330"
         run: ./scripts/ci-local.sh

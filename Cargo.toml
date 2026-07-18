@@ -6,6 +6,13 @@ members = [
   "crates/auth-service",
   "crates/common",
   "crates/config-admin-service",
+  "crates/connectors/connector-runtime",
+  "crates/connectors/fabric",
+  "crates/connectors/generic",
+  "crates/connectors/graph-mail",
+  "crates/connectors/graph-teams",
+  "crates/connectors/sql",
+  "crates/connectors/zendesk",
   "crates/dashboard-api",
   "crates/ingestion-gateway",
   "crates/ingestion-service",
@@ -47,6 +54,8 @@ oauth2 = { version = "4", default-features = false, features = ["reqwest"] }
 aws-sdk-s3 = { version = "1" }
 aws-config = { version = "1" }
 flate2 = { version = "1" }
+tiberius = { version = "0.12", default-features = false, features = ["rustls", "tds73", "chrono"] }
+tokio-util = { version = "0.7", features = ["compat"] }
 
 [profile.dev]
 debug = 1
