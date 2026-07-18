@@ -16,7 +16,7 @@ manually created branches.
 | fix           | `fix/`     | 0002        |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
-| chore         | `chore/`   | 0002         |
+| chore         | `chore/`   | 0003         |
 
 ## Branch log (append-only, newest last)
 
@@ -38,3 +38,4 @@ manually created branches.
 | 0011 | `feature/0011-observability` | feature | 2026-07-18 | open | pending | |
 | 0012 | `feature/0012-connectors` | feature | 2026-07-18 | open | pending | |
 | 0013 | `feature/0013-console-ui` | feature | 2026-07-18 | open | pending | |
+| 0002 | `chore/0002-local-dev-launcher` | chore | 2026-07-18 | open | pending | |

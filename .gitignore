@@ -8,3 +8,7 @@
 Cargo.lock.bak
 lcov.info
 *.profraw
+
+# scripts/run-local.sh runtime artifacts (logs/PIDs/seeded demo credentials)
+/logs
+/run
