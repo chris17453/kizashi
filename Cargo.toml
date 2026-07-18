@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "crates/common",
+  "crates/ingestion-service",
 ]
 
 [workspace.package]
@@ -9,11 +10,13 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/chris17453/kizashi"
+# Every crate in this workspace is an internal service/library, never published to crates.io.
+publish = false
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7" }
-tower = { version = "0.4" }
+tower = { version = "0.5", features = ["util"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 uuid = { version = "1", features = ["v4", "serde"] }
@@ -23,9 +26,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = { version = "0.1" }
 thiserror = { version = "1" }
 reqwest = { version = "0.12", features = ["json"] }
-sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json", "migrate"] }
 lapin = { version = "2" }
 proptest = { version = "1" }
+futures-util = { version = "0.3" }
 
 [profile.dev]
 debug = 1

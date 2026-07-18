@@ -4,15 +4,41 @@ targets = []
 [advisories]
 version = 2
 yanked = "deny"
-ignore = []
+ignore = [
+    # rsa Marvin Attack, transitive via sqlx's always-compiled mysql backend; unreachable since
+    # Kizashi only ever opens Postgres connections. Same waiver as .cargo/audit.toml.
+    "RUSTSEC-2023-0071",
+    # Maintenance-status advisories below are not vulnerabilities — the crates are archived but
+    # have no known security issue, and no replacement is drop-in yet for their transitive
+    # dependents (lapin's async-io/rustls-connector chain). Revisit if lapin updates.
+    "RUSTSEC-2024-0384", # instant unmaintained, via lapin -> async-io
+    "RUSTSEC-2025-0134", # rustls-pemfile unmaintained, via lapin -> rustls-connector
+]
 
 [licenses]
 version = 2
-allow = ["MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0"]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    # webpki-roots (transitive via sqlx's rustls TLS backend) ships Mozilla's CA bundle under
+    # this permissive data license — not a code license concern.
+    "CDLA-Permissive-2.0",
+]
 
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Internal workspace crates (crates/common, etc.) are referenced by path with no version, since
+# they're never published standalone — that's not the unpinned-external-dependency risk this
+# check exists for, so path/workspace deps are exempted from the wildcard-version ban.
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"

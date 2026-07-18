@@ -22,6 +22,7 @@ name = "$NAME"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+publish = false
 
 [dependencies]
 common = { path = "../common" }

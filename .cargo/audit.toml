@@ -1,0 +1,15 @@
+# cargo-audit config. Every ignore entry here must carry a reason and is a deliberate,
+# documented waiver per CLAUDE.md §5 ("a new advisory... blocks merge until addressed or
+# explicitly waived with a documented reason"), not a blanket suppression.
+
+[advisories]
+ignore = [
+    # rsa 0.9.10 Marvin Attack (timing sidechannel), pulled in transitively via sqlx-mysql.
+    # sqlx (as of 0.8.x) unconditionally compiles all three backend drivers (postgres/mysql/
+    # sqlite) into the `sqlx` crate regardless of which backend feature is selected — our
+    # workspace only enables "postgres" and never opens a MySQL connection, so sqlx-mysql's
+    # RSA-based auth path is compiled but unreachable code for Kizashi. No fixed upstream
+    # version of `rsa` exists yet. Revisit when either rsa publishes a fix or sqlx restructures
+    # its backend features so unused drivers aren't compiled in.
+    "RUSTSEC-2023-0071",
+]

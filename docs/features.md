@@ -78,3 +78,42 @@ Entry format:
   creates a branch cleanly from that same starting state.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a
+
+---
+
+## [2026-07-18] feature/0001-ingestion-service — Ingestion Service
+- **Type:** feature
+- **Branch:** feature/0001-ingestion-service
+- **Summary:** First deployable pipeline service (spec §6, service #3): `POST /v1/records`
+  validates a submitted record (non-empty `connector_id`, non-nil `tenant_id`, non-null
+  `raw_payload`), persists it as a `RawRecord` row in Postgres (migration
+  `0001_create_raw_records.sql`, tenant/connector/ingested_at indexed per CLAUDE.md §5), then
+  publishes the same record to the `record.ingested` fanout exchange over RabbitMQ. Repository
+  and publisher are behind traits (`RawRecordRepository`, `EventPublisher`) with Postgres/
+  RabbitMQ implementations and in-memory test doubles, so handler logic is unit-testable
+  without a live stack while still getting real end-to-end coverage. A publish failure is
+  logged but does not roll back the (already-durable) write — the raw store is the source of
+  truth, not the bus.
+- **Tests:** `cargo test --workspace --lib --bins` — 39 passed, 0 failed (28 in `common`, 11 in
+  `ingestion-service`, all with in-memory repository/publisher doubles). Ran
+  `cargo test -p ingestion-service --test ingest_integration_test --test
+  record_ingested_contract_test` against real Postgres 16 + RabbitMQ 3 containers — 3 passed,
+  0 failed: full round trip (HTTP POST → Postgres row → `record.ingested` message consumed off
+  a bound queue) plus the `record.ingested` wire-shape contract test. `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean.
+  Upgraded sqlx 0.7→0.8 (default-features off) after `cargo audit` failed CI on
+  RUSTSEC-2024-0363 (fixed in sqlx ≥0.8.1); re-ran the full test suite (42 tests) against fresh
+  Postgres/RabbitMQ containers to confirm the upgrade didn't change behavior, and switched from
+  the `sqlx::migrate!` macro to the runtime `sqlx::migrate::Migrator::new(...)` API so the
+  "macros" feature (which unconditionally compiles the mysql/sqlite backends, not just
+  postgres) isn't needed. One remaining advisory, RUSTSEC-2023-0071 (rsa Marvin Attack,
+  transitive via sqlx's always-compiled mysql backend, no fix available upstream, unreachable
+  since Kizashi never opens a MySQL connection), is explicitly waived with rationale in
+  `.cargo/audit.toml` per CLAUDE.md §5. Also fixed `cargo deny check` (bans/licenses), which
+  had never run clean before: added `publish = false` workspace-wide (internal path deps read
+  as "wildcard dependencies" to crates.io-publishable crates), allowed the CDLA-Permissive-2.0
+  license (webpki-roots' CA-bundle license, not a code license), and waived
+  RUSTSEC-2024-0384/RUSTSEC-2025-0134 (unmaintained-crate warnings, not vulnerabilities,
+  transitive via lapin) alongside RUSTSEC-2023-0071 in `deny.toml`.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a
