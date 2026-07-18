@@ -42,6 +42,7 @@ pub struct IngestErrorBody {
 pub enum IngestError {
     Validation(String),
     Storage(String),
+    NotFound(String),
 }
 
 impl IntoResponse for IngestError {
@@ -49,6 +50,7 @@ impl IntoResponse for IngestError {
         let (status, message) = match self {
             IngestError::Validation(msg) => (StatusCode::BAD_REQUEST, msg),
             IngestError::Storage(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            IngestError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
         };
         (status, Json(IngestErrorBody { error: message })).into_response()
     }

@@ -3,7 +3,7 @@
 pub(crate) mod event_publisher_test;
 
 use async_trait::async_trait;
-use common::{RawRecord, RECORD_INGESTED_EXCHANGE};
+use common::{RawRecord, RECORD_NORMALIZED_EXCHANGE};
 use lapin::options::{BasicPublishOptions, ExchangeDeclareOptions};
 use lapin::types::FieldTable;
 use lapin::{BasicProperties, Channel, ExchangeKind};
@@ -17,11 +17,11 @@ pub enum PublishError {
     Serialization(String),
 }
 
-/// Publishes `record.ingested` once a RawRecord is durably persisted (spec §3). Abstracted
-/// behind a trait so ingest_handler's unit tests don't need a live RabbitMQ (CLAUDE.md §2).
+/// Publishes `record.normalized` once a RawRecord's normalized_payload has been durably
+/// written back through Ingestion Service (spec §3).
 #[async_trait]
 pub trait EventPublisher: Send + Sync {
-    async fn publish_record_ingested(&self, record: &RawRecord) -> Result<(), PublishError>;
+    async fn publish_record_normalized(&self, record: &RawRecord) -> Result<(), PublishError>;
 }
 
 pub struct RabbitMqEventPublisher {
@@ -32,7 +32,7 @@ impl RabbitMqEventPublisher {
     pub async fn new(channel: Channel) -> Result<Self, PublishError> {
         channel
             .exchange_declare(
-                RECORD_INGESTED_EXCHANGE,
+                RECORD_NORMALIZED_EXCHANGE,
                 ExchangeKind::Fanout,
                 ExchangeDeclareOptions { durable: true, ..Default::default() },
                 FieldTable::default(),
@@ -45,12 +45,12 @@ impl RabbitMqEventPublisher {
 
 #[async_trait]
 impl EventPublisher for RabbitMqEventPublisher {
-    async fn publish_record_ingested(&self, record: &RawRecord) -> Result<(), PublishError> {
+    async fn publish_record_normalized(&self, record: &RawRecord) -> Result<(), PublishError> {
         let payload =
             serde_json::to_vec(record).map_err(|e| PublishError::Serialization(e.to_string()))?;
         self.channel
             .basic_publish(
-                RECORD_INGESTED_EXCHANGE,
+                RECORD_NORMALIZED_EXCHANGE,
                 "",
                 BasicPublishOptions::default(),
                 &payload,

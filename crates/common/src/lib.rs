@@ -4,6 +4,7 @@
 //! workspace-wide, so keep it schema-stable and additive where possible.
 
 pub mod action_execution;
+pub mod bus;
 pub mod connector;
 pub mod db;
 pub mod event;
@@ -13,6 +14,10 @@ pub mod raw_record;
 pub mod trigger_definition;
 
 pub use action_execution::{ActionExecution, ActionExecutionStatus};
+pub use bus::{
+    EVENT_CREATED_EXCHANGE, RECORD_ANALYZED_EXCHANGE, RECORD_INGESTED_EXCHANGE,
+    RECORD_NORMALIZED_EXCHANGE,
+};
 pub use connector::{Connector, ConnectorError};
 pub use db::{connect_with_schema, ConnectError};
 pub use event::{Event, EventStatus};
