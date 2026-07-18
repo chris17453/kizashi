@@ -19,6 +19,11 @@ if [ ! -f "$REGISTRY" ]; then
   exit 1
 fi
 
+# Always read the counter from a fresh, clean main so branch numbering never depends on
+# whatever branch/working-tree state this script happens to be invoked from.
+git checkout main
+git pull --ff-only origin main || true
+
 NEXT=$(awk -F'|' -v t="$TYPE" '
   { gsub(/^[ \t]+|[ \t]+$/, "", $2) }
   $2 == t { gsub(/[^0-9]/, "", $4); print $4 }
@@ -34,6 +39,8 @@ TODAY=$(date +%Y-%m-%d 2>/dev/null || echo "unknown")
 
 NEXT_NUM=$(printf "%04d" $((10#$NEXT + 1)))
 
+git checkout -b "$BRANCH"
+
 # Bump the counter for this type
 tmp=$(mktemp)
 awk -F'|' -v OFS='|' -v t="$TYPE" -v newnum="$NEXT_NUM" '
@@ -46,10 +53,6 @@ awk -F'|' -v OFS='|' -v t="$TYPE" -v newnum="$NEXT_NUM" '
 
 # Append a row to the branch log table (last table in the file)
 printf "| %s | \`%s\` | %s | %s | open | pending | |\n" "$NEXT" "$BRANCH" "$TYPE" "$TODAY" >> "$REGISTRY"
-
-git checkout main
-git pull --ff-only origin main || true
-git checkout -b "$BRANCH"
 
 echo "Created branch: $BRANCH"
 echo "Registered in $REGISTRY (next $TYPE number is now $NEXT_NUM)"

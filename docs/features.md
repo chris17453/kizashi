@@ -58,3 +58,23 @@ Entry format:
 - **ADR:** docs/adr/0003-fabric-onelake-connector-auth-flow.md,
   docs/adr/0004-analysis-service-invocation-pattern.md,
   docs/adr/0005-archive-format-specification.md
+
+---
+
+## [2026-07-18] fix/0001-branch-registry-order — Fix new-branch.sh registry/checkout ordering
+- **Type:** fix
+- **Branch:** fix/0001-branch-registry-order
+- **Summary:** `scripts/new-branch.sh` bumped the counter and appended a row to
+  `docs/branch-registry.md` on whatever branch it was invoked from, *before* checking out fresh
+  `main` — so if that branch's copy of the registry differed from `main`'s (e.g. because a
+  previous branch's own registry edit hadn't been merged yet), `git checkout main` failed with
+  "local changes would be overwritten," exactly as hit when creating this fix's own branch from
+  `docs/0001-adr-open-items`. Reordered: checkout+pull fresh `main` first, read the counter from
+  that clean copy, create the branch, *then* edit the registry (so the edit lands as part of the
+  new branch's own commit, as originally intended).
+- **Tests:** Manually reproduced the failure (created a branch while on a branch with a locally
+  modified `docs/branch-registry.md`), confirmed the original ordering failed with the exact
+  "local changes would be overwritten by checkout" error, then confirmed the fixed script
+  creates a branch cleanly from that same starting state.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a
