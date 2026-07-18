@@ -117,3 +117,39 @@ async fn shows_an_error_when_stats_backend_fails() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("unreachable"));
 }
+
+#[tokio::test]
+async fn chart_data_escapes_a_connector_id_that_could_close_the_script_tag() {
+    let (mut state, session_id) = state_with_session().await;
+    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
+    stats_client.stats.lock().unwrap().push(ConnectorStatSummary {
+        connector_id: "</script><script>alert(1)</script>".to_string(),
+        record_count: 1,
+        last_ingested_at: chrono::Utc::now(),
+    });
+    state.stats_client = stats_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/reports")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(
+        !body.contains("</script><script>alert(1)</script>"),
+        "the literal closing tag must never appear unescaped inside the JSON <script> block"
+    );
+    let expected_escaped = "{\"labels\":[\"\\u003c/script>\\u003cscript>alert(1)\\u003c/script>\"]";
+    assert!(
+        body.contains(expected_escaped),
+        "the script-tag JSON payload must escape every '<' as \\u003c so a value containing \
+         the literal text </script> can never be parsed as a real closing tag"
+    );
+}

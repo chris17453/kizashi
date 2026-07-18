@@ -869,3 +869,50 @@ Entry format:
   line coverage (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a (UI/workflow addition, not a new architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Reverse the no-JS constraint, add charts, Overview dashboard
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** ADR-0014 chose a zero-client-JS Console UI specifically because this build
+  environment has no browser-automation tooling to test JS the same disciplined way every
+  other crate in this repo is tested. The user explicitly overrode that constraint, wanting
+  real graphs and interactive components. Writes **ADR-0015**, reversing only the no-JS part
+  of ADR-0014 (the server-rendered shell, session handling, and every existing read view stay
+  exactly as they are — this is additive, not a rewrite) and explicitly ruling out a full
+  React/SPA migration as its own much larger decision, not something to back into as a side
+  effect of "add some graphs." Concretely: a small vendored (not CDN-loaded — this is an
+  on-prem-capable enterprise product) dependency-free bar-chart renderer
+  (`ui/static/charts.js`, baked into the binary via `include_str!`, served at
+  `GET /static/charts.js`) reads real server-rendered JSON out of a `<script
+  type="application/json">` tag and draws an SVG bar chart — the underlying HTML table is still
+  there and still correct if JS fails or is disabled, a deliberate progressive-enhancement
+  choice, not an afterthought. Wired onto the Reports page (ingestion volume by connector,
+  events by type). Also ships a new `/overview` landing dashboard (KPI cards: agent count/
+  active count, total records ingested, event count, platform health with services-up ratio,
+  reusing existing backends — no new data path) and makes it the new post-login/root landing
+  page (was `/events`). Gave the nav a visual pass alongside this: icon-prefixed links, a
+  divider before Log out, `.kpi-card`/`.pill` CSS building blocks for future pages.
+- **Security note:** JSON embedded inside a `<script>` tag has every `<` escaped to `<`
+  (`chart_json` in `reports_handler.rs`) so an operator-controlled string containing the
+  literal text `</script>` can never prematurely close the tag and inject markup — a
+  regression test (`chart_data_escapes_a_connector_id_that_could_close_the_script_tag`) pins
+  this down explicitly with exactly that payload.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 82 passed (7 new: `static_assets` serves the
+  right content-type, `overview_handler`'s KPI math against real seeded data across three
+  backends, the redirect-target rename from `/events` to `/overview` in both `root_handler`
+  and `login_handler`, and the chart-data XSS-escaping regression test). Beyond unit tests:
+  `node --check ui/static/charts.js` confirms the vendored JS is syntactically valid (no build
+  step exists to catch this otherwise). Rebuilt and redeployed `kizashi-ui`, confirmed through
+  the real running container: `/` redirects to `/overview`, the KPI cards render, `GET
+  /static/charts.js` serves with `content-type: text/javascript`, and the Reports page's
+  `<script type="application/json">` blocks contain real ingestion/event data accumulated
+  across this session's earlier smoke tests. **Not verified — flagged explicitly per CLAUDE.md
+  §0, not silently claimed**: the SVG bar chart's actual visual rendering in a real browser.
+  This environment has no browser-automation tooling (the exact gap ADR-0014 named and
+  ADR-0015 accepts as a tradeoff); server-side correctness (data shape, escaping, JS syntax
+  validity) is verified, DOM/visual rendering is not. Full local CI gate: `cargo fmt --all
+  --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  clean, `cargo test --workspace --all-features` all green, `cargo llvm-cov` 94.40% line
+  coverage (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** [0015](../docs/adr/0015-console-ui-reverses-adr-0014-no-js-constraint-adds-client-side-js-for-charts-and-components.md)

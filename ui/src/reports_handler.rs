@@ -14,6 +14,16 @@ struct EventTypeCount {
     count: usize,
 }
 
+/// Serializes `{labels, values}` for `static/charts.js` to read out of a `<script
+/// type="application/json">` tag. Escapes `<` as `<` so a value containing the literal
+/// text `</script>` (a connector_id or event_type an operator controls) can never prematurely
+/// close the tag and inject arbitrary markup — standard practice for embedding JSON inside
+/// `<script>`, since JSON's own escaping has no reason to touch `<`.
+fn chart_json(labels: &[String], values: &[i64]) -> String {
+    let value = serde_json::json!({"labels": labels, "values": values});
+    serde_json::to_string(&value).unwrap_or_default().replace('<', "\\u003c")
+}
+
 /// GET /reports — the platform-wide aggregate view: ingestion volume per connector (from
 /// Ingestion Service) alongside event counts per event type (from Query Gateway's event feed).
 /// Both are cheap aggregates over data this platform already stores; nothing new is computed
@@ -23,7 +33,9 @@ struct EventTypeCount {
 struct ReportsTemplate {
     show_nav: bool,
     connector_stats: Vec<ConnectorStatSummary>,
+    connector_stats_chart_json: String,
     event_counts: Vec<EventTypeCount>,
+    event_counts_chart_json: String,
     error: Option<String>,
 }
 
@@ -48,7 +60,9 @@ pub async fn get_reports(State(state): State<AppState>, headers: HeaderMap) -> R
                 ReportsTemplate {
                     show_nav: true,
                     connector_stats: vec![],
+                    connector_stats_chart_json: chart_json(&[], &[]),
                     event_counts: vec![],
+                    event_counts_chart_json: chart_json(&[], &[]),
                     error: Some(e.to_string()),
                 }
                 .render()
@@ -63,10 +77,26 @@ pub async fn get_reports(State(state): State<AppState>, headers: HeaderMap) -> R
         Err(_) => vec![],
     };
 
+    let connector_stats_chart_json = chart_json(
+        &connector_stats.iter().map(|s| s.connector_id.clone()).collect::<Vec<_>>(),
+        &connector_stats.iter().map(|s| s.record_count).collect::<Vec<_>>(),
+    );
+    let event_counts_chart_json = chart_json(
+        &event_counts.iter().map(|e| e.event_type.clone()).collect::<Vec<_>>(),
+        &event_counts.iter().map(|e| e.count as i64).collect::<Vec<_>>(),
+    );
+
     Html(
-        ReportsTemplate { show_nav: true, connector_stats, event_counts, error: None }
-            .render()
-            .unwrap(),
+        ReportsTemplate {
+            show_nav: true,
+            connector_stats,
+            connector_stats_chart_json,
+            event_counts,
+            event_counts_chart_json,
+            error: None,
+        }
+        .render()
+        .unwrap(),
     )
     .into_response()
 }

@@ -48,7 +48,7 @@ pub async fn post_login(State(state): State<AppState>, Form(form): Form<LoginFor
     let session_id = state.session_store.create(session).await;
 
     let cookie = format!("{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Strict");
-    let mut response = Redirect::to("/events").into_response();
+    let mut response = Redirect::to("/overview").into_response();
     response.headers_mut().insert(SET_COOKIE, cookie.parse().unwrap());
     response
 }

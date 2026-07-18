@@ -1,6 +1,8 @@
 //! Console UI (spec §7): a server-rendered Rust web app (ADR-0014) — axum + askama, no WASM
 //! build step, tested the same way as every other service in this repo
-//! (`tower::ServiceExt::oneshot` against an in-process router).
+//! (`tower::ServiceExt::oneshot` against an in-process router). Client-side JS is layered on
+//! top for charts/components (ADR-0015, reversing ADR-0014's no-JS constraint) — every page
+//! still server-renders its real data first, JS only progressively enhances it.
 
 mod agents_client;
 mod auth_client;
@@ -22,8 +24,10 @@ mod health_handler;
 mod healthz;
 mod login_handler;
 mod logout_handler;
+mod overview_handler;
 mod reports_handler;
 mod root_handler;
+mod static_assets;
 mod triggers_handler;
 
 pub use agents_client::{AgentsClient, AgentsClientError, HttpAgentsClient};
@@ -51,8 +55,10 @@ pub use health_handler::get_health;
 pub use healthz::healthz;
 pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
+pub use overview_handler::get_overview;
 pub use reports_handler::get_reports;
 pub use root_handler::get_root;
+pub use static_assets::get_charts_js;
 pub use triggers_handler::get_triggers;
 
 use axum::routing::get;
@@ -86,6 +92,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/events", get(get_events))
         .route("/triggers", get(get_triggers))
         .route("/health", get(get_health))
+        .route("/overview", get(get_overview))
         .route("/agents", get(get_agents).post(post_agents))
         .route("/agents/generate", get(get_generate_select))
         .route("/agents/generate/form", get(get_generate_form))
@@ -95,5 +102,6 @@ pub fn build_router(state: AppState) -> Router {
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
         .route("/data/:id", get(get_data_detail))
+        .route("/static/charts.js", get(get_charts_js))
         .with_state(state)
 }

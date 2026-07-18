@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Overview</h1>
+
+<div class="kpi-grid">
+  <div class="kpi-card kpi-accent">
+    <div class="kpi-label">Agents</div>
+    <div class="kpi-value">{{ agent_count }}</div>
+    <div class="kpi-sub">{{ active_agent_count }} active</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Records Ingested</div>
+    <div class="kpi-value">{{ total_records }}</div>
+    <div class="kpi-sub">across all connectors</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Events</div>
+    <div class="kpi-value">{{ event_count }}</div>
+    <div class="kpi-sub">total</div>
+  </div>
+  <div class="kpi-card {% if platform_status == "up" %}kpi-success{% else %}kpi-danger{% endif %}">
+    <div class="kpi-label">Platform Health</div>
+    <div class="kpi-value">{{ platform_status }}</div>
+    <div class="kpi-sub">{{ services_up }}/{{ services_total }} services up</div>
+  </div>
+</div>
+
+<p class="muted">
+  <a href="/agents">Manage agents</a> &middot;
+  <a href="/data">Search data</a> &middot;
+  <a href="/reports">View reports</a> &middot;
+  <a href="/health">Platform health detail</a>
+</p>
+{% endblock %}

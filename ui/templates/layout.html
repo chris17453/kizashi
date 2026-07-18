@@ -37,14 +37,22 @@
       font-weight: 700; font-size: 1.05rem; letter-spacing: 0.02em; color: var(--text);
     }
     nav {
-      width: 220px; background: var(--surface); border-right: 1px solid var(--border);
+      width: 208px; background: var(--surface); border-right: 1px solid var(--border);
       padding: 1.2rem 0; flex-shrink: 0;
     }
     nav a {
-      display: block; margin: 0.15rem 0.6rem; padding: 0.55rem 0.8rem; border-radius: 6px;
-      color: var(--text-dim); text-decoration: none; font-size: 0.92rem; transition: background 0.12s, color 0.12s;
+      display: flex; align-items: center; gap: 0.65rem;
+      margin: 0.1rem 0.6rem; padding: 0.5rem 0.7rem; border-radius: 6px;
+      color: var(--text-dim); text-decoration: none; font-size: 0.88rem; font-weight: 500;
+      transition: background 0.12s, color 0.12s;
     }
     nav a:hover { background: var(--surface-raised); color: var(--text); }
+    nav a.active { background: var(--surface-raised); color: var(--accent); }
+    nav a .nav-icon {
+      width: 1.1rem; text-align: center; flex-shrink: 0; color: var(--text-dim); font-size: 0.95rem;
+    }
+    nav a:hover .nav-icon, nav a.active .nav-icon { color: var(--accent); }
+    nav .nav-divider { height: 1px; background: var(--border); margin: 0.7rem 1rem; }
     main { flex: 1; padding: 2rem 2.5rem; }
     h1 { font-size: 1.5rem; margin-top: 0; margin-bottom: 1.2rem; font-weight: 600; }
     table {
@@ -102,6 +110,43 @@
     .pagination-form { margin: 0; }
     .pagination-form .btn { margin-top: 0; }
 
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem; margin-bottom: 2rem;
+    }
+    .kpi-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1.1rem 1.3rem;
+    }
+    .kpi-card .kpi-label {
+      font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--text-dim); font-weight: 600; margin-bottom: 0.4rem;
+    }
+    .kpi-card .kpi-value { font-size: 1.9rem; font-weight: 700; line-height: 1; }
+    .kpi-card .kpi-sub { font-size: 0.8rem; color: var(--text-dim); margin-top: 0.35rem; }
+    .kpi-card.kpi-accent .kpi-value { color: var(--accent); }
+    .kpi-card.kpi-danger .kpi-value { color: var(--danger); }
+    .kpi-card.kpi-success .kpi-value { color: var(--success); }
+
+    .pill {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+    }
+    .pill::before {
+      content: ""; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: currentColor;
+    }
+    .pill-up { background: rgba(74, 222, 128, 0.12); color: var(--success); }
+    .pill-down { background: rgba(245, 101, 101, 0.12); color: var(--danger); }
+    .pill-muted { background: rgba(139, 147, 156, 0.12); color: var(--text-dim); }
+
+    .chart {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1rem 1.2rem; margin-bottom: 1.5rem;
+    }
+    .chart-label { fill: var(--text-dim); font-size: 12px; }
+    .chart-value { fill: var(--text); font-size: 12px; }
+    .chart-bar { fill: var(--accent); }
+
     .login-page {
       flex: 1; display: flex; align-items: center; justify-content: center;
       min-height: 100vh; padding: 1.5rem;
@@ -145,17 +190,20 @@
       <span class="brand-mark">&#9670;</span>
       <span class="brand-name">Kizashi</span>
     </div>
-    <a href="/agents">Agents</a>
-    <a href="/data">Data</a>
-    <a href="/events">Events</a>
-    <a href="/triggers">Triggers</a>
-    <a href="/reports">Reports</a>
-    <a href="/health">Platform Health</a>
-    <a href="/logout">Log out</a>
+    <a href="/overview"><span class="nav-icon">&#9638;</span> Overview</a>
+    <a href="/agents"><span class="nav-icon">&#11041;</span> Agents</a>
+    <a href="/data"><span class="nav-icon">&#9636;</span> Data</a>
+    <a href="/events"><span class="nav-icon">&#9672;</span> Events</a>
+    <a href="/triggers"><span class="nav-icon">&#9881;</span> Triggers</a>
+    <a href="/reports"><span class="nav-icon">&#9637;</span> Reports</a>
+    <a href="/health"><span class="nav-icon">&#9680;</span> Platform Health</a>
+    <div class="nav-divider"></div>
+    <a href="/logout"><span class="nav-icon">&#9099;</span> Log out</a>
   </nav>
   <main>
     {% block content %}{% endblock %}
   </main>
+  <script src="/static/charts.js" defer></script>
   {% else %}
   <div class="login-page">
     <div class="login-card">

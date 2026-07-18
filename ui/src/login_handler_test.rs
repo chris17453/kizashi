@@ -67,7 +67,7 @@ async fn post_login_with_valid_credentials_sets_a_session_cookie_and_redirects()
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    assert_eq!(response.headers().get("location").unwrap(), "/events");
+    assert_eq!(response.headers().get("location").unwrap(), "/overview");
     let set_cookie = response.headers().get("set-cookie").unwrap().to_str().unwrap();
     assert!(set_cookie.contains("kizashi_session="));
     assert!(set_cookie.contains("HttpOnly"));
