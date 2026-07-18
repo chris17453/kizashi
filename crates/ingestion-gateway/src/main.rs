@@ -15,7 +15,9 @@ async fn main() {
     let rate_limit_per_minute: u32 =
         std::env::var("RATE_LIMIT_PER_MINUTE").ok().and_then(|v| v.parse().ok()).unwrap_or(600);
 
-    let pool = sqlx::PgPool::connect(&database_url).await.expect("failed to connect to postgres");
+    let pool = common::connect_with_schema(&database_url, "ingestion_gateway")
+        .await
+        .expect("failed to connect to postgres");
     let migrations_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
     sqlx::migrate::Migrator::new(migrations_dir)
         .await

@@ -5,6 +5,7 @@
 
 pub mod action_execution;
 pub mod connector;
+pub mod db;
 pub mod event;
 pub mod event_type_definition;
 pub mod normalization_mapping;
@@ -13,6 +14,7 @@ pub mod trigger_definition;
 
 pub use action_execution::{ActionExecution, ActionExecutionStatus};
 pub use connector::{Connector, ConnectorError};
+pub use db::{connect_with_schema, ConnectError};
 pub use event::{Event, EventStatus};
 pub use event_type_definition::EventTypeDefinition;
 pub use normalization_mapping::NormalizationMapping;

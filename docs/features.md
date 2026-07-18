@@ -141,5 +141,18 @@ Entry format:
   nothing). `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
   `cargo fmt --all --check` — clean. `cargo audit` and `cargo deny check` — clean (same waivers
   as feature/0001-ingestion-service, no new advisories).
+
+  Also fixed a real cross-service bug this PR exposed: ingestion-service and
+  ingestion-gateway both connect to the same shared Postgres instance, and both shipped a
+  first migration file named `0001_...` — sqlx tracks applied migrations by version number in
+  one shared `_sqlx_migrations` table, so the moment both services' migrators ran against that
+  database, the second one hit a `VersionMismatch` (CI caught this; it can't reproduce with
+  either service tested alone). Added `common::db::connect_with_schema`, used by both services
+  in `main.rs` and their integration tests: every service now gets its own Postgres schema
+  (`ingestion_service`, `ingestion_gateway`), applied to every pooled connection via
+  `after_connect`, so table names and migration histories can never collide across services
+  sharing one database. Verified by running both services' live-Postgres integration tests
+  together against one container and confirming each landed its tables in its own schema
+  (`\dn` / `information_schema.tables`).
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a
