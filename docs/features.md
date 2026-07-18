@@ -758,3 +758,40 @@ Entry format:
   architectural decision. Deferred/out of scope for this change, tracked separately: a data
   viewer/search page, AI-assisted prompt generation for agent config, and dynamic
   EventTypeDefinition/trigger-condition authoring in the UI.)
+
+## [2026-07-18] feature/0014-docker-images — Data Viewer: search + record detail
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Adds the "data viewer/search" piece of the AIOps-console gap list. Ingestion
+  Service gains `RawRecordRepository::search` (every filter optional and AND-ed: connector_id,
+  source_type, an ingested-at range, and a substring match against the raw payload's text
+  representation via `ILIKE`) exposed as `GET /v1/records/search`, and `get_by_id` exposed as
+  `GET /v1/records/:id` for a single-record detail fetch. The free-text match is deliberately a
+  plain `ILIKE` scan, not a dedicated search index (Elasticsearch/pg_trgm/tsvector) — v1 scope
+  is "find records that mention X," documented in-code as a known limitation to revisit before
+  it's exercised at the platform's actual target scale (thousands of inboxes, hundreds of
+  connector APIs — flagged directly by the user during this work). Also added
+  `idx_raw_records_tenant_connector_ingested_at`, a composite index covering the shape every
+  new Agent-related query (`stats_by_connector`, `list_by_connector`, `search`) actually filters
+  and sorts by, since the three single-column indexes from the original migration force a
+  bitmap-AND plan instead of a single index scan. Console UI gains `/data` (search form +
+  results table) and `/data/:id` (pretty-printed raw + normalized payload).
+- **Tests:** `cargo test -p ingestion-service --lib` — 50 passed (11 new: `get_by_id`
+  tenant-scoping, `search`'s four filter dimensions individually and combined, both new
+  handlers' success/400/500/404 cases). `cargo test -p kizashi-ui --lib` — 64 passed (8 new
+  across `ingestion_stats_client`, `data_handler`, `data_detail_handler`). Beyond unit tests:
+  rebuilt and redeployed `ingestion-service`/`kizashi-ui`, confirmed the new composite index
+  exists via `\d ingestion_service.raw_records` against the real container, posted two records
+  with different subjects through the real `ingestion-gateway`, searched `/data?q=printer`
+  through the real running Console UI and confirmed only the matching record came back (not
+  the other one — proving the filter is real, not a no-op), then opened its `/data/:id` detail
+  page and confirmed the full raw payload rendered correctly (HTML-escaped by askama). Full
+  local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` clean, `cargo test --workspace --all-features` all green,
+  `cargo llvm-cov` 94.10% line coverage (85% floor), `cargo audit` / `cargo deny check` clean,
+  no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (additive query/index on the existing `RawRecord` schema, not a new
+  architectural decision. The scale-driven follow-ups this change explicitly defers — a real
+  search index and a dynamic per-agent connector scheduling model to replace one static
+  container per connector type — are tracked separately, not silently dropped.)

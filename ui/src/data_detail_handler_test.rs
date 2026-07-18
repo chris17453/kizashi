@@ -13,18 +13,18 @@ use axum::routing::get;
 use axum::Router;
 use std::sync::Arc;
 use tower::ServiceExt;
+use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/agents/:id", get(get_agent_detail)).with_state(state)
+    Router::new().route("/data/:id", get(get_data_detail)).with_state(state)
 }
 
-async fn state_with_session() -> (AppState, String, Uuid) {
+async fn state_with_session() -> (AppState, String) {
     let session_store = InMemorySessionStore::default();
-    let tenant_id = Uuid::new_v4();
     let session_id = session_store
         .create(Session {
             bearer_token: "tok".to_string(),
-            tenant_id,
+            tenant_id: Uuid::new_v4(),
             username: "alice".to_string(),
         })
         .await;
@@ -39,24 +39,20 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         agents_client: Arc::new(InMemoryAgentsClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
     };
-    (state, session_id, tenant_id)
+    (state, session_id)
 }
 
 #[tokio::test]
-async fn renders_the_agent_and_its_records_when_found() {
-    let (mut state, session_id, tenant_id) = state_with_session().await;
-    let agent = state
-        .agents_client
-        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
-        .await
-        .unwrap();
+async fn renders_the_record_when_found() {
+    let (mut state, session_id) = state_with_session().await;
+    let record_id = Uuid::new_v4();
     let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
     stats_client.records.lock().unwrap().push(RecordSummary {
-        id: Uuid::new_v4(),
-        connector_id: "support-poller".to_string(),
+        id: record_id,
+        connector_id: "zendesk".to_string(),
         source_type: "ticket".to_string(),
         ingested_at: chrono::Utc::now(),
-        raw_payload: serde_json::json!({}),
+        raw_payload: serde_json::json!({"subject": "printer on fire"}),
         normalized_payload: None,
     });
     state.stats_client = stats_client;
@@ -64,7 +60,7 @@ async fn renders_the_agent_and_its_records_when_found() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/agents/{}", agent.id))
+                .uri(format!("/data/{record_id}"))
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -75,18 +71,17 @@ async fn renders_the_agent_and_its_records_when_found() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("support-poller"));
-    assert!(body.contains("ticket"));
+    assert!(body.contains("printer on fire"));
 }
 
 #[tokio::test]
-async fn renders_not_found_for_an_unknown_agent_id() {
-    let (state, session_id, _tenant_id) = state_with_session().await;
+async fn renders_not_found_for_an_unknown_id() {
+    let (state, session_id) = state_with_session().await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/agents/{}", Uuid::new_v4()))
+                .uri(format!("/data/{}", Uuid::new_v4()))
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -97,17 +92,17 @@ async fn renders_not_found_for_an_unknown_agent_id() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Agent not found"));
+    assert!(body.contains("Record not found"));
 }
 
 #[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
-    let (state, _session_id, _tenant_id) = state_with_session().await;
+    let (state, _session_id) = state_with_session().await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/agents/{}", Uuid::new_v4()))
+                .uri(format!("/data/{}", Uuid::new_v4()))
                 .body(Body::empty())
                 .unwrap(),
         )

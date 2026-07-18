@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Data Viewer</h1>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+<div class="panel">
+  <h2>Search</h2>
+  <form class="inline" method="get" action="/data">
+    <label for="connector_id">Connector ID</label>
+    <input type="text" id="connector_id" name="connector_id" value="{{ query.connector_id }}" placeholder="zendesk">
+    <label for="source_type">Source type</label>
+    <select id="source_type" name="source_type">
+      <option value="" {% if query.source_type.is_empty() %}selected{% endif %}>Any</option>
+      <option value="message" {% if query.source_type == "message" %}selected{% endif %}>Message</option>
+      <option value="ticket" {% if query.source_type == "ticket" %}selected{% endif %}>Ticket</option>
+      <option value="log" {% if query.source_type == "log" %}selected{% endif %}>Log</option>
+      <option value="sql_row" {% if query.source_type == "sql_row" %}selected{% endif %}>SQL Row</option>
+      <option value="fabric_record" {% if query.source_type == "fabric_record" %}selected{% endif %}>Fabric Record</option>
+      <option value="generic" {% if query.source_type == "generic" %}selected{% endif %}>Generic</option>
+    </select>
+    <label for="q">Search text</label>
+    <input type="text" id="q" name="q" value="{{ query.q }}" placeholder="printer on fire">
+    <button type="submit">Search</button>
+  </form>
+</div>
+
+<table>
+  <thead>
+    <tr><th>Record ID</th><th>Connector</th><th>Source Type</th><th>Ingested At</th><th>Normalized</th></tr>
+  </thead>
+  <tbody>
+    {% for record in records %}
+    <tr>
+      <td><a href="/data/{{ record.id }}">{{ record.id }}</a></td>
+      <td>{{ record.connector_id }}</td>
+      <td>{{ record.source_type }}</td>
+      <td>{{ record.ingested_at }}</td>
+      <td class="status-{% if record.is_normalized() %}up{% else %}down{% endif %}">
+        {% if record.is_normalized() %}yes{% else %}no{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

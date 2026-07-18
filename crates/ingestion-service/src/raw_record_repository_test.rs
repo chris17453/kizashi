@@ -100,6 +100,45 @@ impl RawRecordRepository for InMemoryRawRecordRepository {
         matching.truncate(limit as usize);
         Ok(matching)
     }
+
+    async fn get_by_id(
+        &self,
+        tenant_id: uuid::Uuid,
+        record_id: uuid::Uuid,
+    ) -> Result<Option<RawRecord>, RepositoryError> {
+        Ok(self
+            .records
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|r| r.id == record_id && r.tenant_id == tenant_id)
+            .cloned())
+    }
+
+    async fn search(
+        &self,
+        tenant_id: uuid::Uuid,
+        filter: &RecordSearchFilter,
+    ) -> Result<Vec<RawRecord>, RepositoryError> {
+        let records = self.records.lock().unwrap();
+        let mut matching: Vec<RawRecord> = records
+            .iter()
+            .filter(|r| r.tenant_id == tenant_id)
+            .filter(|r| filter.connector_id.as_deref().is_none_or(|c| r.connector_id == c))
+            .filter(|r| filter.source_type.is_none_or(|s| r.source_type == s))
+            .filter(|r| filter.from.is_none_or(|from| r.ingested_at >= from))
+            .filter(|r| filter.to.is_none_or(|to| r.ingested_at <= to))
+            .filter(|r| {
+                filter.query.as_deref().is_none_or(|q| {
+                    r.raw_payload.to_string().to_lowercase().contains(&q.to_lowercase())
+                })
+            })
+            .cloned()
+            .collect();
+        matching.sort_by_key(|r| std::cmp::Reverse(r.ingested_at));
+        matching.truncate(filter.limit as usize);
+        Ok(matching)
+    }
 }
 
 pub struct FailingRawRecordRepository;
@@ -147,6 +186,22 @@ impl RawRecordRepository for FailingRawRecordRepository {
         _tenant_id: uuid::Uuid,
         _connector_id: &str,
         _limit: i64,
+    ) -> Result<Vec<RawRecord>, RepositoryError> {
+        Err(RepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn get_by_id(
+        &self,
+        _tenant_id: uuid::Uuid,
+        _record_id: uuid::Uuid,
+    ) -> Result<Option<RawRecord>, RepositoryError> {
+        Err(RepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn search(
+        &self,
+        _tenant_id: uuid::Uuid,
+        _filter: &RecordSearchFilter,
     ) -> Result<Vec<RawRecord>, RepositoryError> {
         Err(RepositoryError::Backend("simulated failure".to_string()))
     }
@@ -384,4 +439,111 @@ async fn list_by_connector_respects_the_limit() {
 
     let found = repo.list_by_connector(tenant_id, "zendesk", 2).await.unwrap();
     assert_eq!(found.len(), 2);
+}
+
+#[tokio::test]
+async fn get_by_id_returns_the_record_when_tenant_matches() {
+    let repo = InMemoryRawRecordRepository::default();
+    let record = record_ingested_at(chrono::Utc::now());
+    repo.insert(&record).await.unwrap();
+
+    let found = repo.get_by_id(record.tenant_id, record.id).await.unwrap();
+    assert_eq!(found, Some(record));
+}
+
+#[tokio::test]
+async fn get_by_id_returns_none_when_tenant_does_not_match() {
+    let repo = InMemoryRawRecordRepository::default();
+    let record = record_ingested_at(chrono::Utc::now());
+    repo.insert(&record).await.unwrap();
+
+    let found = repo.get_by_id(uuid::Uuid::new_v4(), record.id).await.unwrap();
+    assert_eq!(found, None);
+}
+
+fn record_with_payload(
+    tenant_id: uuid::Uuid,
+    connector_id: &str,
+    ingested_at: chrono::DateTime<chrono::Utc>,
+    payload: serde_json::Value,
+) -> RawRecord {
+    let mut record = RawRecord::new(connector_id, common::SourceType::Ticket, tenant_id, payload);
+    record.ingested_at = ingested_at;
+    record
+}
+
+#[tokio::test]
+async fn search_with_no_filters_returns_all_records_for_the_tenant() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    repo.insert(&record_for_connector(tenant_id, "zendesk", now)).await.unwrap();
+    repo.insert(&record_for_connector(uuid::Uuid::new_v4(), "zendesk", now)).await.unwrap();
+
+    let filter = RecordSearchFilter { limit: 10, ..Default::default() };
+    let found = repo.search(tenant_id, &filter).await.unwrap();
+    assert_eq!(found.len(), 1);
+}
+
+#[tokio::test]
+async fn search_filters_by_connector_id() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    repo.insert(&record_for_connector(tenant_id, "zendesk", now)).await.unwrap();
+    repo.insert(&record_for_connector(tenant_id, "sql", now)).await.unwrap();
+
+    let filter = RecordSearchFilter {
+        connector_id: Some("zendesk".to_string()),
+        limit: 10,
+        ..Default::default()
+    };
+    let found = repo.search(tenant_id, &filter).await.unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].connector_id, "zendesk");
+}
+
+#[tokio::test]
+async fn search_filters_by_free_text_query_against_the_raw_payload() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    let matching = record_with_payload(
+        tenant_id,
+        "zendesk",
+        now,
+        serde_json::json!({"subject": "printer on fire"}),
+    );
+    let non_matching = record_with_payload(
+        tenant_id,
+        "zendesk",
+        now,
+        serde_json::json!({"subject": "password reset"}),
+    );
+    repo.insert(&matching).await.unwrap();
+    repo.insert(&non_matching).await.unwrap();
+
+    let filter =
+        RecordSearchFilter { query: Some("printer".to_string()), limit: 10, ..Default::default() };
+    let found = repo.search(tenant_id, &filter).await.unwrap();
+    assert_eq!(found, vec![matching]);
+}
+
+#[tokio::test]
+async fn search_filters_by_date_range() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now();
+    let old = record_for_connector(tenant_id, "zendesk", now - chrono::Duration::days(30));
+    let recent = record_for_connector(tenant_id, "zendesk", now);
+    repo.insert(&old).await.unwrap();
+    repo.insert(&recent).await.unwrap();
+
+    let filter = RecordSearchFilter {
+        from: Some(now - chrono::Duration::days(1)),
+        limit: 10,
+        ..Default::default()
+    };
+    let found = repo.search(tenant_id, &filter).await.unwrap();
+    assert_eq!(found, vec![recent]);
 }

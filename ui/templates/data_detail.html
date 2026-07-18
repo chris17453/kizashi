@@ -1,0 +1,20 @@
+{% extends "layout.html" %}
+{% block content %}
+{% if let Some(r) = record %}
+<h1>Record {{ r.id }}</h1>
+<p class="muted">{{ r.connector_id }} &middot; {{ r.source_type }} &middot; {{ r.ingested_at }}</p>
+
+<div class="section-title">Raw payload</div>
+<pre class="panel" style="max-width:none; overflow-x:auto;">{{ raw_payload_pretty }}</pre>
+
+<div class="section-title">Normalized payload</div>
+{% if let Some(normalized) = normalized_payload_pretty %}
+<pre class="panel" style="max-width:none; overflow-x:auto;">{{ normalized }}</pre>
+{% else %}
+<p class="muted">Not yet normalized.</p>
+{% endif %}
+{% else %}
+<h1>Record not found</h1>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% endif %}
+{% endblock %}

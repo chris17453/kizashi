@@ -17,8 +17,12 @@ pub struct ConnectorStatSummary {
 #[derive(Debug, Clone, serde::Deserialize, PartialEq)]
 pub struct RecordSummary {
     pub id: Uuid,
+    #[serde(default)]
+    pub connector_id: String,
     pub source_type: String,
     pub ingested_at: DateTime<Utc>,
+    #[serde(default)]
+    pub raw_payload: serde_json::Value,
     pub normalized_payload: Option<serde_json::Value>,
 }
 
@@ -26,6 +30,13 @@ impl RecordSummary {
     pub fn is_normalized(&self) -> bool {
         self.normalized_payload.is_some()
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RecordSearchFilter {
+    pub connector_id: Option<String>,
+    pub source_type: Option<String>,
+    pub query: Option<String>,
 }
 
 #[derive(Debug, Error)]
@@ -51,6 +62,20 @@ pub trait IngestionStatsClient: Send + Sync {
         tenant_id: Uuid,
         connector_id: &str,
     ) -> Result<Vec<RecordSummary>, IngestionStatsClientError>;
+
+    /// The Data Viewer's search — every filter is optional and AND-ed together.
+    async fn search_records(
+        &self,
+        tenant_id: Uuid,
+        filter: &RecordSearchFilter,
+    ) -> Result<Vec<RecordSummary>, IngestionStatsClientError>;
+
+    /// The Data Viewer's record detail view (full raw + normalized payload).
+    async fn get_record(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<Option<RecordSummary>, IngestionStatsClientError>;
 }
 
 pub struct HttpIngestionStatsClient {
@@ -102,5 +127,68 @@ impl IngestionStatsClient for HttpIngestionStatsClient {
             return Err(IngestionStatsClientError::Rejected(response.status().as_u16()));
         }
         response.json().await.map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))
+    }
+
+    async fn search_records(
+        &self,
+        tenant_id: Uuid,
+        filter: &RecordSearchFilter,
+    ) -> Result<Vec<RecordSummary>, IngestionStatsClientError> {
+        let mut params: Vec<(&str, String)> = vec![];
+        if let Some(connector_id) = &filter.connector_id {
+            if !connector_id.is_empty() {
+                params.push(("connector_id", connector_id.clone()));
+            }
+        }
+        if let Some(source_type) = &filter.source_type {
+            if !source_type.is_empty() {
+                params.push(("source_type", source_type.clone()));
+            }
+        }
+        if let Some(query) = &filter.query {
+            if !query.is_empty() {
+                params.push(("q", query.clone()));
+            }
+        }
+
+        let response = self
+            .client
+            .get(format!("{}/v1/records/search", self.ingestion_service_url))
+            .query(&params)
+            .header("x-tenant-id", tenant_id.to_string())
+            .send()
+            .await
+            .map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(IngestionStatsClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))
+    }
+
+    async fn get_record(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<Option<RecordSummary>, IngestionStatsClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/records/{id}", self.ingestion_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .send()
+            .await
+            .map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !response.status().is_success() {
+            return Err(IngestionStatsClientError::Rejected(response.status().as_u16()));
+        }
+        response
+            .json()
+            .await
+            .map(Some)
+            .map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))
     }
 }

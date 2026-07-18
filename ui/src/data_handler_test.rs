@@ -4,7 +4,9 @@ use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
-use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
+use crate::ingestion_stats_client::ingestion_stats_client_test::{
+    FailingIngestionStatsClient, InMemoryIngestionStatsClient,
+};
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
@@ -13,18 +15,18 @@ use axum::routing::get;
 use axum::Router;
 use std::sync::Arc;
 use tower::ServiceExt;
+use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/agents/:id", get(get_agent_detail)).with_state(state)
+    Router::new().route("/data", get(get_data)).with_state(state)
 }
 
-async fn state_with_session() -> (AppState, String, Uuid) {
+async fn state_with_session() -> (AppState, String) {
     let session_store = InMemorySessionStore::default();
-    let tenant_id = Uuid::new_v4();
     let session_id = session_store
         .create(Session {
             bearer_token: "tok".to_string(),
-            tenant_id,
+            tenant_id: Uuid::new_v4(),
             username: "alice".to_string(),
         })
         .await;
@@ -39,24 +41,19 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         agents_client: Arc::new(InMemoryAgentsClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
     };
-    (state, session_id, tenant_id)
+    (state, session_id)
 }
 
 #[tokio::test]
-async fn renders_the_agent_and_its_records_when_found() {
-    let (mut state, session_id, tenant_id) = state_with_session().await;
-    let agent = state
-        .agents_client
-        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
-        .await
-        .unwrap();
+async fn renders_search_results_when_signed_in() {
+    let (mut state, session_id) = state_with_session().await;
     let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
     stats_client.records.lock().unwrap().push(RecordSummary {
         id: Uuid::new_v4(),
-        connector_id: "support-poller".to_string(),
+        connector_id: "zendesk".to_string(),
         source_type: "ticket".to_string(),
         ingested_at: chrono::Utc::now(),
-        raw_payload: serde_json::json!({}),
+        raw_payload: serde_json::json!({"subject": "printer on fire"}),
         normalized_payload: None,
     });
     state.stats_client = stats_client;
@@ -64,7 +61,7 @@ async fn renders_the_agent_and_its_records_when_found() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/agents/{}", agent.id))
+                .uri("/data?q=printer")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -75,44 +72,39 @@ async fn renders_the_agent_and_its_records_when_found() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("support-poller"));
-    assert!(body.contains("ticket"));
-}
-
-#[tokio::test]
-async fn renders_not_found_for_an_unknown_agent_id() {
-    let (state, session_id, _tenant_id) = state_with_session().await;
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .uri(format!("/agents/{}", Uuid::new_v4()))
-                .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Agent not found"));
+    assert!(body.contains("zendesk"));
 }
 
 #[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
-    let (state, _session_id, _tenant_id) = state_with_session().await;
+    let (state, _session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(Request::builder().uri("/data").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[tokio::test]
+async fn shows_an_error_when_the_backend_fails() {
+    let (mut state, session_id) = state_with_session().await;
+    state.stats_client = Arc::new(FailingIngestionStatsClient);
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/agents/{}", Uuid::new_v4()))
+                .uri("/data")
+                .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("unreachable"));
 }

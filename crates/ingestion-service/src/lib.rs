@@ -8,6 +8,7 @@ mod health;
 mod ingest_handler;
 mod list_records_handler;
 mod raw_record_repository;
+mod record_search_handler;
 mod update_normalized_handler;
 
 pub use common::RECORD_INGESTED_EXCHANGE;
@@ -19,8 +20,10 @@ pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
 pub use ingest_handler::{ingest_record, IngestError, IngestState, NewRawRecordRequest};
 pub use list_records_handler::{list_records, ListRecordsQuery};
 pub use raw_record_repository::{
-    ConnectorStats, PostgresRawRecordRepository, RawRecordRepository, RepositoryError,
+    ConnectorStats, PostgresRawRecordRepository, RawRecordRepository, RecordSearchFilter,
+    RepositoryError,
 };
+pub use record_search_handler::{get_record, search_records, SearchRecordsQuery};
 pub use update_normalized_handler::{update_normalized_payload, UpdateNormalizedPayloadRequest};
 
 use axum::routing::{get, patch, post};
@@ -32,7 +35,8 @@ pub fn build_router(state: IngestState) -> Router {
         .route("/v1/records", post(ingest_record).get(list_records))
         .route("/v1/records/stats", get(get_connector_stats))
         .route("/v1/records/by-connector", get(list_records_by_connector))
+        .route("/v1/records/search", get(search_records))
         .route("/v1/records/:id/normalized", patch(update_normalized_payload))
-        .route("/v1/records/:id", axum::routing::delete(delete_record))
+        .route("/v1/records/:id", get(get_record).delete(delete_record))
         .with_state(state)
 }

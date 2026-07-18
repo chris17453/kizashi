@@ -78,6 +78,34 @@ pub trait RawRecordRepository: Send + Sync {
         connector_id: &str,
         limit: i64,
     ) -> Result<Vec<RawRecord>, RepositoryError>;
+
+    /// Fetches a single record, tenant-scoped — the Data Viewer's detail view.
+    async fn get_by_id(
+        &self,
+        tenant_id: uuid::Uuid,
+        record_id: uuid::Uuid,
+    ) -> Result<Option<RawRecord>, RepositoryError>;
+
+    /// The Data Viewer's search: every filter is optional and AND-ed together — connector,
+    /// source type, an ingested-at range, and a substring match against the raw payload's
+    /// text representation. Deliberately a plain `ILIKE` scan rather than a dedicated search
+    /// index (Elasticsearch, pg_trgm, tsvector): v1 scope is "find records that mention X,"
+    /// not sub-second full-text relevance ranking over a large corpus.
+    async fn search(
+        &self,
+        tenant_id: uuid::Uuid,
+        filter: &RecordSearchFilter,
+    ) -> Result<Vec<RawRecord>, RepositoryError>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RecordSearchFilter {
+    pub connector_id: Option<String>,
+    pub source_type: Option<common::SourceType>,
+    pub from: Option<chrono::DateTime<chrono::Utc>>,
+    pub to: Option<chrono::DateTime<chrono::Utc>>,
+    pub query: Option<String>,
+    pub limit: i64,
 }
 
 pub struct PostgresRawRecordRepository {
@@ -213,6 +241,60 @@ impl RawRecordRepository for PostgresRawRecordRepository {
         .bind(tenant_id)
         .bind(connector_id)
         .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Backend(e.to_string()))?;
+        Ok(rows.into_iter().map(row_to_record).collect())
+    }
+
+    async fn get_by_id(
+        &self,
+        tenant_id: uuid::Uuid,
+        record_id: uuid::Uuid,
+    ) -> Result<Option<RawRecord>, RepositoryError> {
+        let row: Option<RawRecordRow> = sqlx::query_as(
+            r#"
+            SELECT id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
+                   normalized_payload, tenant_id
+            FROM raw_records
+            WHERE id = $1 AND tenant_id = $2
+            "#,
+        )
+        .bind(record_id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Backend(e.to_string()))?;
+        Ok(row.map(row_to_record))
+    }
+
+    async fn search(
+        &self,
+        tenant_id: uuid::Uuid,
+        filter: &RecordSearchFilter,
+    ) -> Result<Vec<RawRecord>, RepositoryError> {
+        let rows: Vec<RawRecordRow> = sqlx::query_as(
+            r#"
+            SELECT id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
+                   normalized_payload, tenant_id
+            FROM raw_records
+            WHERE tenant_id = $1
+              AND ($2::text IS NULL OR connector_id = $2)
+              AND ($3::jsonb IS NULL OR source_type = $3)
+              AND ($4::timestamptz IS NULL OR ingested_at >= $4)
+              AND ($5::timestamptz IS NULL OR ingested_at <= $5)
+              AND ($6::text IS NULL OR raw_payload::text ILIKE '%' || $6 || '%')
+            ORDER BY ingested_at DESC
+            LIMIT $7
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(&filter.connector_id)
+        .bind(filter.source_type.map(sqlx::types::Json))
+        .bind(filter.from)
+        .bind(filter.to)
+        .bind(&filter.query)
+        .bind(filter.limit)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| RepositoryError::Backend(e.to_string()))?;

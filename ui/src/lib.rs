@@ -13,6 +13,8 @@ mod triggers_client;
 
 mod agent_detail_handler;
 mod agents_handler;
+mod data_detail_handler;
+mod data_handler;
 mod events_handler;
 mod health_handler;
 mod healthz;
@@ -30,7 +32,7 @@ pub use health_client::{
 };
 pub use ingestion_stats_client::{
     ConnectorStatSummary, HttpIngestionStatsClient, IngestionStatsClient,
-    IngestionStatsClientError, RecordSummary,
+    IngestionStatsClientError, RecordSearchFilter, RecordSummary,
 };
 pub use session::{InMemorySessionStore, Session, SessionStore};
 pub use triggers_client::{
@@ -39,6 +41,8 @@ pub use triggers_client::{
 
 pub use agent_detail_handler::get_agent_detail;
 pub use agents_handler::{get_agents, post_agents, post_delete_agent};
+pub use data_detail_handler::get_data_detail;
+pub use data_handler::get_data;
 pub use events_handler::get_events;
 pub use health_handler::get_health;
 pub use healthz::healthz;
@@ -78,5 +82,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/agents/:id", get(get_agent_detail))
         .route("/agents/:id/delete", axum::routing::post(post_delete_agent))
         .route("/reports", get(get_reports))
+        .route("/data", get(get_data))
+        .route("/data/:id", get(get_data_detail))
         .with_state(state)
 }
