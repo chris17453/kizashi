@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0009         |
+| feature       | `feature/` | 0010         |
 | fix           | `fix/`     | 0002        |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -33,3 +33,4 @@ manually created branches.
 | 0006 | `feature/0006-action-executor` | feature | 2026-07-18 | open | pending | |
 | 0007 | `feature/0007-query-gateway-dashboard-api` | feature | 2026-07-18 | open | pending | |
 | 0008 | `feature/0008-auth-service` | feature | 2026-07-18 | open | pending | |
+| 0009 | `feature/0009-config-admin-service` | feature | 2026-07-18 | open | pending | |
