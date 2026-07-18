@@ -13,6 +13,7 @@ pub struct GatewayState {
     pub token_store: Arc<dyn TokenStore>,
     pub http_client: reqwest::Client,
     pub dashboard_api_url: String,
+    pub internal_secret: String,
 }
 
 #[derive(serde::Serialize)]

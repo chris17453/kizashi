@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "crates/action-executor",
   "crates/analysis-service",
+  "crates/auth-service",
   "crates/common",
   "crates/dashboard-api",
   "crates/ingestion-gateway",
@@ -38,6 +39,8 @@ lapin = { version = "2" }
 proptest = { version = "1" }
 futures-util = { version = "0.3" }
 sha2 = { version = "0.10" }
+argon2 = { version = "0.5" }
+oauth2 = { version = "4", default-features = false, features = ["reqwest"] }
 
 [profile.dev]
 debug = 1

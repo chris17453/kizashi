@@ -8,6 +8,8 @@ async fn main() {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let dashboard_api_url =
         std::env::var("DASHBOARD_API_URL").expect("DASHBOARD_API_URL must be set");
+    let internal_secret =
+        std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
     let pool = common::connect_with_schema(&database_url, "query_gateway")
@@ -25,6 +27,7 @@ async fn main() {
         token_store: Arc::new(PostgresTokenStore::new(pool)),
         http_client: reqwest::Client::new(),
         dashboard_api_url,
+        internal_secret,
     };
 
     let app = health_router().merge(build_router(state));
