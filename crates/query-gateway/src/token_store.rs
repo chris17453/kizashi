@@ -19,6 +19,12 @@ pub enum TokenStoreError {
 #[async_trait]
 pub trait TokenStore: Send + Sync {
     async fn tenant_for_token(&self, token: &str) -> Result<Option<Uuid>, TokenStoreError>;
+
+    /// Mints a new session token for `tenant_id`, storing only its hash, and returns the
+    /// plaintext once — this is the only time it is ever available. Auth Service calls this
+    /// after a successful login (ADR-0009) rather than writing into this table directly
+    /// (spec §2 principle 1).
+    async fn mint_token(&self, tenant_id: Uuid, label: &str) -> Result<String, TokenStoreError>;
 }
 
 pub fn hash_token(token: &str) -> String {
@@ -50,4 +56,26 @@ impl TokenStore for PostgresTokenStore {
         .map_err(|e| TokenStoreError::Backend(e.to_string()))?;
         Ok(row.map(|(tenant_id,)| tenant_id))
     }
+
+    async fn mint_token(&self, tenant_id: Uuid, label: &str) -> Result<String, TokenStoreError> {
+        let token = generate_token();
+        let token_hash = hash_token(&token);
+        sqlx::query(
+            "INSERT INTO query_api_tokens (id, tenant_id, token_hash, label, created_at) VALUES ($1, $2, $3, $4, now())",
+        )
+        .bind(Uuid::new_v4())
+        .bind(tenant_id)
+        .bind(&token_hash)
+        .bind(label)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| TokenStoreError::Backend(e.to_string()))?;
+        Ok(token)
+    }
+}
+
+/// 256 bits of CSPRNG entropy (two v4 UUIDs concatenated) — deliberately not derived from any
+/// guessable value, since this is the plaintext bearer credential handed back to the caller.
+fn generate_token() -> String {
+    format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
 }

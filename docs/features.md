@@ -316,3 +316,36 @@ Entry format:
   overall.
 - **PR:** (opened in this branch's PR)
 - **ADR:** docs/adr/0008-query-gateway-interim-auth-model.md
+
+---
+
+## [2026-07-18] feature/0008-auth-service — Auth Service
+- **Type:** feature
+- **Branch:** feature/0008-auth-service
+- **Summary:** New crate `crates/auth-service` (spec §6, service #10). Two login paths, both
+  ending in a call to Query Gateway's new `POST /internal/tokens` (added to query-gateway in
+  this PR, shared-secret protected) to mint a session, since Auth Service never writes into
+  `query_api_tokens` directly (spec §2 principle 1): (1) **local login**
+  (`POST /v1/auth/local/login`) — Argon2id-hashed credentials in `auth_service.local_users`,
+  constant-shape response so unknown-username and wrong-password aren't distinguishable; (2)
+  **unified OIDC** (`GET /v1/auth/oidc/:provider/authorize`, `POST
+  /v1/auth/oidc/:provider/callback`) — one real `oauth2`-crate-backed client serves both Entra
+  ID and generic OAuth (ADR-0009), since Entra is itself OIDC-compliant and duplicating the
+  client would buy nothing. No session/cookie layer yet — that's Console UI's job once built;
+  the PKCE verifier is handed back to the authorize caller to carry to the callback.
+- **Tests:** `cargo test --workspace --lib --bins` — 197 passed, 0 failed across all ten
+  crates, including a real OIDC client test against a stub IdP (`/token`, `/userinfo`) that
+  exercises the actual code-exchange and userinfo-fetch logic, not just an in-memory double —
+  what's inherently untestable in CI is the human browser hop to the IdP's login page, true of
+  any OIDC integration (documented in ADR-0009, not a gap specific to this build-out). Live
+  Postgres integration test for `local_users`. Beyond automated tests, ran a genuine end-to-end
+  smoke test with real service binaries: created a local user with a real Argon2id hash via
+  `auth-service`'s own hashing code, logged in through `POST /v1/auth/local/login`, confirmed
+  wrong-password gets 401, and used the real minted token against `query-gateway` to read a
+  real ClickHouse-backed event — the full auth-through-query chain working together. `cargo
+  clippy --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all
+  --check` — clean. `cargo audit` / `cargo deny check` — clean (oauth2 pulls in a second
+  reqwest major version transitively; no new advisories, just an existing-pattern
+  multiple-versions warning). `cargo llvm-cov` — 95.42% overall.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0009-auth-service-v1-scope-local-login-plus-unified-oidc.md

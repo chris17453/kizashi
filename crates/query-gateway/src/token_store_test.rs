@@ -20,6 +20,25 @@ impl TokenStore for InMemoryTokenStore {
     async fn tenant_for_token(&self, token: &str) -> Result<Option<Uuid>, TokenStoreError> {
         Ok(self.tokens_by_hash.lock().unwrap().get(&hash_token(token)).copied())
     }
+
+    async fn mint_token(&self, tenant_id: Uuid, _label: &str) -> Result<String, TokenStoreError> {
+        let token = generate_token();
+        self.tokens_by_hash.lock().unwrap().insert(hash_token(&token), tenant_id);
+        Ok(token)
+    }
+}
+
+pub struct FailingTokenStore;
+
+#[async_trait]
+impl TokenStore for FailingTokenStore {
+    async fn tenant_for_token(&self, _token: &str) -> Result<Option<Uuid>, TokenStoreError> {
+        Err(TokenStoreError::Backend("simulated failure".to_string()))
+    }
+
+    async fn mint_token(&self, _tenant_id: Uuid, _label: &str) -> Result<String, TokenStoreError> {
+        Err(TokenStoreError::Backend("simulated failure".to_string()))
+    }
 }
 
 #[test]
@@ -44,4 +63,23 @@ async fn in_memory_store_returns_none_for_unknown_token() {
     let store = InMemoryTokenStore::with_token("valid-token", Uuid::new_v4());
     let resolved = store.tenant_for_token("wrong-token").await.unwrap();
     assert_eq!(resolved, None);
+}
+
+#[tokio::test]
+async fn minted_tokens_immediately_resolve_to_the_tenant_they_were_minted_for() {
+    let store = InMemoryTokenStore::default();
+    let tenant_id = Uuid::new_v4();
+
+    let token = store.mint_token(tenant_id, "test-session").await.unwrap();
+    let resolved = store.tenant_for_token(&token).await.unwrap();
+
+    assert_eq!(resolved, Some(tenant_id));
+}
+
+#[test]
+fn generate_token_produces_distinct_high_entropy_values() {
+    let a = generate_token();
+    let b = generate_token();
+    assert_ne!(a, b);
+    assert_eq!(a.len(), 64);
 }
