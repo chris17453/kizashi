@@ -109,6 +109,11 @@ Entry format:
   postgres) isn't needed. One remaining advisory, RUSTSEC-2023-0071 (rsa Marvin Attack,
   transitive via sqlx's always-compiled mysql backend, no fix available upstream, unreachable
   since Kizashi never opens a MySQL connection), is explicitly waived with rationale in
-  `.cargo/audit.toml` per CLAUDE.md §5.
+  `.cargo/audit.toml` per CLAUDE.md §5. Also fixed `cargo deny check` (bans/licenses), which
+  had never run clean before: added `publish = false` workspace-wide (internal path deps read
+  as "wildcard dependencies" to crates.io-publishable crates), allowed the CDLA-Permissive-2.0
+  license (webpki-roots' CA-bundle license, not a code license), and waived
+  RUSTSEC-2024-0384/RUSTSEC-2025-0134 (unmaintained-crate warnings, not vulnerabilities,
+  transitive via lapin) alongside RUSTSEC-2023-0071 in `deny.toml`.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a

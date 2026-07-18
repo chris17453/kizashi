@@ -10,6 +10,8 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/chris17453/kizashi"
+# Every crate in this workspace is an internal service/library, never published to crates.io.
+publish = false
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
