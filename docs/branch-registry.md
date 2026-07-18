@@ -15,7 +15,7 @@ manually created branches.
 | feature       | `feature/` | 0001        |
 | fix           | `fix/`     | 0001        |
 | debug         | `debug/`   | 0001        |
-| docs          | `docs/`    | 0001        |
+| docs          | `docs/`    | 0002         |
 | chore         | `chore/`   | 0002         |
 
 ## Branch log (append-only, newest last)
@@ -23,3 +23,4 @@ manually created branches.
 | # | Branch                       | Type    | Created    | Status | PR | Notes |
 |---|-------------------------------|---------|------------|--------|----|-------|
 | 0001 | `chore/0001-bootstrap-scaffolding` | chore | 2026-07-18 | open | pending | |
+| 0001 | `docs/0001-adr-open-items` | docs | 2026-07-18 | open | pending | |

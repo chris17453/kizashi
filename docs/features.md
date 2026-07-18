@@ -37,5 +37,24 @@ Entry format:
   `evaluate_never_panics_on_arbitrary_input` and `apply_never_panics_on_arbitrary_path_and_payload`
   fuzzing the trigger evaluator and normalization mapping engine). `cargo clippy --workspace
   --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean.
-- **PR:** (opened in this branch's PR)
+- **PR:** #1
 - **ADR:** docs/adr/0001-trigger-condition-dsl-shape.md, docs/adr/0002-mono-repo-layout.md
+
+---
+
+## [2026-07-18] docs/0001-adr-open-items — Remaining spec §11 ADRs
+- **Type:** docs
+- **Branch:** docs/0001-adr-open-items
+- **Summary:** Closes out the remaining spec §11 open items with ADRs: ADR-0003 (Fabric/OneLake
+  connector auth flow — per-tenant Entra app-registration client-credentials flow, no shared
+  platform service principal against customer tenants), ADR-0004 (Analysis Service invocation
+  pattern — micro-batched calls to Foundry/ML, per-tenant-configurable batch size/max wait,
+  never mixing tenants in one batch), ADR-0005 (archive format — gzip'd NDJSON of `RawRecord`
+  rows with a manifest header, reimported through the normal ingestion path). All five spec §11
+  open items are now resolved (trigger DSL and mono-repo layout were ADR-0001/0002, landed in
+  #1).
+- **Tests:** n/a — docs-only change.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0003-fabric-onelake-connector-auth-flow.md,
+  docs/adr/0004-analysis-service-invocation-pattern.md,
+  docs/adr/0005-archive-format-specification.md
