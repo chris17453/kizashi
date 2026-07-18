@@ -1,0 +1,167 @@
+use super::*;
+use crate::event_query_repository::event_query_repository_test::{
+    FailingEventQueryRepository, InMemoryEventQueryRepository,
+};
+use axum::body::Body;
+use axum::http::Request;
+use axum::routing::get;
+use axum::Router;
+use common::Event;
+use tower::ServiceExt;
+
+fn router(state: DashboardState) -> Router {
+    Router::new()
+        .route("/v1/events", get(list_events))
+        .route("/v1/events/:id", get(get_event))
+        .with_state(state)
+}
+
+fn sample_event(tenant_id: Uuid) -> Event {
+    Event::new(tenant_id, "sentiment", "cust-1", "cust-1", serde_json::json!({}), Utc::now())
+}
+
+#[tokio::test]
+async fn list_events_requires_tenant_header() {
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::default()),
+    };
+
+    let response = router(state)
+        .oneshot(Request::builder().uri("/v1/events").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn list_events_returns_events_scoped_to_the_tenant_header() {
+    let tenant_id = Uuid::new_v4();
+    let event = sample_event(tenant_id);
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::with_events(vec![
+            event.clone()
+        ])),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/events")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let events: Vec<Event> = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(events, vec![event]);
+}
+
+#[tokio::test]
+async fn list_events_rejects_an_invalid_status_filter() {
+    let tenant_id = Uuid::new_v4();
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::default()),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/events?status=not-a-status")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn list_events_returns_500_on_repository_failure() {
+    let tenant_id = Uuid::new_v4();
+    let state = DashboardState { event_query_repository: Arc::new(FailingEventQueryRepository) };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/events")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn get_event_returns_404_for_unknown_id() {
+    let tenant_id = Uuid::new_v4();
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::default()),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v1/events/{}", Uuid::new_v4()))
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn get_event_returns_200_for_a_known_event_in_the_caller_tenant() {
+    let tenant_id = Uuid::new_v4();
+    let event = sample_event(tenant_id);
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::with_events(vec![
+            event.clone()
+        ])),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v1/events/{}", event.id))
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn get_event_with_invalid_tenant_header_returns_400() {
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::default()),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v1/events/{}", Uuid::new_v4()))
+                .header("x-tenant-id", "not-a-uuid")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

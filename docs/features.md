@@ -286,3 +286,33 @@ Entry format:
   llvm-cov` — 96.25% overall.
 - **PR:** (opened in this branch's PR)
 - **ADR:** docs/adr/0007-action-executor-v1-dispatch-model.md
+
+---
+
+## [2026-07-18] feature/0007-query-gateway-dashboard-api — Query Gateway + Dashboard/Query API
+- **Type:** feature
+- **Branch:** feature/0007-query-gateway-dashboard-api
+- **Summary:** Two new crates completing the read side of the platform. `dashboard-api` (spec
+  §6, service #9) reads Events from ClickHouse — `GET /v1/events` (filterable by event_type,
+  group_key, status, since/until, limit) and `GET /v1/events/:id` — trusting `X-Tenant-Id` as
+  set by the gateway rather than deriving identity itself (spec §8). `query-gateway` (spec §6,
+  service #8) is the dashboard/UI-facing entry point: resolves a bearer token to a tenant
+  (ADR-0008 — same hashed-token shape as ingestion-gateway's API keys, since Auth Service isn't
+  built yet; the `query_api_tokens` table is what Auth Service will write into once it exists,
+  not a mechanism to replace later) and forwards to Dashboard API with the resolved tenant_id.
+- **Tests:** `cargo test --workspace --lib --bins` — 168 passed, 0 failed across all nine
+  crates. Live Postgres integration test for the token store (including revoked-token
+  rejection). Beyond automated tests, ran a genuine end-to-end smoke test with real service
+  binaries against live Postgres + ClickHouse: seeded a real Event row and a real token,
+  queried both `list` and `get-by-id` through `query-gateway` end to end, and confirmed 401 on
+  a missing token. **That manual run caught a real bug unit/stub tests missed**: ClickHouse's
+  HTTP interface rejects a bodyless POST with `411 Length Required`, which reqwest doesn't
+  avoid automatically — fixed by explicitly setting `Content-Length: 0`, and added
+  `requests_always_carry_a_content_length_header` so this can't silently regress again (the
+  axum-based stub servers used elsewhere don't enforce this the way real ClickHouse does).
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean (also fixed
+  two `clippy::result_large_err` findings and one `unnecessary_sort_by`). `cargo fmt --all
+  --check` — clean. `cargo audit` / `cargo deny check` — clean. `cargo llvm-cov` — 95.35%
+  overall.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0008-query-gateway-interim-auth-model.md
