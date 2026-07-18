@@ -101,5 +101,14 @@ Entry format:
   0 failed: full round trip (HTTP POST → Postgres row → `record.ingested` message consumed off
   a bound queue) plus the `record.ingested` wire-shape contract test. `cargo clippy --workspace
   --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean.
+  Upgraded sqlx 0.7→0.8 (default-features off) after `cargo audit` failed CI on
+  RUSTSEC-2024-0363 (fixed in sqlx ≥0.8.1); re-ran the full test suite (42 tests) against fresh
+  Postgres/RabbitMQ containers to confirm the upgrade didn't change behavior, and switched from
+  the `sqlx::migrate!` macro to the runtime `sqlx::migrate::Migrator::new(...)` API so the
+  "macros" feature (which unconditionally compiles the mysql/sqlite backends, not just
+  postgres) isn't needed. One remaining advisory, RUSTSEC-2023-0071 (rsa Marvin Attack,
+  transitive via sqlx's always-compiled mysql backend, no fix available upstream, unreachable
+  since Kizashi never opens a MySQL connection), is explicitly waived with rationale in
+  `.cargo/audit.toml` per CLAUDE.md §5.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a

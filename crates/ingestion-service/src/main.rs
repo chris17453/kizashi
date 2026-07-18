@@ -12,7 +12,13 @@ async fn main() {
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
     let pool = sqlx::PgPool::connect(&database_url).await.expect("failed to connect to postgres");
-    sqlx::migrate!("./migrations").run(&pool).await.expect("failed to run migrations");
+    let migrations_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    sqlx::migrate::Migrator::new(migrations_dir)
+        .await
+        .expect("failed to load migrations")
+        .run(&pool)
+        .await
+        .expect("failed to run migrations");
 
     let connection =
         lapin::Connection::connect(&rabbitmq_url, lapin::ConnectionProperties::default())

@@ -19,7 +19,13 @@ async fn test_pool() -> sqlx::PgPool {
     let database_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set to run ingest_integration_test");
     let pool = sqlx::PgPool::connect(&database_url).await.expect("failed to connect to postgres");
-    sqlx::migrate!("./migrations").run(&pool).await.expect("failed to run migrations");
+    let migrations_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    sqlx::migrate::Migrator::new(migrations_dir)
+        .await
+        .expect("failed to load migrations")
+        .run(&pool)
+        .await
+        .expect("failed to run migrations");
     pool
 }
 
