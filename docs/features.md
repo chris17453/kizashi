@@ -117,3 +117,42 @@ Entry format:
   transitive via lapin) alongside RUSTSEC-2023-0071 in `deny.toml`.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a
+
+---
+
+## [2026-07-18] feature/0002-ingestion-gateway — Ingestion Gateway
+- **Type:** feature
+- **Branch:** feature/0002-ingestion-gateway
+- **Summary:** The single agent-facing entry point (spec §6, service #2), sitting in front of
+  Ingestion Service. `POST /v1/ingest` requires an `X-Api-Key` header, resolves it to a tenant
+  via `ApiKeyStore` (Postgres-backed, keys stored only as SHA-256 hashes — the plaintext key is
+  never persisted), applies a per-tenant fixed-window `RateLimiter`, then forwards the request
+  to Ingestion Service with `tenant_id` overwritten from the *authenticated* identity — a
+  caller-supplied `tenant_id` in the request body is always discarded, so a misconfigured or
+  malicious connector cannot write into a tenant it doesn't hold a key for (spec §8 tenant
+  isolation). Missing/invalid keys return 401, rate-limit exhaustion returns 429, a malformed
+  body returns 400, and an unreachable Ingestion Service returns 502.
+- **Tests:** `cargo test -p ingestion-gateway --lib` — 14 passed, 0 failed, all against
+  in-memory doubles (`InMemoryApiKeyStore`, a deterministic `TestClock`-driven `RateLimiter`,
+  and a real in-process axum server standing in for Ingestion Service so the HTTP proxy path is
+  genuinely exercised, not mocked). `cargo test -p ingestion-gateway --test
+  api_key_store_integration_test` against a real Postgres 16 container — 1 passed, 0 failed
+  (stores a key, resolves it, confirms an unknown key and a revoked key both resolve to
+  nothing). `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo audit` and `cargo deny check` — clean (same waivers
+  as feature/0001-ingestion-service, no new advisories).
+
+  Also fixed a real cross-service bug this PR exposed: ingestion-service and
+  ingestion-gateway both connect to the same shared Postgres instance, and both shipped a
+  first migration file named `0001_...` — sqlx tracks applied migrations by version number in
+  one shared `_sqlx_migrations` table, so the moment both services' migrators ran against that
+  database, the second one hit a `VersionMismatch` (CI caught this; it can't reproduce with
+  either service tested alone). Added `common::db::connect_with_schema`, used by both services
+  in `main.rs` and their integration tests: every service now gets its own Postgres schema
+  (`ingestion_service`, `ingestion_gateway`), applied to every pooled connection via
+  `after_connect`, so table names and migration histories can never collide across services
+  sharing one database. Verified by running both services' live-Postgres integration tests
+  together against one container and confirming each landed its tables in its own schema
+  (`\dn` / `information_schema.tables`).
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a

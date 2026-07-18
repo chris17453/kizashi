@@ -11,7 +11,9 @@ async fn main() {
     let rabbitmq_url = std::env::var("RABBITMQ_URL").expect("RABBITMQ_URL must be set");
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
-    let pool = sqlx::PgPool::connect(&database_url).await.expect("failed to connect to postgres");
+    let pool = common::connect_with_schema(&database_url, "ingestion_service")
+        .await
+        .expect("failed to connect to postgres");
     let migrations_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
     sqlx::migrate::Migrator::new(migrations_dir)
         .await

@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "crates/common",
+  "crates/ingestion-gateway",
   "crates/ingestion-service",
 ]
 
@@ -30,6 +31,7 @@ sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio",
 lapin = { version = "2" }
 proptest = { version = "1" }
 futures-util = { version = "0.3" }
+sha2 = { version = "0.10" }
 
 [profile.dev]
 debug = 1
