@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0002         |
+| feature       | `feature/` | 0003         |
 | fix           | `fix/`     | 0002        |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -26,3 +26,4 @@ manually created branches.
 | 0001 | `docs/0001-adr-open-items` | docs | 2026-07-18 | merged | #2 | |
 | 0001 | `fix/0001-branch-registry-order` | fix | 2026-07-18 | open | pending | |
 | 0001 | `feature/0001-ingestion-service` | feature | 2026-07-18 | open | pending | |
+| 0002 | `feature/0002-ingestion-gateway` | feature | 2026-07-18 | open | pending | |
