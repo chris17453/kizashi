@@ -4,9 +4,11 @@ members = [
   "crates/action-executor",
   "crates/analysis-service",
   "crates/common",
+  "crates/dashboard-api",
   "crates/ingestion-gateway",
   "crates/ingestion-service",
   "crates/normalization-service",
+  "crates/query-gateway",
   "crates/trigger-engine",
 ]
 
