@@ -1,0 +1,13 @@
+version: 2
+
+# These paths contain intentionally non-secret, local-development-only placeholder
+# credentials for the self-hosted docker-compose stack (Postgres/RabbitMQ/ClickHouse) —
+# not real secrets. Real credentials are never committed; see CLAUDE.md §5 and .env.example's
+# header comment. Ignored by path rather than by incident id so future edits to these files
+# stay covered without re-triggering a false positive per CLAUDE.md's "No secrets in code or
+# commits" policy, which this documents rather than violates.
+secret:
+  ignored_paths:
+    - docker-compose.yml
+    - .github/workflows/ci.yml
+    - .env.example

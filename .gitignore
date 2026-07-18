@@ -1,0 +1,10 @@
+/target
+**/*.rs.bk
+.env
+*.pdb
+.DS_Store
+/.idea
+/.vscode
+Cargo.lock.bak
+lcov.info
+*.profraw

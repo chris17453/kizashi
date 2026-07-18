@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kizashi
+          POSTGRES_PASSWORD: kizashi
+          POSTGRES_DB: kizashi
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kizashi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: kizashi
+          RABBITMQ_DEFAULT_PASS: kizashi
+        ports: ["5672:5672"]
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      clickhouse:
+        image: clickhouse/clickhouse-server:24-alpine
+        env:
+          CLICKHOUSE_USER: kizashi
+          CLICKHOUSE_PASSWORD: kizashi
+          CLICKHOUSE_DB: kizashi
+        ports: ["8123:8123", "9000:9000"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry and target dir
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Install cargo-audit and cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-deny
+
+      - name: Run ci-local.sh
+        env:
+          DATABASE_URL: postgres://kizashi:kizashi@localhost:5432/kizashi
+          RABBITMQ_URL: amqp://kizashi:kizashi@localhost:5672/%2f
+          CLICKHOUSE_URL: http://localhost:8123
+        run: ./scripts/ci-local.sh
