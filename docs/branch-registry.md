@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0001        |
-| fix           | `fix/`     | 0001        |
+| fix           | `fix/`     | 0002        |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
 | chore         | `chore/`   | 0002         |
@@ -22,5 +22,6 @@ manually created branches.
 
 | # | Branch                       | Type    | Created    | Status | PR | Notes |
 |---|-------------------------------|---------|------------|--------|----|-------|
-| 0001 | `chore/0001-bootstrap-scaffolding` | chore | 2026-07-18 | open | pending | |
-| 0001 | `docs/0001-adr-open-items` | docs | 2026-07-18 | open | pending | |
+| 0001 | `chore/0001-bootstrap-scaffolding` | chore | 2026-07-18 | merged | #1 | |
+| 0001 | `docs/0001-adr-open-items` | docs | 2026-07-18 | merged | #2 | |
+| 0001 | `fix/0001-branch-registry-order` | fix | 2026-07-18 | open | pending | |
