@@ -1,0 +1,212 @@
+#[path = "handlers_test.rs"]
+#[cfg(test)]
+mod handlers_test;
+
+use crate::audit_log::AuditLogReader;
+use crate::normalization_mapping_repository::{
+    NormalizationMappingRepository, NormalizationMappingRepositoryError,
+};
+use crate::trigger_definition_repository::{
+    TriggerDefinitionRepository, TriggerDefinitionRepositoryError,
+};
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Json, Response};
+use common::{NormalizationMapping, TriggerDefinition};
+use std::sync::Arc;
+use uuid::Uuid;
+
+#[derive(Clone)]
+pub struct AdminState {
+    pub trigger_repository: Arc<dyn TriggerDefinitionRepository>,
+    pub mapping_repository: Arc<dyn NormalizationMappingRepository>,
+    pub audit_reader: Arc<dyn AuditLogReader>,
+}
+
+#[derive(serde::Serialize)]
+struct ErrorBody {
+    error: String,
+}
+
+fn error_response(status: StatusCode, message: impl Into<String>) -> Response {
+    (status, Json(ErrorBody { error: message.into() })).into_response()
+}
+
+/// Every handler trusts `X-Tenant-Id` as set by whatever gateway sits in front of this service
+/// (spec §8) — Config Admin Service never derives identity itself, matching Dashboard API's
+/// convention.
+fn tenant_id_from_headers(headers: &HeaderMap) -> Result<Uuid, (StatusCode, &'static str)> {
+    let raw = headers
+        .get("x-tenant-id")
+        .and_then(|v| v.to_str().ok())
+        .ok_or((StatusCode::UNAUTHORIZED, "missing X-Tenant-Id header"))?;
+    Uuid::parse_str(raw).map_err(|_| (StatusCode::BAD_REQUEST, "X-Tenant-Id is not a valid UUID"))
+}
+
+fn trigger_error_response(e: TriggerDefinitionRepositoryError) -> Response {
+    match e {
+        TriggerDefinitionRepositoryError::NotFound(id) => {
+            error_response(StatusCode::NOT_FOUND, format!("no trigger definition with id {id}"))
+        }
+        TriggerDefinitionRepositoryError::Backend(msg) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, msg)
+        }
+    }
+}
+
+fn mapping_error_response(e: NormalizationMappingRepositoryError) -> Response {
+    match e {
+        NormalizationMappingRepositoryError::NotFound(id) => {
+            error_response(StatusCode::NOT_FOUND, format!("no normalization mapping with id {id}"))
+        }
+        NormalizationMappingRepositoryError::Backend(msg) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, msg)
+        }
+    }
+}
+
+fn tenant_mismatch(headers: &HeaderMap, entity_tenant_id: Uuid) -> Option<Response> {
+    match tenant_id_from_headers(headers) {
+        Ok(tenant_id) if tenant_id == entity_tenant_id => None,
+        Ok(_) => {
+            Some(error_response(StatusCode::FORBIDDEN, "tenant_id does not match X-Tenant-Id"))
+        }
+        Err((status, msg)) => Some(error_response(status, msg)),
+    }
+}
+
+pub async fn create_trigger(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Json(trigger): Json<TriggerDefinition>,
+) -> Response {
+    if let Some(response) = tenant_mismatch(&headers, trigger.tenant_id) {
+        return response;
+    }
+    match state.trigger_repository.create(trigger).await {
+        Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
+        Err(e) => trigger_error_response(e),
+    }
+}
+
+pub async fn update_trigger(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(mut trigger): Json<TriggerDefinition>,
+) -> Response {
+    if let Some(response) = tenant_mismatch(&headers, trigger.tenant_id) {
+        return response;
+    }
+    trigger.id = id;
+    match state.trigger_repository.update(trigger).await {
+        Ok(updated) => Json(updated).into_response(),
+        Err(e) => trigger_error_response(e),
+    }
+}
+
+pub async fn get_trigger(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.trigger_repository.get(tenant_id, id).await {
+        Ok(Some(trigger)) => Json(trigger).into_response(),
+        Ok(None) => {
+            error_response(StatusCode::NOT_FOUND, format!("no trigger definition with id {id}"))
+        }
+        Err(e) => trigger_error_response(e),
+    }
+}
+
+pub async fn list_triggers(State(state): State<AdminState>, headers: HeaderMap) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.trigger_repository.list(tenant_id).await {
+        Ok(triggers) => Json(triggers).into_response(),
+        Err(e) => trigger_error_response(e),
+    }
+}
+
+pub async fn create_mapping(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Json(mapping): Json<NormalizationMapping>,
+) -> Response {
+    if let Some(response) = tenant_mismatch(&headers, mapping.tenant_id) {
+        return response;
+    }
+    match state.mapping_repository.create(mapping).await {
+        Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
+        Err(e) => mapping_error_response(e),
+    }
+}
+
+pub async fn update_mapping(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(mut mapping): Json<NormalizationMapping>,
+) -> Response {
+    if let Some(response) = tenant_mismatch(&headers, mapping.tenant_id) {
+        return response;
+    }
+    mapping.id = id;
+    match state.mapping_repository.update(mapping).await {
+        Ok(updated) => Json(updated).into_response(),
+        Err(e) => mapping_error_response(e),
+    }
+}
+
+pub async fn get_mapping(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.mapping_repository.get(tenant_id, id).await {
+        Ok(Some(mapping)) => Json(mapping).into_response(),
+        Ok(None) => {
+            error_response(StatusCode::NOT_FOUND, format!("no normalization mapping with id {id}"))
+        }
+        Err(e) => mapping_error_response(e),
+    }
+}
+
+pub async fn list_mappings(State(state): State<AdminState>, headers: HeaderMap) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.mapping_repository.list(tenant_id).await {
+        Ok(mappings) => Json(mappings).into_response(),
+        Err(e) => mapping_error_response(e),
+    }
+}
+
+/// GET /v1/audit-log/:entity_id — the audit trail CLAUDE.md §5 requires exists for every
+/// admin/config entity, regardless of type (trigger definition or normalization mapping share
+/// the same `config_audit_log` table, keyed by `entity_id`).
+pub async fn get_audit_log(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(entity_id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.audit_reader.list_for_entity(tenant_id, entity_id).await {
+        Ok(entries) => Json(entries).into_response(),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}

@@ -349,3 +349,40 @@ Entry format:
   multiple-versions warning). `cargo llvm-cov` — 95.42% overall.
 - **PR:** (opened in this branch's PR)
 - **ADR:** docs/adr/0009-auth-service-v1-scope-local-login-plus-unified-oidc.md
+
+---
+
+## [2026-07-18] feature/0009-config-admin-service — Config/Admin Service
+- **Type:** feature
+- **Branch:** feature/0009-config-admin-service
+- **Summary:** New crate `crates/config-admin-service` (spec §6, service #11). Full CRUD +
+  immutable audit logging for `TriggerDefinition` and `NormalizationMapping` — the two config
+  entity types with real existing consumers (trigger-engine, normalization-service). Every
+  create/update opens one Postgres transaction, writes the entity change, then writes an
+  audit_log row via `record_audit_entry` (a free function, not a trait method, since sharing
+  one `Transaction` across a `dyn Trait` repository and an audit abstraction isn't portable) —
+  all in the same transaction, per CLAUDE.md §5. `GET /v1/audit-log/:entity_id` exposes the
+  read path via a separately mockable `AuditLogReader` trait. Deliberately does NOT yet migrate
+  trigger-engine/normalization-service to read their config through this service (they still
+  read their own local tables) and does NOT build EventTypeDefinition/connector-config/
+  retention-policy/branding CRUD, since none of those have a real consumer yet and CLAUDE.md
+  prohibits half-finished stub endpoints — both cuts are documented in ADR-0010, not silent.
+- **Tests:** `cargo test --workspace --lib --bins` — 222 passed, 0 failed across all eleven
+  crates (24 in config-admin-service alone: repository CRUD/tenant-scoping/audit-trail unit
+  tests against in-memory doubles, handler tests including a tenant-mismatch-is-rejected case
+  and a full create→get→update→list→audit-log round trip). Live Postgres integration test
+  (`tests/repository_integration_test.rs`, 4 tests) exercises the real transactional behavior
+  the in-memory doubles can't: a real `config_audit_log` row lands in the same transaction as a
+  real trigger/mapping insert, an update writes a second audit row with both `before` and
+  `after` populated, and a failed update (unknown id) leaves zero audit rows — no partial
+  writes. Beyond automated tests, ran a genuine end-to-end smoke test with the real
+  `config-admin-service` binary against live Postgres: created a trigger definition over HTTP,
+  confirmed it was retrievable via `GET /v1/trigger-definitions/:id`, and confirmed the
+  audit-log endpoint returned exactly one `created` entry with the full entity snapshot in
+  `after`. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo audit` / `cargo deny check` — clean (same two
+  pre-existing waived unmaintained-crate warnings as prior PRs, no new advisories). `cargo
+  llvm-cov --workspace --all-features --ignore-filename-regex '(^|/)main\.rs$'
+  --fail-under-lines 85` — 94.37% overall, ratchet holds.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0010-config-admin-service-v1-scope.md

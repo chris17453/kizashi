@@ -5,6 +5,7 @@ members = [
   "crates/analysis-service",
   "crates/auth-service",
   "crates/common",
+  "crates/config-admin-service",
   "crates/dashboard-api",
   "crates/ingestion-gateway",
   "crates/ingestion-service",
