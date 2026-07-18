@@ -133,10 +133,40 @@ impl RawRecordRepository for InMemoryRawRecordRepository {
                     r.raw_payload.to_string().to_lowercase().contains(&q.to_lowercase())
                 })
             })
+            .filter(|r| {
+                filter.subject.as_deref().is_none_or(|s| {
+                    r.raw_payload
+                        .get("subject")
+                        .and_then(|v| v.as_str())
+                        .is_some_and(|subject| subject.to_lowercase().contains(&s.to_lowercase()))
+                })
+            })
+            .filter(|r| {
+                filter.email_from.as_deref().is_none_or(|f| {
+                    r.raw_payload
+                        .get("from")
+                        .and_then(|v| v.as_str())
+                        .is_some_and(|from| from.to_lowercase().contains(&f.to_lowercase()))
+                })
+            })
+            .filter(|r| {
+                filter.attachment_filename.as_deref().is_none_or(|f| {
+                    r.raw_payload.get("attachments").and_then(|v| v.as_array()).is_some_and(
+                        |attachments| {
+                            attachments.iter().any(|a| {
+                                a.get("filename").and_then(|v| v.as_str()).is_some_and(|filename| {
+                                    filename.to_lowercase().contains(&f.to_lowercase())
+                                })
+                            })
+                        },
+                    )
+                })
+            })
             .cloned()
             .collect();
         matching.sort_by_key(|r| std::cmp::Reverse(r.ingested_at));
-        matching.truncate(filter.limit as usize);
+        let matching =
+            matching.into_iter().skip(filter.offset as usize).take(filter.limit as usize).collect();
         Ok(matching)
     }
 }
@@ -546,4 +576,91 @@ async fn search_filters_by_date_range() {
     };
     let found = repo.search(tenant_id, &filter).await.unwrap();
     assert_eq!(found, vec![recent]);
+}
+
+fn email_record(
+    tenant_id: uuid::Uuid,
+    subject: &str,
+    from: &str,
+    attachment_filenames: &[&str],
+) -> RawRecord {
+    let attachments: Vec<serde_json::Value> = attachment_filenames
+        .iter()
+        .map(|f| serde_json::json!({"filename": f, "content_type": "application/pdf", "size_bytes": 10}))
+        .collect();
+    RawRecord::new(
+        "graph-mail",
+        common::SourceType::Message,
+        tenant_id,
+        serde_json::json!({"subject": subject, "from": from, "body": "hi", "attachments": attachments}),
+    )
+}
+
+#[tokio::test]
+async fn search_filters_by_subject() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let matching = email_record(tenant_id, "printer on fire", "alice@example.com", &[]);
+    let non_matching = email_record(tenant_id, "password reset", "bob@example.com", &[]);
+    repo.insert(&matching).await.unwrap();
+    repo.insert(&non_matching).await.unwrap();
+
+    let filter = RecordSearchFilter {
+        subject: Some("printer".to_string()),
+        limit: 10,
+        ..Default::default()
+    };
+    let found = repo.search(tenant_id, &filter).await.unwrap();
+    assert_eq!(found, vec![matching]);
+}
+
+#[tokio::test]
+async fn search_filters_by_email_from() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let matching = email_record(tenant_id, "hi", "alice@example.com", &[]);
+    let non_matching = email_record(tenant_id, "hi", "bob@example.com", &[]);
+    repo.insert(&matching).await.unwrap();
+    repo.insert(&non_matching).await.unwrap();
+
+    let filter = RecordSearchFilter {
+        email_from: Some("alice".to_string()),
+        limit: 10,
+        ..Default::default()
+    };
+    let found = repo.search(tenant_id, &filter).await.unwrap();
+    assert_eq!(found, vec![matching]);
+}
+
+#[tokio::test]
+async fn search_filters_by_attachment_filename() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let matching = email_record(tenant_id, "hi", "alice@example.com", &["invoice.pdf"]);
+    let non_matching = email_record(tenant_id, "hi", "alice@example.com", &["photo.jpg"]);
+    repo.insert(&matching).await.unwrap();
+    repo.insert(&non_matching).await.unwrap();
+
+    let filter = RecordSearchFilter {
+        attachment_filename: Some("invoice".to_string()),
+        limit: 10,
+        ..Default::default()
+    };
+    let found = repo.search(tenant_id, &filter).await.unwrap();
+    assert_eq!(found, vec![matching]);
+}
+
+#[tokio::test]
+async fn search_by_subject_does_not_match_records_with_no_subject_field() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    repo.insert(&record_for_connector(tenant_id, "sql", chrono::Utc::now())).await.unwrap();
+
+    let filter = RecordSearchFilter {
+        subject: Some("anything".to_string()),
+        limit: 10,
+        ..Default::default()
+    };
+    let found = repo.search(tenant_id, &filter).await.unwrap();
+    assert!(found.is_empty());
 }

@@ -11,6 +11,7 @@ use std::sync::Mutex;
 pub struct InMemoryIngestionStatsClient {
     pub stats: Mutex<Vec<ConnectorStatSummary>>,
     pub records: Mutex<Vec<RecordSummary>>,
+    pub has_more: Mutex<bool>,
 }
 
 #[async_trait]
@@ -34,8 +35,11 @@ impl IngestionStatsClient for InMemoryIngestionStatsClient {
         &self,
         _tenant_id: Uuid,
         _filter: &RecordSearchFilter,
-    ) -> Result<Vec<RecordSummary>, IngestionStatsClientError> {
-        Ok(self.records.lock().unwrap().clone())
+    ) -> Result<SearchResult, IngestionStatsClientError> {
+        Ok(SearchResult {
+            records: self.records.lock().unwrap().clone(),
+            has_more: *self.has_more.lock().unwrap(),
+        })
     }
 
     async fn get_record(
@@ -70,7 +74,7 @@ impl IngestionStatsClient for FailingIngestionStatsClient {
         &self,
         _tenant_id: Uuid,
         _filter: &RecordSearchFilter,
-    ) -> Result<Vec<RecordSummary>, IngestionStatsClientError> {
+    ) -> Result<SearchResult, IngestionStatsClientError> {
         Err(IngestionStatsClientError::Unreachable("simulated failure".to_string()))
     }
 
@@ -108,14 +112,17 @@ async fn spawn_stub_server() -> String {
         .into_response()
     }
     async fn search_handler() -> axum::response::Response {
-        Json(serde_json::json!([{
-            "id": "11111111-1111-1111-1111-111111111111",
-            "connector_id": "zendesk",
-            "source_type": "ticket",
-            "ingested_at": "2026-07-18T12:00:00Z",
-            "raw_payload": {"subject": "printer on fire"},
-            "normalized_payload": null
-        }]))
+        Json(serde_json::json!({
+            "records": [{
+                "id": "11111111-1111-1111-1111-111111111111",
+                "connector_id": "zendesk",
+                "source_type": "ticket",
+                "ingested_at": "2026-07-18T12:00:00Z",
+                "raw_payload": {"subject": "printer on fire"},
+                "normalized_payload": null
+            }],
+            "has_more": false
+        }))
         .into_response()
     }
     async fn get_record_handler() -> axum::response::Response {
@@ -171,10 +178,11 @@ async fn http_client_searches_records_against_a_real_server() {
     let client = HttpIngestionStatsClient::new(reqwest::Client::new(), url);
 
     let filter = RecordSearchFilter { query: Some("printer".to_string()), ..Default::default() };
-    let records = client.search_records(Uuid::new_v4(), &filter).await.unwrap();
+    let result = client.search_records(Uuid::new_v4(), &filter).await.unwrap();
 
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].connector_id, "zendesk");
+    assert_eq!(result.records.len(), 1);
+    assert_eq!(result.records[0].connector_id, "zendesk");
+    assert!(!result.has_more);
 }
 
 #[tokio::test]

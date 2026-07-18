@@ -18,8 +18,14 @@
       <option value="fabric_record" {% if query.source_type == "fabric_record" %}selected{% endif %}>Fabric Record</option>
       <option value="generic" {% if query.source_type == "generic" %}selected{% endif %}>Generic</option>
     </select>
-    <label for="q">Search text</label>
+    <label for="q">Search text (raw payload)</label>
     <input type="text" id="q" name="q" value="{{ query.q }}" placeholder="printer on fire">
+    <label for="subject">Subject (email)</label>
+    <input type="text" id="subject" name="subject" value="{{ query.subject }}" placeholder="printer on fire">
+    <label for="email_from">From (email)</label>
+    <input type="text" id="email_from" name="email_from" value="{{ query.email_from }}" placeholder="alice@example.com">
+    <label for="attachment_filename">Attachment filename</label>
+    <input type="text" id="attachment_filename" name="attachment_filename" value="{{ query.attachment_filename }}" placeholder="invoice.pdf">
     <button type="submit">Search</button>
   </form>
 </div>
@@ -42,4 +48,32 @@
     {% endfor %}
   </tbody>
 </table>
+
+<div class="pagination">
+  {% if page > 0 %}
+  <form method="get" action="/data" class="pagination-form">
+    <input type="hidden" name="connector_id" value="{{ query.connector_id }}">
+    <input type="hidden" name="source_type" value="{{ query.source_type }}">
+    <input type="hidden" name="q" value="{{ query.q }}">
+    <input type="hidden" name="subject" value="{{ query.subject }}">
+    <input type="hidden" name="email_from" value="{{ query.email_from }}">
+    <input type="hidden" name="attachment_filename" value="{{ query.attachment_filename }}">
+    <input type="hidden" name="page" value="{{ page - 1 }}">
+    <button type="submit" class="btn">&larr; Previous</button>
+  </form>
+  {% endif %}
+  <span class="muted">Page {{ page + 1 }}</span>
+  {% if has_more %}
+  <form method="get" action="/data" class="pagination-form">
+    <input type="hidden" name="connector_id" value="{{ query.connector_id }}">
+    <input type="hidden" name="source_type" value="{{ query.source_type }}">
+    <input type="hidden" name="q" value="{{ query.q }}">
+    <input type="hidden" name="subject" value="{{ query.subject }}">
+    <input type="hidden" name="email_from" value="{{ query.email_from }}">
+    <input type="hidden" name="attachment_filename" value="{{ query.attachment_filename }}">
+    <input type="hidden" name="page" value="{{ page + 1 }}">
+    <button type="submit" class="btn">Next &rarr;</button>
+  </form>
+  {% endif %}
+</div>
 {% endblock %}

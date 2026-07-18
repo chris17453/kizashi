@@ -795,3 +795,45 @@ Entry format:
   architectural decision. The scale-driven follow-ups this change explicitly defers — a real
   search index and a dynamic per-agent connector scheduling model to replace one static
   container per connector type — are tracked separately, not silently dropped.)
+
+## [2026-07-18] feature/0014-docker-images — Structured email search + Data Viewer pagination
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Two fixes driven directly by user feedback on the just-shipped Data Viewer.
+  First: `raw_payload` was opaque JSON with no defined shape, so there was no way to search
+  "subject contains X" or "from Y" or "has attachment Z" — a real gap for the email/message
+  connectors this platform targets (Graph Mail, and the planned IMAP connector). Added
+  `common::EmailPayload` (subject, from, to/cc/bcc, body, headers, attachments — attachment
+  metadata only, never inline bytes; a real attachment's content belongs in the object store
+  retention-service already archives into, referenced by `storage_key`) as the documented
+  `raw_payload` shape for `SourceType::Message` records from an email connector. Extended
+  `RecordSearchFilter`/`GET /v1/records/search` with `subject`/`email_from`/
+  `attachment_filename`, each a substring match against the corresponding JSON field (a
+  record with no `subject` field simply never matches — not an error), plus a GIN index on
+  `raw_payload` so those lookups can use an index scan instead of a full scan at scale. Second:
+  every list page (Data Viewer, Agents, Events, Triggers) had a hardcoded `limit` with a silent
+  cutoff and no way to see more — flagged directly as not enterprise-grade. Added real
+  offset-based pagination to Data Viewer search: the backend fetches one extra row to compute
+  `has_more` without a second `COUNT(*)` query (which would scan the same rows twice, at
+  exactly the scale pagination exists to handle), and the UI renders Previous/Next as plain
+  `<form method="get">` submissions carrying every current filter as hidden fields — no JS,
+  consistent with the rest of the app. Agents/Events/Triggers pagination is still open
+  (tracked, not silently dropped).
+- **Tests:** `cargo test -p common --lib` — 39 passed (2 new: `EmailPayload` round-trip and
+  default-field handling). `cargo test -p ingestion-service --lib` — 57 passed (10 new: each
+  email filter individually, a no-subject-field non-match case, `has_more` when results exceed
+  the page size, offset skipping earlier pages). `cargo test -p kizashi-ui --lib` — 67 passed
+  (2 new: pagination controls render correctly on page 0 vs. page 1, with vs. without more
+  results). Beyond unit tests: rebuilt and redeployed `ingestion-service`/`kizashi-ui`, posted
+  two email-shaped records with different subject/from/attachment through the real
+  `ingestion-gateway`, then through the real running Console UI confirmed each of
+  subject/email_from/attachment_filename search independently found only its matching record
+  (and a deliberately-wrong search term correctly found nothing), then posted 30 more records
+  and confirmed real pagination through the live UI: page 1 shows a Next link and no Previous,
+  page 2 shows Previous and no Next (30 records, 25-per-page default). Full local CI gate:
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green, `cargo llvm-cov` 94.29%
+  line coverage (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (additive schema/query/UI work on already-established patterns, not a new
+  architectural decision)

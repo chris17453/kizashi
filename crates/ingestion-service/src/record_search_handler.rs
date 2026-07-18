@@ -20,22 +20,40 @@ pub struct SearchRecordsQuery {
     pub from: Option<DateTime<Utc>>,
     pub to: Option<DateTime<Utc>>,
     pub q: Option<String>,
+    /// Substring match against an email-shaped record's `subject` (`common::EmailPayload`).
+    pub subject: Option<String>,
+    /// Substring match against an email-shaped record's `from` address.
+    pub email_from: Option<String>,
+    /// Substring match against any attachment's filename.
+    pub attachment_filename: Option<String>,
     #[serde(default = "default_limit")]
     pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
 }
 
 fn default_limit() -> i64 {
     50
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct SearchRecordsResponse {
+    pub records: Vec<RawRecord>,
+    /// True if there are more matching records beyond this page — computed by fetching one
+    /// extra row rather than a separate `COUNT(*)` query, which would scan the same rows twice
+    /// at exactly the scale (thousands of inboxes) pagination exists to handle.
+    pub has_more: bool,
+}
+
 /// GET /v1/records/search — the Data Viewer's search: every filter is optional and AND-ed
-/// (connector, source type, an ingested-at range, and a substring match against the raw
-/// payload). Tenant-scoped like every other read path.
+/// (connector, source type, an ingested-at range, a substring match against the raw payload,
+/// and, for email-shaped records, subject/from/attachment-filename matches). Tenant-scoped
+/// like every other read path.
 pub async fn search_records(
     State(state): State<IngestState>,
     headers: HeaderMap,
     Query(query): Query<SearchRecordsQuery>,
-) -> Result<Json<Vec<RawRecord>>, IngestError> {
+) -> Result<Json<SearchRecordsResponse>, IngestError> {
     let tenant_id = tenant_id_from_headers(&headers)?;
     let filter = RecordSearchFilter {
         connector_id: query.connector_id,
@@ -43,14 +61,20 @@ pub async fn search_records(
         from: query.from,
         to: query.to,
         query: query.q,
-        limit: query.limit,
+        subject: query.subject,
+        email_from: query.email_from,
+        attachment_filename: query.attachment_filename,
+        limit: query.limit + 1,
+        offset: query.offset,
     };
-    let records = state
+    let mut records = state
         .repository
         .search(tenant_id, &filter)
         .await
         .map_err(|e| IngestError::Storage(e.to_string()))?;
-    Ok(Json(records))
+    let has_more = records.len() as i64 > query.limit;
+    records.truncate(query.limit as usize);
+    Ok(Json(SearchRecordsResponse { records, has_more }))
 }
 
 /// GET /v1/records/:id — the Data Viewer's record detail view (full raw + normalized payload).

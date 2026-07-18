@@ -108,3 +108,71 @@ async fn shows_an_error_when_the_backend_fails() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("unreachable"));
 }
+
+#[tokio::test]
+async fn renders_the_subject_and_email_from_search_fields_prefilled() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data?subject=printer&email_from=alice%40example.com")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(r#"value="printer""#));
+    assert!(body.contains("alice@example.com"));
+}
+
+#[tokio::test]
+async fn shows_a_next_link_when_there_are_more_results_but_no_previous_link_on_page_zero() {
+    let (mut state, session_id) = state_with_session().await;
+    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
+    *stats_client.has_more.lock().unwrap() = true;
+    state.stats_client = stats_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Next"));
+    assert!(!body.contains("Previous"));
+}
+
+#[tokio::test]
+async fn shows_a_previous_link_on_page_two_and_no_next_link_when_no_more_results() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data?page=1")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Previous"));
+    assert!(!body.contains("Next"));
+    assert!(body.contains("Page 2"));
+}

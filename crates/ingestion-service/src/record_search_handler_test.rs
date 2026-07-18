@@ -47,8 +47,9 @@ async fn search_records_returns_matches_for_the_requesting_tenant() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let found: Vec<RawRecord> = serde_json::from_slice(&body).unwrap();
-    assert_eq!(found.len(), 1);
+    let found: SearchRecordsResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(found.records.len(), 1);
+    assert!(!found.has_more);
 }
 
 #[tokio::test]
@@ -129,4 +130,98 @@ async fn get_record_returns_404_for_unknown_id() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn search_records_filters_by_subject_query_param() {
+    let repository = Arc::new(InMemoryRawRecordRepository::default());
+    let publisher = Arc::new(InMemoryEventPublisher::default());
+    let tenant_id = Uuid::new_v4();
+    repository
+        .insert(&record(tenant_id, "graph-mail", serde_json::json!({"subject": "printer on fire"})))
+        .await
+        .unwrap();
+    repository
+        .insert(&record(tenant_id, "graph-mail", serde_json::json!({"subject": "password reset"})))
+        .await
+        .unwrap();
+    let state = IngestState { repository, publisher };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/records/search?subject=printer")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let found: SearchRecordsResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(found.records.len(), 1);
+}
+
+#[tokio::test]
+async fn search_records_reports_has_more_when_results_exceed_the_page_size() {
+    let repository = Arc::new(InMemoryRawRecordRepository::default());
+    let publisher = Arc::new(InMemoryEventPublisher::default());
+    let tenant_id = Uuid::new_v4();
+    for i in 0..3 {
+        repository
+            .insert(&record(tenant_id, "zendesk", serde_json::json!({"i": i})))
+            .await
+            .unwrap();
+    }
+    let state = IngestState { repository, publisher };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/records/search?limit=2")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let found: SearchRecordsResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(found.records.len(), 2);
+    assert!(found.has_more);
+}
+
+#[tokio::test]
+async fn search_records_offset_skips_earlier_pages() {
+    let repository = Arc::new(InMemoryRawRecordRepository::default());
+    let publisher = Arc::new(InMemoryEventPublisher::default());
+    let tenant_id = Uuid::new_v4();
+    let now = chrono::Utc::now();
+    for days_ago in 0..3 {
+        let mut r = record(tenant_id, "zendesk", serde_json::json!({"i": days_ago}));
+        r.ingested_at = now - chrono::Duration::days(days_ago);
+        repository.insert(&r).await.unwrap();
+    }
+    let state = IngestState { repository, publisher };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/records/search?limit=1&offset=1")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let found: SearchRecordsResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(found.records.len(), 1);
+    assert_eq!(found.records[0].raw_payload["i"], 1);
 }

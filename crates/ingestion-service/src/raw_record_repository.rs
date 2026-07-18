@@ -105,7 +105,16 @@ pub struct RecordSearchFilter {
     pub from: Option<chrono::DateTime<chrono::Utc>>,
     pub to: Option<chrono::DateTime<chrono::Utc>>,
     pub query: Option<String>,
+    /// Substring match against `raw_payload.subject` — meaningful for email-shaped records
+    /// (`common::EmailPayload`'s documented `raw_payload` shape), a no-op filter (matches
+    /// nothing) against any record whose payload has no `subject` field.
+    pub subject: Option<String>,
+    /// Substring match against `raw_payload.from` (the sender address).
+    pub email_from: Option<String>,
+    /// Substring match against any attachment's `filename` in `raw_payload.attachments`.
+    pub attachment_filename: Option<String>,
     pub limit: i64,
+    pub offset: i64,
 }
 
 pub struct PostgresRawRecordRepository {
@@ -284,8 +293,15 @@ impl RawRecordRepository for PostgresRawRecordRepository {
               AND ($4::timestamptz IS NULL OR ingested_at >= $4)
               AND ($5::timestamptz IS NULL OR ingested_at <= $5)
               AND ($6::text IS NULL OR raw_payload::text ILIKE '%' || $6 || '%')
+              AND ($7::text IS NULL OR raw_payload->>'subject' ILIKE '%' || $7 || '%')
+              AND ($8::text IS NULL OR raw_payload->>'from' ILIKE '%' || $8 || '%')
+              AND ($9::text IS NULL OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements(COALESCE(raw_payload->'attachments', '[]'::jsonb)) AS a
+                    WHERE a->>'filename' ILIKE '%' || $9 || '%'
+              ))
             ORDER BY ingested_at DESC
-            LIMIT $7
+            LIMIT $10
+            OFFSET $11
             "#,
         )
         .bind(tenant_id)
@@ -294,7 +310,11 @@ impl RawRecordRepository for PostgresRawRecordRepository {
         .bind(filter.from)
         .bind(filter.to)
         .bind(&filter.query)
+        .bind(&filter.subject)
+        .bind(&filter.email_from)
+        .bind(&filter.attachment_filename)
         .bind(filter.limit)
+        .bind(filter.offset)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| RepositoryError::Backend(e.to_string()))?;

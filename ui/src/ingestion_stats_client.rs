@@ -32,11 +32,39 @@ impl RecordSummary {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RecordSearchFilter {
     pub connector_id: Option<String>,
     pub source_type: Option<String>,
     pub query: Option<String>,
+    pub subject: Option<String>,
+    pub email_from: Option<String>,
+    pub attachment_filename: Option<String>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+impl Default for RecordSearchFilter {
+    fn default() -> Self {
+        Self {
+            connector_id: None,
+            source_type: None,
+            query: None,
+            subject: None,
+            email_from: None,
+            attachment_filename: None,
+            limit: DEFAULT_PAGE_SIZE,
+            offset: 0,
+        }
+    }
+}
+
+pub const DEFAULT_PAGE_SIZE: i64 = 25;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchResult {
+    pub records: Vec<RecordSummary>,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Error)]
@@ -68,7 +96,7 @@ pub trait IngestionStatsClient: Send + Sync {
         &self,
         tenant_id: Uuid,
         filter: &RecordSearchFilter,
-    ) -> Result<Vec<RecordSummary>, IngestionStatsClientError>;
+    ) -> Result<SearchResult, IngestionStatsClientError>;
 
     /// The Data Viewer's record detail view (full raw + normalized payload).
     async fn get_record(
@@ -133,8 +161,9 @@ impl IngestionStatsClient for HttpIngestionStatsClient {
         &self,
         tenant_id: Uuid,
         filter: &RecordSearchFilter,
-    ) -> Result<Vec<RecordSummary>, IngestionStatsClientError> {
-        let mut params: Vec<(&str, String)> = vec![];
+    ) -> Result<SearchResult, IngestionStatsClientError> {
+        let mut params: Vec<(&str, String)> =
+            vec![("limit", filter.limit.to_string()), ("offset", filter.offset.to_string())];
         if let Some(connector_id) = &filter.connector_id {
             if !connector_id.is_empty() {
                 params.push(("connector_id", connector_id.clone()));
@@ -150,6 +179,21 @@ impl IngestionStatsClient for HttpIngestionStatsClient {
                 params.push(("q", query.clone()));
             }
         }
+        if let Some(subject) = &filter.subject {
+            if !subject.is_empty() {
+                params.push(("subject", subject.clone()));
+            }
+        }
+        if let Some(email_from) = &filter.email_from {
+            if !email_from.is_empty() {
+                params.push(("email_from", email_from.clone()));
+            }
+        }
+        if let Some(attachment_filename) = &filter.attachment_filename {
+            if !attachment_filename.is_empty() {
+                params.push(("attachment_filename", attachment_filename.clone()));
+            }
+        }
 
         let response = self
             .client
@@ -163,7 +207,17 @@ impl IngestionStatsClient for HttpIngestionStatsClient {
         if !response.status().is_success() {
             return Err(IngestionStatsClientError::Rejected(response.status().as_u16()));
         }
-        response.json().await.map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))
+
+        #[derive(serde::Deserialize)]
+        struct SearchRecordsResponse {
+            records: Vec<RecordSummary>,
+            has_more: bool,
+        }
+        let body: SearchRecordsResponse = response
+            .json()
+            .await
+            .map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))?;
+        Ok(SearchResult { records: body.records, has_more: body.has_more })
     }
 
     async fn get_record(
