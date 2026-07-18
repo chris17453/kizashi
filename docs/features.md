@@ -224,3 +224,35 @@ Entry format:
   `cargo deny check` — clean. `cargo llvm-cov` — 96.56% overall, well above the 85% floor.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a
+
+---
+
+## [2026-07-18] feature/0005-trigger-engine — Trigger Engine
+- **Type:** feature
+- **Branch:** feature/0005-trigger-engine
+- **Summary:** Consumes `record.analyzed`, classifies candidate event types from the analysis
+  output per ADR-0006 (every top-level numeric key in `analysis` becomes a candidate event
+  named after that key — a documented placeholder until Config/Admin Service ships real
+  `EventTypeDefinition` classification), records each as a durable signal in Trigger Engine's
+  own Postgres schema, evaluates every enabled `TriggerDefinition` matching that event type
+  against the signal's rolling window (`TriggerDefinition::evaluate`, ADR-0001), and for every
+  firing trigger writes an `Event` to ClickHouse (spec §5.2 aggregate store — the first service
+  to actually use it) and publishes `event.created`. `TriggerDefinition` storage is, like
+  NormalizationMapping, owned directly by this service for now rather than depending on
+  Config/Admin Service.
+
+  Fixed a real infra gap this surfaced: `CLICKHOUSE_URL` in CI and `.env.example` had no
+  credentials, but ClickHouse's HTTP interface rejects anonymous requests once
+  `CLICKHOUSE_USER`/`CLICKHOUSE_PASSWORD` are set on the server — nothing had exercised that
+  path until this PR. Fixed by embedding credentials in `CLICKHOUSE_URL` (HTTP basic auth via
+  userinfo), matching how `DATABASE_URL`/`RABBITMQ_URL` already work.
+- **Tests:** `cargo test --workspace --lib --bins` — 117 passed, 0 failed across all six
+  crates. `trigger_integration_test` is a genuine full-stack test against real Postgres +
+  ClickHouse + RabbitMQ together: inserts a `TriggerDefinition`, feeds an `AnalyzedRecord`
+  through `process_analyzed_record`, confirms the `Event` lands in ClickHouse and
+  `event.created` is received off a bound queue. `event_created_contract_test` covers the wire
+  shape. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo audit` / `cargo deny check` — clean. `cargo
+  llvm-cov` — 96.49% overall.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0006-trigger-engine-event-type-classification-for-v1.md

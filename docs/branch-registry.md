@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0005         |
+| feature       | `feature/` | 0006         |
 | fix           | `fix/`     | 0002        |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -29,3 +29,4 @@ manually created branches.
 | 0002 | `feature/0002-ingestion-gateway` | feature | 2026-07-18 | open | pending | |
 | 0003 | `feature/0003-normalization-service` | feature | 2026-07-18 | open | pending | |
 | 0004 | `feature/0004-analysis-service` | feature | 2026-07-18 | open | pending | |
+| 0005 | `feature/0005-trigger-engine` | feature | 2026-07-18 | open | pending | |
