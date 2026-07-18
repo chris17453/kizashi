@@ -4,29 +4,32 @@ use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
-use crate::ingestion_stats_client::ingestion_stats_client_test::{
-    FailingIngestionStatsClient, InMemoryIngestionStatsClient,
-};
+use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/data", get(get_data)).with_state(state)
+    Router::new()
+        .route("/agents/generate", get(get_generate_select))
+        .route("/agents/generate/form", get(get_generate_form))
+        .route("/agents/generate/script", post(post_generate_script))
+        .with_state(state)
 }
 
-async fn state_with_session() -> (AppState, String) {
+async fn state_with_session() -> (AppState, String, Uuid) {
     let session_store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
     let session_id = session_store
         .create(Session {
             bearer_token: "tok".to_string(),
-            tenant_id: Uuid::new_v4(),
+            tenant_id,
             username: "alice".to_string(),
         })
         .await;
@@ -42,27 +45,17 @@ async fn state_with_session() -> (AppState, String) {
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
-    (state, session_id)
+    (state, session_id, tenant_id)
 }
 
 #[tokio::test]
-async fn renders_search_results_when_signed_in() {
-    let (mut state, session_id) = state_with_session().await;
-    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
-    stats_client.records.lock().unwrap().push(RecordSummary {
-        id: Uuid::new_v4(),
-        connector_id: "zendesk".to_string(),
-        source_type: "ticket".to_string(),
-        ingested_at: chrono::Utc::now(),
-        raw_payload: serde_json::json!({"subject": "printer on fire"}),
-        normalized_payload: None,
-    });
-    state.stats_client = stats_client;
+async fn get_generate_select_lists_every_connector_type() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/data?q=printer")
+                .uri("/agents/generate")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -73,15 +66,16 @@ async fn renders_search_results_when_signed_in() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("zendesk"));
+    assert!(body.contains("Zendesk"));
+    assert!(body.contains("Fabric"));
 }
 
 #[tokio::test]
-async fn redirects_to_login_when_not_signed_in() {
-    let (state, _session_id) = state_with_session().await;
+async fn get_generate_select_redirects_to_login_when_not_signed_in() {
+    let (state, _session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
-        .oneshot(Request::builder().uri("/data").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/agents/generate").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -89,14 +83,13 @@ async fn redirects_to_login_when_not_signed_in() {
 }
 
 #[tokio::test]
-async fn shows_an_error_when_the_backend_fails() {
-    let (mut state, session_id) = state_with_session().await;
-    state.stats_client = Arc::new(FailingIngestionStatsClient);
+async fn get_generate_form_shows_the_zendesk_specific_fields() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/data")
+                .uri("/agents/generate/form?connector_type=zendesk")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -107,19 +100,24 @@ async fn shows_an_error_when_the_backend_fails() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("unreachable"));
+    assert!(body.contains("ZENDESK_SUBDOMAIN"));
+    assert!(body.contains("ZENDESK_API_TOKEN"));
 }
 
 #[tokio::test]
-async fn renders_the_subject_and_email_from_search_fields_prefilled() {
-    let (state, session_id) = state_with_session().await;
+async fn post_generate_script_renders_all_three_variants_with_submitted_values() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+
+    let body = "connector_type=zendesk&name=support-poller&gateway_url=http%3A%2F%2Fexample.com&api_key=my-secret-key&ZENDESK_SUBDOMAIN=acme&ZENDESK_EMAIL=ops%40acme.com&ZENDESK_API_TOKEN=tok-123";
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/data?subject=printer&email_from=alice%40example.com")
+                .method("POST")
+                .uri("/agents/generate/script")
                 .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
                 .unwrap(),
         )
         .await
@@ -127,53 +125,37 @@ async fn renders_the_subject_and_email_from_search_fields_prefilled() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains(r#"value="printer""#));
-    assert!(body.contains("alice@example.com"));
+    let rendered = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(rendered.contains("support-poller"));
+    assert!(rendered.contains("my-secret-key"));
+    assert!(rendered.contains("acme"));
+    assert!(rendered.contains(&tenant_id.to_string()));
+    assert!(rendered.contains("zendesk-connector"));
+    assert!(rendered.contains("cargo run --release -p connector-zendesk"));
+    assert!(rendered.contains("$env:ZENDESK_SUBDOMAIN"));
 }
 
 #[tokio::test]
-async fn shows_a_next_link_when_there_are_more_results_but_no_previous_link_on_page_zero() {
-    let (mut state, session_id) = state_with_session().await;
-    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
-    *stats_client.has_more.lock().unwrap() = true;
-    state.stats_client = stats_client;
+async fn post_generate_script_omits_empty_optional_fields() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
+
+    let body = "connector_type=generic&name=my-generic&gateway_url=http%3A%2F%2Fexample.com&api_key=key&GENERIC_SOURCE_URL=http%3A%2F%2Fsource.example.com&GENERIC_BEARER_TOKEN=";
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/data")
+                .method("POST")
+                .uri("/agents/generate/script")
                 .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
                 .unwrap(),
         )
         .await
         .unwrap();
 
+    assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Next"));
-    assert!(!body.contains("Previous"));
-}
-
-#[tokio::test]
-async fn shows_a_previous_link_on_page_two_and_no_next_link_when_no_more_results() {
-    let (state, session_id) = state_with_session().await;
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .uri("/data?page=1")
-                .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Previous"));
-    assert!(!body.contains("Next"));
-    assert!(body.contains("Page 2"));
+    let rendered = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!rendered.contains("GENERIC_BEARER_TOKEN"));
 }

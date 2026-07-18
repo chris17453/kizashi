@@ -39,6 +39,7 @@ async fn state_with_session() -> (AppState, String) {
         stats_client: Arc::new(
             crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
         ),
+        ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id)
 }

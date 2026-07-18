@@ -30,6 +30,7 @@ fn default_state() -> AppState {
         stats_client: Arc::new(
             crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
         ),
+        ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     }
 }
 

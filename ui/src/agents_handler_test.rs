@@ -42,6 +42,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         }),
         agents_client: Arc::new(InMemoryAgentsClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
+        ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id, tenant_id)
 }

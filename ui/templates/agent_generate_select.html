@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Deploy an Agent</h1>
+<p class="muted">Generate a ready-to-run deploy script for a connector, using your own credentials — nothing here is stored or invented for you.</p>
+
+<div class="panel">
+  <h2>1. Choose a connector type</h2>
+  <form class="inline" method="get" action="/agents/generate/form">
+    <label for="connector_type">Connector type</label>
+    <select id="connector_type" name="connector_type">
+      {% for pair in connector_types %}
+      <option value="{{ pair.0 }}">{{ pair.1 }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Next</button>
+  </form>
+</div>
+{% endblock %}

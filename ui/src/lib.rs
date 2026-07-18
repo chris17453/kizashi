@@ -4,6 +4,7 @@
 
 mod agents_client;
 mod auth_client;
+mod connector_field_catalog;
 mod events_client;
 mod health_client;
 mod ingestion_stats_client;
@@ -12,6 +13,7 @@ mod session_guard;
 mod triggers_client;
 
 mod agent_detail_handler;
+mod agent_script_handler;
 mod agents_handler;
 mod data_detail_handler;
 mod data_handler;
@@ -40,6 +42,7 @@ pub use triggers_client::{
 };
 
 pub use agent_detail_handler::get_agent_detail;
+pub use agent_script_handler::{get_generate_form, get_generate_select, post_generate_script};
 pub use agents_handler::{get_agents, post_agents, post_delete_agent};
 pub use data_detail_handler::get_data_detail;
 pub use data_handler::get_data;
@@ -67,6 +70,11 @@ pub struct AppState {
     pub health_client: Arc<dyn HealthClient>,
     pub agents_client: Arc<dyn AgentsClient>,
     pub stats_client: Arc<dyn IngestionStatsClient>,
+    /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
+    /// reachable from inside this container (e.g. a customer-hosted connector polling in from
+    /// outside the platform's own network), so it's a separate, operator-configurable value
+    /// from `QUERY_GATEWAY_URL`/etc., which are all internal-network addresses.
+    pub ingestion_gateway_public_url: String,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -79,6 +87,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/triggers", get(get_triggers))
         .route("/health", get(get_health))
         .route("/agents", get(get_agents).post(post_agents))
+        .route("/agents/generate", get(get_generate_select))
+        .route("/agents/generate/form", get(get_generate_form))
+        .route("/agents/generate/script", axum::routing::post(post_generate_script))
         .route("/agents/:id", get(get_agent_detail))
         .route("/agents/:id/delete", axum::routing::post(post_delete_agent))
         .route("/reports", get(get_reports))

@@ -18,6 +18,8 @@ async fn main() {
         std::env::var("OBSERVABILITY_URL").expect("OBSERVABILITY_URL must be set");
     let ingestion_service_url =
         std::env::var("INGESTION_SERVICE_URL").expect("INGESTION_SERVICE_URL must be set");
+    let ingestion_gateway_public_url = std::env::var("INGESTION_GATEWAY_PUBLIC_URL")
+        .unwrap_or_else(|_| "http://localhost:8081".to_string());
 
     let client = reqwest::Client::new();
     let state = AppState {
@@ -31,6 +33,7 @@ async fn main() {
         health_client: Arc::new(HttpHealthClient::new(client.clone(), observability_url)),
         agents_client: Arc::new(HttpAgentsClient::new(client.clone(), config_admin_service_url)),
         stats_client: Arc::new(HttpIngestionStatsClient::new(client, ingestion_service_url)),
+        ingestion_gateway_public_url,
     };
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");

@@ -837,3 +837,35 @@ Entry format:
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a (additive schema/query/UI work on already-established patterns, not a new
   architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Agent deploy-script generator
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Reframes what the Agents page is for. The prior "register an agent" form wrote a
+  database row that meant nothing on its own — no connector was actually deployed, and
+  registering/enabling/disabling it had zero effect on any running process (the row only ever
+  correlated with real ingestion if an operator separately, manually configured a connector's
+  `CONNECTOR_ID` env var to match by hand). This adds a 3-step deploy-script generator
+  (`/agents/generate`) that produces ready-to-run scripts — `docker compose run` (matching the
+  `connectors` profile services already in `docker-compose.yml`), bash, and PowerShell (both
+  `cargo run -p connector-<type>`) — for each of the 6 connector types, with every required
+  env var (pulled directly from each connector's actual `std::env::var(...)` calls in its own
+  `main.rs`, not guessed) prefilled with whatever the operator typed into the form. No secret is
+  ever fabricated or stored: the API key and every connector credential is exactly what the
+  operator entered, substituted directly into the output. The old "register an
+  already-deployed agent" form still exists on `/agents` for catalog/status purposes, now
+  explicitly labeled as not itself deploying anything.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 78 passed (13 new: `connector_field_catalog`'s
+  per-type field coverage and secret-marking, the 3-step handler's happy paths, 404-style
+  fallback for an unknown connector type, and — critically — a test asserting a submitted
+  value the operator typed (an API key) actually appears verbatim in the rendered script, not
+  just that the page renders). Beyond unit tests: rebuilt and redeployed `kizashi-ui`, walked
+  the real 3-step flow through the live container end to end (select Zendesk → confirm the
+  Zendesk-specific fields appear → submit real values → confirmed all three script variants
+  render with the submitted API key, subdomain, and token verbatim, and the Docker/bash/
+  PowerShell commands reference the correct connector binary/service name). Full local CI gate:
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green, `cargo llvm-cov` 94.33%
+  line coverage (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (UI/workflow addition, not a new architectural decision)

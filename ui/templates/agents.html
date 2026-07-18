@@ -3,21 +3,25 @@
 <h1>Agents</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
+<p><a href="/agents/generate">Generate a deploy script for a new agent &rarr;</a></p>
+
 <div class="panel">
-  <h2>Register a new agent</h2>
+  <h2>Register an already-deployed agent</h2>
+  <p class="muted">Adds a catalog entry so status/records show up here. Doesn't deploy anything —
+  use "Generate a deploy script" above to actually stand one up.</p>
   <form class="inline" method="post" action="/agents">
     <label for="connector_type">Connector type</label>
     <select id="connector_type" name="connector_type">
       <option value="zendesk">Zendesk</option>
-      <option value="graph_mail">Microsoft Graph (Mail)</option>
-      <option value="graph_teams">Microsoft Graph (Teams)</option>
+      <option value="graph-mail">Microsoft Graph (Mail)</option>
+      <option value="graph-teams">Microsoft Graph (Teams)</option>
       <option value="sql">SQL</option>
       <option value="fabric">Fabric</option>
       <option value="generic">Generic</option>
     </select>
-    <label for="name">Name</label>
+    <label for="name">Name (must match the deployed connector's CONNECTOR_ID)</label>
     <input type="text" id="name" name="name" placeholder="support-poller" required>
-    <label for="config">Config (JSON)</label>
+    <label for="config">Config (JSON, for your own reference only)</label>
     <textarea id="config" name="config" placeholder="{}"></textarea>
     <button type="submit">Register</button>
   </form>

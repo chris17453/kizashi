@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Deploy a {{ connector_type_label }} Agent</h1>
+
+<div class="panel">
+  <h2>2. Fill in your details</h2>
+  <form class="inline" method="post" action="/agents/generate/script">
+    <input type="hidden" name="connector_type" value="{{ connector_type }}">
+    <label for="name">Agent name</label>
+    <input type="text" id="name" name="name" placeholder="support-poller" required>
+    <label for="gateway_url">Ingestion Gateway URL</label>
+    <input type="text" id="gateway_url" name="gateway_url" value="{{ gateway_url }}" required>
+    <label for="api_key">Ingestion Gateway API key</label>
+    <input type="text" id="api_key" name="api_key" placeholder="your existing API key" required>
+    {% for field in fields %}
+    <label for="{{ field.env_var }}">{{ field.label }}{% if field.optional %} (optional){% endif %}</label>
+    <input type="{% if field.secret %}password{% else %}text{% endif %}" id="{{ field.env_var }}" name="{{ field.env_var }}" {% if !field.optional %}required{% endif %}>
+    {% endfor %}
+    <button type="submit">Generate script</button>
+  </form>
+</div>
+{% endblock %}

@@ -237,6 +237,7 @@ services:
       CONFIG_ADMIN_SERVICE_URL: http://config-admin-service:8080
       OBSERVABILITY_URL: http://observability:8080
       INGESTION_SERVICE_URL: http://ingestion-service:8080
+      INGESTION_GATEWAY_PUBLIC_URL: "${INGESTION_GATEWAY_PUBLIC_URL:-http://localhost:8081}"
     ports: ["8093:8080"]
     depends_on:
       auth-service: { condition: service_healthy }

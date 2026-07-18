@@ -41,6 +41,7 @@ async fn logout_deletes_the_session_and_expires_the_cookie() {
         stats_client: Arc::new(
             crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
         ),
+        ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
 
     let response = router(state)
