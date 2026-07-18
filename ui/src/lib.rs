@@ -11,6 +11,7 @@ mod triggers_client;
 
 mod events_handler;
 mod health_handler;
+mod healthz;
 mod login_handler;
 mod logout_handler;
 mod triggers_handler;
@@ -27,6 +28,7 @@ pub use triggers_client::{
 
 pub use events_handler::get_events;
 pub use health_handler::get_health;
+pub use healthz::healthz;
 pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
 pub use triggers_handler::get_triggers;
@@ -48,6 +50,7 @@ pub struct AppState {
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        .route("/healthz", get(healthz))
         .route("/login", get(get_login).post(post_login))
         .route("/logout", get(get_logout))
         .route("/events", get(get_events))

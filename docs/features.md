@@ -555,3 +555,60 @@ Entry format:
   advisories. `cargo llvm-cov` — 93.78% overall, ratchet holds.
 - **PR:** (opened in this branch's PR)
 - **ADR:** docs/adr/0014-console-ui-v1-scope-server-rendered-rust-web-app-shell-plus-read-only-events-triggers-health-views.md
+
+---
+
+## [2026-07-18] chore/0002-local-dev-launcher — Local dev launcher (Makefile + scripts)
+
+- **Type:** chore
+- **Branch:** chore/0002-local-dev-launcher
+- **Summary:** No Dockerfiles or docker-compose entries exist for the thirteen application
+  services, six connectors, or the UI (only infra is containerized) — every manual smoke test
+  this project has run so far required hand-invoking binaries with hand-built env vars. Adds
+  `scripts/run-local.sh` (builds the workspace, launches every service as a background process
+  with its own `logs/<name>.log`/`run/<name>.pid`, waiting on `/healthz` between dependency
+  tiers), `scripts/stop-local.sh`, `scripts/status-local.sh`, `scripts/seed-local-demo.sh`
+  (idempotent — seeds a fixed demo tenant/local-user/API-key so the Console UI and
+  `POST /v1/ingest` are usable immediately), and a root `Makefile` wrapping all of them
+  (`make run`, `make seed`, `make status`, `make stop`, `make logs SERVICE=...`, `make test`,
+  `make ci`). Also adds `auth-service --bin hash_password` (offline Argon2id hash generator —
+  every real deployment needs some way to seed its first local user before an admin UI exists
+  to do it through the API; the seed script uses it rather than duplicating the hashing logic),
+  makes docker-compose.yml's infra host ports overridable via `.env`
+  (`POSTGRES_PORT`/`RABBITMQ_PORT`/etc., defaulting to the existing values) since a machine
+  with other projects already bound to 5432 previously had no way to work around it without
+  editing the checked-in file, adds `RABBITMQ_MANAGEMENT_URL` to `.env.example` (missing since
+  the observability PR — required, no default, would `.expect()`-panic without it), and adds
+  `GET /healthz` to `kizashi-ui` (every other service has one; the UI didn't, which
+  `status-local.sh` needs).
+- **What running it for the first time actually found**: the launcher surfaced a real ordering
+  bug in how the pipeline's RabbitMQ exchanges come up. Every stage's `RabbitMqEventPublisher`
+  declares its own exchange on startup; every stage's consumer only `queue_bind`s, which
+  requires that exchange to already exist. `analysis-service` (a `record.normalized` consumer)
+  starting before `normalization-service` (the `record.normalized` publisher) panicked with
+  `NOT_FOUND - no exchange 'record.normalized'`. This ordering constraint — ingestion-service →
+  normalization-service → analysis-service → trigger-engine → action-executor, strictly in
+  that order — was never documented or encoded anywhere before now; `scripts/run-local.sh`
+  encodes it. The seed script also needed two passes to get right: the first demo password
+  contained spaces and broke `run/demo-tenant.env` when sourced, and the fixed-id upsert
+  originally used `ON CONFLICT (key_hash) DO NOTHING`, which errored on a primary-key collision
+  the moment the API key's value changed between runs — fixed to `ON CONFLICT (id) DO UPDATE`
+  so re-running always converges to the script's current constants.
+- **Tests:** `cargo test --workspace --lib --bins` — all crates green (`kizashi-ui` grew to 36
+  tests with the new `/healthz`; `auth-service` gained
+  `tests/hash_password_bin_test.rs`, which runs the actual compiled binary via
+  `CARGO_BIN_EXE_hash_password` and confirms its output round-trips through `verify_password`,
+  not just "the binary exits 0"). Beyond automated tests: ran `make run` against a genuinely
+  fresh local Postgres/RabbitMQ/ClickHouse/MinIO stack, confirmed all thirteen services plus
+  the UI came up healthy via `make status`, ran `make seed` twice in a row to confirm
+  idempotency, logged into the real Console UI as the seeded demo user (real session cookie,
+  real redirect), loaded `/events`, `/triggers`, and `/health` (showing all eleven registered
+  services `up`), then posted a real record through `POST /v1/ingest` with the seeded API key
+  and confirmed via direct Postgres query that it reached `ingestion_service.raw_records` and
+  was correctly left un-normalized (no mapping configured for that tenant/source-type — the
+  correct no-op, not a bug) — proving the exchange-ordering fix actually holds under a real
+  `record.ingested` publish. `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` — clean. `cargo fmt --all --check` — clean. `cargo audit` / `cargo deny check` —
+  clean, no new advisories (no new dependencies added).
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a (operational tooling, not an architectural decision)
