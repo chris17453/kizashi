@@ -256,3 +256,33 @@ Entry format:
   llvm-cov` — 96.49% overall.
 - **PR:** (opened in this branch's PR)
 - **ADR:** docs/adr/0006-trigger-engine-event-type-classification-for-v1.md
+
+---
+
+## [2026-07-18] feature/0006-action-executor — Action Executor
+- **Type:** feature
+- **Branch:** feature/0006-action-executor
+- **Summary:** Consumes `event.created`, resolves which actions to run by calling Trigger
+  Engine's new `GET /v1/triggers/:id` API (added to trigger-engine in this same PR — spec §2
+  principle 1, no direct cross-service DB reads) using the `triggered_by` trigger id embedded
+  in the event's payload, dispatches each action, and writes an append-only `ActionExecution`
+  audit row per action regardless of outcome — a dispatch failure is recorded as `Failed`, not
+  swallowed. Per ADR-0007, v1 dispatches every `ActionType` (email/webhook/teams_alert/
+  create_ticket/custom) through one `HttpActionDispatcher` that POSTs the event + action config
+  to `config["url"]` — genuinely functional against any webhook-shaped endpoint, not a stub;
+  type-specific integrations (SMTP, Teams card schema, per-vendor ticketing APIs) are follow-up
+  work.
+- **Tests:** `cargo test --workspace --lib --bins` — 135 passed, 0 failed across all seven
+  crates. `execution_repository_integration_test` (real Postgres) confirms inserts persist and
+  that a `retry()` produces a second append-only row rather than mutating the first. Beyond
+  automated tests, ran a genuine end-to-end smoke test with real service binaries: started
+  trigger-engine + action-executor against a live Postgres/RabbitMQ/ClickHouse stack, inserted
+  a `TriggerDefinition` with a webhook action pointed at a throwaway local HTTP receiver,
+  published a `record.analyzed` message, and confirmed the trigger fired, the action was
+  dispatched, the receiver got the POST, and the `ActionExecution` row landed with
+  `status: sent` — the full ingest-through-action pipeline working together, not just
+  per-service tests. `cargo clippy --workspace --all-targets --all-features -- -D warnings` —
+  clean. `cargo fmt --all --check` — clean. `cargo audit` / `cargo deny check` — clean. `cargo
+  llvm-cov` — 96.25% overall.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0007-action-executor-v1-dispatch-model.md
