@@ -1,0 +1,13 @@
+//! Analysis Service (spec §6, service #5): consumes `record.normalized`, calls Azure AI
+//! Foundry/ML in per-tenant micro-batches (ADR-0004), and publishes `record.analyzed`.
+
+mod analysis_client;
+mod batch_processor;
+mod event_publisher;
+mod health;
+
+pub use analysis_client::{AnalysisClient, AnalysisError, FoundryAnalysisClient};
+pub use batch_processor::{group_by_tenant, process_batch, AnalysisDeps, BatchError};
+pub use common::{RECORD_ANALYZED_EXCHANGE, RECORD_NORMALIZED_EXCHANGE};
+pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
+pub use health::build_router as health_router;

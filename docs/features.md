@@ -200,3 +200,27 @@ Entry format:
   Coverage is now 96.32% overall.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a
+
+---
+
+## [2026-07-18] feature/0004-analysis-service — Analysis Service
+- **Type:** feature
+- **Branch:** feature/0004-analysis-service
+- **Summary:** Consumes `record.normalized` and calls Azure AI Foundry/ML in per-tenant
+  micro-batches per ADR-0004 (bounded by `ANALYSIS_BATCH_SIZE` or `ANALYSIS_BATCH_MAX_WAIT_MS`,
+  whichever hits first; never mixing tenants in one batch call), then publishes
+  `record.analyzed`. Analysis results are not persisted to their own table in v1 — they travel
+  forward on the `record.analyzed` message itself for Aggregation/Trigger Engine to consume
+  directly, rather than adding a service that reads back through another API just to hand the
+  result one hop further (documented in `common::AnalyzedRecord`'s doc comment). Adds
+  `AnalyzedRecord { record, analysis, analyzed_at }` to `common` as the new bus contract type,
+  alongside `RawRecord`/`Event`.
+- **Tests:** `cargo test --workspace --lib --bins` — 92 passed, 0 failed across all five
+  crates. `cargo test -p analysis-service --test analysis_integration_test` — a real
+  RabbitMQ-backed test (publish through `process_batch`, consume off a bound queue) plus a real
+  in-process HTTP server standing in for Foundry, not mocks. `record_analyzed_contract_test`
+  covers the `record.analyzed` wire shape. `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo audit` /
+  `cargo deny check` — clean. `cargo llvm-cov` — 96.56% overall, well above the 85% floor.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a
