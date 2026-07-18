@@ -67,5 +67,5 @@ jobs:
         env:
           DATABASE_URL: postgres://kizashi:kizashi@localhost:5432/kizashi
           RABBITMQ_URL: amqp://kizashi:kizashi@localhost:5672/%2f
-          CLICKHOUSE_URL: http://localhost:8123
+          CLICKHOUSE_URL: http://kizashi:kizashi@localhost:8123
         run: ./scripts/ci-local.sh

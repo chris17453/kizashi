@@ -6,6 +6,7 @@ members = [
   "crates/ingestion-gateway",
   "crates/ingestion-service",
   "crates/normalization-service",
+  "crates/trigger-engine",
 ]
 
 [workspace.package]
