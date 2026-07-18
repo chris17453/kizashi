@@ -19,7 +19,10 @@ cargo test --workspace --all-features
 
 if command -v cargo-llvm-cov >/dev/null 2>&1; then
   echo "==> cargo llvm-cov --workspace (coverage ratchet)"
-  cargo llvm-cov --workspace --all-features --fail-under-lines 85
+  # main.rs files are pure composition roots (env parsing, wiring dependencies together) with
+  # no branching logic of their own — everything they call is unit-tested via lib.rs. Excluding
+  # them keeps the ratchet meaningful instead of penalizing every new service's boilerplate.
+  cargo llvm-cov --workspace --all-features --ignore-filename-regex '(^|/)main\.rs$' --fail-under-lines 85
 else
   echo "==> cargo-llvm-cov not installed, skipping coverage (install: cargo install cargo-llvm-cov)"
 fi
