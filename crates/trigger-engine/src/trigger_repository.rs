@@ -24,6 +24,14 @@ pub trait TriggerRepository: Send + Sync {
         tenant_id: Uuid,
         event_type: &str,
     ) -> Result<Vec<TriggerDefinition>, TriggerRepositoryError>;
+
+    /// Looks up a single trigger by id, regardless of enabled/disabled — used by the
+    /// `GET /v1/triggers/:id` API so Action Executor can resolve which actions to run for a
+    /// firing event without reading Trigger Engine's database directly (spec §2 principle 1).
+    async fn get_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<TriggerDefinition>, TriggerRepositoryError>;
 }
 
 pub struct PostgresTriggerRepository {
@@ -82,5 +90,24 @@ impl TriggerRepository for PostgresTriggerRepository {
         .map_err(|e| TriggerRepositoryError::Backend(e.to_string()))?;
 
         Ok(rows.into_iter().map(row_to_trigger).collect())
+    }
+
+    async fn get_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<TriggerDefinition>, TriggerRepositoryError> {
+        let row: Option<TriggerRow> = sqlx::query_as(
+            r#"
+            SELECT id, tenant_id, name, event_type_match, condition, window_seconds, actions, enabled
+            FROM trigger_definitions
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| TriggerRepositoryError::Backend(e.to_string()))?;
+
+        Ok(row.map(row_to_trigger))
     }
 }

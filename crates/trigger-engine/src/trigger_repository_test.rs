@@ -28,6 +28,13 @@ impl TriggerRepository for InMemoryTriggerRepository {
             .cloned()
             .collect())
     }
+
+    async fn get_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<TriggerDefinition>, TriggerRepositoryError> {
+        Ok(self.triggers.lock().unwrap().iter().find(|t| t.id == id).cloned())
+    }
 }
 
 fn sample_trigger(tenant_id: Uuid, enabled: bool) -> TriggerDefinition {
@@ -68,4 +75,21 @@ async fn excludes_triggers_for_a_different_event_type() {
 
     let found = repo.active_triggers_for(tenant_id, "urgency").await.unwrap();
     assert!(found.is_empty());
+}
+
+#[tokio::test]
+async fn get_by_id_finds_a_trigger_regardless_of_enabled_state() {
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id, false);
+    let repo = InMemoryTriggerRepository::with_trigger(trigger.clone());
+
+    let found = repo.get_by_id(trigger.id).await.unwrap();
+    assert_eq!(found, Some(trigger));
+}
+
+#[tokio::test]
+async fn get_by_id_returns_none_for_unknown_id() {
+    let repo = InMemoryTriggerRepository::default();
+    let found = repo.get_by_id(Uuid::new_v4()).await.unwrap();
+    assert!(found.is_none());
 }

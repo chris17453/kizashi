@@ -3,6 +3,7 @@
 //! (tenant, event_type, group_key), writes firing Events to ClickHouse, and publishes
 //! `event.created`.
 
+mod api;
 mod classify;
 mod event_publisher;
 mod event_store;
@@ -11,6 +12,7 @@ mod process_analyzed_record;
 mod signal_repository;
 mod trigger_repository;
 
+pub use api::{build_router as api_router, ApiState};
 pub use classify::{candidates, group_key, Candidate};
 pub use common::{EVENT_CREATED_EXCHANGE, RECORD_ANALYZED_EXCHANGE};
 pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
