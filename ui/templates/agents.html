@@ -1,12 +1,12 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Agents</h1>
+<h1>Sensors</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
 {% if can_write %}
 <div class="form-row">
   <div class="panel">
-    <h2>Register an already-deployed agent</h2>
+    <h2>Register an already-deployed sensor</h2>
     <p class="muted">Adds a catalog entry so status/records show up here. Doesn't deploy anything —
     use "Generate a deploy script" below to actually stand one up.</p>
     <form class="inline" method="post" action="/agents">
@@ -27,7 +27,7 @@
     </form>
   </div>
   <div class="info-panel">
-    <h2>Deploying a new agent</h2>
+    <h2>Deploying a new sensor</h2>
     <ul>
       <li>Registering here only adds a catalog entry — it doesn't deploy or run anything.</li>
       <li>To actually stand up a connector, use
@@ -36,7 +36,7 @@
       <li>The <code>Name</code> field must exactly match the deployed connector's
         <code>CONNECTOR_ID</code> environment variable, or ingested records won't be matched
         back to this catalog entry.</li>
-      <li>Agents need an API key to authenticate — issue one from
+      <li>Sensors need an API key to authenticate — issue one from
         <a href="/api-keys">API Keys</a> if you haven't already.</li>
     </ul>
   </div>
@@ -46,7 +46,7 @@
 {% if agents.is_empty() && page == 0 && !has_more %}
 <div class="empty-state">
   <div class="empty-icon">&#11041;</div>
-  <p>No agents registered yet for this tenant.</p>
+  <p>No sensors registered yet for this tenant.</p>
   {% if can_write %}<p>Use the form above to register one, or generate a deploy script to stand a new one up.</p>{% endif %}
 </div>
 {% else %}

@@ -3058,3 +3058,32 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — additive rendering of already-available data through an already-established
   page/endpoint pattern, no new architectural decision
+
+## [2026-07-19] feature/0048-sensor-naming-stage1-ui-labels — "Sensor" terminology, Stage 1 (UI labels)
+- **Type:** feature
+- **Summary:** User-flagged naming confusion: "Agent" was overloaded between deployable
+  connector-poller instances (`common::Agent`) and the newly-added AI/LLM analysis-profile
+  concept (`AnalysisConfig`, ADR-0031). Decided (ADR-0036) that connector-pollers become
+  "Sensor" and "Agent" is reserved for AI-analysis-profile terminology going forward. Given the
+  size of the full rename (touches `common::Agent`, `agent-scheduler`'s service identity, DB
+  schema, and every layer in between) and that a **real production `agent-scheduler` container
+  is actively polling a real customer mailbox right now**, the rollout is staged rather than
+  one PR — this PR is Stage 1 only: Console UI-visible labels (nav item, page headings, button/
+  form copy, empty-state text) renamed "Agent(s)" → "Sensor(s)", with zero backend/route/schema
+  changes. Struct fields, URL paths (`/agents/...`), and the `common::Agent` type are
+  deliberately untouched this pass — they still say "agent" internally, which is an accepted,
+  documented, temporary mismatch until Stage 2.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 241 passed (2 existing assertions updated to
+  match the new labels: `agent_detail_handler_test.rs`'s not-found message, `agents_handler_test.rs`'s
+  register-form and empty-state text). `cargo test --workspace --all-features` (full real-infra
+  stack) — every test binary passed, 0 failed. `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny check`
+  / `cargo audit` — clean, same 3 pre-existing allow-listed advisories.
+- **Live verification:** (to be run against the real deployed Console UI once this merges and
+  `kizashi-ui` is rebuilt/redeployed.)
+- **Follow-up (staged, not this PR):** Stage 2 (`common::Agent` → `common::Sensor`,
+  `AgentRepository`/`AgentChangeEvent`/HTTP routes rename across `config-admin-service`,
+  `agent-scheduler`, `kizashi-ui`) and Stage 3 (`agent-scheduler` service/image/docker-compose
+  rename) — see ADR-0036 for the full plan and why they're sequenced after this one.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0036](../docs/adr/0036-sensor-vs-agent-terminology.md)
