@@ -36,6 +36,20 @@ impl RetentionPolicyRepository for InMemoryRetentionPolicyRepository {
         }
     }
 
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<(), RetentionPolicyRepositoryError> {
+        let mut policies = self.policies.lock().unwrap();
+        let before_len = policies.len();
+        policies.retain(|p| !(p.id == id && p.tenant_id == tenant_id));
+        if policies.len() == before_len {
+            return Err(RetentionPolicyRepositoryError::NotFound(id));
+        }
+        Ok(())
+    }
+
     async fn get(
         &self,
         tenant_id: Uuid,
@@ -86,6 +100,14 @@ impl RetentionPolicyRepository for FailingRetentionPolicyRepository {
         &self,
         _policy: RetentionPolicy,
     ) -> Result<RetentionPolicy, RetentionPolicyRepositoryError> {
+        Err(RetentionPolicyRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn delete(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+    ) -> Result<(), RetentionPolicyRepositoryError> {
         Err(RetentionPolicyRepositoryError::Backend("simulated failure".to_string()))
     }
 
@@ -162,4 +184,33 @@ async fn list_all_enabled_excludes_disabled_policies_across_tenants() {
     let found = repo.list_all_enabled().await.unwrap();
     assert_eq!(found.len(), 1);
     assert!(found[0].enabled);
+}
+
+#[tokio::test]
+async fn delete_removes_the_policy_then_get_returns_none() {
+    let tenant_id = Uuid::new_v4();
+    let policy = sample_policy(tenant_id);
+    let repo = InMemoryRetentionPolicyRepository::with_policy(policy.clone());
+
+    repo.delete(tenant_id, policy.id).await.unwrap();
+
+    assert_eq!(repo.get(tenant_id, policy.id).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn delete_of_unknown_policy_returns_not_found() {
+    let repo = InMemoryRetentionPolicyRepository::default();
+    let err = repo.delete(Uuid::new_v4(), Uuid::new_v4()).await.unwrap_err();
+    assert!(matches!(err, RetentionPolicyRepositoryError::NotFound(_)));
+}
+
+#[tokio::test]
+async fn delete_does_not_remove_a_policy_owned_by_a_different_tenant() {
+    let tenant_id = Uuid::new_v4();
+    let policy = sample_policy(tenant_id);
+    let repo = InMemoryRetentionPolicyRepository::with_policy(policy.clone());
+
+    let err = repo.delete(Uuid::new_v4(), policy.id).await.unwrap_err();
+    assert!(matches!(err, RetentionPolicyRepositoryError::NotFound(_)));
+    assert_eq!(repo.get(tenant_id, policy.id).await.unwrap(), Some(policy));
 }

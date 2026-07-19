@@ -1,0 +1,89 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Data Retention</h1>
+<p class="muted">How long each data class is kept before it's archived and deleted. One policy
+per data class per tenant — <code>retention-service</code>'s scheduled sweep archives aged
+records to blob storage in a replayable format, then deletes them, unless a compliance hold
+overrides it.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if let Some(e) = form_error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if can_write %}
+<div class="form-row">
+  <div class="panel">
+    <h2>Create a policy</h2>
+    <form class="inline" method="post" action="/retention-policies">
+      <label for="data_class">Data class</label>
+      <select id="data_class" name="data_class" required>
+        <option value="raw">Raw</option>
+        <option value="normalized">Normalized</option>
+        <option value="event">Event</option>
+      </select>
+
+      <label for="ttl_days">TTL (days)</label>
+      <input type="number" id="ttl_days" name="ttl_days" min="1" placeholder="90" required>
+
+      <button type="submit">Create policy</button>
+    </form>
+  </div>
+  <div class="info-panel">
+    <h2>How this works</h2>
+    <ul>
+      <li>v1 only enforces <code>Raw</code> — <code>Normalized</code>/<code>Event</code>
+        policies can be configured but the scheduled sweep doesn't act on them yet.</li>
+      <li>Archived data is re-ingestible through the same pipeline — the archive format
+        preserves enough fidelity to replay ingestion &rarr; normalization &rarr; analysis.</li>
+      <li>Disabling a policy stops the sweep from archiving/deleting that data class without
+        losing the configured TTL.</li>
+      <li>Every create/update is written to an immutable audit log for compliance review.</li>
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{% if policies.is_empty() %}
+<div class="empty-state">
+  <div class="empty-icon">&#9202;</div>
+  <p>No retention policies configured yet for this tenant.</p>
+  {% if can_write %}<p>Use the form above to create your first one.</p>{% endif %}
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Data Class</th><th>TTL (days)</th><th>Status</th>{% if can_write %}<th></th>{% endif %}</tr>
+  </thead>
+  <tbody>
+    {% for policy in policies %}
+    <tr>
+      <td>{{ policy.data_class }}</td>
+      <td>
+        {% if can_write %}
+        <form class="inline" method="post" action="/retention-policies/{{ policy.id }}/edit" style="display:inline">
+          <input type="number" name="ttl_days" min="1" value="{{ policy.ttl_days }}" style="width:5em">
+          <button type="submit" class="btn">Save</button>
+        </form>
+        {% else %}
+        {{ policy.ttl_days }}
+        {% endif %}
+      </td>
+      <td>
+        <span class="pill {% if policy.enabled %}pill-up{% else %}pill-muted{% endif %}">
+          {% if policy.enabled %}enabled{% else %}disabled{% endif %}
+        </span>
+      </td>
+      {% if can_write %}
+      <td>
+        <form class="inline" method="post" action="/retention-policies/{{ policy.id }}/toggle" style="display:inline">
+          <button type="submit" class="btn">{% if policy.enabled %}Disable{% else %}Enable{% endif %}</button>
+        </form>
+        <form class="inline" method="post" action="/retention-policies/{{ policy.id }}/delete" style="display:inline">
+          <button type="submit" class="btn-danger">Remove</button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

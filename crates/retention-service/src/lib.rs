@@ -23,7 +23,9 @@ pub use audit_log::{
 pub use health::healthz;
 pub use manifest::{archive_key, ArchiveManifest};
 pub use ops_handlers::{trigger_reimport, trigger_sweep, ReimportRequest};
-pub use policy_handlers::{create_policy, get_audit_log, get_policy, list_policies, update_policy};
+pub use policy_handlers::{
+    create_policy, delete_policy, get_audit_log, get_policy, list_policies, update_policy,
+};
 pub use raw_record_client::{HttpRawRecordClient, RawRecordClient, RawRecordClientError};
 pub use reimport::{reimport, ReimportError, ReimportState, ReimportSummary};
 pub use retention_policy::{
@@ -48,7 +50,10 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(healthz))
         .route("/v1/retention-policies", post(create_policy).get(list_policies))
-        .route("/v1/retention-policies/:id", get(get_policy).put(update_policy))
+        .route(
+            "/v1/retention-policies/:id",
+            get(get_policy).put(update_policy).delete(delete_policy),
+        )
         .route("/v1/audit-log/:entity_id", get(get_audit_log))
         .route("/v1/sweep", post(trigger_sweep))
         .route("/v1/reimport", post(trigger_reimport))
