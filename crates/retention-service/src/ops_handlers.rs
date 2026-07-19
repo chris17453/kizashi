@@ -16,7 +16,8 @@ const DEFAULT_SWEEP_BATCH_LIMIT: i64 = 500;
 
 /// POST /v1/sweep — triggers one retention sweep pass across every enabled policy. Sweeping is
 /// externally scheduled (a Kubernetes CronJob or equivalent, ADR-0011 point 5) rather than an
-/// in-process timer, so this is the only way a sweep runs.
+/// in-process timer, so this is the only way a sweep runs — `retention-sweep-scheduler` in
+/// `docker-compose.yml` is that "or equivalent" for the docker-compose deployment target.
 pub async fn trigger_sweep(State(state): State<AppState>) -> Response {
     let sweep_state = SweepState {
         policy_repository: state.policy_repository.clone(),
