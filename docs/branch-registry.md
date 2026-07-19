@@ -15,7 +15,7 @@ manually created branches.
 | feature       | `feature/` | 0036         |
 | fix           | `fix/`     | 0005         |
 | debug         | `debug/`   | 0001        |
-| docs          | `docs/`    | 0002         |
+| docs          | `docs/`    | 0003         |
 | chore         | `chore/`   | 0004         |
 
 ## Branch log (append-only, newest last)
@@ -65,3 +65,4 @@ manually created branches.
 | 0033 | `feature/0033-cross-source-correlated-triggers` | feature | 2026-07-19 | open | pending | |
 | 0034 | `feature/0034-correlated-triggers-console-ui` | feature | 2026-07-19 | open | pending | |
 | 0035 | `feature/0035-configurable-webhook-action-body` | feature | 2026-07-19 | open | pending | |
+| 0002 | `docs/0002-adr-0016-stale-followups-note` | docs | 2026-07-19 | open | pending | |

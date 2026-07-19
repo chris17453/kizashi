@@ -2605,3 +2605,26 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0028](../docs/adr/0028-configurable-webhook-action-body-template.md) — extends
   ADR-0007's dispatch model with a config-driven body shape, generalizing the ad hoc Teams fix
+
+## [2026-07-19] docs/0002-adr-0016-stale-followups-note — Correct stale RBAC follow-up claims in ADR-0016
+- **Type:** docs
+- **Branch:** docs/0002-adr-0016-stale-followups-note
+- **Summary:** An RBAC-lifecycle audit for the next backlog item found that ADR-0016's
+  "Consequences" section still claims `retention-service` and `ingestion-gateway`'s API-key
+  endpoints are unenforced, and that role reassignment has no UI — both have since shipped
+  (fix/0003, ingestion-gateway's own `require_operator` gating already in place, and feature/
+  0030's `/users` page). A misleading ADR is worse than no ADR — CLAUDE.md §5 says this is how
+  "a future auditor (or future Claude session) sees why, not just what," and a stale claim
+  actively misleads that reader. Added `**Update:**` notes to both bullets pointing at what
+  actually landed, without rewriting the original (accurate-at-the-time) text. Also fixed a
+  matching stale doc comment in `ui/src/api_keys_handler.rs` that repeated the same outdated
+  claim. No production behavior changed — this is a docs-accuracy fix, verified that both
+  claims were actually false by re-reading `retention-service/src/policy_handlers.rs` and
+  `ingestion-gateway/src/api_key_handlers.rs`, which both already call `require_operator` on
+  every write path.
+- **Tests:** `cargo build -p kizashi-ui` — compiles (comment-only change). `cargo fmt --all
+  --check` / `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` — clean.
+  Full workspace CI gate not re-run for this docs-only change beyond the affected crate, since
+  no production code path changed.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — corrects ADR-0016 itself, no new decision

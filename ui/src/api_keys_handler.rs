@@ -18,9 +18,10 @@ struct ApiKeysTemplate {
     /// Set only immediately after a successful create — the one and only render where the
     /// plaintext key is ever available to show the operator.
     created_key: Option<String>,
-    /// RBAC v1 (ADR-0016): hides the create form and revoke buttons from a `Viewer` —
-    /// presentation-layer only; `ingestion-gateway`'s API-key endpoints don't enforce this
-    /// server-side yet (tracked as a follow-up in the ADR).
+    /// RBAC v1 (ADR-0016): hides the create form and revoke buttons from a `Viewer` — matches
+    /// server-side enforcement (`ingestion-gateway`'s `api_key_handlers.rs` calls
+    /// `require_operator` on create/revoke), this is presentation-layer convenience, not the
+    /// only gate.
     can_write: bool,
     error: Option<String>,
 }
