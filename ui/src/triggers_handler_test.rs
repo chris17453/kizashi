@@ -287,6 +287,95 @@ async fn post_rerenders_with_a_form_error_when_the_threshold_field_is_missing() 
 }
 
 #[tokio::test]
+async fn post_creates_a_correlated_trigger_deriving_event_type_match_from_the_first_leg() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    let mut state = state;
+    state.triggers_client = triggers_client.clone();
+
+    let body = "name=email-and-chat&event_type_match=&window_seconds=3600&condition_shape=correlated_over_window&field=&threshold=&direction=above&count=&action_url=&correlated_event_type_1=sentiment_drop_email&correlated_min_count_1=1&correlated_event_type_2=unresolved_chat&correlated_min_count_2=1&correlated_event_type_3=&correlated_min_count_3=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let created = triggers_client.created.lock().unwrap();
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].event_type_match, "sentiment_drop_email");
+    match &created[0].condition {
+        common::TriggerCondition::CorrelatedOverWindow { conditions } => {
+            assert_eq!(conditions.len(), 2);
+            assert_eq!(conditions[0].event_type, "sentiment_drop_email");
+            assert_eq!(conditions[0].min_count, 1);
+            assert_eq!(conditions[1].event_type, "unresolved_chat");
+            assert_eq!(conditions[1].min_count, 1);
+        }
+        other => panic!("expected CorrelatedOverWindow, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn post_rerenders_with_a_form_error_when_no_correlated_rows_are_filled_in() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+
+    let body = "name=bad&event_type_match=&window_seconds=3600&condition_shape=correlated_over_window&field=&threshold=&direction=above&count=&action_url=&correlated_event_type_1=&correlated_min_count_1=&correlated_event_type_2=&correlated_min_count_2=&correlated_event_type_3=&correlated_min_count_3=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("at least one correlated"));
+}
+
+#[tokio::test]
+async fn post_rerenders_with_a_form_error_when_a_correlated_row_has_an_invalid_min_count() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+
+    let body = "name=bad&event_type_match=&window_seconds=3600&condition_shape=correlated_over_window&field=&threshold=&direction=above&count=&action_url=&correlated_event_type_1=sentiment_drop_email&correlated_min_count_1=not-a-number&correlated_event_type_2=&correlated_min_count_2=&correlated_event_type_3=&correlated_min_count_3=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("valid min count"));
+}
+
+#[tokio::test]
 async fn post_rejects_a_viewer_role() {
     let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Viewer).await;
 

@@ -2539,3 +2539,34 @@ architectural decision.
 - **ADR:** [ADR-0027](../docs/adr/0027-cross-source-correlated-trigger-conditions.md) — extends
   ADR-0001's trigger condition DSL shape, the spec §11 open item CLAUDE.md flags for this exact
   kind of change
+
+## [2026-07-19] feature/0034-correlated-triggers-console-ui — Author correlated triggers through the Console UI
+- **Type:** feature
+- **Branch:** feature/0034-correlated-triggers-console-ui
+- **Summary:** Closes the Console UI gap ADR-0027 explicitly deferred: until now,
+  `CorrelatedOverWindow` triggers (email + chat, etc.) could only be created via raw API calls,
+  not through the `/triggers` page. Added a third condition option, "Combine multiple sources,"
+  to the create-trigger form (`ui/src/triggers_handler.rs`, `ui/templates/triggers.html`) — up
+  to three (event type, min count) rows, since a plain HTML form can't submit a variable-length
+  list without JS (ADR-0014's no-JS-by-default stance); any row left blank is skipped, not an
+  error. The trigger's `event_type_match` (a display/audit label for this shape per ADR-0027)
+  is auto-derived from the first filled-in row rather than asked for separately, since it plays
+  no role in lookup for a correlated trigger.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 210 passed (3 new: creates a correlated trigger
+  and derives `event_type_match` from the first leg, form-error when no rows are filled in,
+  form-error when a row has an invalid min count). `cargo test --workspace --all-features`
+  (full real-infra stack) — 108 test binaries, all passed, 0 failed. `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean.
+  `cargo deny check` — clean. `cargo audit` — same 3 pre-existing allow-listed advisories, no
+  new ones.
+- **Live verification:** rebuilt and redeployed the real `kizashi-ui` container, logged in as
+  the seeded demo admin, and submitted a real "combine multiple sources" trigger
+  (`sentiment_drop_email` + `unresolved_chat`, min count 1 each) through the actual form.
+  Confirmed via `config-admin-service`'s real API that the stored `TriggerDefinition` has the
+  correct `CorrelatedOverWindow` shape and that `event_type_match` was correctly auto-derived
+  as `sentiment_drop_email`. A headless-Chrome screenshot confirmed the new form fields render
+  correctly and match the platform's existing visual design language. Cleaned up the test
+  trigger afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — implements the UI surface ADR-0027 already decided to defer, no new
+  architectural decision

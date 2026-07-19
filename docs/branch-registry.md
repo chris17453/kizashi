@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0034         |
+| feature       | `feature/` | 0035         |
 | fix           | `fix/`     | 0005         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -63,3 +63,4 @@ manually created branches.
 | 0004 | `fix/0004-teams-alert-webhook-payload-shape` | fix | 2026-07-19 | open | pending | |
 | 0032 | `feature/0032-retention-sweep-scheduler` | feature | 2026-07-19 | open | pending | |
 | 0033 | `feature/0033-cross-source-correlated-triggers` | feature | 2026-07-19 | open | pending | |
+| 0034 | `feature/0034-correlated-triggers-console-ui` | feature | 2026-07-19 | open | pending | |
