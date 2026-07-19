@@ -2974,3 +2974,31 @@ architectural decision.
 - **ADR:** n/a — a bounded, tenant-scoped extension of the existing search filter plus a thin
   republish handler; no new architectural decision (deliberately reuses the existing
   `record.ingested` → Normalization Service pipeline rather than adding a parallel one)
+
+## [2026-07-19] feature/0045-analysis-concurrency — Bounded concurrency for OpenAI-compatible analysis calls
+- **Type:** feature
+- **Summary:** Observed live against the real watkinslabs backlog: reprocessing 631 real emails
+  through a local `qwen3:8b` Ollama model at concurrency 1 (ADR-0031's original sequential
+  design) processed roughly 1-3 records per minute — a multi-hour wait for what should be a
+  routine catch-up sweep, since each request waited for the previous one's full round trip
+  (network + the model's own reasoning/generation time) before starting the next.
+  `OpenAiCompatibleAnalysisClient::analyze_batch` now runs up to `concurrency` requests in
+  flight at once via `futures_util::stream::buffered` (default 4, configurable per process via
+  `ANALYSIS_OPENAI_CONCURRENCY`, threaded through `AnalysisDeps`). `buffered` (not
+  `buffer_unordered`) was chosen specifically to preserve result ordering relative to input
+  records with no separate re-sort step, since `process_batch` zips `records` with `results` by
+  position. `FoundryAnalysisClient` (the Foundry platform-default path) is unaffected — it
+  already sends a whole batch as one call.
+- **Tests:** `cargo test -p analysis-service --lib analysis_client` — 16 passed (2 new: a real
+  wall-clock proof that 8 records against a 100ms-latency stub finish well under the ~800ms a
+  strictly-sequential implementation would take, and a proof that result ordering is preserved
+  under concurrency even when responses arrive out of order). `cargo test --workspace
+  --all-features` (full real-infra stack) — every test binary passed, 0 failed. `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check`
+  — clean. `cargo deny check` / `cargo audit` — clean, same 3 pre-existing allow-listed
+  advisories.
+- **Live verification:** (to be run against the real watkinslabs backlog — currently mid-flight
+  through `analysis-service`'s queue at the old concurrency-1 rate — after this merges and the
+  service is rebuilt/redeployed with the fix.)
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0035](../docs/adr/0035-bounded-concurrency-for-openai-compatible-analysis.md)

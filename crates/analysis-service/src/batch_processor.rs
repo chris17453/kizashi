@@ -29,6 +29,11 @@ pub struct AnalysisDeps {
     /// Reused to build per-tenant `OpenAiCompatibleAnalysisClient`s so each call doesn't pay
     /// for a fresh connection pool.
     pub http_client: reqwest::Client,
+    /// How many `OpenAiCompatibleAnalysisClient` requests run concurrently per batch
+    /// (ADR-0035) — a slow reasoning model turns a real multi-hundred-record backlog into a
+    /// multi-hour serial queue at concurrency 1 (observed live), so this is a real operator
+    /// knob, not a hardcoded constant.
+    pub openai_compatible_concurrency: usize,
 }
 
 /// Picks the client for a tenant's configured provider. Resolved per call, not cached, so a
@@ -38,14 +43,15 @@ fn resolve_analysis_client(
     config: Option<&AnalysisConfig>,
 ) -> Arc<dyn AnalysisClient> {
     match config {
-        Some(config) if config.provider == AnalysisProvider::OpenAiCompatible => {
-            Arc::new(OpenAiCompatibleAnalysisClient::new(
+        Some(config) if config.provider == AnalysisProvider::OpenAiCompatible => Arc::new(
+            OpenAiCompatibleAnalysisClient::new(
                 deps.http_client.clone(),
                 config.endpoint.clone().unwrap_or_default(),
                 config.api_key.clone(),
                 config.model.clone().unwrap_or_default(),
-            ))
-        }
+            )
+            .with_concurrency(deps.openai_compatible_concurrency),
+        ),
         _ => deps.analysis_client.clone(),
     }
 }
