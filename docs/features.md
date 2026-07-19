@@ -1902,3 +1902,46 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — implements the wiring already decided in ADR-0021, no new architectural
   decision
+
+## [2026-07-19] feature/0020-imap-inbound-connector — IMAP inbound connector (Phase 5)
+- **Type:** feature
+- **Branch:** feature/0020-imap-inbound-connector
+- **Summary:** New `crates/connectors/imap` crate, the seventh connector, for polling any
+  RFC 3501 IMAP mailbox (Gmail, self-hosted, anything non-M365) — closes the first Phase 5 gap
+  from the roadmap. Implements the shared `Connector` trait: connects (TLS by default,
+  configurable plain-TCP via `IMAP_USE_TLS`), logs in via IMAP `LOGIN`, selects a mailbox,
+  `SEARCH SINCE <date>`, `FETCH ... RFC822` each matching UID, and maps each message to a
+  `RawRecord` (`SourceType::Message`) via a pure `parse_message` function kept separate from
+  the network I/O. Follows ADR-0013's stateless-cursor design (`since_date` passed in per
+  invocation, no persisted state) and ADR-0021's non-adoption for non-HTTP protocols (IMAP's
+  raw TCP can't route through Egress Gateway's HTTP CONNECT tunnel). Added a
+  `docker-compose.yml` `imap-connector` service entry following the existing
+  `<name>-connector` pattern (build-arg `BIN: connector-imap`, `connectors` profile).
+- **Known gaps, explicitly not done here:** XOAUTH2 auth (Gmail/Workspace with password auth
+  disabled) and UID-based incremental cursor tracking (v1 re-fetches the whole `since_date`
+  day on every poll — idempotent, not lossy, but not efficient) are tracked as follow-ups, not
+  silently dropped.
+- **Tests:** `cargo test -p connector-imap --lib` — 4 unit tests, all passed
+  (`parse_message` against static RFC822 byte fixtures, including malformed/minimal-header
+  inputs that must not panic). `tests/imap_connector_integration_test.rs` — 2 tests against a
+  **real IMAP server** (`greenmail/standalone:2.0.1`, CLAUDE.md §2's "test against the real
+  thing"), gated on `IMAP_TEST_HOST`/`IMAP_TEST_PORT`/`IMAP_TEST_USERNAME`/
+  `IMAP_TEST_PASSWORD`: one polling a real seeded message end-to-end, one asserting a wrong
+  password is reported as `ConnectorError::AuthFailed` against the real server. `cargo test
+  --workspace --all-features` (full stack: Postgres/RabbitMQ/ClickHouse/MinIO via
+  docker-compose, throwaway `kizashi-mssql-ci` for Fabric, `greenmail` for this connector) —
+  all passed, 0 failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  — clean. `cargo fmt --all --check` — clean. `cargo audit` — same 3 pre-existing
+  allow-listed advisories, no new advisories from the new `async-imap`/`async-native-tls`/
+  `mail-parser` dependencies.
+- **Live verification:** built the real `imap-connector` Docker image via `docker compose
+  build`, seeded a real message into `greenmail` via `curl --url smtp://... --upload-file`,
+  created a real API key via `POST /v1/api-keys`, and ran the containerized connector with
+  `docker run --network kizashi_default` against the real running `ingestion-gateway` and the
+  real `greenmail` server — output: `PollSummary { polled: 1, ingested: 1, failed: 0 }`.
+  Confirmed via a direct Postgres query that the record landed in
+  `ingestion_service.raw_records` with the correct `connector_id`, `tenant_id`, and message
+  subject. Cleaned up the test record and API key afterward (both are deletable, unlike the
+  append-only audit tables verified in earlier phases).
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0022](adr/0022-imap-connector-plain-auth-stateless-cursor.md)

@@ -82,6 +82,22 @@ jobs:
           done
           sleep 15
 
+      # Same rationale as MinIO/SQL Server above: connector-imap's live integration test needs
+      # a real IMAP server (ADR-0022) — greenmail is a small, fast-starting IMAP+SMTP test
+      # server built exactly for this. Seeds one message via SMTP so the "poll returns a real
+      # message" test has something to find.
+      - name: Start greenmail (IMAP test server)
+        run: |
+          docker run -d --name greenmail -p 13143:3143 -p 13025:3025 \
+            -e GREENMAIL_OPTS='-Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imap -Dgreenmail.users=testuser:testpass@example.com -Dgreenmail.hostname=0.0.0.0' \
+            greenmail/standalone:2.0.1
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/13143) >/dev/null 2>&1 && break
+            sleep 1
+          done
+          printf 'From: sender@example.com\r\nTo: testuser@example.com\r\nSubject: Live IMAP connector test\r\nDate: Wed, 15 Jan 2025 10:00:00 +0000\r\n\r\nCI-seeded test message.\r\n' \
+            | curl -s --url "smtp://127.0.0.1:13025" --mail-from "sender@example.com" --mail-rcpt "testuser@example.com" --upload-file -
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -111,4 +127,8 @@ jobs:
           # AWS_SECRET_ACCESS_KEY is set by the "Start MinIO" step via $GITHUB_ENV
           FABRIC_TEST_HOST: 127.0.0.1
           FABRIC_TEST_PORT: "14330"
+          IMAP_TEST_HOST: 127.0.0.1
+          IMAP_TEST_PORT: "13143"
+          IMAP_TEST_USERNAME: testuser
+          IMAP_TEST_PASSWORD: testpass
         run: ./scripts/ci-local.sh

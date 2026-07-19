@@ -12,6 +12,7 @@ members = [
   "crates/connectors/generic",
   "crates/connectors/graph-mail",
   "crates/connectors/graph-teams",
+  "crates/connectors/imap",
   "crates/connectors/sql",
   "crates/connectors/zendesk",
   "crates/dashboard-api",
@@ -62,6 +63,9 @@ tokio-util = { version = "0.7", features = ["compat"] }
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 base64 = { version = "0.22" }
+async-imap = { version = "0.9", default-features = false, features = ["runtime-tokio"] }
+async-native-tls = { version = "0.5" }
+mail-parser = { version = "0.9" }
 
 [profile.dev]
 debug = 1
