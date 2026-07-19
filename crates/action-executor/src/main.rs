@@ -38,13 +38,19 @@ async fn main() {
             .expect("failed to connect to rabbitmq");
     let consume_channel = connection.create_channel().await.expect("failed to open channel");
 
+    // ADR-0021: opt-in — set EGRESS_PROXY_URL to route every action webhook dispatch (an
+    // external, often customer-controlled endpoint) through Egress Gateway's audit log/
+    // allowlist; unset means today's exact behavior. trigger_client below stays unproxied —
+    // it calls trigger-engine, a Kizashi-owned service, not an external one.
+    let egress_proxy_url = std::env::var("EGRESS_PROXY_URL").ok();
+
     let execution_repository = Arc::new(PostgresExecutionRepository::new(pool));
     let deps = ActionDeps {
         trigger_client: Arc::new(HttpTriggerClient::new(
             reqwest::Client::new(),
             trigger_engine_url,
         )),
-        dispatcher: Arc::new(HttpActionDispatcher::new(reqwest::Client::new())),
+        dispatcher: Arc::new(HttpActionDispatcher::new(egress_proxy_url)),
         execution_repository: execution_repository.clone(),
     };
 

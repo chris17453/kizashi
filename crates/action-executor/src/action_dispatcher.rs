@@ -28,13 +28,19 @@ pub trait ActionDispatcher: Send + Sync {
     ) -> Result<serde_json::Value, DispatchError>;
 }
 
+/// `egress_proxy_url` is `None` by default (ADR-0021: adoption is opt-in). When set, every
+/// dispatch builds a fresh client proxied through Egress Gateway, identified as
+/// `(event.tenant_id, "action-executor")` — unlike a connector process (one tenant for its
+/// whole lifetime), Action Executor is multi-tenant within one process, so the proxy identity
+/// can't be baked into one shared client at startup the way `connector_runtime::
+/// build_outbound_client` is used by connectors; it has to be resolved per event instead.
 pub struct HttpActionDispatcher {
-    client: reqwest::Client,
+    egress_proxy_url: Option<String>,
 }
 
 impl HttpActionDispatcher {
-    pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+    pub fn new(egress_proxy_url: Option<String>) -> Self {
+        Self { egress_proxy_url }
     }
 }
 
@@ -54,8 +60,14 @@ impl ActionDispatcher for HttpActionDispatcher {
             "event": event,
         });
 
-        let response = self
-            .client
+        let client = common::build_outbound_client(
+            self.egress_proxy_url.as_deref(),
+            event.tenant_id,
+            "action-executor",
+        )
+        .map_err(|e| DispatchError::Unreachable(e.to_string()))?;
+
+        let response = client
             .post(url)
             .json(&body)
             .send()
