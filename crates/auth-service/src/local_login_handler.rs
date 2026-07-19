@@ -32,6 +32,7 @@ pub struct LocalLoginRequest {
 pub struct LoginResponse {
     pub token: String,
     pub tenant_id: Uuid,
+    pub role: common::Role,
 }
 
 #[derive(serde::Serialize)]
@@ -94,8 +95,9 @@ pub async fn local_login(
     }
     let user = user.expect("authenticated implies user is Some");
 
-    match state.session_client.mint_session(user.tenant_id, "local-login").await {
-        Ok(token) => Json(LoginResponse { token, tenant_id: user.tenant_id }).into_response(),
+    match state.session_client.mint_session(user.tenant_id, user.role, "local-login").await {
+        Ok(token) => Json(LoginResponse { token, tenant_id: user.tenant_id, role: user.role })
+            .into_response(),
         Err(e) => {
             tracing::error!(error = %e, "session mint failed");
             error_response(StatusCode::BAD_GATEWAY, "failed to establish session")

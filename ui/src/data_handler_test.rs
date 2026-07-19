@@ -28,6 +28,7 @@ async fn state_with_session() -> (AppState, String) {
             bearer_token: "tok".to_string(),
             tenant_id: Uuid::new_v4(),
             username: "alice".to_string(),
+            role: common::Role::Admin,
         })
         .await;
     let state = AppState {

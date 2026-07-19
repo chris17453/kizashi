@@ -35,9 +35,9 @@ INSERT INTO auth_service.tenants (id, name)
 VALUES ('$TENANT_ID', '$TENANT_NAME')
 ON CONFLICT (id) DO UPDATE SET name = excluded.name;
 
-INSERT INTO auth_service.local_users (id, tenant_id, username, password_hash)
-VALUES ('$USER_ID', '$TENANT_ID', 'demo', '$PASSWORD_HASH')
-ON CONFLICT (id) DO UPDATE SET password_hash = excluded.password_hash;
+INSERT INTO auth_service.local_users (id, tenant_id, username, password_hash, role)
+VALUES ('$USER_ID', '$TENANT_ID', 'demo', '$PASSWORD_HASH', 'admin')
+ON CONFLICT (id) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role;
 
 INSERT INTO ingestion_gateway.api_keys (id, tenant_id, key_hash, label, created_at)
 VALUES ('$KEY_ID', '$TENANT_ID', '$KEY_HASH', 'local-demo', now())

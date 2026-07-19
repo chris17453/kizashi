@@ -8,7 +8,7 @@ use std::sync::Mutex;
 #[derive(Default)]
 pub struct InMemoryAuthClient {
     pub logins: Mutex<Vec<(String, String, String)>>,
-    pub result: Mutex<Option<(String, Uuid)>>,
+    pub result: Mutex<Option<(String, Uuid, Role)>>,
 }
 
 #[async_trait]
@@ -18,7 +18,7 @@ impl AuthClient for InMemoryAuthClient {
         tenant_name: &str,
         username: &str,
         password: &str,
-    ) -> Result<(String, Uuid), AuthClientError> {
+    ) -> Result<(String, Uuid, Role), AuthClientError> {
         self.logins.lock().unwrap().push((
             tenant_name.to_string(),
             username.to_string(),
@@ -37,7 +37,7 @@ impl AuthClient for FailingAuthClient {
         _tenant_name: &str,
         _username: &str,
         _password: &str,
-    ) -> Result<(String, Uuid), AuthClientError> {
+    ) -> Result<(String, Uuid, Role), AuthClientError> {
         Err(AuthClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -60,8 +60,10 @@ async fn spawn_stub_server(expected: ExpectedCreds) -> String {
         JsonExtractor(body): JsonExtractor<Body>,
     ) -> axum::response::Response {
         if body.username == expected.username && body.password == expected.password {
-            Json(serde_json::json!({"token": "issued-token", "tenant_id": expected.tenant_id}))
-                .into_response()
+            Json(serde_json::json!({
+                "token": "issued-token", "tenant_id": expected.tenant_id, "role": "operator"
+            }))
+            .into_response()
         } else {
             axum::http::StatusCode::UNAUTHORIZED.into_response()
         }
@@ -86,10 +88,11 @@ async fn http_client_returns_the_token_and_tenant_id_on_valid_credentials() {
     .await;
     let client = HttpAuthClient::new(reqwest::Client::new(), url);
 
-    let (token, returned_tenant_id) =
+    let (token, returned_tenant_id, role) =
         client.local_login("acme", "alice", "correct-password").await.unwrap();
     assert_eq!(token, "issued-token");
     assert_eq!(returned_tenant_id, tenant_id);
+    assert_eq!(role, Role::Operator);
 }
 
 #[tokio::test]

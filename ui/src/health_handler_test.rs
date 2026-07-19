@@ -25,6 +25,7 @@ async fn state_with_session(health_client: Arc<dyn crate::HealthClient>) -> (App
             bearer_token: "tok".to_string(),
             tenant_id: Uuid::new_v4(),
             username: "alice".to_string(),
+            role: common::Role::Admin,
         })
         .await;
     let state = AppState {

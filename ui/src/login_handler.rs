@@ -35,7 +35,7 @@ fn login_error(message: impl Into<String>) -> Response {
 /// then establishes its own session (ADR-0014, since Auth Service has no session/cookie layer
 /// of its own per ADR-0009).
 pub async fn post_login(State(state): State<AppState>, Form(form): Form<LoginForm>) -> Response {
-    let (bearer_token, tenant_id) = match state
+    let (bearer_token, tenant_id, role) = match state
         .auth_client
         .local_login(&form.tenant_name, &form.username, &form.password)
         .await
@@ -44,7 +44,7 @@ pub async fn post_login(State(state): State<AppState>, Form(form): Form<LoginFor
         Err(_) => return login_error("Invalid workspace, username, or password"),
     };
 
-    let session = Session { bearer_token, tenant_id, username: form.username };
+    let session = Session { bearer_token, tenant_id, username: form.username, role };
     let session_id = state.session_store.create(session).await;
 
     let cookie = format!("{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Strict");

@@ -1145,3 +1145,55 @@ Entry format:
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a — closes a gap flagged in the standing gap-closing roadmap (Phase 1c,
   security/compliance), not a spec §11 open item.
+
+## [2026-07-18] feature/0014-docker-images — RBAC v1: role on local users, write-path enforcement on config-admin-service
+- **Type:** feature
+- **Summary:** Closes gap-closing-roadmap Phase 1a's highest-priority item: until now every
+  service trusted `X-Tenant-Id` with zero role/permission check — any authenticated session
+  could create/update/delete triggers and mappings regardless of who it belonged to. Adds
+  `common::Role` (`Viewer < Operator < Admin`, ordered) and threads it end-to-end through the
+  identity chain that already exists: `auth_service.local_users` gains a `role` column (new
+  migration, existing rows default to `admin` so the demo login isn't locked out) →
+  `SessionClient::mint_session` gains a `role` param → `query-gateway`'s `/internal/tokens` +
+  `TokenStore` + `query_api_tokens` table carry it (`tenant_for_token` renamed
+  `session_for_token`, now returns `(tenant_id, role)`) → `LoginResponse` returns it → Console
+  UI's `Session` struct carries it. `config-admin-service`'s `create_trigger`/`update_trigger`/
+  `create_mapping`/`update_mapping` now require an `X-Role` header at least `Operator`, 403
+  otherwise, 401 if the header is missing entirely — the same trust-boundary pattern
+  `X-Tenant-Id` already uses, since no gateway sits in front of this service (ADR-0010) to
+  enforce roles at a proxy layer. OIDC logins (which have no local role source) default to the
+  least-privileged `Viewer` rather than being left unroled or guessing something permissive.
+  See ADR-0016 for the full v1-scope decision, including what's explicitly deferred:
+  `retention-service`, `action-executor`, and `ingestion-gateway`'s API-key endpoints remain
+  unenforced (tracked, not silently dropped), and there's no "assign another user's role" UI
+  yet — that's a direct SQL update for now, same interim state API keys were in before Phase
+  1c's UI shipped.
+- **Tests:** `cargo test -p common role` — 5 passed (ordering, `at_least`, `Display`/`FromStr`
+  round-trip, snake_case serialization). `cargo test -p auth-service --lib` — 33 passed
+  (`LocalUser`/`SessionClient` role threading, a new assertion that a successful login mints
+  with the user's actual role and returns it in the response body). `cargo test -p auth-service
+  --test local_user_repository_integration_test` — 1 passed against real Postgres, now
+  asserting the stored role round-trips. `cargo test -p query-gateway --lib` — 14 passed
+  (`TokenStore`/`session_for_token` role threading). `cargo test -p query-gateway --test
+  token_store_integration_test` — 2 passed against real Postgres (stored role round-trips;
+  minted tokens carry the role they were minted with). `cargo test -p config-admin-service
+  --lib` — 47 passed (4 new: missing-role-header 401, viewer-rejected 403 on both
+  trigger-create and mapping-create, operator-allowed 201 — the actual enforcement contract).
+  `cargo test -p kizashi-ui --lib` — 101 passed (every `Session`/`AppState` construction site
+  across the test suite updated for the new field; no behavioral change to any existing UI test
+  since role isn't yet consumed by nav or any write-path client). Beyond unit/integration
+  tests: rebuilt and redeployed `auth-service`/`query-gateway`/`config-admin-service`/
+  `kizashi-ui`, confirmed the demo login still returns `"role":"admin"` and Console UI login
+  still works end-to-end, then — the test that actually proves the enforcement — sent a real
+  trigger-create request directly at the live `config-admin-service` three ways: no `X-Role`
+  header (401), `X-Role: viewer` (403), `X-Role: operator` (201), all against real running
+  Postgres with the real migration applied. Full local CI gate: `cargo fmt --all --check`
+  clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean (one
+  `await_holding_lock` finding caught and fixed — a `MutexGuard` held across an `.await` in a
+  new test), `cargo test --workspace --all-features` all green (0 failures across every crate,
+  verified against a throwaway local `mssql` container standing in for CI's Fabric TDS
+  dependency), `cargo llvm-cov` 93.81% line coverage (85% floor), `cargo audit` / `cargo deny
+  check` clean (same two pre-existing allow-listed `unmaintained` advisories, no new
+  advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** [0016-rbac-v1-scope-role-on-local-user-x-role-header-trust-config-admin-write-path-enforcement.md](../adr/0016-rbac-v1-scope-role-on-local-user-x-role-header-trust-config-admin-write-path-enforcement.md)

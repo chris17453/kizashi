@@ -91,12 +91,16 @@ pub async fn callback(
         }
     };
 
+    // OIDC has no local role source yet (ADR-0016 scopes RBAC v1 to `local_users`, which OIDC
+    // sessions never consult) — default to the least-privileged role rather than leaving OIDC
+    // logins unroled or guessing something more permissive.
+    let role = common::Role::Viewer;
     match state
         .session_client
-        .mint_session(req.tenant_id, &format!("oidc:{provider}:{}", userinfo.subject))
+        .mint_session(req.tenant_id, role, &format!("oidc:{provider}:{}", userinfo.subject))
         .await
     {
-        Ok(token) => Json(LoginResponse { token, tenant_id: req.tenant_id }).into_response(),
+        Ok(token) => Json(LoginResponse { token, tenant_id: req.tenant_id, role }).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "session mint failed");
             error_response(StatusCode::BAD_GATEWAY, "failed to establish session")

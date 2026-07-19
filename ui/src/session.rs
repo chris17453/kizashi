@@ -3,6 +3,7 @@
 pub(crate) mod session_test;
 
 use async_trait::async_trait;
+use common::Role;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use uuid::Uuid;
@@ -12,6 +13,7 @@ pub struct Session {
     pub bearer_token: String,
     pub tenant_id: Uuid,
     pub username: String,
+    pub role: Role,
 }
 
 /// Auth Service has no session/cookie layer of its own (ADR-0009 — "that's Console UI's job

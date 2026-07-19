@@ -12,7 +12,7 @@ use crate::trigger_definition_repository::{
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use common::{NormalizationMapping, TriggerDefinition};
+use common::{NormalizationMapping, Role, TriggerDefinition};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -77,12 +77,40 @@ pub(crate) fn tenant_mismatch(headers: &HeaderMap, entity_tenant_id: Uuid) -> Op
     }
 }
 
+/// RBAC v1 (ADR-0016): every write handler trusts `X-Role`, forwarded by Console UI's session
+/// alongside `X-Tenant-Id`, the same trust boundary already established for tenant identity —
+/// this service has no gateway in front of it (ADR-0010) to enforce roles at a proxy layer.
+fn role_from_headers(headers: &HeaderMap) -> Result<Role, (StatusCode, &'static str)> {
+    let raw = headers
+        .get("x-role")
+        .and_then(|v| v.to_str().ok())
+        .ok_or((StatusCode::UNAUTHORIZED, "missing X-Role header"))?;
+    raw.parse().map_err(|_| (StatusCode::BAD_REQUEST, "X-Role is not a recognized role"))
+}
+
+/// Rejects the request unless the caller's role is at least `Operator` — the check every
+/// create/update write-path handler runs before touching a repository (ADR-0016 v1 scope:
+/// trigger-definition and normalization-mapping writes only).
+fn require_operator(headers: &HeaderMap) -> Option<Response> {
+    match role_from_headers(headers) {
+        Ok(role) if role.at_least(Role::Operator) => None,
+        Ok(_) => Some(error_response(
+            StatusCode::FORBIDDEN,
+            "role does not have permission to perform this action",
+        )),
+        Err((status, msg)) => Some(error_response(status, msg)),
+    }
+}
+
 pub async fn create_trigger(
     State(state): State<AdminState>,
     headers: HeaderMap,
     Json(trigger): Json<TriggerDefinition>,
 ) -> Response {
     if let Some(response) = tenant_mismatch(&headers, trigger.tenant_id) {
+        return response;
+    }
+    if let Some(response) = require_operator(&headers) {
         return response;
     }
     match state.trigger_repository.create(trigger).await {
@@ -98,6 +126,9 @@ pub async fn update_trigger(
     Json(mut trigger): Json<TriggerDefinition>,
 ) -> Response {
     if let Some(response) = tenant_mismatch(&headers, trigger.tenant_id) {
+        return response;
+    }
+    if let Some(response) = require_operator(&headers) {
         return response;
     }
     trigger.id = id;
@@ -170,6 +201,9 @@ pub async fn create_mapping(
     if let Some(response) = tenant_mismatch(&headers, mapping.tenant_id) {
         return response;
     }
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
     match state.mapping_repository.create(mapping).await {
         Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
         Err(e) => mapping_error_response(e),
@@ -183,6 +217,9 @@ pub async fn update_mapping(
     Json(mut mapping): Json<NormalizationMapping>,
 ) -> Response {
     if let Some(response) = tenant_mismatch(&headers, mapping.tenant_id) {
+        return response;
+    }
+    if let Some(response) = require_operator(&headers) {
         return response;
     }
     mapping.id = id;

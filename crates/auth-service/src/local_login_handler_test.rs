@@ -24,6 +24,7 @@ fn sample_user(tenant_id: Uuid, password: &str) -> LocalUser {
         tenant_id,
         username: "alice".to_string(),
         password_hash: hash_password(password).unwrap(),
+        role: common::Role::Operator,
     }
 }
 
@@ -53,7 +54,15 @@ async fn correct_credentials_mint_a_session_token() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(session_client.minted.lock().unwrap().len(), 1);
+    {
+        let minted = session_client.minted.lock().unwrap();
+        assert_eq!(minted.len(), 1);
+        assert_eq!(minted[0].1, common::Role::Operator);
+    }
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["role"], "operator");
 }
 
 #[tokio::test]

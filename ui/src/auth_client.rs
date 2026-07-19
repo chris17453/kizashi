@@ -3,6 +3,7 @@
 pub(crate) mod auth_client_test;
 
 use async_trait::async_trait;
+use common::Role;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -24,7 +25,7 @@ pub trait AuthClient: Send + Sync {
         tenant_name: &str,
         username: &str,
         password: &str,
-    ) -> Result<(String, Uuid), AuthClientError>;
+    ) -> Result<(String, Uuid, Role), AuthClientError>;
 }
 
 pub struct HttpAuthClient {
@@ -42,6 +43,7 @@ impl HttpAuthClient {
 struct LoginResponse {
     token: String,
     tenant_id: Uuid,
+    role: Role,
 }
 
 #[async_trait]
@@ -51,7 +53,7 @@ impl AuthClient for HttpAuthClient {
         tenant_name: &str,
         username: &str,
         password: &str,
-    ) -> Result<(String, Uuid), AuthClientError> {
+    ) -> Result<(String, Uuid, Role), AuthClientError> {
         let response = self
             .client
             .post(format!("{}/v1/auth/local/login", self.auth_service_url))
@@ -72,6 +74,6 @@ impl AuthClient for HttpAuthClient {
 
         let body: LoginResponse =
             response.json().await.map_err(|e| AuthClientError::Unreachable(e.to_string()))?;
-        Ok((body.token, body.tenant_id))
+        Ok((body.token, body.tenant_id, body.role))
     }
 }

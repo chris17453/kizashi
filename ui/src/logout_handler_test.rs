@@ -26,6 +26,7 @@ async fn logout_deletes_the_session_and_expires_the_cookie() {
             bearer_token: "tok".to_string(),
             tenant_id: Uuid::new_v4(),
             username: "alice".to_string(),
+            role: common::Role::Admin,
         })
         .await;
     let session_store = Arc::new(session_store);
