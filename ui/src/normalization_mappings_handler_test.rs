@@ -1,14 +1,15 @@
 use super::*;
 use crate::agents_client::agents_client_test::InMemoryAgentsClient;
-use crate::analysis_config_client::analysis_config_client_test::{
-    FailingAnalysisConfigClient, InMemoryAnalysisConfigClient,
-};
+use crate::analysis_config_client::analysis_config_client_test::InMemoryAnalysisConfigClient;
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::execution_client::execution_client_test::InMemoryExecutionClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
+use crate::normalization_mappings_client::normalization_mappings_client_test::{
+    FailingNormalizationMappingsClient, InMemoryNormalizationMappingsClient,
+};
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
@@ -21,7 +22,10 @@ use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
     Router::new()
-        .route("/analysis-config", get(get_analysis_config_page).post(post_analysis_config))
+        .route(
+            "/normalization-mappings",
+            get(get_normalization_mappings).post(post_normalization_mapping),
+        )
         .with_state(state)
 }
 
@@ -52,22 +56,22 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
             crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default(),
         ),
         execution_client: Arc::new(InMemoryExecutionClient::default()),
-        normalization_mappings_client: std::sync::Arc::new(crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient::default()),
-        stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         analysis_config_client: Arc::new(InMemoryAnalysisConfigClient::default()),
+        stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
+        normalization_mappings_client: Arc::new(InMemoryNormalizationMappingsClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id, tenant_id)
 }
 
 #[tokio::test]
-async fn renders_an_empty_prompt_when_none_configured() {
-    let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
+async fn shows_an_empty_state_with_no_mappings_configured() {
+    let (state, session_id, _tenant_id) = state_with_session(common::Role::Admin).await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/analysis-config")
+                .uri("/normalization-mappings")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -78,21 +82,55 @@ async fn renders_an_empty_prompt_when_none_configured() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("AI Analysis"));
+    assert!(body.contains("No normalization mappings"));
 }
 
 #[tokio::test]
-async fn post_saves_the_prompt_and_rerenders_it() {
+async fn post_creates_a_mapping_and_redirects() {
     let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
+    let mappings_client = Arc::new(
+        crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient::default(),
+    );
+    let mut state = state;
+    state.normalization_mappings_client = mappings_client.clone();
+
+    let body = "source_type=ticket&field_map=text+%3D+%24.description%0Aurgency+%3D+%24.priority";
 
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/analysis-config")
+                .uri("/normalization-mappings")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from("prompt=look+for+urgent+tickets"))
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let created = mappings_client.created.lock().unwrap();
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].source_type, "ticket");
+    assert_eq!(created[0].field_map.get("text"), Some(&"$.description".to_string()));
+    assert_eq!(created[0].field_map.get("urgency"), Some(&"$.priority".to_string()));
+}
+
+#[tokio::test]
+async fn post_rerenders_with_an_error_when_field_map_has_no_valid_lines() {
+    let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
+
+    let body = "source_type=ticket&field_map=not+a+valid+line";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/normalization-mappings")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
                 .unwrap(),
         )
         .await
@@ -101,22 +139,23 @@ async fn post_saves_the_prompt_and_rerenders_it() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("look for urgent tickets"));
-    assert!(body.contains("Saved"));
+    assert!(body.contains("at least one"));
 }
 
 #[tokio::test]
 async fn post_rejects_a_viewer_role() {
     let (state, session_id, _tenant_id) = state_with_session(common::Role::Viewer).await;
 
+    let body = "source_type=ticket&field_map=text+%3D+%24.description";
+
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/analysis-config")
+                .uri("/normalization-mappings")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from("prompt=x"))
+                .body(Body::from(body))
                 .unwrap(),
         )
         .await
@@ -126,14 +165,14 @@ async fn post_rejects_a_viewer_role() {
 }
 
 #[tokio::test]
-async fn get_shows_an_error_when_the_backend_fails() {
-    let (mut state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
-    state.analysis_config_client = Arc::new(FailingAnalysisConfigClient);
+async fn shows_an_error_when_the_backend_fails() {
+    let (mut state, session_id, _tenant_id) = state_with_session(common::Role::Admin).await;
+    state.normalization_mappings_client = Arc::new(FailingNormalizationMappingsClient);
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/analysis-config")
+                .uri("/normalization-mappings")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -144,15 +183,15 @@ async fn get_shows_an_error_when_the_backend_fails() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("simulated failure") || body.contains("error"));
+    assert!(body.contains("unreachable"));
 }
 
 #[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
-    let (state, _session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
+    let (state, _session_id, _tenant_id) = state_with_session(common::Role::Admin).await;
 
     let response = router(state)
-        .oneshot(Request::builder().uri("/analysis-config").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/normalization-mappings").body(Body::empty()).unwrap())
         .await
         .unwrap();
 

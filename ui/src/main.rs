@@ -1,7 +1,8 @@
 use kizashi_ui::{
     build_router, AppState, HttpAgentsClient, HttpAnalysisConfigClient, HttpApiKeysClient,
     HttpAuthClient, HttpBacklogClient, HttpEventsClient, HttpExecutionClient, HttpHealthClient,
-    HttpIngestionStatsClient, HttpTriggersClient, InMemorySessionStore,
+    HttpIngestionStatsClient, HttpNormalizationMappingsClient, HttpTriggersClient,
+    InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -48,6 +49,10 @@ async fn main() {
         )),
         execution_client: Arc::new(HttpExecutionClient::new(client.clone(), action_executor_url)),
         analysis_config_client: Arc::new(HttpAnalysisConfigClient::new(
+            client.clone(),
+            config_admin_service_url.clone(),
+        )),
+        normalization_mappings_client: Arc::new(HttpNormalizationMappingsClient::new(
             client,
             config_admin_service_url,
         )),

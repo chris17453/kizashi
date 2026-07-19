@@ -14,6 +14,7 @@ mod events_client;
 mod execution_client;
 mod health_client;
 mod ingestion_stats_client;
+mod normalization_mappings_client;
 mod session;
 mod session_guard;
 mod topology;
@@ -31,6 +32,7 @@ mod health_handler;
 mod healthz;
 mod login_handler;
 mod logout_handler;
+mod normalization_mappings_handler;
 mod overview_handler;
 mod pipeline_handler;
 mod record_journey_handler;
@@ -57,6 +59,9 @@ pub use ingestion_stats_client::{
     ConnectorStatSummary, HttpIngestionStatsClient, IngestionStatsClient,
     IngestionStatsClientError, RecordSearchFilter, RecordSummary,
 };
+pub use normalization_mappings_client::{
+    HttpNormalizationMappingsClient, NormalizationMappingsClient, NormalizationMappingsClientError,
+};
 pub use session::{InMemorySessionStore, Session, SessionStore};
 pub use triggers_client::{
     HttpTriggersClient, TriggerSummary, TriggersClient, TriggersClientError, TriggersPage,
@@ -74,6 +79,7 @@ pub use health_handler::get_health;
 pub use healthz::healthz;
 pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
+pub use normalization_mappings_handler::{get_normalization_mappings, post_normalization_mapping};
 pub use overview_handler::get_overview;
 pub use pipeline_handler::get_pipeline;
 pub use record_journey_handler::get_record_journey;
@@ -101,6 +107,7 @@ pub struct AppState {
     pub execution_client: Arc<dyn ExecutionClient>,
     pub stats_client: Arc<dyn IngestionStatsClient>,
     pub analysis_config_client: Arc<dyn AnalysisConfigClient>,
+    pub normalization_mappings_client: Arc<dyn NormalizationMappingsClient>,
     /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
     /// reachable from inside this container (e.g. a customer-hosted connector polling in from
     /// outside the platform's own network), so it's a separate, operator-configurable value
@@ -129,6 +136,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api-keys", get(get_api_keys).post(post_api_keys))
         .route("/api-keys/:id/revoke", axum::routing::post(post_revoke_api_key))
         .route("/analysis-config", get(get_analysis_config_page).post(post_analysis_config))
+        .route(
+            "/normalization-mappings",
+            get(get_normalization_mappings).post(post_normalization_mapping),
+        )
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
         .route("/data/:id", get(get_data_detail))

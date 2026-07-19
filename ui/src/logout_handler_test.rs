@@ -43,6 +43,7 @@ async fn logout_deletes_the_session_and_expires_the_cookie() {
         backlog_client: Arc::new(crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default()),
         execution_client: std::sync::Arc::new(crate::execution_client::execution_client_test::InMemoryExecutionClient::default()),
         analysis_config_client: std::sync::Arc::new(crate::analysis_config_client::analysis_config_client_test::InMemoryAnalysisConfigClient::default()),
+        normalization_mappings_client: std::sync::Arc::new(crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient::default()),
         stats_client: Arc::new(
             crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
         ),

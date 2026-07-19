@@ -1654,3 +1654,35 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — reuses ADR-0007's action config shape and ADR-0018's sync pipeline; no new
   architectural decision.
+
+## [2026-07-19] feature/0015-ai-analysis-config — Add Field Mappings (NormalizationMapping) to the Console UI
+- **Type:** feature
+- **Branch:** feature/0015-ai-analysis-config
+- **Summary:** `NormalizationMapping` has had a full CRUD API in `config-admin-service` since
+  ADR-0010 but zero presence anywhere in the Console UI — not even a read-only list, unlike
+  Triggers which at least had a (read-only, until the entry above) page. Discovered by
+  auditing for other instances of the same "operators can't practically use this" pattern
+  just fixed for Triggers. Adds `NormalizationMappingsClient` (list/create),
+  `GET/POST /normalization-mappings`, and a new "Field Mappings" nav page. `field_map` is a
+  dynamic `BTreeMap<String, String>` (arbitrary target-field-to-JSON-path pairs), so rather
+  than a JS-dependent dynamic add-row form, the create form uses one `target_field = $.path`
+  pair per line in a textarea, parsed server-side — consistent with the no-JS constraint
+  (ADR-0014) already governing every other form in this app.
+- **Tests:** `cargo test -p kizashi-ui` — 155 passed (10 new: 4
+  `normalization_mappings_client_test` HTTP-client tests against a real stub server, 6
+  `normalization_mappings_handler_test` tests covering the empty state, a successful
+  multi-line create, an all-invalid-lines error re-render, a Viewer-role 403, a backend
+  failure, and the login redirect; every other `*_handler_test.rs`'s `AppState` construction
+  swept to add the new `normalization_mappings_client` field). Full local CI gate: `cargo fmt
+  --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green (0 failures, verified
+  against a throwaway local `mssql` container for Fabric), `cargo audit` clean (same two
+  pre-existing allow-listed `unmaintained` advisories, no new ones). Live-verified against the
+  running docker-compose stack: rebuilt/redeployed `kizashi-ui`, submitted a real
+  multi-line mapping (`text = $.description` / `urgency = $.priority`) through the actual
+  form, and confirmed via a direct Postgres query that both fields landed correctly in
+  `config_admin_service.normalization_mappings` — screenshotted the page showing the create
+  form and both fields rendered in the list table.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — reuses the existing NormalizationMapping CRUD API (ADR-0010); no new
+  architectural decision.

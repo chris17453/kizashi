@@ -1,0 +1,65 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Field Mappings</h1>
+<p class="muted">How raw payloads from a connector get mapped into normalized fields before
+analysis. One mapping per source type — the most specific one for a record's
+<code>source_type</code> is used at normalization time.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if let Some(e) = form_error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if can_write %}
+<div class="form-row">
+  <div class="panel">
+    <h2>Create a mapping</h2>
+    <form class="inline" method="post" action="/normalization-mappings">
+      <label for="source_type">Source type</label>
+      <input type="text" id="source_type" name="source_type" placeholder="ticket" required>
+
+      <label for="field_map">Field mappings (one per line)</label>
+      <textarea id="field_map" name="field_map" rows="6" placeholder="text = $.description&#10;urgency = $.priority&#10;entity_ref = $.customer.id" required></textarea>
+
+      <button type="submit">Create mapping</button>
+    </form>
+  </div>
+  <div class="info-panel">
+    <h2>How this works</h2>
+    <ul>
+      <li>Each line is <code>target_field = $.json.path</code> — the path is resolved
+        against the raw payload the connector ingested.</li>
+      <li><code>entity_ref</code> is a special target field: if present, it's what Triggers
+        group repeated events by (e.g. per-customer) instead of per-record.</li>
+      <li>A missing/unmatched path yields <code>null</code> for that field rather than
+        failing normalization — safe to map speculatively.</li>
+      <li>Every create is written to an immutable audit log for compliance review.</li>
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{% if mappings.is_empty() %}
+<div class="empty-state">
+  <div class="empty-icon">&#9636;</div>
+  <p>No normalization mappings configured yet for this tenant.</p>
+  {% if can_write %}<p>Use the form above to create your first one.</p>{% endif %}
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Source Type</th><th>Fields</th><th>Version</th></tr>
+  </thead>
+  <tbody>
+    {% for mapping in mappings %}
+    <tr>
+      <td>{{ mapping.source_type }}</td>
+      <td>
+        {% for (field, path) in mapping.field_map %}
+        <code>{{ field }} = {{ path }}</code>{% if !loop.last %}, {% endif %}
+        {% endfor %}
+      </td>
+      <td>{{ mapping.version }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
