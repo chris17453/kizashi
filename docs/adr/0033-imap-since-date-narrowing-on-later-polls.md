@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-0034](0034-imap-uid-cursor-chunked-backfill.md), which replaces the
+day-overlap approximation here with an exact IMAP UID cursor plus chunked backfill — kept for
+historical context on why the interim approach existed and what was wrong with it.
 
 ## Context
 

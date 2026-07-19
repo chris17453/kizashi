@@ -23,6 +23,26 @@ impl Connector for StubConnector {
     }
 }
 
+struct CheckpointingConnector {
+    records: Vec<RawRecord>,
+}
+
+#[async_trait]
+impl Connector for CheckpointingConnector {
+    fn connector_id(&self) -> &str {
+        "checkpointing"
+    }
+    fn source_type(&self) -> SourceType {
+        SourceType::Generic
+    }
+    async fn poll(&self, _tenant_id: Uuid) -> Result<Vec<RawRecord>, ConnectorError> {
+        Ok(self.records.clone())
+    }
+    fn checkpoint(&self, records: &[RawRecord]) -> Option<String> {
+        (!records.is_empty()).then_some("high-water-mark-42".to_string())
+    }
+}
+
 struct FailingConnector;
 
 #[async_trait]
@@ -51,7 +71,7 @@ async fn ingests_every_polled_record() {
 
     let summary = run_poll_cycle(&connector, tenant_id, &ingestion_client).await.unwrap();
 
-    assert_eq!(summary, PollSummary { polled: 2, ingested: 2, failed: 0 });
+    assert_eq!(summary, PollSummary { polled: 2, ingested: 2, failed: 0, checkpoint: None });
     assert_eq!(ingestion_client.ingested.lock().unwrap().len(), 2);
 }
 
@@ -63,7 +83,7 @@ async fn a_failed_ingest_is_counted_but_does_not_abort_the_cycle() {
 
     let summary = run_poll_cycle(&connector, tenant_id, &ingestion_client).await.unwrap();
 
-    assert_eq!(summary, PollSummary { polled: 1, ingested: 0, failed: 1 });
+    assert_eq!(summary, PollSummary { polled: 1, ingested: 0, failed: 1, checkpoint: None });
 }
 
 #[tokio::test]
@@ -74,6 +94,28 @@ async fn a_poll_failure_returns_an_error() {
 
     let err = run_poll_cycle(&connector, tenant_id, &ingestion_client).await.unwrap_err();
     assert!(matches!(err, PollRunError::Poll(_)));
+}
+
+#[tokio::test]
+async fn a_connectors_checkpoint_is_carried_into_the_summary() {
+    let tenant_id = Uuid::new_v4();
+    let connector = CheckpointingConnector { records: vec![sample_record(tenant_id)] };
+    let ingestion_client = InMemoryIngestionClient::default();
+
+    let summary = run_poll_cycle(&connector, tenant_id, &ingestion_client).await.unwrap();
+
+    assert_eq!(summary.checkpoint, Some("high-water-mark-42".to_string()));
+}
+
+#[tokio::test]
+async fn a_connector_with_no_checkpoint_leaves_it_none() {
+    let tenant_id = Uuid::new_v4();
+    let connector = StubConnector { records: vec![sample_record(tenant_id)] };
+    let ingestion_client = InMemoryIngestionClient::default();
+
+    let summary = run_poll_cycle(&connector, tenant_id, &ingestion_client).await.unwrap();
+
+    assert_eq!(summary.checkpoint, None);
 }
 
 #[tokio::test]

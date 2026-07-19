@@ -28,6 +28,15 @@ async fn main() {
         .unwrap_or_else(|_| "true".to_string())
         .parse()
         .expect("IMAP_USE_TLS must be true or false");
+    let since_uid: Option<u32> = std::env::var("IMAP_SINCE_UID").ok().and_then(|v| v.parse().ok());
+    // Caps a single poll's fetch instead of pulling an entire backfill window in one shot —
+    // this is what makes backfill "chunked, resumable, rate-limit-friendly" rather than one
+    // giant burst (ADR-0034). 200 is a conservative default for a 5-minute default poll
+    // interval; operators with a larger poll interval or higher ingestion rate limit can raise
+    // it per-Agent.
+    let max_records_per_poll: Option<usize> = Some(
+        std::env::var("IMAP_MAX_RECORDS_PER_POLL").ok().and_then(|v| v.parse().ok()).unwrap_or(200),
+    );
     let ingestion_gateway_url =
         std::env::var("INGESTION_GATEWAY_URL").expect("INGESTION_GATEWAY_URL must be set");
     let api_key =
@@ -47,7 +56,9 @@ async fn main() {
         mailbox,
         since_date,
         use_tls,
-    );
+    )
+    .with_since_uid(since_uid)
+    .with_max_records_per_poll(max_records_per_poll);
     let ingestion_client =
         HttpIngestionClient::new(reqwest::Client::new(), ingestion_gateway_url, api_key);
 
@@ -58,6 +69,12 @@ async fn main() {
                 connector_id = connector.connector_id(),
                 "poll cycle complete"
             );
+            // A machine-parseable marker on its own stdout line so the orchestrator
+            // (DockerInvoker) can capture and persist it without needing structured logging —
+            // see ADR-0034. Only emitted when this poll actually produced a checkpoint.
+            if let Some(checkpoint) = &summary.checkpoint {
+                println!("KIZASHI_CHECKPOINT={checkpoint}");
+            }
         }
         Err(e) => {
             tracing::error!(error = %e, connector_id = connector.connector_id(), "poll cycle failed");

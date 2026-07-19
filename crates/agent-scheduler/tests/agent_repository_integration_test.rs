@@ -70,11 +70,12 @@ async fn mark_polled_and_delete_work_against_real_postgres() {
     repo.upsert(agent.clone()).await.unwrap();
 
     let now = chrono::Utc::now();
-    repo.mark_polled(agent.id, now).await.unwrap();
+    repo.mark_polled(agent.id, now, Some("42".to_string())).await.unwrap();
 
     let enabled = repo.list_enabled().await.unwrap();
     let found = enabled.iter().find(|a| a.agent.id == agent.id).unwrap();
     assert!(found.last_polled_at.is_some());
+    assert_eq!(found.last_checkpoint, Some("42".to_string()));
 
     repo.delete(agent.id).await.unwrap();
     let enabled_after_delete = repo.list_enabled().await.unwrap();

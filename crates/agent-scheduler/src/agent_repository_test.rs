@@ -12,7 +12,7 @@ impl AgentRepository for InMemoryAgentRepository {
         let mut agents = self.agents.lock().unwrap();
         match agents.iter_mut().find(|a| a.agent.id == agent.id) {
             Some(existing) => existing.agent = agent,
-            None => agents.push(StoredAgent { agent, last_polled_at: None }),
+            None => agents.push(StoredAgent { agent, last_polled_at: None, last_checkpoint: None }),
         }
         Ok(())
     }
@@ -30,10 +30,14 @@ impl AgentRepository for InMemoryAgentRepository {
         &self,
         id: Uuid,
         at: chrono::DateTime<chrono::Utc>,
+        checkpoint: Option<String>,
     ) -> Result<(), AgentRepositoryError> {
         let mut agents = self.agents.lock().unwrap();
         if let Some(found) = agents.iter_mut().find(|a| a.agent.id == id) {
             found.last_polled_at = Some(at);
+            if checkpoint.is_some() {
+                found.last_checkpoint = checkpoint;
+            }
         }
         Ok(())
     }
@@ -99,8 +103,33 @@ async fn mark_polled_records_the_timestamp() {
     repo.upsert(agent.clone()).await.unwrap();
 
     let now = chrono::Utc::now();
-    repo.mark_polled(agent.id, now).await.unwrap();
+    repo.mark_polled(agent.id, now, None).await.unwrap();
 
     let enabled = repo.list_enabled().await.unwrap();
     assert_eq!(enabled[0].last_polled_at, Some(now));
+}
+
+#[tokio::test]
+async fn mark_polled_with_a_checkpoint_records_it() {
+    let repo = InMemoryAgentRepository::default();
+    let agent = sample_agent(true);
+    repo.upsert(agent.clone()).await.unwrap();
+
+    repo.mark_polled(agent.id, chrono::Utc::now(), Some("42".to_string())).await.unwrap();
+
+    let enabled = repo.list_enabled().await.unwrap();
+    assert_eq!(enabled[0].last_checkpoint, Some("42".to_string()));
+}
+
+#[tokio::test]
+async fn mark_polled_with_no_checkpoint_leaves_the_previous_one_intact() {
+    let repo = InMemoryAgentRepository::default();
+    let agent = sample_agent(true);
+    repo.upsert(agent.clone()).await.unwrap();
+    repo.mark_polled(agent.id, chrono::Utc::now(), Some("42".to_string())).await.unwrap();
+
+    repo.mark_polled(agent.id, chrono::Utc::now(), None).await.unwrap();
+
+    let enabled = repo.list_enabled().await.unwrap();
+    assert_eq!(enabled[0].last_checkpoint, Some("42".to_string()));
 }

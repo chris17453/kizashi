@@ -17,15 +17,16 @@ pub enum InvokeError {
 /// affecting the scheduler or any other tenant's Agent, matching ADR-0013's isolation stance.
 #[async_trait]
 pub trait Invoker: Send + Sync {
-    /// `last_polled_at` is `None` on an agent's first-ever poll (use its configured backfill
-    /// window as-is) and `Some` on every later poll — connectors that understand a `since`-
-    /// style window narrow it instead of re-scanning from the original configured start every
-    /// time (see `DockerInvoker::build_run_args`'s IMAP override).
+    /// `last_checkpoint` is this Agent's most recent `Connector::checkpoint` value (ADR-0034),
+    /// `None` until its first checkpoint-reporting poll succeeds. Returns the *new* checkpoint
+    /// this invocation reported, if any, so the caller can persist it for the next poll —
+    /// `Ok(None)` means this poll didn't report one (an empty result, or the connector doesn't
+    /// support checkpointing), not that the previous checkpoint should be forgotten.
     async fn invoke(
         &self,
         agent: &Agent,
-        last_polled_at: Option<chrono::DateTime<chrono::Utc>>,
-    ) -> Result<(), InvokeError>;
+        last_checkpoint: Option<String>,
+    ) -> Result<Option<String>, InvokeError>;
 }
 
 /// Runs each due Agent's connector via `docker run --rm <image>` against the local Docker
@@ -63,18 +64,18 @@ impl DockerInvoker {
     /// gateway env vars the deploy-script wizard already computes by hand
     /// (`ui/src/agent_script_handler.rs::build_scripts`). Exposed at `pub(crate)` visibility
     /// purely so this method is independently unit-testable without shelling out.
-    /// `last_polled_at` narrows the IMAP connector's `IMAP_SINCE_DATE` on every poll after the
-    /// first, instead of re-scanning from the operator's originally-configured backfill start
-    /// forever — see the `Invoker::invoke` doc comment. This is deliberately special-cased to
-    /// `connector_type == "imap"` rather than a generic mechanism: it's the one connector this
-    /// scheduler currently knows re-scans a stateless date window, and a generic per-connector
-    /// cursor protocol is real follow-up work (see ADR-0033), not something to fake here.
+    ///
+    /// `last_checkpoint`, when present, is injected as `IMAP_SINCE_UID` for `connector_type ==
+    /// "imap"` — a real incremental cursor (ADR-0034), not a generic mechanism: it's the one
+    /// connector this scheduler currently knows how to checkpoint. On an agent's first-ever
+    /// poll (`last_checkpoint: None`), the operator's configured `IMAP_SINCE_DATE` is used as
+    /// the connector's own `search_query()` fallback, unmodified.
     pub(crate) fn build_run_args(
         &self,
         agent: &Agent,
         ingestion_gateway_url: &str,
         ingestion_gateway_api_key: &str,
-        last_polled_at: Option<chrono::DateTime<chrono::Utc>>,
+        last_checkpoint: Option<&str>,
     ) -> Vec<String> {
         let mut args = vec![
             "run".to_string(),
@@ -91,29 +92,19 @@ impl DockerInvoker {
             format!("INGESTION_GATEWAY_API_KEY={ingestion_gateway_api_key}"),
         ];
 
-        // A one-day overlap, not an exact cursor: IMAP's SEARCH SINCE command only has date
-        // granularity, so this is the coarsest safe margin against missing a message that
-        // landed right at a previous poll's boundary. Real dedup (ADR-0032) is what makes the
-        // resulting re-scan of that overlap day safe rather than duplicating anything.
-        let imap_since_override = if agent.connector_type == "imap" {
-            last_polled_at.map(|t| (t - chrono::Duration::days(1)).format("%Y-%m-%d").to_string())
-        } else {
-            None
-        };
-
         if let Some(fields) = agent.config.as_object() {
             for (key, value) in fields {
-                if key == "IMAP_SINCE_DATE" {
-                    if let Some(overridden) = &imap_since_override {
-                        args.push("-e".to_string());
-                        args.push(format!("IMAP_SINCE_DATE={overridden}"));
-                        continue;
-                    }
-                }
                 let value_str =
                     value.as_str().map(str::to_string).unwrap_or_else(|| value.to_string());
                 args.push("-e".to_string());
                 args.push(format!("{key}={value_str}"));
+            }
+        }
+
+        if agent.connector_type == "imap" {
+            if let Some(checkpoint) = last_checkpoint {
+                args.push("-e".to_string());
+                args.push(format!("IMAP_SINCE_UID={checkpoint}"));
             }
         }
 
@@ -122,18 +113,29 @@ impl DockerInvoker {
     }
 }
 
+/// The `imap` connector prints this on its own stdout line when a poll produces a checkpoint
+/// (see `crates/connectors/imap/src/main.rs`) — a plain marker rather than structured logging,
+/// so it survives regardless of what the connector's tracing subscriber does.
+const CHECKPOINT_MARKER: &str = "KIZASHI_CHECKPOINT=";
+
+fn extract_checkpoint(stdout: &[u8]) -> Option<String> {
+    String::from_utf8_lossy(stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix(CHECKPOINT_MARKER).map(str::to_string))
+}
+
 #[async_trait]
 impl Invoker for DockerInvoker {
     async fn invoke(
         &self,
         agent: &Agent,
-        last_polled_at: Option<chrono::DateTime<chrono::Utc>>,
-    ) -> Result<(), InvokeError> {
+        last_checkpoint: Option<String>,
+    ) -> Result<Option<String>, InvokeError> {
         let args = self.build_run_args(
             agent,
             &self.ingestion_gateway_url,
             &self.ingestion_gateway_api_key,
-            last_polled_at,
+            last_checkpoint.as_deref(),
         );
 
         let output = tokio::process::Command::new("docker")
@@ -149,6 +151,6 @@ impl Invoker for DockerInvoker {
                 String::from_utf8_lossy(&output.stderr)
             )));
         }
-        Ok(())
+        Ok(extract_checkpoint(&output.stdout))
     }
 }
