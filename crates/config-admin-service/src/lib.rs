@@ -13,6 +13,8 @@ mod handlers;
 mod health;
 mod mapping_publisher;
 mod normalization_mapping_repository;
+mod saved_search_query_handlers;
+mod saved_search_query_repository;
 mod trigger_definition_repository;
 mod trigger_publisher;
 
@@ -42,6 +44,13 @@ pub use normalization_mapping_repository::{
     NormalizationMappingRepository, NormalizationMappingRepositoryError,
     PostgresNormalizationMappingRepository,
 };
+pub use saved_search_query_handlers::{
+    create_saved_search_query, delete_saved_search_query, list_saved_search_queries,
+    SavedSearchQueryState,
+};
+pub use saved_search_query_repository::{
+    PostgresSavedSearchQueryRepository, SavedSearchQueryRepository, SavedSearchQueryRepositoryError,
+};
 pub use trigger_definition_repository::{
     PostgresTriggerDefinitionRepository, TriggerDefinitionRepository,
     TriggerDefinitionRepositoryError,
@@ -55,6 +64,7 @@ pub fn build_router(
     state: AdminState,
     agent_state: AgentState,
     analysis_config_state: AnalysisConfigState,
+    saved_search_query_state: SavedSearchQueryState,
 ) -> Router {
     let admin_routes = Router::new()
         .route("/healthz", get(healthz))
@@ -75,5 +85,13 @@ pub fn build_router(
         .route("/v1/analysis-config", get(get_analysis_config).put(put_analysis_config))
         .with_state(analysis_config_state);
 
-    admin_routes.merge(agent_routes).merge(analysis_config_routes)
+    let saved_search_query_routes = Router::new()
+        .route(
+            "/v1/saved-search-queries",
+            post(create_saved_search_query).get(list_saved_search_queries),
+        )
+        .route("/v1/saved-search-queries/:id", axum::routing::delete(delete_saved_search_query))
+        .with_state(saved_search_query_state);
+
+    admin_routes.merge(agent_routes).merge(analysis_config_routes).merge(saved_search_query_routes)
 }

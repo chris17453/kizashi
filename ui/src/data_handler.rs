@@ -6,15 +6,18 @@ use crate::ingestion_stats_client::DEFAULT_PAGE_SIZE;
 use crate::session_guard::require_session;
 use crate::{AppState, RecordSearchFilter, RecordSummary};
 use askama::Template;
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
-use axum::response::{Html, IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Redirect, Response};
+use common::SavedSearchQuery;
+use serde::Serialize;
+use uuid::Uuid;
 
 fn default_page() -> i64 {
     0
 }
 
-#[derive(Debug, serde::Deserialize, Default)]
+#[derive(Debug, serde::Deserialize, Serialize, Default, Clone)]
 pub struct DataSearchQuery {
     #[serde(default)]
     pub connector_id: String,
@@ -32,6 +35,21 @@ pub struct DataSearchQuery {
     pub page: i64,
 }
 
+/// A saved query's filter, plus a pre-built `/data?...` query string so the template can link
+/// straight to it without re-deriving field-by-field URL encoding in Askama (which can't call
+/// arbitrary Rust functions).
+struct SavedSearchRow {
+    id: Uuid,
+    name: String,
+    load_url: String,
+}
+
+fn to_saved_search_row(query: SavedSearchQuery) -> SavedSearchRow {
+    let filter: DataSearchQuery = serde_json::from_value(query.filter).unwrap_or_default();
+    let load_url = format!("/data?{}", serde_urlencoded::to_string(&filter).unwrap_or_default());
+    SavedSearchRow { id: query.id, name: query.name, load_url }
+}
+
 #[derive(Template)]
 #[template(path = "data.html")]
 struct DataTemplate {
@@ -40,6 +58,7 @@ struct DataTemplate {
     query: DataSearchQuery,
     page: i64,
     has_more: bool,
+    saved_searches: Vec<SavedSearchRow>,
     error: Option<String>,
 }
 
@@ -47,7 +66,8 @@ struct DataTemplate {
 /// connector, source type, free-text substring match, and (for email-shaped records)
 /// subject/from/attachment filename, tenant-scoped and paginated (`DEFAULT_PAGE_SIZE` per
 /// page — every list in this platform needs to hold up at "thousands of inboxes" scale, not
-/// silently truncate at an arbitrary limit).
+/// silently truncate at an arbitrary limit). Also lists saved searches (ADR-0029) so a filter
+/// can be bookmarked and revisited.
 pub async fn get_data(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -71,6 +91,15 @@ pub async fn get_data(
         offset: page * DEFAULT_PAGE_SIZE,
     };
 
+    let saved_searches = state
+        .saved_search_queries_client
+        .list(session.tenant_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(to_saved_search_row)
+        .collect();
+
     match state.stats_client.search_records(session.tenant_id, &filter).await {
         Ok(result) => Html(
             DataTemplate {
@@ -79,6 +108,7 @@ pub async fn get_data(
                 query,
                 page,
                 has_more: result.has_more,
+                saved_searches,
                 error: None,
             }
             .render()
@@ -92,6 +122,7 @@ pub async fn get_data(
                 query,
                 page,
                 has_more: false,
+                saved_searches,
                 error: Some(e.to_string()),
             }
             .render()
@@ -99,4 +130,64 @@ pub async fn get_data(
         )
         .into_response(),
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SaveSearchForm {
+    name: String,
+    #[serde(default)]
+    connector_id: String,
+    #[serde(default)]
+    source_type: String,
+    #[serde(default)]
+    q: String,
+    #[serde(default)]
+    subject: String,
+    #[serde(default)]
+    email_from: String,
+    #[serde(default)]
+    attachment_filename: String,
+}
+
+/// POST /data/saved-searches — no `require_operator` gate (ADR-0029): any authenticated tenant
+/// member can bookmark a search.
+pub async fn post_save_search(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Form(form): axum::extract::Form<SaveSearchForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+
+    let filter = DataSearchQuery {
+        connector_id: form.connector_id,
+        source_type: form.source_type,
+        q: form.q,
+        subject: form.subject,
+        email_from: form.email_from,
+        attachment_filename: form.attachment_filename,
+        page: 0,
+    };
+    let _ = state
+        .saved_search_queries_client
+        .create(session.tenant_id, &form.name, serde_json::to_value(&filter).unwrap_or_default())
+        .await;
+
+    Redirect::to("/data").into_response()
+}
+
+pub async fn post_delete_saved_search(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+
+    let _ = state.saved_search_queries_client.delete(session.tenant_id, id).await;
+    Redirect::to("/data").into_response()
 }

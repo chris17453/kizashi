@@ -18,6 +18,7 @@ mod health_client;
 mod ingestion_stats_client;
 mod normalization_mappings_client;
 mod retention_policies_client;
+mod saved_search_queries_client;
 mod session;
 mod session_guard;
 mod topology;
@@ -80,6 +81,9 @@ pub use retention_policies_client::{
     DataClass, HttpRetentionPoliciesClient, RetentionPoliciesClient, RetentionPoliciesClientError,
     RetentionPolicy,
 };
+pub use saved_search_queries_client::{
+    HttpSavedSearchQueriesClient, SavedSearchQueriesClient, SavedSearchQueriesClientError,
+};
 pub use session::{InMemorySessionStore, Session, SessionStore};
 pub use triggers_client::{
     HttpTriggersClient, TriggerSummary, TriggersClient, TriggersClientError, TriggersPage,
@@ -93,7 +97,7 @@ pub use analysis_config_handler::{get_analysis_config_page, post_analysis_config
 pub use api_keys_handler::{get_api_keys, post_api_keys, post_revoke_api_key};
 pub use audit_log_handler::get_audit_log as get_entity_audit_log;
 pub use data_detail_handler::get_data_detail;
-pub use data_handler::get_data;
+pub use data_handler::{get_data, post_delete_saved_search, post_save_search};
 pub use egress_allowlist_handler::{get_egress_allowlist, post_egress_allowlist};
 pub use events_handler::get_events;
 pub use health_handler::get_health;
@@ -137,6 +141,7 @@ pub struct AppState {
     pub retention_policies_client: Arc<dyn RetentionPoliciesClient>,
     pub egress_allowlist_client: Arc<dyn EgressAllowlistClient>,
     pub users_client: Arc<dyn UsersClient>,
+    pub saved_search_queries_client: Arc<dyn SavedSearchQueriesClient>,
     /// All three fields hold an `Arc<dyn AuditLogClient>` built from the *same*
     /// `HttpAuditLogClient` implementation, just constructed with a different backend base
     /// URL — `config-admin-service`, `retention-service`, and `auth-service` all expose an
@@ -187,6 +192,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/audit-log/:service/:entity_id", get(get_entity_audit_log))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
+        .route("/data/saved-searches", axum::routing::post(post_save_search))
+        .route("/data/saved-searches/:id/delete", axum::routing::post(post_delete_saved_search))
         .route("/data/:id", get(get_data_detail))
         .route("/data/:id/journey", get(get_record_journey))
         .route("/static/charts.js", get(get_charts_js))

@@ -66,6 +66,9 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         users_client: Arc::new(
             crate::users_client::users_client_test::InMemoryUsersClient::default(),
         ),
+        saved_search_queries_client: Arc::new(
+            crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default(),
+        ),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id, tenant_id)

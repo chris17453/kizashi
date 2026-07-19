@@ -7,6 +7,7 @@ use crate::health_client::PlatformHealthSummary;
 use crate::ingestion_stats_client::ingestion_stats_client_test::{
     FailingIngestionStatsClient, InMemoryIngestionStatsClient,
 };
+use crate::saved_search_queries_client::SavedSearchQueriesClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
@@ -18,7 +19,11 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/data", get(get_data)).with_state(state)
+    Router::new()
+        .route("/data", get(get_data))
+        .route("/data/saved-searches", axum::routing::post(post_save_search))
+        .route("/data/saved-searches/:id/delete", axum::routing::post(post_delete_saved_search))
+        .with_state(state)
 }
 
 async fn state_with_session() -> (AppState, String) {
@@ -57,6 +62,7 @@ async fn state_with_session() -> (AppState, String) {
         retention_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
         auth_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
         users_client: std::sync::Arc::new(crate::users_client::users_client_test::InMemoryUsersClient::default()),
+        saved_search_queries_client: std::sync::Arc::new(crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
@@ -194,4 +200,112 @@ async fn shows_a_previous_link_on_page_two_and_no_next_link_when_no_more_results
     assert!(body.contains("Previous"));
     assert!(!body.contains("Next"));
     assert!(body.contains("Page 2"));
+}
+
+#[tokio::test]
+async fn a_backend_failure_listing_saved_searches_does_not_break_the_page() {
+    let (mut state, session_id) = state_with_session().await;
+    state.saved_search_queries_client = Arc::new(
+        crate::saved_search_queries_client::saved_search_queries_client_test::FailingSavedSearchQueriesClient,
+    );
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn post_save_search_creates_a_bookmark_and_redirects() {
+    let (state, session_id) = state_with_session().await;
+    let saved_client = Arc::new(
+        crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default(),
+    );
+    let mut state = state;
+    state.saved_search_queries_client = saved_client.clone();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/data/saved-searches")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("name=urgent%20tickets&q=urgent&connector_id=&source_type=&subject=&email_from=&attachment_filename="))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let saved = saved_client.queries.lock().unwrap();
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0].name, "urgent tickets");
+}
+
+#[tokio::test]
+async fn saved_searches_render_as_links_on_the_page() {
+    let (mut state, session_id) = state_with_session().await;
+    let saved_client = Arc::new(
+        crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default(),
+    );
+    saved_client
+        .create(
+            state.session_store.get(&session_id).await.unwrap().tenant_id,
+            "urgent tickets",
+            serde_json::json!({"q": "urgent", "connector_id": "", "source_type": "", "subject": "", "email_from": "", "attachment_filename": "", "page": 0}),
+        )
+        .await
+        .unwrap();
+    state.saved_search_queries_client = saved_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("urgent tickets"));
+    assert!(body.contains("q=urgent"));
+}
+
+#[tokio::test]
+async fn post_delete_saved_search_removes_it_and_redirects() {
+    let (mut state, session_id) = state_with_session().await;
+    let saved_client = Arc::new(
+        crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default(),
+    );
+    let tenant_id = state.session_store.get(&session_id).await.unwrap().tenant_id;
+    let created = saved_client.create(tenant_id, "to remove", serde_json::json!({})).await.unwrap();
+    state.saved_search_queries_client = saved_client.clone();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/data/saved-searches/{}/delete", created.id))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert!(saved_client.list(tenant_id).await.unwrap().is_empty());
 }

@@ -2628,3 +2628,43 @@ architectural decision.
   no production code path changed.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — corrects ADR-0016 itself, no new decision
+
+## [2026-07-19] feature/0036-saved-search-queries — Saved data search queries (spec §7)
+- **Type:** feature
+- **Branch:** feature/0036-saved-search-queries
+- **Summary:** Closes the "saved queries/views" slice of spec §7's Reporting capability —
+  independently valuable and much smaller than the full scheduled-PDF/email-reporting gap
+  (which still needs new infra this PR doesn't touch: no PDF renderer, no email-sending
+  scheduler exists anywhere in the repo, out of scope here). Added ADR-0029 and a new
+  `common::SavedSearchQuery` type + `saved_search_queries` table in `config-admin-service`
+  (least friction: already has `sqlx`/migrations/tenant-scoped-table pattern, unlike
+  `kizashi-ui` or `dashboard-api`, neither of which has ever had a Postgres dependency).
+  Deliberately **not** audit-logged (unlike every other entity in this service) and **not**
+  `require_operator`-gated — a saved search is a personal/team UI bookmark with zero effect on
+  the ingestion/normalization/analysis/trigger pipeline, not admin/config in the CLAUDE.md §5
+  sense. Console UI: the `/data` page gains a "Save this search as" form and a "Saved searches"
+  panel — each saved entry is a plain link to `/data?...` built from the stored filter, so
+  "loading" a saved search needs no new load handler, just the existing query-string-driven
+  page.
+- **Tests:** `cargo test -p common --lib` — 56 passed (2 new: `SavedSearchQuery::new`).
+  `cargo test -p config-admin-service --lib` — 95 passed (10 new: repository CRUD + handler
+  tests covering no-role-required creation, tenant-mismatch rejection, tenant-scoped listing,
+  backend-failure, delete/not-found). `cargo test -p config-admin-service --test
+  saved_search_query_repository_integration_test` — 2 passed, real Postgres. `cargo test -p
+  kizashi-ui --lib` — 218 passed (10 new: HTTP client round-trip tests against a real stub
+  server, and `/data` handler tests for save/list/delete/backend-failure-doesn't-break-the-page).
+  `cargo test --workspace --all-features` (full real-infra stack) — 109 test binaries, all
+  passed, 0 failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings` —
+  clean. `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo audit` — same 3
+  pre-existing allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `config-admin-service` and
+  `kizashi-ui` containers, logged in as the seeded demo user, saved a real search
+  (`zendesk`/`ticket`/`urgent`) through the actual `/data` form, confirmed it's stored correctly
+  via `config-admin-service`'s real API, confirmed the rendered "Saved searches" panel's link
+  correctly reloads and pre-fills the exact filter, and confirmed the Remove button/route works.
+  A headless-Chrome screenshot confirmed the panel renders correctly and matches the platform's
+  existing visual design language. Cleaned up the test saved search afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0029](../docs/adr/0029-saved-data-search-queries.md) — scopes "saved
+  queries/views" out of the larger deferred Reporting gap and places it in
+  `config-admin-service`

@@ -2,8 +2,8 @@ use kizashi_ui::{
     build_router, AppState, HttpAgentsClient, HttpAnalysisConfigClient, HttpApiKeysClient,
     HttpAuditLogClient, HttpAuthClient, HttpBacklogClient, HttpEgressAllowlistClient,
     HttpEventsClient, HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
-    HttpNormalizationMappingsClient, HttpRetentionPoliciesClient, HttpTriggersClient,
-    HttpUsersClient, InMemorySessionStore,
+    HttpNormalizationMappingsClient, HttpRetentionPoliciesClient, HttpSavedSearchQueriesClient,
+    HttpTriggersClient, HttpUsersClient, InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -71,7 +71,7 @@ async fn main() {
         )),
         config_audit_log_client: Arc::new(HttpAuditLogClient::new(
             client.clone(),
-            config_admin_service_url,
+            config_admin_service_url.clone(),
         )),
         retention_audit_log_client: Arc::new(HttpAuditLogClient::new(
             client.clone(),
@@ -81,7 +81,11 @@ async fn main() {
             client.clone(),
             auth_service_url.clone(),
         )),
-        users_client: Arc::new(HttpUsersClient::new(client, auth_service_url)),
+        users_client: Arc::new(HttpUsersClient::new(client.clone(), auth_service_url)),
+        saved_search_queries_client: Arc::new(HttpSavedSearchQueriesClient::new(
+            client,
+            config_admin_service_url,
+        )),
         ingestion_gateway_public_url,
     };
 
