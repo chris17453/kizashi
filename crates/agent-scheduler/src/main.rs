@@ -185,7 +185,7 @@ async fn main() {
                 }
 
                 tracing::info!(agent_id = %stored.agent.id, name = %stored.agent.name, "invoking due agent");
-                if let Err(e) = invoker.invoke(&stored.agent).await {
+                if let Err(e) = invoker.invoke(&stored.agent, stored.last_polled_at).await {
                     tracing::error!(agent_id = %stored.agent.id, error = %e, "agent invocation failed");
                 }
                 if let Err(e) = agent_repository.mark_polled(stored.agent.id, now).await {
