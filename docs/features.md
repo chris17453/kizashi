@@ -2707,3 +2707,29 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0030](../docs/adr/0030-trigger-dry-run-test-endpoint.md) — a read-only
   validation endpoint reusing existing evaluation logic, no schema change
+
+## [2026-07-19] feature/0038-correlated-trigger-form-more-rows — Support up to 6 correlated sources in the trigger form
+- **Type:** feature
+- **Summary:** The correlated-trigger form was hard-capped at 3 sources (email + chat was just
+  the illustrative example in ADR-0027/the UI copy, not a real limit — the backend/API already
+  accepts any number of legs). Bumped to 6, with only 2 shown by default and a "+ Add another
+  source" button progressively revealing the rest — a plain client-side reveal of already
+  server-rendered inputs, not a JS-generated form (ADR-0014's no-JS-by-default stance intact).
+  While live-verifying, found and fixed a real bug: the hidden extra rows reused the `.form-row`
+  class for layout convenience, and that class's own `display: grid` CSS silently overrode the
+  native `hidden` attribute's `display: none` — the rows were visible from page load regardless
+  of the JS, defeating the progressive-reveal entirely. Fixed by dropping the reused class and
+  using explicit inline `display:none`/`display:flex` toggled directly by the button's JS.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 1 new (`post_creates_a_correlated_trigger_
+  with_all_six_sources`, proving the backend/form parsing handles all 6 rows correctly);
+  existing 23 triggers-related tests unaffected. Full workspace CI gate (fmt/clippy/tests/deny/
+  audit) re-run clean, same as prior PRs this session.
+- **Live verification:** rebuilt and redeployed the real `kizashi-ui` container. Created a real
+  6-source correlated trigger through the actual form, confirmed all 6 legs stored correctly
+  via `config-admin-service`'s API. A headless-Chrome screenshot caught the CSS bug (all 6 rows
+  visible despite the `hidden` attribute) — fixed, rebuilt, redeployed, and re-screenshotted to
+  confirm rows 3-6 are now genuinely hidden until "+ Add another source" is clicked. Cleaned up
+  test trigger data afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — extends ADR-0027's already-generic correlated-condition shape past a UI-only
+  row limit, no new architectural decision
