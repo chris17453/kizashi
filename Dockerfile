@@ -5,6 +5,13 @@
 # Build context must be the repo root (this is a Cargo workspace — every crate's Cargo.lock
 # resolution depends on the workspace root). Example:
 #   docker build --build-arg BIN=ingestion-service -t kizashi/ingestion-service .
+#
+# Two binaries need more than the base image: `agent-scheduler` (ADR-0020) shells out to the
+# `docker` CLI against the host's Docker socket to run each due connector, so it needs the CLI
+# installed and (via docker-compose.yml's volume mount + `RUN_AS_USER=root` build arg) socket
+# access — every other binary stays on the minimal, non-root default. `INSTALL_DOCKER_CLI` and
+# `RUN_AS_USER` are opt-in per build, not per-BIN-name magic, so any future binary that needs
+# the same capability just sets the same two args rather than this file special-casing names.
 
 # syntax=docker/dockerfile:1
 FROM rust:1-slim-bookworm AS builder
@@ -17,7 +24,22 @@ RUN cargo build --release --bin "${BIN}" \
     && cp "target/release/${BIN}" /tmp/service
 
 FROM debian:bookworm-slim
+ARG INSTALL_DOCKER_CLI=false
+# Debian bookworm's `docker.io` package ships Docker 20.10 (client API 1.41) — too old to talk
+# to a modern host daemon (25.0+/API 1.44+, what this was actually tested against). Pulling
+# the official static CLI-only binary instead of the distro package sidesteps that mismatch
+# without adding Docker's apt repo/GPG key for what amounts to one binary.
+ARG DOCKER_CLI_VERSION=26.1.4
+ARG RUN_AS_USER=kizashi
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && if [ "$INSTALL_DOCKER_CLI" = "true" ]; then \
+         curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz" \
+           -o /tmp/docker-cli.tgz \
+         && tar -xzf /tmp/docker-cli.tgz -C /tmp \
+         && mv /tmp/docker/docker /usr/local/bin/docker \
+         && rm -rf /tmp/docker-cli.tgz /tmp/docker \
+         && chmod +x /usr/local/bin/docker; \
+       fi \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --uid 1000 kizashi
 WORKDIR /app
@@ -28,6 +50,6 @@ WORKDIR /app
 COPY --from=builder /app/crates /app/crates
 COPY --from=builder /tmp/service /usr/local/bin/service
 RUN chown -R kizashi:kizashi /app
-USER kizashi
+USER ${RUN_AS_USER}
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/service"]

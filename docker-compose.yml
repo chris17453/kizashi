@@ -143,6 +143,32 @@ services:
       trigger-engine: { condition: service_healthy }
     healthcheck: *healthz
 
+  # ADR-0020: shells out to `docker run` against the host's Docker socket to invoke each due
+  # Agent's connector, so — unlike every other service — this image needs the Docker CLI and
+  # runs as root (mount permissions on /var/run/docker.sock vary by host, but it's reliably
+  # accessible to root); do not copy this pattern for any other service without the same need.
+  agent-scheduler:
+    build:
+      context: .
+      args: { BIN: agent-scheduler, INSTALL_DOCKER_CLI: "true", RUN_AS_USER: root }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
+      DOCKER_IMAGE_PREFIX: kizashi
+      DOCKER_NETWORK: kizashi_default
+      INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
+      # v1 simplification (see crates/agent-scheduler/src/invoker.rs): one platform-wide key
+      # for every scheduled connector, not a per-Agent key lookup. Set this to a real key
+      # created via the Console UI's API Keys page before enabling any scheduled Agent.
+      INGESTION_GATEWAY_API_KEY: "${AGENT_SCHEDULER_INGESTION_GATEWAY_API_KEY:-}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck: *healthz
+
   dashboard-api:
     build: { context: ., args: { BIN: dashboard-api } }
     environment:

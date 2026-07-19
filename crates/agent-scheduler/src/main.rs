@@ -45,6 +45,18 @@ async fn main() {
         std::env::var("INGESTION_GATEWAY_URL").expect("INGESTION_GATEWAY_URL must be set");
     let ingestion_gateway_api_key =
         std::env::var("INGESTION_GATEWAY_API_KEY").expect("INGESTION_GATEWAY_API_KEY must be set");
+    if ingestion_gateway_api_key.is_empty() {
+        // Not a startup failure — docker-compose sets this to an empty string by default
+        // (ADR-0020's v1 platform-wide-key simplification) rather than refusing to start the
+        // whole stack over one unconfigured key. Every scheduled connector invocation will
+        // fail to authenticate until a real key is set; a loud warning here beats silently
+        // discovering it later in per-invocation error logs.
+        tracing::warn!(
+            "INGESTION_GATEWAY_API_KEY is empty — every scheduled connector invocation will \
+             fail to authenticate until AGENT_SCHEDULER_INGESTION_GATEWAY_API_KEY is set to a \
+             real key (create one via the Console UI's API Keys page)"
+        );
+    }
 
     let pool = common::connect_with_schema(&database_url, "agent_scheduler")
         .await

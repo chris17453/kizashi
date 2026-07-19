@@ -1768,3 +1768,45 @@ architectural decision.
   known simplification in `invoker.rs`.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [0020](adr/0020-agent-scheduler-in-platform-connector-scheduling.md)
+
+## [2026-07-19] feature/0017-agent-scheduler-docker-packaging — Docker CLI/socket packaging for agent-scheduler, closing ADR-0020
+- **Type:** fix
+- **Branch:** feature/0017-agent-scheduler-docker-packaging
+- **Summary:** Closes the gap explicitly logged in the entry above: `agent-scheduler`'s
+  `DockerInvoker` had never actually been exercised against a real `docker run`, because the
+  shared runtime `Dockerfile` had neither the Docker CLI nor socket access. Adds two opt-in
+  build args to the shared `Dockerfile` (`INSTALL_DOCKER_CLI`, `RUN_AS_USER`) rather than
+  forking a second Dockerfile — every other binary's build is unaffected (verified: a default
+  `config-admin-service` build has no `docker` CLI and still runs as the non-root `kizashi`
+  user). Adds the `agent-scheduler` service to `docker-compose.yml` with the socket mounted
+  and `AGENT_SCHEDULER_INGESTION_GATEWAY_API_KEY` documented in `.env.example` (empty by
+  default; `main.rs` now logs a loud warning instead of silently degrading if it's unset, per
+  ADR-0020's documented v1 platform-wide-key simplification).
+- **Tests:** No new Rust unit/integration tests — this PR is packaging/infra, not logic (the
+  `DockerInvoker` logic itself was already tested in the prior PR). Full local CI gate: `cargo
+  fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green (0 failures, verified
+  against a throwaway local `mssql` container for Fabric), `cargo audit` clean (same two
+  pre-existing allow-listed `unmaintained` advisories, no new ones).
+- **Live verification (this is the part that actually matters for this PR):** built the image
+  with `INSTALL_DOCKER_CLI=true` — the first attempt used Debian bookworm's `docker.io`
+  package (Docker 20.10, client API 1.41) and failed immediately against the real host daemon
+  (API 1.44+): `client version 1.41 is too old`. Switched to the official static Docker CLI
+  binary (26.1.4) instead of the distro package; rebuilt, confirmed `docker ps` against the
+  real mounted socket worked. Deployed the real `agent-scheduler` service via `docker compose
+  up`, created a real Ingestion Gateway API key via the live API, built the real
+  `generic-connector` image, registered a real Agent (`connector_type: generic`,
+  `poll_interval_seconds: 5`) through `config-admin-service`'s live API, and confirmed via
+  `docker logs` that `agent-scheduler` actually ran `docker run` against the real
+  `kizashi-generic-connector` image on schedule — the container launched and executed (exited
+  non-zero on its own connector-level logic against a stub URL, which is expected and
+  unrelated to the invocation mechanism itself, which is what this PR needed to prove). Also
+  incidentally confirmed the previous PR's registry-sync integration tests had been publishing
+  to the same real, shared `agent.changed` exchange this whole time — several leftover
+  `integration-test-agent` rows had synced into the live `agent_scheduler.agents` table and
+  were failing invocation (expected: `kizashi-zendesk-connector` was never built locally).
+  Cleaned up all test data (agents, API key) after verification.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — implements ADR-0020's already-decided Phase 1 packaging, no new decision;
+  the Debian-package-vs-static-binary choice for the CLI itself is a small enough
+  implementation detail to note in this entry rather than warrant its own ADR.
