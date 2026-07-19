@@ -16,7 +16,7 @@ manually created branches.
 | fix           | `fix/`     | 0004         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
-| chore         | `chore/`   | 0003         |
+| chore         | `chore/`   | 0004         |
 
 ## Branch log (append-only, newest last)
 
@@ -53,3 +53,4 @@ manually created branches.
 | 0025 | `feature/0025-query-gateway-tenant-isolation-e2e` | feature | 2026-07-19 | open | pending | |
 | 0002 | `fix/0002-agent-rbac-enforcement` | fix | 2026-07-19 | open | pending | |
 | 0003 | `fix/0003-egress-allowlist-rbac` | fix | 2026-07-19 | open | pending | |
+| 0003 | `chore/0003-update-handler-tenant-mismatch-tests` | chore | 2026-07-19 | open | pending | |
