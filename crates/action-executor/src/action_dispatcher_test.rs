@@ -1,4 +1,5 @@
 use super::*;
+use axum::extract::Json as JsonExtractor;
 use axum::routing::post;
 use axum::Router;
 use common::{ActionType, EventStatus};
@@ -125,4 +126,83 @@ async fn dispatch_returns_unreachable_for_a_malformed_egress_proxy_url() {
 
     let err = dispatcher.dispatch(&action, &sample_event()).await.unwrap_err();
     assert!(matches!(err, DispatchError::Unreachable(_)));
+}
+
+#[test]
+fn render_body_template_substitutes_recognized_placeholders() {
+    let event = sample_event();
+    let template = json!({
+        "text": "{{event_type}} for {{entity_ref}} (tenant {{tenant_id}})",
+        "nested": {"group": "{{group_key}}", "raw_payload": "{{payload}}"},
+        "list": ["{{event_type}}", "literal"],
+        "unchanged_number": 42,
+    });
+
+    let rendered = render_body_template(&template, &event);
+
+    assert_eq!(rendered["text"], format!("sentiment for cust-1 (tenant {})", event.tenant_id));
+    assert_eq!(rendered["nested"]["group"], "cust-1");
+    assert_eq!(rendered["nested"]["raw_payload"], event.payload.to_string());
+    assert_eq!(rendered["list"][0], "sentiment");
+    assert_eq!(rendered["list"][1], "literal");
+    assert_eq!(rendered["unchanged_number"], 42);
+}
+
+#[test]
+fn render_body_template_leaves_unrecognized_placeholders_as_literal_text() {
+    let event = sample_event();
+    let template = json!({"text": "{{not_a_real_field}} stays literal"});
+
+    let rendered = render_body_template(&template, &event);
+
+    assert_eq!(rendered["text"], "{{not_a_real_field}} stays literal");
+}
+
+async fn spawn_capturing_stub_webhook() -> (String, std::sync::Arc<Mutex<Vec<serde_json::Value>>>) {
+    let captured: std::sync::Arc<Mutex<Vec<serde_json::Value>>> = Default::default();
+    let captured_clone = captured.clone();
+    let handler = move |JsonExtractor(body): JsonExtractor<serde_json::Value>| {
+        let captured = captured_clone.clone();
+        async move {
+            captured.lock().unwrap().push(body);
+            axum::http::StatusCode::OK
+        }
+    };
+    let app = Router::new().route("/hook", post(handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (format!("http://{addr}/hook"), captured)
+}
+
+#[tokio::test]
+async fn dispatch_sends_the_rendered_body_template_instead_of_the_generic_envelope() {
+    let (url, captured) = spawn_capturing_stub_webhook().await;
+    let dispatcher = HttpActionDispatcher::new(None);
+    let action = ActionRef {
+        action_type: ActionType::Webhook,
+        config: json!({"url": url, "body_template": {"text": "alert: {{entity_ref}}"}}),
+    };
+
+    dispatcher.dispatch(&action, &sample_event()).await.unwrap();
+
+    let bodies = captured.lock().unwrap();
+    assert_eq!(bodies.len(), 1);
+    assert_eq!(bodies[0], json!({"text": "alert: cust-1"}));
+    assert!(bodies[0].get("action_type").is_none(), "must not fall back to the generic envelope");
+}
+
+#[tokio::test]
+async fn dispatch_without_a_body_template_still_sends_the_generic_envelope() {
+    let (url, captured) = spawn_capturing_stub_webhook().await;
+    let dispatcher = HttpActionDispatcher::new(None);
+    let action = ActionRef { action_type: ActionType::Webhook, config: json!({"url": url}) };
+
+    dispatcher.dispatch(&action, &sample_event()).await.unwrap();
+
+    let bodies = captured.lock().unwrap();
+    assert_eq!(bodies[0]["action_type"], "webhook");
+    assert!(bodies[0].get("event").is_some());
 }
