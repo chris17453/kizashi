@@ -1978,3 +1978,31 @@ architectural decision.
   ADR-0022 already documents for IMAP) are tracked as follow-ups.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [0023](adr/0023-smtp-send-action-routing-dispatcher.md)
+
+## [2026-07-19] feature/0022-graph-send-mail-action — Graph send-mail-as-user action (Phase 5)
+- **Type:** feature
+- **Branch:** feature/0022-graph-send-mail-action
+- **Summary:** Closes the third and final Phase 5 gap. New `GraphSendMailActionDispatcher`
+  sends email as a real mailbox user via Microsoft Graph's `POST /users/{id}/sendMail`, reusing
+  `connector_runtime::fetch_access_token` (the Entra ID app-only client-credentials flow
+  already proven by `graph-mail`/`graph-teams`, ADR-0003) — the cheapest of the three Phase 5
+  actions since the auth plumbing already existed. `RoutingActionDispatcher` now composes three
+  dispatchers: an `Email` action with `smtp_host` goes to `SmtpActionDispatcher` (ADR-0023),
+  one with `graph_client_id` goes to `GraphSendMailActionDispatcher` (SMTP takes precedence if
+  a config somehow carries both), everything else still falls through to
+  `HttpActionDispatcher` unchanged.
+- **Tests:** `cargo test -p action-executor --lib` — 39 tests, all passed (config-validation
+  and routing-decision unit tests, plus dispatch tests against real stub HTTP servers proving
+  real token-fetch + real bearer-auth request construction + real status-code branching for
+  success/500/token-endpoint-down). `cargo test --workspace --all-features` (full real-infra
+  stack) — all passed, 0 failed. `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` — clean. `cargo fmt --all --check` — clean. `cargo audit` — same 3 pre-existing
+  allow-listed advisories, no new ones.
+- **Explicit test-boundary note (not a gap, a documented limitation):** unlike the SMTP/IMAP
+  actions' real-server verification, the actual Microsoft Graph API surface is stubbed, not
+  real — this environment has no Entra app registration to test against, the same limitation
+  ADR-0009 already documents for OIDC's browser hop and ADR-0013 documents for Fabric's
+  AAD-token login. What *is* proven: the real TCP connect, real HTTP request construction, real
+  bearer-token attachment, and real success/failure status-code handling all execute correctly.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0024](adr/0024-graph-send-mail-action-and-provable-test-boundary.md)

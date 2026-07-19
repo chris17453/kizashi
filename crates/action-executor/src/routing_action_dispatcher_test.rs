@@ -53,3 +53,21 @@ async fn dispatch_of_a_non_smtp_email_action_without_a_url_fails_with_missing_ur
     let err = dispatcher.dispatch(&action, &sample_event()).await.unwrap_err();
     assert!(matches!(err, DispatchError::MissingUrl));
 }
+
+#[test]
+fn an_email_action_with_graph_client_id_is_routed_to_graph() {
+    let action = ActionRef {
+        action_type: ActionType::Email,
+        config: json!({"graph_client_id": "id", "graph_from_user_id": "a@example.com"}),
+    };
+    assert!(is_graph_email(&action));
+}
+
+#[test]
+fn smtp_takes_precedence_over_graph_when_both_fields_are_present() {
+    let action = ActionRef {
+        action_type: ActionType::Email,
+        config: json!({"smtp_host": "localhost", "graph_client_id": "id"}),
+    };
+    assert!(is_smtp_email(&action));
+}
