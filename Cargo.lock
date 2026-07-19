@@ -11,6 +11,7 @@ dependencies = [
  "chrono",
  "common",
  "connector-imap",
+ "connector-runtime",
  "futures-util",
  "lapin",
  "lettre",
