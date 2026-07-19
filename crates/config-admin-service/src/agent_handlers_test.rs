@@ -1,4 +1,5 @@
 use super::*;
+use crate::agent_publisher::agent_publisher_test::InMemoryAgentPublisher;
 use crate::agent_repository::agent_repository_test::{
     FailingAgentRepository, InMemoryAgentRepository,
 };
@@ -26,7 +27,10 @@ fn sample_agent(tenant_id: Uuid) -> Agent {
 }
 
 fn default_state() -> AgentState {
-    AgentState { agent_repository: Arc::new(InMemoryAgentRepository::default()) }
+    AgentState {
+        agent_repository: Arc::new(InMemoryAgentRepository::default()),
+        agent_publisher: Arc::new(InMemoryAgentPublisher::default()),
+    }
 }
 
 async fn send(
@@ -81,6 +85,7 @@ async fn list_agents_is_scoped_to_the_header_tenant() {
     let tenant_id = Uuid::new_v4();
     let state = AgentState {
         agent_repository: Arc::new(InMemoryAgentRepository::with_agent(sample_agent(tenant_id))),
+        agent_publisher: Arc::new(InMemoryAgentPublisher::default()),
     };
     let response =
         send(router(state), "GET", "/v1/agents".to_string(), Some(tenant_id), None).await;
@@ -100,7 +105,10 @@ async fn list_agents_reports_has_more_when_results_exceed_the_page_size() {
     for name in ["a", "b", "c"] {
         repo.create(Agent::new(tenant_id, "zendesk", name, serde_json::json!({}))).await.unwrap();
     }
-    let state = AgentState { agent_repository: Arc::new(repo) };
+    let state = AgentState {
+        agent_repository: Arc::new(repo),
+        agent_publisher: Arc::new(InMemoryAgentPublisher::default()),
+    };
 
     let response =
         send(router(state), "GET", "/v1/agents?limit=2".to_string(), Some(tenant_id), None).await;
@@ -133,6 +141,7 @@ async fn delete_agent_succeeds_then_get_returns_404() {
     let agent = sample_agent(tenant_id);
     let state = AgentState {
         agent_repository: Arc::new(InMemoryAgentRepository::with_agent(agent.clone())),
+        agent_publisher: Arc::new(InMemoryAgentPublisher::default()),
     };
     let app = router(state);
 
@@ -149,7 +158,10 @@ async fn delete_agent_succeeds_then_get_returns_404() {
 #[tokio::test]
 async fn repository_failure_returns_500() {
     let tenant_id = Uuid::new_v4();
-    let state = AgentState { agent_repository: Arc::new(FailingAgentRepository) };
+    let state = AgentState {
+        agent_repository: Arc::new(FailingAgentRepository),
+        agent_publisher: Arc::new(InMemoryAgentPublisher::default()),
+    };
     let response =
         send(router(state), "GET", "/v1/agents".to_string(), Some(tenant_id), None).await;
 
@@ -162,6 +174,7 @@ async fn get_agent_by_name_returns_the_matching_agent() {
     let agent = sample_agent(tenant_id);
     let state = AgentState {
         agent_repository: Arc::new(InMemoryAgentRepository::with_agent(agent.clone())),
+        agent_publisher: Arc::new(InMemoryAgentPublisher::default()),
     };
 
     let response = send(

@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "crates/action-executor",
+  "crates/agent-scheduler",
   "crates/analysis-service",
   "crates/auth-service",
   "crates/common",

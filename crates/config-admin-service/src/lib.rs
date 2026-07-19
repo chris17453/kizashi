@@ -3,6 +3,7 @@
 //! writes an audit_log row in the same transaction as the entity change (CLAUDE.md §5).
 
 mod agent_handlers;
+mod agent_publisher;
 mod agent_repository;
 mod analysis_config_handlers;
 mod analysis_config_publisher;
@@ -17,6 +18,7 @@ mod trigger_publisher;
 pub use agent_handlers::{
     create_agent, delete_agent, get_agent, get_agent_by_name, list_agents, update_agent, AgentState,
 };
+pub use agent_publisher::{AgentPublishError, AgentPublisher, RabbitMqAgentPublisher};
 pub use agent_repository::{AgentRepository, AgentRepositoryError, PostgresAgentRepository};
 pub use analysis_config_handlers::{get_analysis_config, put_analysis_config, AnalysisConfigState};
 pub use analysis_config_publisher::{
