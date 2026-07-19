@@ -9,6 +9,7 @@ mod oidc_client;
 mod oidc_handler;
 mod password;
 mod session_client;
+mod tenant_repository;
 
 pub use health::build_router as health_router;
 pub use local_login_handler::{local_login, AuthState, LocalLoginRequest, LoginResponse};
@@ -21,6 +22,7 @@ pub use oidc_client::{
 pub use oidc_handler::{authorize, callback, AuthorizeResponse, OidcCallbackRequest, OidcClients};
 pub use password::{hash_password, verify_password, PasswordError};
 pub use session_client::{HttpSessionClient, SessionClient, SessionClientError};
+pub use tenant_repository::{PostgresTenantRepository, TenantRepository, TenantRepositoryError};
 
 use axum::routing::{get, post};
 use axum::Router;

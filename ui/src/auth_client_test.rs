@@ -7,20 +7,24 @@ use std::sync::Mutex;
 
 #[derive(Default)]
 pub struct InMemoryAuthClient {
-    pub logins: Mutex<Vec<(Uuid, String, String)>>,
-    pub token: Mutex<Option<String>>,
+    pub logins: Mutex<Vec<(String, String, String)>>,
+    pub result: Mutex<Option<(String, Uuid, Role)>>,
 }
 
 #[async_trait]
 impl AuthClient for InMemoryAuthClient {
     async fn local_login(
         &self,
-        tenant_id: Uuid,
+        tenant_name: &str,
         username: &str,
         password: &str,
-    ) -> Result<String, AuthClientError> {
-        self.logins.lock().unwrap().push((tenant_id, username.to_string(), password.to_string()));
-        self.token.lock().unwrap().clone().ok_or(AuthClientError::InvalidCredentials)
+    ) -> Result<(String, Uuid, Role), AuthClientError> {
+        self.logins.lock().unwrap().push((
+            tenant_name.to_string(),
+            username.to_string(),
+            password.to_string(),
+        ));
+        self.result.lock().unwrap().clone().ok_or(AuthClientError::InvalidCredentials)
     }
 }
 
@@ -30,10 +34,10 @@ pub struct FailingAuthClient;
 impl AuthClient for FailingAuthClient {
     async fn local_login(
         &self,
-        _tenant_id: Uuid,
+        _tenant_name: &str,
         _username: &str,
         _password: &str,
-    ) -> Result<String, AuthClientError> {
+    ) -> Result<(String, Uuid, Role), AuthClientError> {
         Err(AuthClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -42,6 +46,7 @@ impl AuthClient for FailingAuthClient {
 struct ExpectedCreds {
     username: String,
     password: String,
+    tenant_id: Uuid,
 }
 
 async fn spawn_stub_server(expected: ExpectedCreds) -> String {
@@ -55,7 +60,10 @@ async fn spawn_stub_server(expected: ExpectedCreds) -> String {
         JsonExtractor(body): JsonExtractor<Body>,
     ) -> axum::response::Response {
         if body.username == expected.username && body.password == expected.password {
-            Json(serde_json::json!({"token": "issued-token"})).into_response()
+            Json(serde_json::json!({
+                "token": "issued-token", "tenant_id": expected.tenant_id, "role": "operator"
+            }))
+            .into_response()
         } else {
             axum::http::StatusCode::UNAUTHORIZED.into_response()
         }
@@ -70,16 +78,21 @@ async fn spawn_stub_server(expected: ExpectedCreds) -> String {
 }
 
 #[tokio::test]
-async fn http_client_returns_the_token_on_valid_credentials() {
+async fn http_client_returns_the_token_and_tenant_id_on_valid_credentials() {
+    let tenant_id = Uuid::new_v4();
     let url = spawn_stub_server(ExpectedCreds {
         username: "alice".to_string(),
         password: "correct-password".to_string(),
+        tenant_id,
     })
     .await;
     let client = HttpAuthClient::new(reqwest::Client::new(), url);
 
-    let token = client.local_login(Uuid::new_v4(), "alice", "correct-password").await.unwrap();
+    let (token, returned_tenant_id, role) =
+        client.local_login("acme", "alice", "correct-password").await.unwrap();
     assert_eq!(token, "issued-token");
+    assert_eq!(returned_tenant_id, tenant_id);
+    assert_eq!(role, Role::Operator);
 }
 
 #[tokio::test]
@@ -87,17 +100,18 @@ async fn http_client_returns_invalid_credentials_on_401() {
     let url = spawn_stub_server(ExpectedCreds {
         username: "alice".to_string(),
         password: "correct-password".to_string(),
+        tenant_id: Uuid::new_v4(),
     })
     .await;
     let client = HttpAuthClient::new(reqwest::Client::new(), url);
 
-    let err = client.local_login(Uuid::new_v4(), "alice", "wrong").await.unwrap_err();
+    let err = client.local_login("acme", "alice", "wrong").await.unwrap_err();
     assert!(matches!(err, AuthClientError::InvalidCredentials));
 }
 
 #[tokio::test]
 async fn http_client_returns_unreachable_when_server_is_down() {
     let client = HttpAuthClient::new(reqwest::Client::new(), "http://127.0.0.1:1".to_string());
-    let err = client.local_login(Uuid::new_v4(), "alice", "correct-password").await.unwrap_err();
+    let err = client.local_login("acme", "alice", "correct-password").await.unwrap_err();
     assert!(matches!(err, AuthClientError::Unreachable(_)));
 }

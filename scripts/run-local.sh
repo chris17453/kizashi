@@ -110,12 +110,14 @@ start dashboard-api dashboard-api \
 wait_healthy dashboard-api "http://localhost:$DASHBOARD_API_PORT/healthz"
 
 start config-admin-service config-admin-service \
-  BIND_ADDR="0.0.0.0:$CONFIG_ADMIN_SERVICE_PORT" DATABASE_URL="$DATABASE_URL"
+  BIND_ADDR="0.0.0.0:$CONFIG_ADMIN_SERVICE_PORT" DATABASE_URL="$DATABASE_URL" \
+  RABBITMQ_URL="$RABBITMQ_URL"
 wait_healthy config-admin-service "http://localhost:$CONFIG_ADMIN_SERVICE_PORT/healthz"
 
 start ingestion-gateway ingestion-gateway \
   BIND_ADDR="0.0.0.0:$INGESTION_GATEWAY_PORT" DATABASE_URL="$DATABASE_URL" \
-  INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT"
+  INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT" \
+  CONFIG_ADMIN_SERVICE_URL="http://localhost:$CONFIG_ADMIN_SERVICE_PORT"
 wait_healthy ingestion-gateway "http://localhost:$INGESTION_GATEWAY_PORT/healthz"
 
 start query-gateway query-gateway \
@@ -153,7 +155,11 @@ start kizashi-ui kizashi-ui \
   AUTH_SERVICE_URL="http://localhost:$AUTH_SERVICE_PORT" \
   QUERY_GATEWAY_URL="http://localhost:$QUERY_GATEWAY_PORT" \
   CONFIG_ADMIN_SERVICE_URL="http://localhost:$CONFIG_ADMIN_SERVICE_PORT" \
-  OBSERVABILITY_URL="http://localhost:$OBSERVABILITY_PORT"
+  OBSERVABILITY_URL="http://localhost:$OBSERVABILITY_PORT" \
+  INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT" \
+  INGESTION_GATEWAY_URL="http://localhost:$INGESTION_GATEWAY_PORT" \
+  INGESTION_GATEWAY_PUBLIC_URL="http://localhost:$INGESTION_GATEWAY_PORT" \
+  ACTION_EXECUTOR_URL="http://localhost:$ACTION_EXECUTOR_PORT"
 sleep 2
 
 echo ""

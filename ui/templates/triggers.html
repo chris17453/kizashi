@@ -2,6 +2,14 @@
 {% block content %}
 <h1>Triggers</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if triggers.is_empty() && page == 0 && !has_more %}
+<div class="empty-state">
+  <div class="empty-icon">&#9881;</div>
+  <p>No triggers configured yet for this tenant.</p>
+  <p>Triggers are created via the Config Admin API — see the platform docs for the
+  <code>POST /v1/trigger-definitions</code> endpoint.</p>
+</div>
+{% else %}
 <table>
   <thead>
     <tr><th>Name</th><th>Event Type Match</th><th>Enabled</th></tr>
@@ -18,4 +26,21 @@
     {% endfor %}
   </tbody>
 </table>
+
+<div class="pagination">
+  {% if page > 0 %}
+  <form method="get" action="/triggers" class="pagination-form">
+    <input type="hidden" name="page" value="{{ page - 1 }}">
+    <button type="submit" class="btn">&larr; Previous</button>
+  </form>
+  {% endif %}
+  <span class="muted">Page {{ page + 1 }}</span>
+  {% if has_more %}
+  <form method="get" action="/triggers" class="pagination-form">
+    <input type="hidden" name="page" value="{{ page + 1 }}">
+    <button type="submit" class="btn">Next &rarr;</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

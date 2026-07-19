@@ -19,7 +19,9 @@ thiserror = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 sqlx = { workspace = true }
+lapin = { workspace = true }
 
 [dev-dependencies]
 tower = { workspace = true }
 reqwest = { workspace = true }
+futures-util = { workspace = true }

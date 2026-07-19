@@ -32,6 +32,11 @@ pub trait TriggerRepository: Send + Sync {
         &self,
         id: Uuid,
     ) -> Result<Option<TriggerDefinition>, TriggerRepositoryError>;
+
+    /// Inserts or replaces a trigger by id (ADR-0018): the write side of syncing Trigger
+    /// Engine's own copy of trigger definitions with what config-admin-service's `trigger.
+    /// changed` messages say is current.
+    async fn upsert(&self, trigger: TriggerDefinition) -> Result<(), TriggerRepositoryError>;
 }
 
 pub struct PostgresTriggerRepository {
@@ -109,5 +114,36 @@ impl TriggerRepository for PostgresTriggerRepository {
         .map_err(|e| TriggerRepositoryError::Backend(e.to_string()))?;
 
         Ok(row.map(row_to_trigger))
+    }
+
+    async fn upsert(&self, trigger: TriggerDefinition) -> Result<(), TriggerRepositoryError> {
+        sqlx::query(
+            r#"
+            INSERT INTO trigger_definitions
+                (id, tenant_id, name, event_type_match, condition, window_seconds, actions, enabled)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (id) DO UPDATE SET
+                tenant_id = EXCLUDED.tenant_id,
+                name = EXCLUDED.name,
+                event_type_match = EXCLUDED.event_type_match,
+                condition = EXCLUDED.condition,
+                window_seconds = EXCLUDED.window_seconds,
+                actions = EXCLUDED.actions,
+                enabled = EXCLUDED.enabled
+            "#,
+        )
+        .bind(trigger.id)
+        .bind(trigger.tenant_id)
+        .bind(trigger.name)
+        .bind(trigger.event_type_match)
+        .bind(sqlx::types::Json(trigger.condition))
+        .bind(trigger.window_seconds)
+        .bind(sqlx::types::Json(trigger.actions))
+        .bind(trigger.enabled)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| TriggerRepositoryError::Backend(e.to_string()))?;
+
+        Ok(())
     }
 }

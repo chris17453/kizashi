@@ -3,6 +3,7 @@
 //! writes an append-only ActionExecution audit row per action.
 
 mod action_dispatcher;
+mod execution_handlers;
 mod execution_repository;
 mod health;
 mod process_event;
@@ -10,6 +11,7 @@ mod trigger_client;
 
 pub use action_dispatcher::{ActionDispatcher, DispatchError, HttpActionDispatcher};
 pub use common::EVENT_CREATED_EXCHANGE;
+pub use execution_handlers::{build_router as execution_router, list_executions, ExecutionState};
 pub use execution_repository::{
     ExecutionRepository, ExecutionRepositoryError, PostgresExecutionRepository,
 };

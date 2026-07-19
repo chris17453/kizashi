@@ -1,0 +1,111 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Agents</h1>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if can_write %}
+<div class="form-row">
+  <div class="panel">
+    <h2>Register an already-deployed agent</h2>
+    <p class="muted">Adds a catalog entry so status/records show up here. Doesn't deploy anything —
+    use "Generate a deploy script" below to actually stand one up.</p>
+    <form class="inline" method="post" action="/agents">
+      <label for="connector_type">Connector type</label>
+      <select id="connector_type" name="connector_type">
+        <option value="zendesk">Zendesk</option>
+        <option value="graph-mail">Microsoft Graph (Mail)</option>
+        <option value="graph-teams">Microsoft Graph (Teams)</option>
+        <option value="sql">SQL</option>
+        <option value="fabric">Fabric</option>
+        <option value="generic">Generic</option>
+      </select>
+      <label for="name">Name (must match the deployed connector's CONNECTOR_ID)</label>
+      <input type="text" id="name" name="name" placeholder="support-poller" required>
+      <label for="config">Config (JSON, for your own reference only)</label>
+      <textarea id="config" name="config" placeholder="{}"></textarea>
+      <button type="submit">Register</button>
+    </form>
+  </div>
+  <div class="info-panel">
+    <h2>Deploying a new agent</h2>
+    <ul>
+      <li>Registering here only adds a catalog entry — it doesn't deploy or run anything.</li>
+      <li>To actually stand up a connector, use
+        <a href="/agents/generate">Generate a deploy script &rarr;</a>, which produces a
+        ready-to-run Docker/bash/PowerShell command for the connector type you pick.</li>
+      <li>The <code>Name</code> field must exactly match the deployed connector's
+        <code>CONNECTOR_ID</code> environment variable, or ingested records won't be matched
+        back to this catalog entry.</li>
+      <li>Agents need an API key to authenticate — issue one from
+        <a href="/api-keys">API Keys</a> if you haven't already.</li>
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{% if agents.is_empty() && page == 0 && !has_more %}
+<div class="empty-state">
+  <div class="empty-icon">&#11041;</div>
+  <p>No agents registered yet for this tenant.</p>
+  {% if can_write %}<p>Use the form above to register one, or generate a deploy script to stand a new one up.</p>{% endif %}
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Name</th><th>Connector Type</th><th>Status</th><th>Records</th><th>Last Ingested</th><th>Enabled</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for agent in agents %}
+    <tr>
+      <td><a href="/agents/{{ agent.id }}">{{ agent.name }}</a></td>
+      <td>{{ agent.connector_type }}</td>
+      {% if let Some(count) = agent.record_count %}
+      <td class="status-up">active</td>
+      <td>{{ count }}</td>
+      {% if let Some(last) = agent.last_ingested_at %}
+      <td>{{ last }}</td>
+      {% else %}
+      <td class="muted">—</td>
+      {% endif %}
+      {% else %}
+      <td class="muted">never run</td>
+      <td class="muted">0</td>
+      <td class="muted">—</td>
+      {% endif %}
+      <td>
+        <span class="pill {% if agent.enabled %}pill-up{% else %}pill-muted{% endif %}">
+          {% if agent.enabled %}enabled{% else %}disabled{% endif %}
+        </span>
+      </td>
+      <td>
+        {% if can_write %}
+        <form class="inline" method="post" action="/agents/{{ agent.id }}/toggle" style="display:inline">
+          <button type="submit" class="btn">{% if agent.enabled %}Disable{% else %}Enable{% endif %}</button>
+        </form>
+        <form class="inline" method="post" action="/agents/{{ agent.id }}/delete" style="display:inline">
+          <button type="submit" class="btn-danger">Remove</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="pagination">
+  {% if page > 0 %}
+  <form method="get" action="/agents" class="pagination-form">
+    <input type="hidden" name="page" value="{{ page - 1 }}">
+    <button type="submit" class="btn">&larr; Previous</button>
+  </form>
+  {% endif %}
+  <span class="muted">Page {{ page + 1 }}</span>
+  {% if has_more %}
+  <form method="get" action="/agents" class="pagination-form">
+    <input type="hidden" name="page" value="{{ page + 1 }}">
+    <button type="submit" class="btn">Next &rarr;</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

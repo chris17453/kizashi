@@ -25,6 +25,7 @@ async fn state_with_session() -> (AppState, String) {
             bearer_token: "tok".to_string(),
             tenant_id: Uuid::new_v4(),
             username: "alice".to_string(),
+            role: common::Role::Admin,
         })
         .await;
     let state = AppState {
@@ -35,8 +36,38 @@ async fn state_with_session() -> (AppState, String) {
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
+        agents_client: Arc::new(crate::agents_client::agents_client_test::InMemoryAgentsClient::default()),
+        api_keys_client: Arc::new(crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default()),
+        backlog_client: Arc::new(crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default()),
+        execution_client: std::sync::Arc::new(crate::execution_client::execution_client_test::InMemoryExecutionClient::default()),
+        stats_client: Arc::new(
+            crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
+        ),
+        ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id)
+}
+
+#[tokio::test]
+async fn shows_an_empty_state_with_no_triggers_configured() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No triggers configured yet"));
+    assert!(!body.contains("<table>"));
 }
 
 #[tokio::test]
@@ -78,6 +109,51 @@ async fn redirects_to_login_when_not_signed_in() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[tokio::test]
+async fn shows_a_next_link_when_there_are_more_triggers_but_no_previous_link_on_page_zero() {
+    let (mut state, session_id) = state_with_session().await;
+    let triggers_client = InMemoryTriggersClient::default();
+    *triggers_client.has_more.lock().unwrap() = true;
+    state.triggers_client = Arc::new(triggers_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Next"));
+    assert!(!body.contains("Previous"));
+}
+
+#[tokio::test]
+async fn shows_a_previous_link_on_page_two() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers?page=1")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Previous"));
+    assert!(body.contains("Page 2"));
 }
 
 #[tokio::test]

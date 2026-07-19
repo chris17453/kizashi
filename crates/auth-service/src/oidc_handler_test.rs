@@ -2,6 +2,7 @@ use super::*;
 use crate::local_user_repository::local_user_repository_test::InMemoryLocalUserRepository;
 use crate::oidc_client::oidc_client_test::{FailingOidcClient, InMemoryOidcClient};
 use crate::session_client::session_client_test::{FailingSessionClient, InMemorySessionClient};
+use crate::tenant_repository::tenant_repository_test::InMemoryTenantRepository;
 use axum::body::Body;
 use axum::http::Request;
 use axum::routing::{get, post};
@@ -24,6 +25,7 @@ fn state_with_provider(
     oidc_clients.insert(provider.to_string(), client);
     AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::default()),
+        tenant_repository: Arc::new(InMemoryTenantRepository::default()),
         session_client,
         oidc_clients,
     }

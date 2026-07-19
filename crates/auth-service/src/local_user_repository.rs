@@ -3,6 +3,7 @@
 pub(crate) mod local_user_repository_test;
 
 use async_trait::async_trait;
+use common::Role;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -18,6 +19,7 @@ pub struct LocalUser {
     pub tenant_id: Uuid,
     pub username: String,
     pub password_hash: String,
+    pub role: Role,
 }
 
 /// Local login credential store (spec §8: "local login... hashed credentials"). Scoped by
@@ -48,8 +50,8 @@ impl LocalUserRepository for PostgresLocalUserRepository {
         tenant_id: Uuid,
         username: &str,
     ) -> Result<Option<LocalUser>, LocalUserRepositoryError> {
-        let row: Option<(Uuid, Uuid, String, String)> = sqlx::query_as(
-            "SELECT id, tenant_id, username, password_hash FROM local_users WHERE tenant_id = $1 AND username = $2",
+        let row: Option<(Uuid, Uuid, String, String, String)> = sqlx::query_as(
+            "SELECT id, tenant_id, username, password_hash, role FROM local_users WHERE tenant_id = $1 AND username = $2",
         )
         .bind(tenant_id)
         .bind(username)
@@ -57,11 +59,12 @@ impl LocalUserRepository for PostgresLocalUserRepository {
         .await
         .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
 
-        Ok(row.map(|(id, tenant_id, username, password_hash)| LocalUser {
-            id,
-            tenant_id,
-            username,
-            password_hash,
-        }))
+        row.map(|(id, tenant_id, username, password_hash, role)| {
+            let role: Role = role.parse().map_err(|e: common::ParseRoleError| {
+                LocalUserRepositoryError::Backend(e.to_string())
+            })?;
+            Ok(LocalUser { id, tenant_id, username, password_hash, role })
+        })
+        .transpose()
     }
 }

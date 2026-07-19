@@ -1,0 +1,62 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Overview</h1>
+
+<div class="kpi-grid">
+  <div class="kpi-card kpi-accent">
+    <div class="kpi-label">Agents</div>
+    <div class="kpi-value">{{ agent_count }}</div>
+    <div class="kpi-sub">{{ active_agent_count }} active</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Records Ingested</div>
+    <div class="kpi-value">{{ total_records }}</div>
+    <div class="kpi-sub">across all connectors</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Events</div>
+    <div class="kpi-value">{{ event_count }}</div>
+    <div class="kpi-sub">total</div>
+  </div>
+  <div class="kpi-card {% if platform_status == "up" %}kpi-success{% else %}kpi-danger{% endif %}">
+    <div class="kpi-label">Platform Health</div>
+    <div class="kpi-value">{{ platform_status }}</div>
+    <div class="kpi-sub">{{ services_up }}/{{ services_total }} services up</div>
+  </div>
+</div>
+
+<p class="muted">
+  <a href="/agents">Manage agents</a> &middot;
+  <a href="/data">Search data</a> &middot;
+  <a href="/reports">View reports</a> &middot;
+  <a href="/health">Platform health detail</a>
+</p>
+
+<div class="section-title">Pipeline status</div>
+{% if !pipeline_items.is_empty() %}
+<div class="topology-frame">
+  <div class="topology">
+    {% for item in pipeline_items %}
+    {% match item %}
+      {% when TopologyItem::Stage with { label, status } %}
+      <div class="topology-node node-{{ status }}">
+        <div><span class="node-dot"></span><span class="node-label">{{ label }}</span></div>
+        <div class="node-status">{{ status }}</div>
+      </div>
+      {% when TopologyItem::Edge with { label, messages, severity } %}
+      <div class="topology-edge edge-{{ severity }}">
+        <div class="edge-line"></div>
+        <span class="edge-label">{{ label }}</span>
+        {% if let Some(count) = messages %}
+        <span class="edge-count">{{ count }} queued</span>
+        {% else %}
+        <span class="edge-count">n/a</span>
+        {% endif %}
+      </div>
+    {% endmatch %}
+    {% endfor %}
+  </div>
+</div>
+<p class="muted"><a href="/pipeline">View full pipeline map &rarr;</a></p>
+{% endif %}
+{% endblock %}

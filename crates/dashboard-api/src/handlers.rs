@@ -42,12 +42,21 @@ pub struct ListEventsQuery {
     pub status: Option<String>,
     pub since: Option<DateTime<Utc>>,
     pub until: Option<DateTime<Utc>>,
+    pub record_id: Option<Uuid>,
     #[serde(default = "default_limit")]
     pub limit: u32,
+    #[serde(default)]
+    pub offset: u32,
 }
 
 fn default_limit() -> u32 {
     100
+}
+
+#[derive(serde::Serialize)]
+struct ListEventsResponse {
+    events: Vec<common::Event>,
+    has_more: bool,
 }
 
 fn parse_status(raw: &str) -> Result<common::EventStatus, String> {
@@ -81,11 +90,17 @@ pub async fn list_events(
         status,
         since: query.since,
         until: query.until,
-        limit: query.limit,
+        record_id: query.record_id,
+        limit: query.limit + 1,
+        offset: query.offset,
     };
 
     match state.event_query_repository.list_events(tenant_id, &filter).await {
-        Ok(events) => Json(events).into_response(),
+        Ok(mut events) => {
+            let has_more = events.len() as u32 > query.limit;
+            events.truncate(query.limit as usize);
+            Json(ListEventsResponse { events, has_more }).into_response()
+        }
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }

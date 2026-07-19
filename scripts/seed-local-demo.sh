@@ -19,6 +19,7 @@ DEMO_PASSWORD="kizashi-local-demo-password"
 API_KEY="kizashi-local-demo-api-key"
 DEMO_TENANT_FILE="run/demo-tenant.env"
 TENANT_ID="00000000-0000-0000-0000-000000000001"
+TENANT_NAME="acme"
 USER_ID="00000000-0000-0000-0000-000000000002"
 KEY_ID="00000000-0000-0000-0000-000000000003"
 
@@ -30,9 +31,13 @@ PASSWORD_HASH="$(cargo run -q -p auth-service --bin hash_password -- "$DEMO_PASS
 # from a space-separated demo password to a hyphenated one), re-running must converge to the
 # new values rather than erroring on a stale row with the same id but a different key_hash.
 docker compose exec -T postgres psql -U kizashi -d kizashi -v ON_ERROR_STOP=1 <<SQL
-INSERT INTO auth_service.local_users (id, tenant_id, username, password_hash)
-VALUES ('$USER_ID', '$TENANT_ID', 'demo', '$PASSWORD_HASH')
-ON CONFLICT (id) DO UPDATE SET password_hash = excluded.password_hash;
+INSERT INTO auth_service.tenants (id, name)
+VALUES ('$TENANT_ID', '$TENANT_NAME')
+ON CONFLICT (id) DO UPDATE SET name = excluded.name;
+
+INSERT INTO auth_service.local_users (id, tenant_id, username, password_hash, role)
+VALUES ('$USER_ID', '$TENANT_ID', 'demo', '$PASSWORD_HASH', 'admin')
+ON CONFLICT (id) DO UPDATE SET password_hash = excluded.password_hash, role = excluded.role;
 
 INSERT INTO ingestion_gateway.api_keys (id, tenant_id, key_hash, label, created_at)
 VALUES ('$KEY_ID', '$TENANT_ID', '$KEY_HASH', 'local-demo', now())
@@ -42,6 +47,7 @@ SQL
 mkdir -p run
 cat >"$DEMO_TENANT_FILE" <<EOF
 DEMO_TENANT_ID="$TENANT_ID"
+DEMO_TENANT_NAME="$TENANT_NAME"
 DEMO_USERNAME="demo"
 DEMO_PASSWORD="$DEMO_PASSWORD"
 DEMO_API_KEY="$API_KEY"
@@ -49,7 +55,7 @@ EOF
 
 echo ""
 echo "==> demo credentials (also saved to $DEMO_TENANT_FILE):"
-echo "    Tenant ID:  $TENANT_ID"
+echo "    Workspace:  $TENANT_NAME"
 echo "    Username:   demo"
 echo "    Password:   $DEMO_PASSWORD"
 echo "    API key:    $API_KEY  (for POST http://localhost:8081/v1/ingest, header X-Api-Key)"

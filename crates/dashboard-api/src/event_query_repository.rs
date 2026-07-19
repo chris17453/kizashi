@@ -25,7 +25,12 @@ pub struct EventFilter {
     pub status: Option<common::EventStatus>,
     pub since: Option<DateTime<Utc>>,
     pub until: Option<DateTime<Utc>>,
+    /// Matches Events whose `record_ids` contains this `RawRecord` id — the record→event
+    /// lineage lookup (ADR-0017) a record-journey view uses to find what a record contributed
+    /// to.
+    pub record_id: Option<Uuid>,
     pub limit: u32,
+    pub offset: u32,
 }
 
 /// Reads Events from the aggregate store (spec §5.2, ClickHouse) for dashboards/reports/event
@@ -97,6 +102,8 @@ struct ClickHouseEventRow {
     occurred_at: String,
     created_at: String,
     status: String,
+    #[serde(default)]
+    record_ids: Vec<Uuid>,
 }
 
 impl TryFrom<ClickHouseEventRow> for Event {
@@ -122,6 +129,7 @@ impl TryFrom<ClickHouseEventRow> for Event {
             occurred_at: parse_clickhouse_datetime(&row.occurred_at)?,
             created_at: parse_clickhouse_datetime(&row.created_at)?,
             status,
+            record_ids: row.record_ids,
         })
     }
 }
@@ -162,12 +170,17 @@ impl EventQueryRepository for ClickHouseEventQueryRepository {
             conditions.push("occurred_at <= {until:DateTime64}".to_string());
             params.push(("until".to_string(), until.format("%Y-%m-%d %H:%M:%S%.3f").to_string()));
         }
+        if let Some(record_id) = filter.record_id {
+            conditions.push("has(record_ids, {record_id:UUID})".to_string());
+            params.push(("record_id".to_string(), record_id.to_string()));
+        }
 
         let limit = filter.limit.clamp(1, 1000);
         let query = format!(
-            "SELECT id, tenant_id, event_type, source_connector_ids, entity_ref, group_key, payload, occurred_at, created_at, status FROM events WHERE {} ORDER BY occurred_at DESC LIMIT {} FORMAT JSONEachRow",
+            "SELECT id, tenant_id, event_type, source_connector_ids, entity_ref, group_key, payload, occurred_at, created_at, status, record_ids FROM events WHERE {} ORDER BY occurred_at DESC LIMIT {} OFFSET {} FORMAT JSONEachRow",
             conditions.join(" AND "),
-            limit
+            limit,
+            filter.offset
         );
         let params_ref: Vec<(&str, String)> =
             params.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
@@ -176,7 +189,7 @@ impl EventQueryRepository for ClickHouseEventQueryRepository {
     }
 
     async fn get_event(&self, tenant_id: Uuid, id: Uuid) -> Result<Option<Event>, QueryError> {
-        let query = "SELECT id, tenant_id, event_type, source_connector_ids, entity_ref, group_key, payload, occurred_at, created_at, status FROM events WHERE tenant_id = {tenant_id:UUID} AND id = {id:UUID} LIMIT 1 FORMAT JSONEachRow";
+        let query = "SELECT id, tenant_id, event_type, source_connector_ids, entity_ref, group_key, payload, occurred_at, created_at, status, record_ids FROM events WHERE tenant_id = {tenant_id:UUID} AND id = {id:UUID} LIMIT 1 FORMAT JSONEachRow";
         let rows = self
             .run_query(query, &[("tenant_id", tenant_id.to_string()), ("id", id.to_string())])
             .await?;

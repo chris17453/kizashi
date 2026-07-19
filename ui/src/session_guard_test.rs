@@ -32,6 +32,7 @@ async fn require_session_returns_the_session_for_a_valid_cookie() {
         bearer_token: "tok".to_string(),
         tenant_id: uuid::Uuid::new_v4(),
         username: "alice".to_string(),
+        role: common::Role::Admin,
     };
     let session_id = store.create(session.clone()).await;
     let headers = headers_with_cookie(&format!("kizashi_session={session_id}"));

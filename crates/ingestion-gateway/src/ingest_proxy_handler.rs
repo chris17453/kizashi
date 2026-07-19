@@ -2,7 +2,9 @@
 #[cfg(test)]
 mod ingest_proxy_handler_test;
 
+use crate::agent_status_client::{AgentStatus, AgentStatusClient};
 use crate::api_key_store::ApiKeyStore;
+use crate::audit_log::AuditLogReader;
 use crate::rate_limiter::RateLimiter;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
@@ -13,9 +15,11 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct GatewayState {
     pub api_key_store: Arc<dyn ApiKeyStore>,
+    pub audit_reader: Arc<dyn AuditLogReader>,
     pub rate_limiter: Arc<RateLimiter>,
     pub http_client: reqwest::Client,
     pub ingestion_service_url: String,
+    pub agent_status_client: Arc<dyn AgentStatusClient>,
 }
 
 #[derive(Debug, Serialize)]
@@ -59,11 +63,28 @@ pub async fn ingest_proxy(
         Ok(value) => value,
         Err(_) => return error_response(StatusCode::BAD_REQUEST, "body must be valid JSON"),
     };
-    match payload.as_object_mut() {
+    let connector_id = match payload.as_object_mut() {
         Some(obj) => {
             obj.insert("tenant_id".to_string(), serde_json::json!(tenant_id));
+            obj.get("connector_id").and_then(|v| v.as_str()).map(str::to_string)
         }
         None => return error_response(StatusCode::BAD_REQUEST, "body must be a JSON object"),
+    };
+
+    // Unregistered connector_ids are allowed through (permissive default — most connectors
+    // have no registered Agent row at all); a lookup failure is also allowed through rather
+    // than blocking every ingest whenever config-admin-service has a blip, since availability
+    // of the ingest path matters more than this one soft-enforcement check. Only an
+    // explicitly-registered-and-disabled agent is rejected.
+    if let Some(connector_id) = &connector_id {
+        if let Ok(AgentStatus::Disabled) =
+            state.agent_status_client.status_for(tenant_id, connector_id).await
+        {
+            return error_response(
+                StatusCode::FORBIDDEN,
+                format!("agent '{connector_id}' is disabled"),
+            );
+        }
     }
 
     let upstream = state

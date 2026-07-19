@@ -53,15 +53,19 @@ impl TriggerDefinitionRepository for InMemoryTriggerDefinitionRepository {
     async fn list(
         &self,
         tenant_id: Uuid,
+        limit: i64,
+        offset: i64,
     ) -> Result<Vec<TriggerDefinition>, TriggerDefinitionRepositoryError> {
-        Ok(self
+        let mut triggers: Vec<TriggerDefinition> = self
             .triggers
             .lock()
             .unwrap()
             .iter()
             .filter(|t| t.tenant_id == tenant_id)
             .cloned()
-            .collect())
+            .collect();
+        triggers.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(triggers.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
 }
 
@@ -94,6 +98,8 @@ impl TriggerDefinitionRepository for FailingTriggerDefinitionRepository {
     async fn list(
         &self,
         _tenant_id: Uuid,
+        _limit: i64,
+        _offset: i64,
     ) -> Result<Vec<TriggerDefinition>, TriggerDefinitionRepositoryError> {
         Err(TriggerDefinitionRepositoryError::Backend("simulated failure".to_string()))
     }
@@ -138,6 +144,21 @@ async fn list_is_scoped_to_tenant() {
     let repo = InMemoryTriggerDefinitionRepository::with_trigger(sample_trigger(tenant_id));
     repo.create(sample_trigger(Uuid::new_v4())).await.unwrap();
 
-    let found = repo.list(tenant_id).await.unwrap();
+    let found = repo.list(tenant_id, 25, 0).await.unwrap();
     assert_eq!(found.len(), 1);
+}
+
+#[tokio::test]
+async fn list_respects_limit_and_offset() {
+    let tenant_id = Uuid::new_v4();
+    let repo = InMemoryTriggerDefinitionRepository::default();
+    for name in ["a", "b", "c"] {
+        let mut trigger = sample_trigger(tenant_id);
+        trigger.name = name.to_string();
+        repo.create(trigger).await.unwrap();
+    }
+
+    let found = repo.list(tenant_id, 1, 1).await.unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].name, "b");
 }

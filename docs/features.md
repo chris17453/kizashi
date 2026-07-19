@@ -612,3 +612,947 @@ Entry format:
   clean, no new advisories (no new dependencies added).
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a (operational tooling, not an architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Containerize all services, connectors, and the UI
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** `scripts/run-local.sh` (prior chore) launched every binary as a plain background
+  process on the host — `docker ps` only ever showed the four infra containers
+  (Postgres/RabbitMQ/ClickHouse/MinIO), not the actual application. This adds one shared
+  multi-stage root `Dockerfile` (builder stage compiles `--bin "${BIN}"`, runtime stage is
+  `debian:bookworm-slim` running as non-root `kizashi`), reused across all 20 binaries via
+  `--build-arg BIN=<name>` rather than 20 near-identical Dockerfiles, plus `.dockerignore`, and
+  extends `docker-compose.yml` with a `build:`+`healthcheck:`+`depends_on:` entry for each of the
+  13 services and `kizashi-ui` (internal port always 8080; host ports match the map
+  `scripts/run-local.sh` already established), and the 6 connectors under a `connectors` compose
+  profile (one-shot CronJob-shaped binaries invoked via `docker compose run --rm`, not
+  long-running services, so they don't auto-start with `docker compose up`). `depends_on:
+  condition: service_healthy` chains encode both ordinary HTTP-dependency order and the AMQP
+  exchange-declaration order discovered in the prior local-launcher PR (ingestion-service →
+  normalization-service → analysis-service → trigger-engine → action-executor — each stage's
+  publisher declares its own exchange on startup, so a consumer starting first panics with
+  `NOT_FOUND - no exchange`).
+- **What building/running it for real found**: every migration-running service reads its
+  migrations directory via `env!("CARGO_MANIFEST_DIR")` — an absolute build-time source path —
+  so a runtime image containing only the compiled binary would panic at startup with a missing
+  migrations directory; fixed by also copying the `crates/` source tree into the runtime stage
+  (`COPY --from=builder /app/crates /app/crates`), verified by actually running the built
+  `ingestion-service` image against real containerized Postgres/RabbitMQ and confirming
+  `/healthz` returned 200 (i.e. migrations genuinely ran). Separately, `clickhouse/clickhouse-server`
+  came up `unhealthy` under `docker compose up` even though the server itself was fine: its
+  `[::]` (IPv6 wildcard) listener fails at startup in this Docker networking environment ("DNS
+  error: Address family for hostname not supported"), and the pre-existing healthcheck
+  (`wget --spider -q localhost:8123/ping`) resolved `localhost` to `::1` first and got
+  connection-refused, even though the server was correctly listening and serving on
+  `0.0.0.0:8123` the whole time — fixed by pointing the healthcheck at `127.0.0.1` explicitly
+  (confirmed the app-service healthchecks don't share this problem: `curl`, unlike `wget`,
+  falls through to the next resolved address on refusal). This ClickHouse healthcheck bug
+  predates this branch but was only surfaced by actually bringing the full stack up as
+  containers with `depends_on: condition: service_healthy` gating on it.
+- **Tests:** `docker compose up -d --build` — all 17 containers (4 infra + 13 services) reached
+  `healthy`. Ran a real end-to-end smoke test through the *containerized* stack, not the host
+  processes: `scripts/seed-local-demo.sh` against the containerized Postgres (via
+  `docker compose exec`), logged into the containerized Console UI's `/login` (200), hit
+  `GET /healthz` on both `kizashi-ui` and `ingestion-gateway` through their published host
+  ports, then `POST /v1/ingest` through the containerized `ingestion-gateway` with the seeded
+  API key and confirmed via direct Postgres query the row reached
+  `ingestion_service.raw_records` correctly tenant-scoped and correctly left un-normalized (no
+  `NormalizationMapping` configured for that connector/source-type — the correct no-op, not a
+  bug). Ran the full local CI gate (`scripts/ci-local.sh`) with `.env` loaded and a throwaway
+  local `mssql` container standing in for the CI-only Fabric/TDS integration test dependency
+  (mirroring `.github/workflows/`'s own `docker run mcr.microsoft.com/mssql/server` step, not a
+  new dependency): `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` clean, `cargo test --workspace --all-features` all green,
+  `cargo llvm-cov` 94.73% line coverage (85% floor), `cargo audit` / `cargo deny check` clean,
+  no new advisories.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a (deployment packaging of already-decided architecture, not a new architectural
+  decision — Kubernetes/Helm, the actual "how do we deploy" decision per spec §10, is a
+  follow-up item in the approved gap-closing roadmap, not part of this change)
+
+## [2026-07-18] feature/0014-docker-images — Fix `/` 404, tenant-UUID login, and Console UI branding
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** Real usage of the just-containerized stack (this branch) surfaced three
+  independent UX defects in the Console UI, fixed together since all three sit on the same
+  login/landing path: (1) `GET /` was entirely unrouted and 404'd — the exact URL a person
+  types first — fixed with a new `root_handler.rs` that redirects `/` to `/events`, which
+  itself already bounces an unauthenticated visitor to `/login`; (2) local login required
+  typing a raw tenant UUID, which no human can be expected to know, because there was no
+  first-class `Tenant` entity anywhere in the system — every service only ever carried a bare
+  `tenant_id` foreign key. Added a new `tenants` table + `TenantRepository` to auth-service
+  (`crates/auth-service/migrations/0002_create_tenants.sql`), changed
+  `POST /v1/auth/local/login` to accept `tenant_name` and resolve it internally (still returns
+  a generic 401 for unknown-workspace/unknown-username/wrong-password alike, so none of the
+  three is enumerable), and threaded the rename through Console UI's `AuthClient`/login form
+  (now labeled "Workspace"); (3) the UI had no visual identity at all — no logo/wordmark, no
+  centered login layout, table/nav styling was minimal to the point of looking broken. Gave
+  `layout.html` a real theme (CSS custom properties, a "&#9670; Kizashi" wordmark, a centered
+  login card with focus states, zebra/hover table rows, a data-URI SVG favicon so the browser
+  tab isn't blank) without adding any new dependency (still zero JS, per ADR-0014).
+- **Tests:** New: `root_handler_test.rs` (`root_redirects_to_events`),
+  `tenant_repository_test.rs` (`finds_a_tenant_id_by_name`,
+  `returns_none_for_an_unknown_tenant_name`), plus new/updated cases in
+  `local_login_handler_test.rs` (`unknown_tenant_name_is_rejected_with_401_not_404`,
+  `tenant_repository_failure_returns_500`), `auth_client_test.rs`
+  (`http_client_returns_the_token_and_tenant_id_on_valid_credentials`), and
+  `login_handler_test.rs` (`post_login_with_an_unknown_workspace_rerenders_the_form_with_an_error`).
+  `cargo test -p auth-service --lib` — 33 passed. `cargo test -p kizashi-ui --lib` — 37 passed.
+  Rebuilt and redeployed the `auth-service` and `kizashi-ui` containers, re-ran
+  `scripts/seed-local-demo.sh` (now also seeds a `tenants` row, workspace name `acme`), and
+  drove a real login through the actual running containers end to end: `GET /` → 303 to
+  `/events` (previously 404), `POST /login` with `tenant_name=acme` → 303 to `/events` with a
+  valid session cookie, `GET /events` with that cookie → 200. Full local CI gate
+  (`scripts/ci-local.sh`, `.env` loaded, throwaway local `mssql` for the Fabric/TDS test) —
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green, `cargo llvm-cov` 94.72%
+  line coverage (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (the `tenants` table is additive schema, not a change to the multi-tenancy
+  model itself — `tenant_id` remains the system-wide scoping key everywhere except this one
+  human-facing login form)
+
+## [2026-07-18] feature/0014-docker-images — Agent registry, live status, drill-down, and reports
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Closes the largest gap this session's live audit surfaced: there was no
+  first-class "Agent" concept anywhere in the system — the 6 connector binaries were
+  configured only by env vars, with no service that knew of their existence, no way to
+  register/list/disable one, and no way to see what a given connector had actually ingested.
+  Adds `common::Agent` (id, tenant_id, connector_type, name, config, enabled) and a full
+  CRUD registry in Config/Admin Service (`agents` table, `AgentRepository`, audit-logged
+  create/update/delete like every other admin entity) at `/v1/agents`. Since connectors don't
+  self-report a heartbeat anywhere, "live status" is derived rather than tracked separately:
+  Ingestion Service gained `GET /v1/records/stats` (per-`connector_id` record count and
+  last-ingested time, aggregated straight off `raw_records`) and
+  `GET /v1/records/by-connector` (recent records for one connector, tenant-scoped). The
+  matching convention this establishes: an agent's registered `name` is what the deployed
+  connector's own `CONNECTOR_ID` env var must be set to, so a registration can be joined
+  against real ingestion activity without any new bookkeeping table. Console UI gained three
+  pages: `/agents` (register form + live status table, join done in `agents_handler.rs`),
+  `/agents/:id` (per-agent drill-down — its own recent records), and `/reports` (ingestion
+  volume per connector alongside event counts per type, reusing the existing events feed). Also
+  gave the whole UI a second visual pass: form styling (`.panel`, `form.inline`), a `.btn-danger`
+  for destructive actions, and nav links for the two new pages.
+- **Tests:** `cargo test -p config-admin-service --lib` — 35 passed (12 new: `agent_repository`
+  CRUD + tenant scoping + not-found cases, `agent_handlers` tenant-mismatch/404/500 cases).
+  `cargo test -p ingestion-service --lib` — 39 passed (10 new: `stats_by_connector` aggregation
+  + tenant scoping, `list_by_connector` ordering/limit/tenant scoping, both handlers'
+  success/400/500 cases). `cargo test -p kizashi-ui --lib` — 56 passed (19 new across
+  `agents_client`, `ingestion_stats_client`, `agents_handler`, `agent_detail_handler`,
+  `reports_handler`). Beyond unit tests: rebuilt and redeployed the `config-admin-service`,
+  `ingestion-service`, and `kizashi-ui` containers and drove the entire feature through the real
+  running stack — logged in, registered a `zendesk`/`support-poller` agent (status correctly
+  showed "never run"), posted a real record through `POST /v1/ingest` with `connector_id:
+  support-poller`, confirmed the Agents page's status flipped to "active" with a record count
+  of 1 (proving the name/connector_id join actually works against live data, not just mocks),
+  confirmed the drill-down page showed that record, confirmed the Reports page showed the same
+  connector's volume, then deleted the agent and confirmed removal. Full local CI gate
+  (`.env` loaded, throwaway local `mssql` for the Fabric/TDS test): `cargo fmt --all --check`
+  clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean,
+  `cargo test --workspace --all-features` all green, `cargo llvm-cov` 94.11% line coverage
+  (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (Agent is additive schema/API following the exact CRUD+audit-log pattern
+  TriggerDefinition/NormalizationMapping already established in ADR-0010, not a new
+  architectural decision. Deferred/out of scope for this change, tracked separately: a data
+  viewer/search page, AI-assisted prompt generation for agent config, and dynamic
+  EventTypeDefinition/trigger-condition authoring in the UI.)
+
+## [2026-07-18] feature/0014-docker-images — Data Viewer: search + record detail
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Adds the "data viewer/search" piece of the AIOps-console gap list. Ingestion
+  Service gains `RawRecordRepository::search` (every filter optional and AND-ed: connector_id,
+  source_type, an ingested-at range, and a substring match against the raw payload's text
+  representation via `ILIKE`) exposed as `GET /v1/records/search`, and `get_by_id` exposed as
+  `GET /v1/records/:id` for a single-record detail fetch. The free-text match is deliberately a
+  plain `ILIKE` scan, not a dedicated search index (Elasticsearch/pg_trgm/tsvector) — v1 scope
+  is "find records that mention X," documented in-code as a known limitation to revisit before
+  it's exercised at the platform's actual target scale (thousands of inboxes, hundreds of
+  connector APIs — flagged directly by the user during this work). Also added
+  `idx_raw_records_tenant_connector_ingested_at`, a composite index covering the shape every
+  new Agent-related query (`stats_by_connector`, `list_by_connector`, `search`) actually filters
+  and sorts by, since the three single-column indexes from the original migration force a
+  bitmap-AND plan instead of a single index scan. Console UI gains `/data` (search form +
+  results table) and `/data/:id` (pretty-printed raw + normalized payload).
+- **Tests:** `cargo test -p ingestion-service --lib` — 50 passed (11 new: `get_by_id`
+  tenant-scoping, `search`'s four filter dimensions individually and combined, both new
+  handlers' success/400/500/404 cases). `cargo test -p kizashi-ui --lib` — 64 passed (8 new
+  across `ingestion_stats_client`, `data_handler`, `data_detail_handler`). Beyond unit tests:
+  rebuilt and redeployed `ingestion-service`/`kizashi-ui`, confirmed the new composite index
+  exists via `\d ingestion_service.raw_records` against the real container, posted two records
+  with different subjects through the real `ingestion-gateway`, searched `/data?q=printer`
+  through the real running Console UI and confirmed only the matching record came back (not
+  the other one — proving the filter is real, not a no-op), then opened its `/data/:id` detail
+  page and confirmed the full raw payload rendered correctly (HTML-escaped by askama). Full
+  local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` clean, `cargo test --workspace --all-features` all green,
+  `cargo llvm-cov` 94.10% line coverage (85% floor), `cargo audit` / `cargo deny check` clean,
+  no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (additive query/index on the existing `RawRecord` schema, not a new
+  architectural decision. The scale-driven follow-ups this change explicitly defers — a real
+  search index and a dynamic per-agent connector scheduling model to replace one static
+  container per connector type — are tracked separately, not silently dropped.)
+
+## [2026-07-18] feature/0014-docker-images — Structured email search + Data Viewer pagination
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Two fixes driven directly by user feedback on the just-shipped Data Viewer.
+  First: `raw_payload` was opaque JSON with no defined shape, so there was no way to search
+  "subject contains X" or "from Y" or "has attachment Z" — a real gap for the email/message
+  connectors this platform targets (Graph Mail, and the planned IMAP connector). Added
+  `common::EmailPayload` (subject, from, to/cc/bcc, body, headers, attachments — attachment
+  metadata only, never inline bytes; a real attachment's content belongs in the object store
+  retention-service already archives into, referenced by `storage_key`) as the documented
+  `raw_payload` shape for `SourceType::Message` records from an email connector. Extended
+  `RecordSearchFilter`/`GET /v1/records/search` with `subject`/`email_from`/
+  `attachment_filename`, each a substring match against the corresponding JSON field (a
+  record with no `subject` field simply never matches — not an error), plus a GIN index on
+  `raw_payload` so those lookups can use an index scan instead of a full scan at scale. Second:
+  every list page (Data Viewer, Agents, Events, Triggers) had a hardcoded `limit` with a silent
+  cutoff and no way to see more — flagged directly as not enterprise-grade. Added real
+  offset-based pagination to Data Viewer search: the backend fetches one extra row to compute
+  `has_more` without a second `COUNT(*)` query (which would scan the same rows twice, at
+  exactly the scale pagination exists to handle), and the UI renders Previous/Next as plain
+  `<form method="get">` submissions carrying every current filter as hidden fields — no JS,
+  consistent with the rest of the app. Agents/Events/Triggers pagination is still open
+  (tracked, not silently dropped).
+- **Tests:** `cargo test -p common --lib` — 39 passed (2 new: `EmailPayload` round-trip and
+  default-field handling). `cargo test -p ingestion-service --lib` — 57 passed (10 new: each
+  email filter individually, a no-subject-field non-match case, `has_more` when results exceed
+  the page size, offset skipping earlier pages). `cargo test -p kizashi-ui --lib` — 67 passed
+  (2 new: pagination controls render correctly on page 0 vs. page 1, with vs. without more
+  results). Beyond unit tests: rebuilt and redeployed `ingestion-service`/`kizashi-ui`, posted
+  two email-shaped records with different subject/from/attachment through the real
+  `ingestion-gateway`, then through the real running Console UI confirmed each of
+  subject/email_from/attachment_filename search independently found only its matching record
+  (and a deliberately-wrong search term correctly found nothing), then posted 30 more records
+  and confirmed real pagination through the live UI: page 1 shows a Next link and no Previous,
+  page 2 shows Previous and no Next (30 records, 25-per-page default). Full local CI gate:
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green, `cargo llvm-cov` 94.29%
+  line coverage (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (additive schema/query/UI work on already-established patterns, not a new
+  architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Agent deploy-script generator
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Reframes what the Agents page is for. The prior "register an agent" form wrote a
+  database row that meant nothing on its own — no connector was actually deployed, and
+  registering/enabling/disabling it had zero effect on any running process (the row only ever
+  correlated with real ingestion if an operator separately, manually configured a connector's
+  `CONNECTOR_ID` env var to match by hand). This adds a 3-step deploy-script generator
+  (`/agents/generate`) that produces ready-to-run scripts — `docker compose run` (matching the
+  `connectors` profile services already in `docker-compose.yml`), bash, and PowerShell (both
+  `cargo run -p connector-<type>`) — for each of the 6 connector types, with every required
+  env var (pulled directly from each connector's actual `std::env::var(...)` calls in its own
+  `main.rs`, not guessed) prefilled with whatever the operator typed into the form. No secret is
+  ever fabricated or stored: the API key and every connector credential is exactly what the
+  operator entered, substituted directly into the output. The old "register an
+  already-deployed agent" form still exists on `/agents` for catalog/status purposes, now
+  explicitly labeled as not itself deploying anything.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 78 passed (13 new: `connector_field_catalog`'s
+  per-type field coverage and secret-marking, the 3-step handler's happy paths, 404-style
+  fallback for an unknown connector type, and — critically — a test asserting a submitted
+  value the operator typed (an API key) actually appears verbatim in the rendered script, not
+  just that the page renders). Beyond unit tests: rebuilt and redeployed `kizashi-ui`, walked
+  the real 3-step flow through the live container end to end (select Zendesk → confirm the
+  Zendesk-specific fields appear → submit real values → confirmed all three script variants
+  render with the submitted API key, subdomain, and token verbatim, and the Docker/bash/
+  PowerShell commands reference the correct connector binary/service name). Full local CI gate:
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green, `cargo llvm-cov` 94.33%
+  line coverage (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (UI/workflow addition, not a new architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Reverse the no-JS constraint, add charts, Overview dashboard
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** ADR-0014 chose a zero-client-JS Console UI specifically because this build
+  environment has no browser-automation tooling to test JS the same disciplined way every
+  other crate in this repo is tested. The user explicitly overrode that constraint, wanting
+  real graphs and interactive components. Writes **ADR-0015**, reversing only the no-JS part
+  of ADR-0014 (the server-rendered shell, session handling, and every existing read view stay
+  exactly as they are — this is additive, not a rewrite) and explicitly ruling out a full
+  React/SPA migration as its own much larger decision, not something to back into as a side
+  effect of "add some graphs." Concretely: a small vendored (not CDN-loaded — this is an
+  on-prem-capable enterprise product) dependency-free bar-chart renderer
+  (`ui/static/charts.js`, baked into the binary via `include_str!`, served at
+  `GET /static/charts.js`) reads real server-rendered JSON out of a `<script
+  type="application/json">` tag and draws an SVG bar chart — the underlying HTML table is still
+  there and still correct if JS fails or is disabled, a deliberate progressive-enhancement
+  choice, not an afterthought. Wired onto the Reports page (ingestion volume by connector,
+  events by type). Also ships a new `/overview` landing dashboard (KPI cards: agent count/
+  active count, total records ingested, event count, platform health with services-up ratio,
+  reusing existing backends — no new data path) and makes it the new post-login/root landing
+  page (was `/events`). Gave the nav a visual pass alongside this: icon-prefixed links, a
+  divider before Log out, `.kpi-card`/`.pill` CSS building blocks for future pages.
+- **Security note:** JSON embedded inside a `<script>` tag has every `<` escaped to `<`
+  (`chart_json` in `reports_handler.rs`) so an operator-controlled string containing the
+  literal text `</script>` can never prematurely close the tag and inject markup — a
+  regression test (`chart_data_escapes_a_connector_id_that_could_close_the_script_tag`) pins
+  this down explicitly with exactly that payload.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 82 passed (7 new: `static_assets` serves the
+  right content-type, `overview_handler`'s KPI math against real seeded data across three
+  backends, the redirect-target rename from `/events` to `/overview` in both `root_handler`
+  and `login_handler`, and the chart-data XSS-escaping regression test). Beyond unit tests:
+  `node --check ui/static/charts.js` confirms the vendored JS is syntactically valid (no build
+  step exists to catch this otherwise). Rebuilt and redeployed `kizashi-ui`, confirmed through
+  the real running container: `/` redirects to `/overview`, the KPI cards render, `GET
+  /static/charts.js` serves with `content-type: text/javascript`, and the Reports page's
+  `<script type="application/json">` blocks contain real ingestion/event data accumulated
+  across this session's earlier smoke tests. **Not verified — flagged explicitly per CLAUDE.md
+  §0, not silently claimed**: the SVG bar chart's actual visual rendering in a real browser.
+  This environment has no browser-automation tooling (the exact gap ADR-0014 named and
+  ADR-0015 accepts as a tradeoff); server-side correctness (data shape, escaping, JS syntax
+  validity) is verified, DOM/visual rendering is not. Full local CI gate: `cargo fmt --all
+  --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  clean, `cargo test --workspace --all-features` all green, `cargo llvm-cov` 94.40% line
+  coverage (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** [0015](../docs/adr/0015-console-ui-reverses-adr-0014-no-js-constraint-adds-client-side-js-for-charts-and-components.md)
+
+## [2026-07-18] feature/0014-docker-images — Enforce Agent enabled/disabled status at ingestion
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** `Agent.enabled` was stored since the registry shipped but never checked anywhere
+  — disabling an agent in the Console UI had zero effect on whether its data was accepted.
+  Closes that gap for real. Config/Admin Service gains `AgentRepository::find_by_name` and
+  `GET /v1/agents/by-name/:name`, the lookup Ingestion Gateway needs (agents are keyed by id,
+  but ingestion only ever has a `connector_id` string to check against). Ingestion Gateway
+  gains an `AgentStatusClient` and checks it on every `POST /v1/ingest`: a `connector_id` with
+  no matching registered `Agent` still ingests normally (permissive default — most connectors
+  today have no registered row at all, and this must never break them), a matching *enabled*
+  agent ingests normally, and a matching *disabled* agent is rejected with 403. A status-lookup
+  failure (Config/Admin Service down, network blip) also fails open — availability of the
+  ingest path matters more than this soft-enforcement check, so one dependency having a bad
+  moment must never take down ingestion for every connector. Console UI's Agents page gains an
+  actual Enable/Disable toggle button (previously there was no way to flip the flag at all
+  through the UI) and a status pill replacing the old plain yes/no text.
+- **Tests:** `cargo test -p config-admin-service --lib` — 40 passed (5 new:
+  `find_by_name`'s tenant-scoping and not-found cases, the `by-name` handler's 200/404). `cargo
+  test -p ingestion-gateway --lib` — 21 passed (7 new: `AgentStatusClient` against a real stub
+  server for enabled/disabled/404/unreachable, and the proxy handler's three enforcement
+  cases — disabled rejects, unregistered passes, lookup-failure fails open). `cargo test -p
+  kizashi-ui --lib` — 85 passed (3 new: `update_agent` against a real stub server, the toggle
+  handler flipping state and redirecting, and its login-required case). Beyond unit tests:
+  rebuilt and redeployed `ingestion-gateway`/`config-admin-service`/`kizashi-ui`, registered a
+  real agent through the live UI, ingested through the live `ingestion-gateway` while enabled
+  (201), disabled it through the UI's new toggle button, ingested again with the same
+  `connector_id` and got the real 403 with the exact expected error message, confirmed an
+  unrelated unregistered `connector_id` still ingests fine (permissive default holds), then
+  re-enabled and confirmed ingestion resumes (201) before cleaning up the test agent. Full
+  local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` clean, `cargo test --workspace --all-features` all green,
+  `cargo llvm-cov` 94.38% line coverage (85% floor), `cargo audit` / `cargo deny check` clean,
+  no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (closes a gap in the already-established Agent registry, not a new
+  architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Events pagination
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** Events was one of three list pages flagged as having a hardcoded limit with a
+  silent cutoff and no way to see more (Data Viewer got real pagination earlier; this closes
+  the same gap for Events). Dashboard API's `EventFilter` gains `offset`, the ClickHouse query
+  gains a matching `OFFSET`, and `GET /v1/events` now returns `{events, has_more}` instead of a
+  bare array — `has_more` computed the same way as the Data Viewer's search (fetch one extra
+  row, no second `COUNT(*)` query against ClickHouse). Query Gateway needed no changes — it
+  already passes the full query string through via `OriginalUri` untouched. Console UI's
+  `/events` gains the same Previous/Next `<form method="get">` pagination controls as the Data
+  Viewer. Agents and Triggers pagination remain open — flagged, not silently dropped; Triggers
+  in particular is low-volume (operator-configured, not per-record data) so it's lower priority
+  than Events/Data Viewer, which both read from tables that grow with real traffic.
+- **Tests:** `cargo test -p dashboard-api --lib` — 18 passed (3 new: offset skips earlier
+  pages at the repository level, the handler's `has_more` computation, and the response-shape
+  change reflected in the existing scoped-events test). `cargo test -p kizashi-ui --lib` — 85
+  passed (`EventsPage`/`EventsClient` trait signature change threaded through
+  `events_handler`, `overview_handler`, and `reports_handler`'s call sites, plus 2 new
+  pagination-control-rendering tests mirroring the Data Viewer's). Beyond unit tests: rebuilt
+  and redeployed `dashboard-api`/`kizashi-ui`, confirmed `/events` and `/events?page=1` both
+  return 200 through the real running stack (query-gateway → dashboard-api → ClickHouse) with
+  the new response shape, proving the plumbing holds end-to-end. Full live-data pagination
+  boundary behavior (Next/Previous appearing at exactly the right count) is unit-tested with
+  controlled data, not independently re-verified against real ClickHouse volume in this pass —
+  the demo tenant has no real event traffic to page through without standing up the full
+  ingest→normalize→analyze→trigger pipeline, called out explicitly rather than implied. Full
+  local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` clean, `cargo test --workspace --all-features` all green,
+  `cargo llvm-cov` 94.45% line coverage (85% floor), `cargo audit` / `cargo deny check` clean,
+  no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (additive query/response-shape change, not a new architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Agents pagination, and a real correctness fix it forced
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** Closes the last of the three flagged list pages (Data Viewer and Events already
+  had real pagination). `AgentRepository::list` gains `limit`/`offset`, `GET /v1/agents` now
+  returns `{agents, has_more}` (fetch-one-extra pattern, same as Events/Data Viewer), and
+  `/agents` gets the same Previous/Next controls. Doing this properly surfaced a real
+  correctness bug in the process: `agent_detail_handler` and the enable/disable toggle both
+  found "the agent" by calling `list_agents` and searching the result for a matching id — which
+  only worked because `list_agents` used to return every agent unpaginated. Once it's
+  paginated, that lookup silently breaks the moment an agent isn't on the first page (toggling
+  an agent on page 2 would appear to succeed — 303 redirect, no error — while doing nothing).
+  Fixed by adding `AgentsClient::get_agent`/`GET /v1/agents/:id` (config-admin-service already
+  had this route; the UI just wasn't using it) and switching both call sites to fetch by id
+  directly instead of paging through a list. Triggers pagination remains open — still lower
+  priority, operator-configured data that doesn't grow with traffic the way agents/events/raw
+  records do.
+- **Tests:** `cargo test -p config-admin-service --lib` — 42 passed (3 new: `list` respects
+  limit/offset at the repository level, the handler's `has_more` computation, the existing
+  scoped-list test updated for the new response shape). `cargo test -p kizashi-ui --lib` — 88
+  passed (`AgentsClient` trait signature change threaded through every call site, 2 new
+  pagination-control-rendering tests, `get_agent` tested against a real stub server). Beyond
+  unit tests: rebuilt and redeployed `config-admin-service`/`kizashi-ui`, registered 30 real
+  agents through the live UI, confirmed page 1 shows Next-only and page 2 shows Previous-only,
+  then — the test that actually matters — found an agent that only exists on page 2, toggled
+  it, and confirmed on a fresh page load that it actually flipped from enabled to disabled
+  (proving the `get_agent` fix holds against live data, not just the bug's absence in a unit
+  test), then cleaned up all 30 test agents. Full local CI gate: `cargo fmt --all --check`
+  clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean, `cargo
+  test --workspace --all-features` all green, `cargo llvm-cov` 94.44% line coverage (85%
+  floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (additive query/response-shape change plus a bugfix, not a new architectural
+  decision)
+
+## [2026-07-18] feature/0014-docker-images — Triggers pagination (last of the four flagged list pages)
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** Closes the last remaining item from the pagination backlog (Data Viewer, Events,
+  and Agents were already done). `TriggerDefinitionRepository::list` gains `limit`/`offset`
+  (Postgres impl adds `LIMIT $2 OFFSET $3`, ordered by `name`), `GET /v1/trigger-definitions`
+  now returns `{triggers, has_more}` using the same fetch-one-extra pattern as every other
+  paginated list endpoint in this codebase, and `/triggers` gets the same Previous/Next
+  `<form method="get">` controls as Agents/Events/Data Viewer. `TriggersClient::list_triggers`
+  and the Console UI handler/template were updated to match, mirroring `AgentsClient`/
+  `agents_handler.rs` exactly. Triggers had no existing "get one by id" call site (no detail
+  page), so this pass did not surface the same list-vs-lookup bug the Agents pagination work
+  found — there was nothing to fix beyond the list endpoint itself.
+- **Tests:** `cargo test -p config-admin-service --lib` — 43 passed (1 new: `list` respects
+  limit/offset at the repository level; the existing scoped-list test and the full CRUD
+  round-trip test were both updated for the new response shape). `cargo test -p kizashi-ui
+  --lib` — 92 passed (`TriggersClient` trait signature change threaded through
+  `triggers_handler`, 2 new pagination-control-rendering tests mirroring Agents/Events).
+  Beyond unit tests: rebuilt and redeployed `config-admin-service`/`kizashi-ui`, seeded 30
+  real trigger definitions directly against the live `config-admin-service` API, confirmed
+  `/triggers` shows Next-only on page 0 and Previous-only on page 1 with the 30th trigger
+  landing on page 1 as expected, then deleted all 30 test triggers (and their audit-log rows)
+  to leave the demo tenant clean. Full local CI gate: `cargo fmt --all --check` clean, `cargo
+  clippy --workspace --all-targets --all-features -- -D warnings` clean, `cargo test
+  --workspace --all-features` all green (0 failures across every crate, verified against a
+  throwaway local `mssql` container standing in for CI's Fabric TDS dependency), `cargo
+  llvm-cov` 93.90% line coverage (85% floor), `cargo audit` / `cargo deny check` clean (same
+  two pre-existing `unmaintained` advisories already allow-listed — `instant`,
+  `rustls-pemfile` — no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (additive query/response-shape change, not a new architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Audit log immutability enforced at the database level
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** `config_admin_service.config_audit_log` and `retention_service.retention_audit_log`
+  were append-only by application convention only (no Rust code path ever issues UPDATE/DELETE
+  against them) — nothing at the database level stopped a bug or a manual `psql` session from
+  mutating or deleting an audit row, a real gap against CLAUDE.md §5's "every admin/config
+  change is logged immutably" bar for a product that expects compliance audits. Since
+  `common::connect_with_schema` and every service's `main.rs` run migrations and runtime
+  queries through the same connection pool and the same shared `kizashi` Postgres role (no
+  role separation exists anywhere in this codebase), a `REVOKE UPDATE, DELETE` approach would
+  have required introducing a second privileged migration-only role — a much larger,
+  unprecedented change. Went with a `BEFORE UPDATE OR DELETE` trigger on each table that
+  `RAISE EXCEPTION`s instead — a single plain `.sql` migration per service, no new role, no
+  `docker-compose.yml`/`.env.example`/`common` changes, works regardless of which role issues
+  the mutation.
+- **Tests:** TDD'd against real Postgres: wrote the regression tests first, ran them without
+  the migration present to confirm they fail for the expected reason (`rows_affected: 1`, i.e.
+  the row-level trigger genuinely wasn't there yet), then added the migration and reran.
+  `cargo test -p config-admin-service --test repository_integration_test` — 6 passed (2 new:
+  `config_audit_log_rejects_update_at_the_database_level`,
+  `config_audit_log_rejects_delete_at_the_database_level`, both asserting the real Postgres
+  error text). `cargo test -p retention-service --test retention_policy_integration_test` — 6
+  passed (2 new, same pattern for `retention_audit_log`). Beyond integration tests: rebuilt and
+  redeployed `config-admin-service`/`retention-service`, created a real trigger definition and
+  a real retention policy through their live HTTP APIs (so each had a genuine audit row), then
+  ran a raw `UPDATE`/`DELETE` against each audit table directly via `psql` against the live
+  running Postgres container and confirmed Postgres itself rejected all four attempts with
+  `... is append-only: UPDATE/DELETE is not permitted` — proving the trigger is live against
+  the real running stack, not just the test database. Full local CI gate: `cargo fmt --all
+  --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  clean, `cargo test --workspace --all-features` all green (0 failures across every crate,
+  verified against a throwaway local `mssql` container standing in for CI's Fabric TDS
+  dependency), `cargo llvm-cov` 93.90% line coverage (85% floor — unchanged, since the new
+  code is pure SQL plus integration tests, neither counted in the Rust line-coverage ratchet),
+  `cargo audit` / `cargo deny check` clean (same two pre-existing allow-listed `unmaintained`
+  advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — closes a gap flagged in the standing gap-closing roadmap
+  (Phase 1b, security/compliance), not a spec §11 open item.
+
+## [2026-07-18] feature/0014-docker-images — API key lifecycle management (create/list/revoke)
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Closes gap-closing-roadmap Phase 1c: until now `ApiKeyStore` only had
+  `tenant_for_key` (lookup) — there was no way to actually create or revoke a connector API
+  key except a manual `INSERT`/`UPDATE` against Postgres, a real problem for a resold
+  enterprise product whose customers need to self-serve issue and rotate credentials.
+  `ApiKeyStore` gains `create`/`list`/`revoke`, all backed by Postgres, with `create`/`revoke`
+  each writing an audit row in the same transaction as the key mutation (CLAUDE.md §5's
+  "new mutable config entity ships with an audit-log write in the same PR" rule) — this
+  required standing up ingestion-gateway's *first* audit log (`ingestion_gateway_audit_log`,
+  ported from config-admin-service's `audit_log.rs`), which ships with the same
+  `BEFORE UPDATE OR DELETE` immutability trigger just added to the other two audit tables, from
+  day one rather than as a follow-up gap. New endpoints: `POST /v1/api-keys` (returns the
+  plaintext key once — only its SHA-256 hash is ever persisted, matching the existing
+  `tenant_for_key` convention), `GET /v1/api-keys` (tenant-scoped summaries, no key material),
+  `DELETE /v1/api-keys/:id` (idempotent revoke), `GET /v1/api-keys/:id/audit-log`. Console UI
+  gets a new `/api-keys` page (nav: "API Keys") — create form, table with Revoke buttons, and
+  a one-time plaintext-key reveal panel shown only on the response immediately after creation,
+  never persisted or retrievable again. Required adding `INGESTION_GATEWAY_URL` (the internal
+  address) alongside the existing `INGESTION_GATEWAY_PUBLIC_URL` (the address a *deployed
+  connector* should point at, not necessarily reachable from inside the UI container) — Console
+  UI needed a way to reach ingestion-gateway's admin API that's distinct from the
+  connector-facing address.
+- **Tests:** `cargo test -p ingestion-gateway --lib` — 32 passed (in-memory `ApiKeyStore`/
+  `AuditLogReader` test doubles, HTTP handler tests for create/list/revoke/audit-log, a
+  never-exposes-key-material assertion on the list response, a missing-tenant-header 401
+  case). `cargo test -p ingestion-gateway --test api_key_store_integration_test` — 6 passed
+  against real Postgres (create writes a Created audit row and the key resolves; revoke writes
+  a Deleted audit row and the key stops resolving; revoking an already-revoked key writes no
+  duplicate audit row; list is tenant-scoped; the new `ingestion_gateway_audit_log` rejects
+  UPDATE/DELETE at the database level, same pattern as the previous PR's immutability tests).
+  `cargo test -p kizashi-ui --lib` — 106 passed (`ApiKeysClient` HTTP-client tests against a
+  real stub server, 5 new handler tests including the one-time-reveal assertion). Beyond unit
+  tests: rebuilt and redeployed `ingestion-gateway`/`kizashi-ui`, logged into the live UI,
+  created a real key through `/api-keys`, confirmed the plaintext was shown, used it to
+  authenticate a real `POST /v1/ingest` call (got 422 from the payload-shape check, not 401 —
+  proving auth passed), revoked it through the UI, and confirmed the exact same key now gets
+  401 "invalid API key" on the same ingest call — the complete lifecycle proven against the
+  real running stack, not just test doubles. Full local CI gate: `cargo fmt --all --check`
+  clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean, `cargo
+  test --workspace --all-features` all green (0 failures across every crate, verified against
+  a throwaway local `mssql` container standing in for CI's Fabric TDS dependency), `cargo
+  llvm-cov` 93.76% line coverage (85% floor), `cargo audit` / `cargo deny check` clean (same
+  two pre-existing allow-listed `unmaintained` advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — closes a gap flagged in the standing gap-closing roadmap (Phase 1c,
+  security/compliance), not a spec §11 open item.
+
+## [2026-07-18] feature/0014-docker-images — RBAC v1: role on local users, write-path enforcement on config-admin-service
+- **Type:** feature
+- **Summary:** Closes gap-closing-roadmap Phase 1a's highest-priority item: until now every
+  service trusted `X-Tenant-Id` with zero role/permission check — any authenticated session
+  could create/update/delete triggers and mappings regardless of who it belonged to. Adds
+  `common::Role` (`Viewer < Operator < Admin`, ordered) and threads it end-to-end through the
+  identity chain that already exists: `auth_service.local_users` gains a `role` column (new
+  migration, existing rows default to `admin` so the demo login isn't locked out) →
+  `SessionClient::mint_session` gains a `role` param → `query-gateway`'s `/internal/tokens` +
+  `TokenStore` + `query_api_tokens` table carry it (`tenant_for_token` renamed
+  `session_for_token`, now returns `(tenant_id, role)`) → `LoginResponse` returns it → Console
+  UI's `Session` struct carries it. `config-admin-service`'s `create_trigger`/`update_trigger`/
+  `create_mapping`/`update_mapping` now require an `X-Role` header at least `Operator`, 403
+  otherwise, 401 if the header is missing entirely — the same trust-boundary pattern
+  `X-Tenant-Id` already uses, since no gateway sits in front of this service (ADR-0010) to
+  enforce roles at a proxy layer. OIDC logins (which have no local role source) default to the
+  least-privileged `Viewer` rather than being left unroled or guessing something permissive.
+  See ADR-0016 for the full v1-scope decision, including what's explicitly deferred:
+  `retention-service`, `action-executor`, and `ingestion-gateway`'s API-key endpoints remain
+  unenforced (tracked, not silently dropped), and there's no "assign another user's role" UI
+  yet — that's a direct SQL update for now, same interim state API keys were in before Phase
+  1c's UI shipped.
+- **Tests:** `cargo test -p common role` — 5 passed (ordering, `at_least`, `Display`/`FromStr`
+  round-trip, snake_case serialization). `cargo test -p auth-service --lib` — 33 passed
+  (`LocalUser`/`SessionClient` role threading, a new assertion that a successful login mints
+  with the user's actual role and returns it in the response body). `cargo test -p auth-service
+  --test local_user_repository_integration_test` — 1 passed against real Postgres, now
+  asserting the stored role round-trips. `cargo test -p query-gateway --lib` — 14 passed
+  (`TokenStore`/`session_for_token` role threading). `cargo test -p query-gateway --test
+  token_store_integration_test` — 2 passed against real Postgres (stored role round-trips;
+  minted tokens carry the role they were minted with). `cargo test -p config-admin-service
+  --lib` — 47 passed (4 new: missing-role-header 401, viewer-rejected 403 on both
+  trigger-create and mapping-create, operator-allowed 201 — the actual enforcement contract).
+  `cargo test -p kizashi-ui --lib` — 101 passed (every `Session`/`AppState` construction site
+  across the test suite updated for the new field; no behavioral change to any existing UI test
+  since role isn't yet consumed by nav or any write-path client). Beyond unit/integration
+  tests: rebuilt and redeployed `auth-service`/`query-gateway`/`config-admin-service`/
+  `kizashi-ui`, confirmed the demo login still returns `"role":"admin"` and Console UI login
+  still works end-to-end, then — the test that actually proves the enforcement — sent a real
+  trigger-create request directly at the live `config-admin-service` three ways: no `X-Role`
+  header (401), `X-Role: viewer` (403), `X-Role: operator` (201), all against real running
+  Postgres with the real migration applied. Full local CI gate: `cargo fmt --all --check`
+  clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean (one
+  `await_holding_lock` finding caught and fixed — a `MutexGuard` held across an `.await` in a
+  new test), `cargo test --workspace --all-features` all green (0 failures across every crate,
+  verified against a throwaway local `mssql` container standing in for CI's Fabric TDS
+  dependency), `cargo llvm-cov` 93.81% line coverage (85% floor), `cargo audit` / `cargo deny
+  check` clean (same two pre-existing allow-listed `unmaintained` advisories, no new
+  advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** [0016-rbac-v1-scope-role-on-local-user-x-role-header-trust-config-admin-write-path-enforcement.md](../adr/0016-rbac-v1-scope-role-on-local-user-x-role-header-trust-config-admin-write-path-enforcement.md)
+
+## [2026-07-19] feature/0014-docker-images — RBAC enforcement extended to retention-service
+- **Type:** feature
+- **Summary:** First of ADR-0016's explicitly-deferred follow-ups: `retention-service`'s
+  `create_policy`/`update_policy` now require `X-Role` at least `Operator`, mirroring
+  `config-admin-service`'s enforcement exactly (`role_from_headers`/`require_operator` helpers,
+  same 401-missing/403-insufficient/pass-through-Operator-or-above contract). No new migration
+  needed — `retention-service` doesn't mint its own sessions; it trusts the same `X-Role` header
+  Console UI/callers already forward. `action-executor`'s trigger CRUD and
+  `ingestion-gateway`'s API-key create/revoke remain unenforced, still tracked in ADR-0016 as
+  the next follow-ups.
+- **Tests:** `cargo test -p retention-service --lib` — 43 passed (3 new: missing-role 401,
+  viewer-rejected 403, operator-allowed 201 on `create_policy`, mirroring
+  config-admin-service's role tests exactly). Beyond unit tests: rebuilt and redeployed
+  `retention-service`, sent a real policy-create request three ways against the live service —
+  no `X-Role` (401), `X-Role: viewer` (403), `X-Role: operator` (201) — against real running
+  Postgres. Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` clean, `cargo test --workspace --all-features`
+  all green (0 failures across every crate, verified against a throwaway local `mssql`
+  container standing in for CI's Fabric TDS dependency), `cargo llvm-cov` 93.84% line coverage
+  (85% floor), `cargo audit` / `cargo deny check` clean (same two pre-existing allow-listed
+  `unmaintained` advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — implements a follow-up explicitly scoped out of ADR-0016's v1, not a new
+  architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — Instana-style Pipeline Map view
+- **Type:** feature
+- **Summary:** Continues ADR-0015's Instana-style APM direction (#30) with the feature that
+  actually reads as "Instana" — a live topology map, not another table. New `/pipeline` page
+  renders the ingest → normalize → analyze → trigger → act chain as connected boxes: each stage
+  node colored by its real `/v1/health` status (green dot = up, red = down), each connecting
+  edge labeled with the message type it carries and colored by real `/v1/backlog` queue depth
+  (grey = empty, amber = building up, red = past the critical threshold). Both data sources
+  already existed in Observability (ADR-0012) — this wires Console UI to consume the backlog
+  endpoint for the first time via a new `BacklogClient`, alongside the existing `HealthClient`.
+  A backlog-lookup failure degrades the page to "topology with no backlog numbers" rather than
+  an error page (health is the load-bearing signal; backlog is enrichment), while a health
+  failure does show the error page since the topology has nothing meaningful to render without
+  it. Template built as a flat, pre-interleaved `Vec<TopologyItem>` (stage/edge alternating)
+  rather than having the template zip two arrays — Askama's expression grammar makes index
+  arithmetic (`edges[loop.index0 - 1]`) fragile, so the ordering is resolved in Rust and the
+  template just iterates and matches.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 108 passed (2 new for `BacklogClient` against a
+  real stub server; 5 new for the pipeline handler: all five stages render with correct
+  up/down status, redirects to login when signed out, shows an error when health fails,
+  degrades gracefully with "n/a" backlog numbers when backlog fails, and a 500-message queue
+  renders as `edge-critical`). Beyond unit tests: rebuilt and redeployed `kizashi-ui`, logged
+  into the live stack, loaded `/pipeline` for real, and confirmed all five stages rendered
+  "up" with 0-message queues on every edge — matching the actual idle state of the real running
+  pipeline (no synthetic data, genuine live health/backlog reads through the full
+  Console-UI-to-Observability-to-RabbitMQ path). Full local CI gate: `cargo fmt --all --check`
+  clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean, `cargo
+  test --workspace --all-features` all green (0 failures across every crate, verified against
+  a throwaway local `mssql` container standing in for CI's Fabric TDS dependency), `cargo
+  llvm-cov` 93.91% line coverage (85% floor), `cargo audit` / `cargo deny check` clean (same
+  two pre-existing allow-listed `unmaintained` advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — additive UI feature consuming already-decided ADR-0012/ADR-0015 capabilities,
+  not a new architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — Role-aware nav: hide write actions from Viewers
+- **Type:** feature
+- **Summary:** Closes ADR-0016's last still-open Console UI v1 item: "role-aware nav (hide
+  admin actions from viewer)." `/agents` and `/api-keys` now compute
+  `can_write = session.role.at_least(Role::Operator)` and gate the register/create forms and
+  every per-row Enable/Disable/Remove/Revoke button behind it — a `Viewer` sees the same data
+  (agent list, key list) with none of the mutation controls. This is presentation-layer only:
+  `agents`-write and `ingestion-gateway`'s API-key endpoints don't enforce role server-side yet
+  (only config-admin-service's trigger/mapping writes and retention-service's policy writes
+  do, per ADR-0016 and its retention-service follow-up) — noted explicitly in code comments so
+  it isn't mistaken for a security boundary.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 112 passed (4 new: a `Viewer` session sees the
+  agent/key data but none of the write UI; an `Operator` session sees both). Beyond unit
+  tests: rebuilt and redeployed `kizashi-ui`, inserted a real `viewer`-role user directly into
+  the running `auth_service.local_users` table (via the existing `hash_password` bin for a
+  real Argon2 hash), logged in as that user through the live UI, and confirmed zero matches for
+  every write control on both `/agents` and `/api-keys` — then logged back in as the existing
+  `admin`-role demo user and confirmed all controls are present, proving the gate works both
+  directions against the real running stack, not just template unit tests. Full local CI gate:
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green (0 failures across every
+  crate, verified against a throwaway local `mssql` container standing in for CI's Fabric TDS
+  dependency), `cargo llvm-cov` 93.96% line coverage (85% floor), `cargo audit` / `cargo deny
+  check` clean (same two pre-existing allow-listed `unmaintained` advisories, no new
+  advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — implements a follow-up explicitly scoped into ADR-0016's v1 Console UI item,
+  not a new architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — RBAC enforcement extended to ingestion-gateway API keys
+- **Type:** feature
+- **Summary:** Closes ADR-0016's last remaining deferred write path.
+  `action-executor` turned out to have no HTTP write surface at all (it's a pure RabbitMQ
+  consumer with only `/healthz`), so there was nothing to gate there — that leaves
+  `ingestion-gateway`'s `create_api_key`/`revoke_api_key` as the real remaining item, now
+  requiring `X-Role` at least `Operator` via the same `role_from_headers`/`require_operator`
+  pattern as every other write path. Because Console UI's Agents/API-Keys pages actively call
+  these endpoints (unlike config-admin-service's trigger/mapping writes, which have no UI form
+  yet), enabling enforcement without also updating the caller would have broken the live
+  create/revoke flow verified working in the previous PR — so `ApiKeysClient::create_api_key`/
+  `revoke_api_key` gained a `role: Role` parameter, forwarded as `X-Role`, with
+  `api_keys_handler.rs` passing `session.role` through. Every write-path service in the
+  platform's admin surface (config-admin-service, retention-service, ingestion-gateway) is now
+  role-gated; the only remaining gap from ADR-0016 is the "assign another user's role" admin UI,
+  still explicitly out of scope for v1.
+- **Tests:** `cargo test -p ingestion-gateway --lib` — 34 passed (2 new: missing-role 401,
+  viewer-rejected 403 on `create_api_key`; existing create/revoke tests updated to send
+  `X-Role`). `cargo test -p kizashi-ui --lib` — 112 passed (`ApiKeysClient` trait signature
+  change threaded through every call site; the HTTP-client stub server now rejects a missing
+  `X-Role` on create, proving the client actually sends it). Beyond unit tests: rebuilt and
+  redeployed `ingestion-gateway`/`kizashi-ui`, created a real key through the live UI as the
+  `admin`-role demo user (confirming the enforcement-plus-forwarding change didn't break the
+  working flow), then sent the same create request directly at `ingestion-gateway` three ways —
+  no `X-Role` (401), `X-Role: viewer` (403), `X-Role: operator` (201) — against the real
+  running service. Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` clean, `cargo test --workspace
+  --all-features` all green (0 failures across every crate, verified against a throwaway local
+  `mssql` container standing in for CI's Fabric TDS dependency), `cargo llvm-cov` 93.98% line
+  coverage (85% floor), `cargo audit` / `cargo deny check` clean (same two pre-existing
+  allow-listed `unmaintained` advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — implements the last follow-up explicitly scoped out of ADR-0016's v1, not a
+  new architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — normalization-service live-RabbitMQ integration test
+- **Type:** test
+- **Summary:** Closes one of the three testing gaps from the gap-closing roadmap's Phase 3:
+  `normalization-service` had Postgres-repository and schema-contract tests but nothing
+  exercising its actual `record.ingested` → `record.normalized` processing path against real
+  infrastructure. New `tests/normalization_integration_test.rs` mirrors the pattern already
+  proven in `analysis-service`/`trigger-engine`'s integration tests — connect to real
+  RabbitMQ, declare/bind a queue, call `process_normalization` directly with real
+  `PostgresMappingRepository` + a stub HTTP server standing in for Ingestion Service's
+  `PATCH /v1/records/:id/normalized`, then assert the published `record.normalized` message.
+  A second test covers the no-mapping-configured path (asserts `NoMappingConfigured`, not an
+  error, and implicitly nothing is published). `action-executor`'s equivalent gap and
+  `dashboard-api`'s live-ClickHouse gap remain open, tracked as further Phase 3 follow-ups.
+- **Tests:** `cargo test -p normalization-service --test normalization_integration_test` — 2
+  passed against real RabbitMQ and real Postgres.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — closes a gap flagged in the standing gap-closing roadmap (Phase 3, testing
+  gaps), not a spec §11 open item.
+
+## [2026-07-19] feature/0014-docker-images — Console UI layout overhaul: fix wasted space and unprofessional appearance
+- **Type:** fix
+- **Summary:** Direct user feedback: "the ui is very unprofessional and a huge waste of
+  space." Verified with real headless-Chrome screenshots against the live running stack
+  (not guessed from CSS) — every page with a form panel (Agents, API Keys, Data Viewer) had a
+  bare 480px-wide `.panel` on the left and pure empty black space filling the rest of a
+  1600px-wide viewport; Overview was 4 KPI cards followed by ~700px of nothing; Platform
+  Health was a plain 2-column table wasting nearly the entire row width on a service name and
+  one status word; Reports showed the exact same connector/event data twice — once as a bar
+  chart, once as an identical table directly below it. Fixed all of it: `.form-row` pairs
+  every form panel with a new `.info-panel` (contextual tips/docs) so the row uses the full
+  width instead of leaving a void; `.chart-row` puts Reports' chart and its detail table
+  side by side instead of stacked duplicates; Platform Health became a `.status-grid` of
+  compact status cards instead of a bare table; every list page (Agents, Events, Triggers,
+  Data Viewer) gained a proper `.empty-state` block instead of rendering an empty table with
+  nothing below it; the Overview dashboard now embeds a compact live Pipeline Map preview
+  below the KPI row (extracted the topology-building logic from `pipeline_handler.rs` into a
+  shared `ui/src/topology.rs` module so both pages render the same real data, not a
+  duplicated/faked preview) instead of ending after one line of links; the Pipeline Map's own
+  topology nodes/edges were resized to stop wrapping/clipping (`flex: 0 1 170px` sizing found
+  by iterating against real screenshots, not guessed) and gained a color legend.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 121 passed (6 new for the extracted
+  `topology` module's stage/edge-building logic — status lookup, unknown-stage fallback,
+  severity thresholds, backlog-present vs. absent; 3 new empty-state tests for Agents/
+  Triggers/Events confirming the empty-state message renders and no `<table>` tag does when
+  there's genuinely nothing to show, `page == 0 && !has_more` in the empty-state condition
+  specifically to avoid hiding Previous/Next controls on a legitimately-empty later page — a
+  real bug the first pass introduced and the existing pagination tests caught immediately).
+  Beyond unit tests: rebuilt and redeployed `kizashi-ui` **twice** during this fix — the first
+  screenshot pass caught the topology wrapping bug (`Action Executor` dropping to its own
+  row) and a text-clipping regression from an over-aggressive `flex: 1 1 0` fix, both only
+  visible in an actual rendered screenshot, not in any test assertion. Final verification was
+  a full screenshot sweep of all 9 pages (Overview, Agents, API Keys, Pipeline Map, Events,
+  Reports, Platform Health, Data Viewer, Triggers) against the live running stack with real
+  session cookies, confirmed by direct visual inspection, not just "the page returned 200."
+  Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` clean, `cargo test --workspace --all-features` all green (0
+  failures across every crate, verified against a throwaway local `mssql` container standing
+  in for CI's Fabric TDS dependency), `cargo llvm-cov` 94.08% line coverage (85% floor),
+  `cargo audit` / `cargo deny check` clean (same two pre-existing allow-listed `unmaintained`
+  advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — CSS/template layout fix, not a new architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — Event record lineage: record_ids field closes the last untraceable pipeline hop
+- **Type:** feature
+- **Summary:** `Event → ActionExecution` was already traceable (`ActionExecution.event_id`) and
+  `RawRecord → AnalyzedRecord` needs no lookup (same row), but `RawRecord → Event` — which
+  records actually caused a trigger to fire — was completely untraceable: `SignalRepository::
+  window_stats` computed count/values for trigger evaluation and then discarded which record
+  ids contributed. `common::Event` gains `record_ids: Vec<Uuid>`; `window_stats` now returns
+  `(count, values, record_ids)` from the same `analyzed_signals` scan (no new query);
+  `process_analyzed_record` attaches them via `Event::new(...).with_record_ids(...)`. The
+  ClickHouse `events` table gains a matching `record_ids Array(UUID)` column. This closes the
+  only remaining gap in the platform's full ingest→normalize→analyze→event→action lineage —
+  unblocking a record-journey/link-analysis view in Console UI without further backend work,
+  since `GET /data/:id` and `GET /v1/events/:id` already exist and now the second one returns
+  the link. See ADR-0017 for the full decision including why a builder method (not a changed
+  `Event::new` signature) and the live-ClickHouse migration note.
+- **Tests:** `cargo test -p trigger-engine --lib` — 29 passed (`window_stats` test now asserts
+  record ids are returned; both a single-record threshold-trigger fire and a multi-record
+  count-over-window fire assert the resulting Event carries the correct record id(s)). `cargo
+  test -p trigger-engine --test event_created_contract_test` — 3 passed (1 new: `record_ids`
+  round-trips through the wire message). `cargo test -p trigger-engine --test
+  trigger_integration_test` — 1 passed against real Postgres/ClickHouse/RabbitMQ, confirming
+  the altered schema doesn't break the existing write path. `cargo test -p dashboard-api --test
+  event_query_integration_test` — 2 passed, new test file closing another Phase 3 testing gap
+  (dashboard-api had zero tests against real ClickHouse before this): inserts a real row with
+  `record_ids` via ClickHouse's HTTP interface, reads it back through
+  `ClickHouseEventQueryRepository::get_event`/`list_events`, asserts the ids round-trip; a
+  second test confirms `get_event` returns `None` for an unknown id against the real service
+  (not a stub). Beyond tests: applied `ALTER TABLE events ADD COLUMN IF NOT EXISTS record_ids
+  Array(UUID)` directly against this build's live ClickHouse instance (a pre-existing table
+  `CREATE TABLE IF NOT EXISTS` doesn't alter — noted as a real rollout gotcha in ADR-0017),
+  then confirmed both the trigger-engine write path and the dashboard-api read path work
+  against the now-altered live table before any test ran. Full local CI gate: `cargo fmt --all
+  --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  clean, `cargo test --workspace --all-features` all green (0 failures across every crate,
+  verified against a throwaway local `mssql` container standing in for CI's Fabric TDS
+  dependency), `cargo llvm-cov` 94.10% line coverage (85% floor), `cargo audit` / `cargo deny
+  check` clean (same two pre-existing allow-listed `unmaintained` advisories, no new
+  advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** [0017-event-record-lineage-record-ids-field-on-event.md](../adr/0017-event-record-lineage-record-ids-field-on-event.md)
+
+## [2026-07-19] feature/0014-docker-images — ActionExecution gains tenant_id; action-executor's first query endpoint; dashboard-api record_id filter
+- **Type:** fix
+- **Summary:** Building the record→event lineage (ADR-0017) surfaced a real compliance gap
+  while wiring up the event→action hop for a UI journey view: `ActionExecution` had **no
+  `tenant_id` at all**, on the type or the table — a genuine violation of CLAUDE.md §5's
+  "every row is tenant-scoped" rule, only latent until now because `action-executor` had zero
+  HTTP query surface (pure RabbitMQ consumer, insert-only repository). Fixed properly rather
+  than worked around: `ActionExecution` gains `tenant_id: Uuid` (from `Event.tenant_id`, always
+  available at write time); `action_executions` gets a migration adding the column (existing
+  126 rows in this build's dev database were synthetic test/demo data with no way to backfill
+  a real tenant, so they're dropped as part of the migration, documented inline in the SQL
+  comment, not silently). `ExecutionRepository` gains `list_by_event(tenant_id, event_id)`, and
+  action-executor gets its first real HTTP endpoint — `GET /v1/action-executions?event_id=X` —
+  trusting `X-Tenant-Id` the same way every other gateway-less service in this codebase does.
+  Separately, `dashboard-api`'s `EventFilter` gains `record_id: Option<Uuid>`
+  (`GET /v1/events?record_id=X`), using ClickHouse's `has(record_ids, ...)` against the
+  `record_ids` column from the previous PR — completing the query-side plumbing for a
+  record-journey view: `GET /data/:id` → `GET /v1/events?record_id=:id` →
+  `GET /v1/action-executions?event_id=:id` now traces a record all the way to what happened
+  because of it.
+- **Tests:** `cargo test -p common --lib action_execution` — 3 passed (tenant_id threading
+  through `new`/`retry`). `cargo test -p action-executor --lib` — 22 passed (3 new:
+  `list_by_event` scoped to tenant+event in the in-memory double; the new HTTP handler tested
+  for success, missing-tenant-header 401, and backend-failure 500). `cargo test -p
+  action-executor --test execution_repository_integration_test` — 2 passed against real
+  Postgres (1 new: `list_by_event` against the real table, confirming both the tenant and
+  event scoping hold). `cargo test -p dashboard-api --lib` — 19 passed (1 new: `record_id`
+  filter). `cargo test -p dashboard-api --test event_query_integration_test` — 3 passed
+  against real ClickHouse (1 new: `has(record_ids, ...)` filter proven against a real insert,
+  not just the in-memory double). Full local CI gate: `cargo fmt --all --check` clean, `cargo
+  clippy --workspace --all-targets --all-features -- -D warnings` clean, `cargo test
+  --workspace --all-features` all green (0 failures across every crate, verified against a
+  throwaway local `mssql` container standing in for CI's Fabric TDS dependency), `cargo
+  llvm-cov` 94.16% line coverage (85% floor), `cargo audit` / `cargo deny check` clean (same
+  two pre-existing allow-listed `unmaintained` advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — a compliance bugfix (missing tenant scoping) and additive query capability
+  surfaced while implementing ADR-0017, not a new architectural decision itself.
+
+## [2026-07-19] feature/0014-docker-images — Console UI Record Journey page (Palantir-style lineage view)
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Adds `GET /data/:id/journey`, a link/investigative view that renders a raw
+  record's full pipeline lineage — the record, every Event it contributed to (via ADR-0017's
+  `record_ids`), and every ActionExecution each Event caused — as a vertical tree
+  (record → event branches → execution cards), each execution colored by status. Built
+  entirely from existing read endpoints (`GET /data/:id`, `GET /v1/events?record_id=`,
+  Action Executor's `GET /v1/action-executions?event_id=`); no new backend query added. A
+  "View record journey →" link was added to the existing `/data/:id` page. New
+  `ui/src/execution_client.rs` (`ExecutionClient`/`HttpExecutionClient`) and
+  `ui/src/record_journey_handler.rs` wire a new `ACTION_EXECUTOR_URL` env var into
+  `AppState`, `docker-compose.yml`, `.env.example`, and `scripts/run-local.sh` (which was
+  also missing `INGESTION_GATEWAY_URL` for the UI — a pre-existing gap, fixed alongside since
+  it's the same env-wiring block).
+- **Tests:** `cargo test -p kizashi-ui` — 128 passed, 0 failed (12 new:
+  `record_journey_handler_test` covers no-events, events-with-executions, an
+  execution-client-failure-still-renders-the-event case, and the login-redirect guard;
+  `execution_client_test` covers the HTTP client against a real stub server and an
+  unreachable-server case; every other `*_handler_test.rs`'s `AppState` construction was
+  swept to add the new `execution_client` field). Full local CI gate:
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features --
+  -D warnings` clean, `cargo test --workspace --all-features` all green (0 failures,
+  verified against a throwaway local `mssql` container for Fabric), `cargo audit` clean (same
+  two pre-existing allow-listed `unmaintained` advisories, no new ones). Live-verified against
+  the running docker-compose stack: rebuilt/redeployed `kizashi-ui`, seeded a real
+  record→event→action chain (a trigger inserted directly into `trigger_engine`'s schema, an
+  `AnalyzedRecord` published onto the real `record.analyzed` RabbitMQ exchange, consumed by
+  the real trigger-engine and action-executor), then fetched and screenshotted both
+  `/data/:id` and `/data/:id/journey` against the live server — confirmed the journey tree
+  renders the record, event, and a "webhook — failed" execution card with correct red
+  styling, and confirmed the empty-state ("hasn't contributed to any events yet") renders
+  for a record with no events. This surfaced and fixed a real bug: the template and test
+  fixtures assumed `ActionExecutionStatus`/`ActionType` serialize PascalCase
+  (`"Sent"`/`"Webhook"`), but both actually derive `#[serde(rename_all = "snake_case")]`
+  (`"sent"`/`"webhook"`) — the live screenshot showed the status pill always rendering red
+  regardless of real status, which caught it; fixed the template's status comparison and all
+  test fixtures to match the real backend casing.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — reuses ADR-0017's `record_ids` lineage field and the existing
+  Action Executor query endpoint; no new architectural decision.
+
+**Known gap surfaced while seeding live test data (not fixed in this PR):** triggers created
+via `config-admin-service` (the Console UI's Triggers page) are written only to
+`config_admin_service.trigger_definitions` — `trigger-engine` reads triggers exclusively from
+its own separate `trigger_engine.trigger_definitions` schema (`crates/trigger-engine/src/
+trigger_repository.rs`), and nothing syncs the two. In this dev environment
+`trigger_engine.trigger_definitions` already holds thousands of directly-inserted rows from
+past sessions, meaning triggers made through the UI/API have likely never actually fired in
+this environment. This is a real functional gap, not a cosmetic one — tracked for a follow-up
+fix (either a shared table/view, or config-admin-service publishing trigger-created/updated
+events for trigger-engine to consume) with its own ADR, since the fix shape is an
+architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — Fix trigger-engine/config-admin-service sync gap (ADR-0018)
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** Closes the gap logged in the entry above: `config-admin-service` now publishes
+  a `trigger.changed` fanout message (new `TRIGGER_CHANGED_EXCHANGE` in `crates/common/src/
+  bus.rs`, same pattern as the three existing pipeline exchanges) on every successful trigger
+  create/update, carrying the full `TriggerDefinition`. `trigger-engine` gains a second
+  RabbitMQ consumer (spawned alongside its existing `record.analyzed` loop) that upserts the
+  message into its own `trigger_definitions` table by id via a new
+  `TriggerRepository::upsert` method. Triggers authored through the Console UI's Triggers
+  page now actually reach the component that evaluates them. Per ADR-0018, deletes are out of
+  scope (no delete endpoint exists yet — `enabled: false` is how a trigger is turned off), and
+  pre-existing rows created before this change require a one-time backfill per environment
+  (not performed here — this PR only fixes go-forward sync).
+- **Tests:** `cargo test -p config-admin-service` — 49 passed (2 new:
+  `trigger_publisher_test` unit tests for the in-memory/failing publisher doubles; every
+  `AdminState` test constructor swept to add the new `trigger_publisher` field). `cargo test -p
+  config-admin-service --test trigger_publisher_integration_test` — 1 passed, publishing a
+  real `TriggerDefinition` over real RabbitMQ and consuming it back to prove the wire shape
+  round-trips. `cargo test -p trigger-engine` — 31 passed (2 new: `upsert_inserts_a_new_
+  trigger`/`upsert_replaces_an_existing_trigger_with_the_same_id` against the in-memory
+  double). `cargo test -p trigger-engine --test trigger_repository_integration_test` — 2
+  passed against real Postgres, proving the `ON CONFLICT (id) DO UPDATE` SQL actually inserts
+  then replaces a row. Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` clean, `cargo test --workspace
+  --all-features` all green (0 failures across every crate, verified against a throwaway
+  local `mssql` container for Fabric), `cargo audit` clean (same two pre-existing
+  allow-listed `unmaintained` advisories, no new ones). Live-verified against the running
+  docker-compose stack: rebuilt/redeployed `config-admin-service` and `trigger-engine`
+  (surfaced and fixed a missing `RABBITMQ_URL` env var for `config-admin-service` in both
+  `docker-compose.yml` and `scripts/run-local.sh` — it never needed RabbitMQ before this
+  change), created a trigger through the real `POST /v1/trigger-definitions` API, and
+  confirmed via direct Postgres query that it appeared in `trigger_engine.trigger_definitions`
+  within seconds; updated it and confirmed the update (including flipping `enabled` to
+  `false`) propagated the same way.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0018](adr/0018-trigger-definition-sync-config-admin-to-trigger-engine.md)

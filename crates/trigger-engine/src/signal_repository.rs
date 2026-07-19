@@ -34,15 +34,17 @@ pub struct AnalyzedSignal {
 pub trait SignalRepository: Send + Sync {
     async fn record_signal(&self, signal: &AnalyzedSignal) -> Result<(), SignalRepositoryError>;
 
-    /// Returns (count of matching signals, their numeric values where present) for the given
-    /// tenant/event_type/group_key within the last `window_seconds`.
+    /// Returns (count of matching signals, their numeric values where present, the `RawRecord`
+    /// ids that produced them) for the given tenant/event_type/group_key within the last
+    /// `window_seconds`. The record ids are what let a fired Event carry forward exactly which
+    /// records satisfied its trigger condition — the record→event lineage link (ADR-0017).
     async fn window_stats(
         &self,
         tenant_id: Uuid,
         event_type: &str,
         group_key: &str,
         window_seconds: i64,
-    ) -> Result<(u32, Vec<f64>), SignalRepositoryError>;
+    ) -> Result<(u32, Vec<f64>, Vec<Uuid>), SignalRepositoryError>;
 }
 
 pub struct PostgresSignalRepository {
@@ -87,10 +89,10 @@ impl SignalRepository for PostgresSignalRepository {
         event_type: &str,
         group_key: &str,
         window_seconds: i64,
-    ) -> Result<(u32, Vec<f64>), SignalRepositoryError> {
-        let rows: Vec<(Option<f64>,)> = sqlx::query_as(
+    ) -> Result<(u32, Vec<f64>, Vec<Uuid>), SignalRepositoryError> {
+        let rows: Vec<(Option<f64>, Uuid)> = sqlx::query_as(
             r#"
-            SELECT numeric_value
+            SELECT numeric_value, record_id
             FROM analyzed_signals
             WHERE tenant_id = $1
               AND event_type = $2
@@ -107,7 +109,8 @@ impl SignalRepository for PostgresSignalRepository {
         .map_err(|e| SignalRepositoryError::Backend(e.to_string()))?;
 
         let count = rows.len() as u32;
-        let values = rows.into_iter().filter_map(|(v,)| v).collect();
-        Ok((count, values))
+        let values = rows.iter().filter_map(|(v, _)| *v).collect();
+        let record_ids = rows.into_iter().map(|(_, record_id)| record_id).collect();
+        Ok((count, values, record_ids))
     }
 }

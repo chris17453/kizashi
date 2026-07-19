@@ -36,7 +36,7 @@ async fn mints_a_token_when_the_internal_secret_matches() {
                 .header("content-type", "application/json")
                 .header("x-internal-secret", "shared-secret")
                 .body(Body::from(
-                    serde_json::json!({"tenant_id": tenant_id, "label": "test"}).to_string(),
+                    serde_json::json!({"tenant_id": tenant_id, "role": "operator", "label": "test"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -62,7 +62,7 @@ async fn rejects_a_wrong_internal_secret() {
                 .header("content-type", "application/json")
                 .header("x-internal-secret", "wrong-secret")
                 .body(Body::from(
-                    serde_json::json!({"tenant_id": Uuid::new_v4(), "label": "test"}).to_string(),
+                    serde_json::json!({"tenant_id": Uuid::new_v4(), "role": "operator", "label": "test"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -84,7 +84,7 @@ async fn rejects_a_missing_internal_secret() {
                 .uri("/internal/tokens")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::json!({"tenant_id": Uuid::new_v4(), "label": "test"}).to_string(),
+                    serde_json::json!({"tenant_id": Uuid::new_v4(), "role": "operator", "label": "test"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -106,7 +106,7 @@ async fn returns_500_on_token_store_failure() {
                 .header("content-type", "application/json")
                 .header("x-internal-secret", "shared-secret")
                 .body(Body::from(
-                    serde_json::json!({"tenant_id": Uuid::new_v4(), "label": "test"}).to_string(),
+                    serde_json::json!({"tenant_id": Uuid::new_v4(), "role": "operator", "label": "test"}).to_string(),
                 ))
                 .unwrap(),
         )

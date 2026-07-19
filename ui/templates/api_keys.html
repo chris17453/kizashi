@@ -1,0 +1,77 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>API Keys</h1>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if let Some(key) = created_key %}
+<div class="panel">
+  <h2>Key created</h2>
+  <p class="muted">This is the only time this key will be shown. Copy it now — it cannot be
+  retrieved again, only revoked and replaced with a new one.</p>
+  <code class="key-reveal">{{ key }}</code>
+</div>
+{% endif %}
+
+{% if can_write %}
+<div class="form-row">
+  <div class="panel">
+    <h2>Create a new key</h2>
+    <p class="muted">Issue a key for a connector/agent to authenticate against
+    <code>POST /v1/ingest</code>. Label it by what it's for (e.g. the agent name) so it's
+    identifiable later.</p>
+    <form class="inline" method="post" action="/api-keys">
+      <label for="label">Label</label>
+      <input type="text" id="label" name="label" placeholder="support-poller" required>
+      <button type="submit">Create key</button>
+    </form>
+  </div>
+  <div class="info-panel">
+    <h2>About API keys</h2>
+    <ul>
+      <li>Each key authenticates one connector/agent at <code>POST /v1/ingest</code> via the
+        <code>X-Api-Key</code> header.</li>
+      <li>The plaintext key is shown exactly once, right after creation — copy it immediately.
+        Only its hash is ever stored, so it can't be retrieved again later.</li>
+      <li>Revoking a key takes effect immediately; a revoked key's connector will start getting
+        401s on its next ingest attempt.</li>
+      <li>Every create/revoke is written to an immutable audit log for compliance review.</li>
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{% if keys.is_empty() %}
+<div class="empty-state">
+  <div class="empty-icon">&#9877;</div>
+  <p>No API keys issued yet for this tenant.</p>
+  {% if can_write %}<p>Use the form above to create one for your first agent.</p>{% endif %}
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Label</th><th>Created</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for key in keys %}
+    <tr>
+      <td>{{ key.label }}</td>
+      <td>{{ key.created_at }}</td>
+      {% if let Some(revoked) = key.revoked_at %}
+      <td class="status-down">revoked {{ revoked }}</td>
+      <td></td>
+      {% else %}
+      <td class="status-up">active</td>
+      <td>
+        {% if can_write %}
+        <form class="inline" method="post" action="/api-keys/{{ key.id }}/revoke" style="display:inline">
+          <button type="submit" class="btn-danger">Revoke</button>
+        </form>
+        {% endif %}
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

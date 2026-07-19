@@ -1,5 +1,6 @@
 //! Integration test against real Postgres (CLAUDE.md §2). Requires DATABASE_URL.
 
+use common::Role;
 use query_gateway::{hash_token, PostgresTokenStore, TokenStore};
 use uuid::Uuid;
 
@@ -20,7 +21,7 @@ async fn test_pool() -> sqlx::PgPool {
 }
 
 #[tokio::test]
-async fn resolves_a_stored_token_to_its_tenant_and_rejects_unknown_or_revoked_tokens() {
+async fn resolves_a_stored_token_to_its_tenant_and_role_and_rejects_unknown_or_revoked_tokens() {
     let pool = test_pool().await;
     let store = PostgresTokenStore::new(pool.clone());
 
@@ -29,20 +30,21 @@ async fn resolves_a_stored_token_to_its_tenant_and_rejects_unknown_or_revoked_to
     let token_id = Uuid::new_v4();
 
     sqlx::query(
-        "INSERT INTO query_api_tokens (id, tenant_id, token_hash, label, created_at) VALUES ($1, $2, $3, $4, now())",
+        "INSERT INTO query_api_tokens (id, tenant_id, token_hash, label, created_at, role) VALUES ($1, $2, $3, $4, now(), $5)",
     )
     .bind(token_id)
     .bind(tenant_id)
     .bind(hash_token(&token))
     .bind("integration-test-token")
+    .bind("operator")
     .execute(&pool)
     .await
     .expect("failed to insert token");
 
-    let resolved = store.tenant_for_token(&token).await.unwrap();
-    assert_eq!(resolved, Some(tenant_id));
+    let resolved = store.session_for_token(&token).await.unwrap();
+    assert_eq!(resolved, Some((tenant_id, Role::Operator)));
 
-    let unknown = store.tenant_for_token("never-issued-token").await.unwrap();
+    let unknown = store.session_for_token("never-issued-token").await.unwrap();
     assert_eq!(unknown, None);
 
     sqlx::query("UPDATE query_api_tokens SET revoked_at = now() WHERE id = $1")
@@ -51,6 +53,18 @@ async fn resolves_a_stored_token_to_its_tenant_and_rejects_unknown_or_revoked_to
         .await
         .expect("failed to revoke token");
 
-    let revoked = store.tenant_for_token(&token).await.unwrap();
+    let revoked = store.session_for_token(&token).await.unwrap();
     assert_eq!(revoked, None, "a revoked token must no longer resolve to its tenant");
+}
+
+#[tokio::test]
+async fn mint_token_stores_the_role_it_was_minted_with() {
+    let pool = test_pool().await;
+    let store = PostgresTokenStore::new(pool.clone());
+    let tenant_id = Uuid::new_v4();
+
+    let token = store.mint_token(tenant_id, Role::Viewer, "test-session").await.unwrap();
+
+    let resolved = store.session_for_token(&token).await.unwrap();
+    assert_eq!(resolved, Some((tenant_id, Role::Viewer)));
 }

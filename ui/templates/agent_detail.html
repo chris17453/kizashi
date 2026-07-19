@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block content %}
+{% if let Some(a) = agent %}
+<h1>{{ a.name }}</h1>
+<p class="muted">{{ a.connector_type }} &middot; {% if a.enabled %}enabled{% else %}disabled{% endif %}</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+<div class="section-title">Recent records</div>
+<table>
+  <thead>
+    <tr><th>Record ID</th><th>Source Type</th><th>Ingested At</th><th>Normalized</th></tr>
+  </thead>
+  <tbody>
+    {% for record in records %}
+    <tr>
+      <td>{{ record.id }}</td>
+      <td>{{ record.source_type }}</td>
+      <td>{{ record.ingested_at }}</td>
+      <td class="status-{% if record.is_normalized() %}up{% else %}down{% endif %}">
+        {% if record.is_normalized() %}yes{% else %}no{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<h1>Agent not found</h1>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% endif %}
+{% endblock %}

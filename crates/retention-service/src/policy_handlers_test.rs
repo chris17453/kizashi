@@ -50,7 +50,7 @@ async fn send(
     let mut req =
         Request::builder().method(method).uri(uri).header("content-type", "application/json");
     if let Some(tenant_id) = tenant_header {
-        req = req.header("x-tenant-id", tenant_id.to_string());
+        req = req.header("x-tenant-id", tenant_id.to_string()).header("x-role", "admin");
     }
     let body = body.map(|b| Body::from(b.to_string())).unwrap_or(Body::empty());
     app.oneshot(req.body(body).unwrap()).await.unwrap()
@@ -98,6 +98,65 @@ async fn create_policy_requires_tenant_header() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn create_policy_requires_role_header() {
+    let tenant_id = Uuid::new_v4();
+    let policy = sample_policy(tenant_id);
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/retention-policies")
+                .header("content-type", "application/json")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::from(serde_json::to_value(&policy).unwrap().to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn create_policy_rejects_a_viewer_role() {
+    let tenant_id = Uuid::new_v4();
+    let policy = sample_policy(tenant_id);
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/retention-policies")
+                .header("content-type", "application/json")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "viewer")
+                .body(Body::from(serde_json::to_value(&policy).unwrap().to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn create_policy_allows_an_operator_role() {
+    let tenant_id = Uuid::new_v4();
+    let policy = sample_policy(tenant_id);
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/retention-policies")
+                .header("content-type", "application/json")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "operator")
+                .body(Body::from(serde_json::to_value(&policy).unwrap().to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
 }
 
 #[tokio::test]

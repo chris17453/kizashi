@@ -1,0 +1,50 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Record Journey</h1>
+<p class="muted">Traces this record through the pipeline: what it produced, and what happened
+because of it.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if let Some(record) = record %}
+<div class="journey">
+  <div class="journey-node journey-record">
+    <div class="journey-node-label">Raw Record</div>
+    <div class="journey-node-title"><a href="/data/{{ record.id }}">{{ record.id }}</a></div>
+    <div class="journey-node-sub">{{ record.connector_id }} &middot; {{ record.source_type }}</div>
+  </div>
+
+  {% if !event_links.is_empty() %}
+  <div class="journey-connector"></div>
+  <div class="journey-branches">
+    {% for link in event_links %}
+    <div class="journey-branch">
+      <div class="journey-node">
+        <div class="journey-node-label">Event</div>
+        <div class="journey-node-title">{{ link.event.event_type }}</div>
+        <div class="journey-node-sub">{{ link.event.group_key }} &middot; {{ link.event.status }}</div>
+      </div>
+      {% if !link.executions.is_empty() %}
+      <div class="journey-connector"></div>
+      <div class="journey-executions">
+        {% for exec in link.executions %}
+        <div class="journey-execution">
+          <span class="exec-type">{{ exec.action_type }}</span>
+          <span class="status-{% if exec.status == "sent" %}up{% else %}down{% endif %}">{{ exec.status }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="journey-empty">No actions executed yet</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="journey-connector"></div>
+  <p class="journey-empty">This record hasn't contributed to any events yet.</p>
+  {% endif %}
+</div>
+{% else %}
+<p class="muted">Record not found.</p>
+{% endif %}
+{% endblock %}

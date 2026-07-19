@@ -18,6 +18,7 @@ pub enum AuditLogError {
 pub enum ChangeType {
     Created,
     Updated,
+    Deleted,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]

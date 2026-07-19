@@ -21,6 +21,7 @@ fn event_with_trigger(trigger_id: Uuid) -> Event {
         occurred_at: chrono::Utc::now(),
         created_at: chrono::Utc::now(),
         status: EventStatus::New,
+        record_ids: vec![],
     }
 }
 

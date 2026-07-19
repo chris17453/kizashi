@@ -50,6 +50,7 @@ async fn finds_a_user_scoped_to_tenant_and_username() {
         tenant_id,
         username: "alice".to_string(),
         password_hash: "hash".to_string(),
+        role: common::Role::Operator,
     };
     let repo = InMemoryLocalUserRepository::with_user(user.clone());
 
@@ -64,6 +65,7 @@ async fn does_not_find_the_same_username_in_a_different_tenant() {
         tenant_id: Uuid::new_v4(),
         username: "alice".to_string(),
         password_hash: "hash".to_string(),
+        role: common::Role::Viewer,
     };
     let repo = InMemoryLocalUserRepository::with_user(user);
 

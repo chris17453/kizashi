@@ -6,11 +6,13 @@ use crate::proxy_handler::GatewayState;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
+use common::Role;
 use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
 pub struct MintTokenRequest {
     pub tenant_id: Uuid,
+    pub role: Role,
     pub label: String,
 }
 
@@ -42,7 +44,7 @@ pub async fn mint_token(
         return error_response(StatusCode::UNAUTHORIZED, "invalid internal secret");
     }
 
-    match state.token_store.mint_token(req.tenant_id, &req.label).await {
+    match state.token_store.mint_token(req.tenant_id, req.role, &req.label).await {
         Ok(token) => (StatusCode::CREATED, Json(MintTokenResponse { token })).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }

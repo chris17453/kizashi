@@ -1,0 +1,14 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>{{ connector_type_label }} deploy script</h1>
+<p class="muted">Copy the option that fits how you want to run it. Nothing here was stored — copy it now.</p>
+
+<div class="section-title">Docker Compose (from this repo)</div>
+<pre class="panel" style="max-width:none; overflow-x:auto;">{{ docker_command }}</pre>
+
+<div class="section-title">Bash (build from source)</div>
+<pre class="panel" style="max-width:none; overflow-x:auto;">{{ bash_script }}</pre>
+
+<div class="section-title">PowerShell (build from source)</div>
+<pre class="panel" style="max-width:none; overflow-x:auto;">{{ powershell_script }}</pre>
+{% endblock %}

@@ -12,6 +12,17 @@ pub enum RepositoryError {
     Backend(String),
 }
 
+/// Per-connector aggregate derived from `raw_records` — this is how an Agent's live status
+/// (last run, volume) is computed. There is no separate "agent run" bookkeeping table; a
+/// connector's own ingested records are already the ground truth for whether/when it ran, so
+/// this reads that data rather than requiring connectors to self-report a heartbeat.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ConnectorStats {
+    pub connector_id: String,
+    pub record_count: i64,
+    pub last_ingested_at: chrono::DateTime<chrono::Utc>,
+}
+
 /// Persists RawRecords to the hot store (spec §5.1). Ingestion Service's only write path to
 /// Postgres — abstracted behind a trait so handler logic is unit-testable without a live DB,
 /// per CLAUDE.md §2's requirement that unit tests not require the docker-compose stack.
@@ -51,6 +62,59 @@ pub trait RawRecordRepository: Send + Sync {
         tenant_id: uuid::Uuid,
         record_id: uuid::Uuid,
     ) -> Result<bool, RepositoryError>;
+
+    /// Aggregates `raw_records` by `connector_id` for `tenant_id` — powers the Agent status
+    /// view (record count and last-ingested time per registered agent).
+    async fn stats_by_connector(
+        &self,
+        tenant_id: uuid::Uuid,
+    ) -> Result<Vec<ConnectorStats>, RepositoryError>;
+
+    /// Lists up to `limit` records for one `connector_id`/`tenant_id`, newest first — the
+    /// per-agent data drill-down view.
+    async fn list_by_connector(
+        &self,
+        tenant_id: uuid::Uuid,
+        connector_id: &str,
+        limit: i64,
+    ) -> Result<Vec<RawRecord>, RepositoryError>;
+
+    /// Fetches a single record, tenant-scoped — the Data Viewer's detail view.
+    async fn get_by_id(
+        &self,
+        tenant_id: uuid::Uuid,
+        record_id: uuid::Uuid,
+    ) -> Result<Option<RawRecord>, RepositoryError>;
+
+    /// The Data Viewer's search: every filter is optional and AND-ed together — connector,
+    /// source type, an ingested-at range, and a substring match against the raw payload's
+    /// text representation. Deliberately a plain `ILIKE` scan rather than a dedicated search
+    /// index (Elasticsearch, pg_trgm, tsvector): v1 scope is "find records that mention X,"
+    /// not sub-second full-text relevance ranking over a large corpus.
+    async fn search(
+        &self,
+        tenant_id: uuid::Uuid,
+        filter: &RecordSearchFilter,
+    ) -> Result<Vec<RawRecord>, RepositoryError>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RecordSearchFilter {
+    pub connector_id: Option<String>,
+    pub source_type: Option<common::SourceType>,
+    pub from: Option<chrono::DateTime<chrono::Utc>>,
+    pub to: Option<chrono::DateTime<chrono::Utc>>,
+    pub query: Option<String>,
+    /// Substring match against `raw_payload.subject` — meaningful for email-shaped records
+    /// (`common::EmailPayload`'s documented `raw_payload` shape), a no-op filter (matches
+    /// nothing) against any record whose payload has no `subject` field.
+    pub subject: Option<String>,
+    /// Substring match against `raw_payload.from` (the sender address).
+    pub email_from: Option<String>,
+    /// Substring match against any attachment's `filename` in `raw_payload.attachments`.
+    pub attachment_filename: Option<String>,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 pub struct PostgresRawRecordRepository {
@@ -139,6 +203,122 @@ impl RawRecordRepository for PostgresRawRecordRepository {
             .await
             .map_err(|e| RepositoryError::Backend(e.to_string()))?;
         Ok(result.rows_affected() > 0)
+    }
+
+    async fn stats_by_connector(
+        &self,
+        tenant_id: uuid::Uuid,
+    ) -> Result<Vec<ConnectorStats>, RepositoryError> {
+        let rows: Vec<(String, i64, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+            r#"
+            SELECT connector_id, COUNT(*), MAX(ingested_at)
+            FROM raw_records
+            WHERE tenant_id = $1
+            GROUP BY connector_id
+            "#,
+        )
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Backend(e.to_string()))?;
+        Ok(rows
+            .into_iter()
+            .map(|(connector_id, record_count, last_ingested_at)| ConnectorStats {
+                connector_id,
+                record_count,
+                last_ingested_at,
+            })
+            .collect())
+    }
+
+    async fn list_by_connector(
+        &self,
+        tenant_id: uuid::Uuid,
+        connector_id: &str,
+        limit: i64,
+    ) -> Result<Vec<RawRecord>, RepositoryError> {
+        let rows: Vec<RawRecordRow> = sqlx::query_as(
+            r#"
+            SELECT id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
+                   normalized_payload, tenant_id
+            FROM raw_records
+            WHERE tenant_id = $1 AND connector_id = $2
+            ORDER BY ingested_at DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(connector_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Backend(e.to_string()))?;
+        Ok(rows.into_iter().map(row_to_record).collect())
+    }
+
+    async fn get_by_id(
+        &self,
+        tenant_id: uuid::Uuid,
+        record_id: uuid::Uuid,
+    ) -> Result<Option<RawRecord>, RepositoryError> {
+        let row: Option<RawRecordRow> = sqlx::query_as(
+            r#"
+            SELECT id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
+                   normalized_payload, tenant_id
+            FROM raw_records
+            WHERE id = $1 AND tenant_id = $2
+            "#,
+        )
+        .bind(record_id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Backend(e.to_string()))?;
+        Ok(row.map(row_to_record))
+    }
+
+    async fn search(
+        &self,
+        tenant_id: uuid::Uuid,
+        filter: &RecordSearchFilter,
+    ) -> Result<Vec<RawRecord>, RepositoryError> {
+        let rows: Vec<RawRecordRow> = sqlx::query_as(
+            r#"
+            SELECT id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
+                   normalized_payload, tenant_id
+            FROM raw_records
+            WHERE tenant_id = $1
+              AND ($2::text IS NULL OR connector_id = $2)
+              AND ($3::jsonb IS NULL OR source_type = $3)
+              AND ($4::timestamptz IS NULL OR ingested_at >= $4)
+              AND ($5::timestamptz IS NULL OR ingested_at <= $5)
+              AND ($6::text IS NULL OR raw_payload::text ILIKE '%' || $6 || '%')
+              AND ($7::text IS NULL OR raw_payload->>'subject' ILIKE '%' || $7 || '%')
+              AND ($8::text IS NULL OR raw_payload->>'from' ILIKE '%' || $8 || '%')
+              AND ($9::text IS NULL OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements(COALESCE(raw_payload->'attachments', '[]'::jsonb)) AS a
+                    WHERE a->>'filename' ILIKE '%' || $9 || '%'
+              ))
+            ORDER BY ingested_at DESC
+            LIMIT $10
+            OFFSET $11
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(&filter.connector_id)
+        .bind(filter.source_type.map(sqlx::types::Json))
+        .bind(filter.from)
+        .bind(filter.to)
+        .bind(&filter.query)
+        .bind(&filter.subject)
+        .bind(&filter.email_from)
+        .bind(&filter.attachment_filename)
+        .bind(filter.limit)
+        .bind(filter.offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Backend(e.to_string()))?;
+        Ok(rows.into_iter().map(row_to_record).collect())
     }
 }
 

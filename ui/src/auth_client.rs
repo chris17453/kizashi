@@ -3,6 +3,7 @@
 pub(crate) mod auth_client_test;
 
 use async_trait::async_trait;
+use common::Role;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -21,10 +22,10 @@ pub enum AuthClientError {
 pub trait AuthClient: Send + Sync {
     async fn local_login(
         &self,
-        tenant_id: Uuid,
+        tenant_name: &str,
         username: &str,
         password: &str,
-    ) -> Result<String, AuthClientError>;
+    ) -> Result<(String, Uuid, Role), AuthClientError>;
 }
 
 pub struct HttpAuthClient {
@@ -41,20 +42,22 @@ impl HttpAuthClient {
 #[derive(serde::Deserialize)]
 struct LoginResponse {
     token: String,
+    tenant_id: Uuid,
+    role: Role,
 }
 
 #[async_trait]
 impl AuthClient for HttpAuthClient {
     async fn local_login(
         &self,
-        tenant_id: Uuid,
+        tenant_name: &str,
         username: &str,
         password: &str,
-    ) -> Result<String, AuthClientError> {
+    ) -> Result<(String, Uuid, Role), AuthClientError> {
         let response = self
             .client
             .post(format!("{}/v1/auth/local/login", self.auth_service_url))
-            .json(&serde_json::json!({"tenant_id": tenant_id, "username": username, "password": password}))
+            .json(&serde_json::json!({"tenant_name": tenant_name, "username": username, "password": password}))
             .send()
             .await
             .map_err(|e| AuthClientError::Unreachable(e.to_string()))?;
@@ -71,6 +74,6 @@ impl AuthClient for HttpAuthClient {
 
         let body: LoginResponse =
             response.json().await.map_err(|e| AuthClientError::Unreachable(e.to_string()))?;
-        Ok(body.token)
+        Ok((body.token, body.tenant_id, body.role))
     }
 }

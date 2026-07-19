@@ -43,7 +43,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      test: ["CMD", "wget", "--spider", "-q", "127.0.0.1:8123/ping"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -64,6 +64,250 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # --- Application services ---------------------------------------------------------------
+  # All thirteen services build from the one shared root Dockerfile (--build-arg BIN=<name>
+  # selects which binary), matching the port map and dependency order already established in
+  # scripts/run-local.sh (that script is the source of truth this file mirrors). Internal
+  # inter-service URLs use the compose network's service-name DNS, not localhost.
+
+  ingestion-service:
+    build: { context: ., args: { BIN: ingestion-service } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
+    ports: ["8082:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck: &healthz
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # RabbitMQ exchanges are declared by their *publisher* on startup; consumers only queue_bind,
+  # which requires the exchange to already exist — so normalization-service must wait on
+  # ingestion-service being healthy (not just RabbitMQ), and so on down the chain. This
+  # ordering constraint was only discovered by actually running the system
+  # (scripts/run-local.sh) and has no other source of truth.
+  normalization-service:
+    build: { context: ., args: { BIN: normalization-service } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
+      INGESTION_SERVICE_URL: http://ingestion-service:8080
+    ports: ["8085:8080"]
+    depends_on:
+      ingestion-service: { condition: service_healthy }
+    healthcheck: *healthz
+
+  analysis-service:
+    build: { context: ., args: { BIN: analysis-service } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
+      AZURE_AI_FOUNDRY_ENDPOINT: "${AZURE_AI_FOUNDRY_ENDPOINT:-}"
+      AZURE_AI_FOUNDRY_API_KEY: "${AZURE_AI_FOUNDRY_API_KEY:-}"
+    ports: ["8086:8080"]
+    depends_on:
+      normalization-service: { condition: service_healthy }
+    healthcheck: *healthz
+
+  trigger-engine:
+    build: { context: ., args: { BIN: trigger-engine } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
+      CLICKHOUSE_URL: http://kizashi:kizashi@clickhouse:8123
+    ports: ["8087:8080"]
+    depends_on:
+      analysis-service: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    healthcheck: *healthz
+
+  action-executor:
+    build: { context: ., args: { BIN: action-executor } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
+      TRIGGER_ENGINE_URL: http://trigger-engine:8080
+    ports: ["8088:8080"]
+    depends_on:
+      trigger-engine: { condition: service_healthy }
+    healthcheck: *healthz
+
+  dashboard-api:
+    build: { context: ., args: { BIN: dashboard-api } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      CLICKHOUSE_URL: http://kizashi:kizashi@clickhouse:8123
+    ports: ["8084:8080"]
+    depends_on:
+      clickhouse: { condition: service_healthy }
+    healthcheck: *healthz
+
+  config-admin-service:
+    build: { context: ., args: { BIN: config-admin-service } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
+    ports: ["8090:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck: *healthz
+
+  ingestion-gateway:
+    build: { context: ., args: { BIN: ingestion-gateway } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      INGESTION_SERVICE_URL: http://ingestion-service:8080
+      CONFIG_ADMIN_SERVICE_URL: http://config-admin-service:8080
+    ports: ["8081:8080"]
+    depends_on:
+      ingestion-service: { condition: service_healthy }
+      config-admin-service: { condition: service_healthy }
+    healthcheck: *healthz
+
+  query-gateway:
+    build: { context: ., args: { BIN: query-gateway } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      DASHBOARD_API_URL: http://dashboard-api:8080
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
+    ports: ["8083:8080"]
+    depends_on:
+      dashboard-api: { condition: service_healthy }
+    healthcheck: *healthz
+
+  retention-service:
+    build: { context: ., args: { BIN: retention-service } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      INGESTION_SERVICE_URL: http://ingestion-service:8080
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+      S3_ENDPOINT_URL: http://minio:9000
+      AWS_S3_BUCKET: "${AWS_S3_BUCKET:-kizashi-archive}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-kizashi}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env, see .env.example}"
+    ports: ["8091:8080"]
+    depends_on:
+      ingestion-service: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    healthcheck: *healthz
+
+  auth-service:
+    build: { context: ., args: { BIN: auth-service } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      QUERY_GATEWAY_URL: http://query-gateway:8080
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
+      ENTRA_TENANT_ID: "${ENTRA_TENANT_ID:-}"
+      ENTRA_CLIENT_ID: "${ENTRA_CLIENT_ID:-}"
+      ENTRA_CLIENT_SECRET: "${ENTRA_CLIENT_SECRET:-}"
+      ENTRA_REDIRECT_URL: "${ENTRA_REDIRECT_URL:-}"
+    ports: ["8089:8080"]
+    depends_on:
+      query-gateway: { condition: service_healthy }
+    healthcheck: *healthz
+
+  observability:
+    build: { context: ., args: { BIN: observability } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      RABBITMQ_MANAGEMENT_URL: http://kizashi:kizashi@rabbitmq:15672
+      SERVICE_REGISTRY: "ingestion-gateway=http://ingestion-gateway:8080,ingestion-service=http://ingestion-service:8080,query-gateway=http://query-gateway:8080,dashboard-api=http://dashboard-api:8080,normalization-service=http://normalization-service:8080,analysis-service=http://analysis-service:8080,trigger-engine=http://trigger-engine:8080,action-executor=http://action-executor:8080,auth-service=http://auth-service:8080,config-admin-service=http://config-admin-service:8080,retention-service=http://retention-service:8080"
+    ports: ["8092:8080"]
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    healthcheck: *healthz
+
+  kizashi-ui:
+    build: { context: ., args: { BIN: kizashi-ui } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      AUTH_SERVICE_URL: http://auth-service:8080
+      QUERY_GATEWAY_URL: http://query-gateway:8080
+      CONFIG_ADMIN_SERVICE_URL: http://config-admin-service:8080
+      OBSERVABILITY_URL: http://observability:8080
+      INGESTION_SERVICE_URL: http://ingestion-service:8080
+      INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
+      INGESTION_GATEWAY_PUBLIC_URL: "${INGESTION_GATEWAY_PUBLIC_URL:-http://localhost:8081}"
+      ACTION_EXECUTOR_URL: http://action-executor:8080
+    ports: ["8093:8080"]
+    depends_on:
+      auth-service: { condition: service_healthy }
+      query-gateway: { condition: service_healthy }
+      config-admin-service: { condition: service_healthy }
+      observability: { condition: service_healthy }
+      ingestion-service: { condition: service_healthy }
+      ingestion-gateway: { condition: service_healthy }
+      action-executor: { condition: service_healthy }
+    healthcheck: *healthz
+
+  # --- Connectors --------------------------------------------------------------------------
+  # One-shot CronJob-shaped pollers (spec §3), not long-running services — the `connectors`
+  # profile keeps them out of a default `docker compose up`. Run one explicitly with real
+  # per-tenant credentials, e.g.:
+  #   docker compose run --rm -e TENANT_ID=... -e GENERIC_SOURCE_URL=... \
+  #     -e INGESTION_GATEWAY_API_KEY=... generic-connector
+  generic-connector:
+    build: { context: ., args: { BIN: connector-generic } }
+    profiles: ["connectors"]
+    environment:
+      INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
+    depends_on:
+      ingestion-gateway: { condition: service_healthy }
+
+  sql-connector:
+    build: { context: ., args: { BIN: connector-sql } }
+    profiles: ["connectors"]
+    environment:
+      INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
+    depends_on:
+      ingestion-gateway: { condition: service_healthy }
+
+  zendesk-connector:
+    build: { context: ., args: { BIN: connector-zendesk } }
+    profiles: ["connectors"]
+    environment:
+      INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
+    depends_on:
+      ingestion-gateway: { condition: service_healthy }
+
+  graph-mail-connector:
+    build: { context: ., args: { BIN: connector-graph-mail } }
+    profiles: ["connectors"]
+    environment:
+      INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
+    depends_on:
+      ingestion-gateway: { condition: service_healthy }
+
+  graph-teams-connector:
+    build: { context: ., args: { BIN: connector-graph-teams } }
+    profiles: ["connectors"]
+    environment:
+      INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
+    depends_on:
+      ingestion-gateway: { condition: service_healthy }
+
+  fabric-connector:
+    build: { context: ., args: { BIN: connector-fabric } }
+    profiles: ["connectors"]
+    environment:
+      INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
+    depends_on:
+      ingestion-gateway: { condition: service_healthy }
 
 volumes:
   postgres_data:

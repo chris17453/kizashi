@@ -36,6 +36,8 @@ pub trait TriggerDefinitionRepository: Send + Sync {
     async fn list(
         &self,
         tenant_id: Uuid,
+        limit: i64,
+        offset: i64,
     ) -> Result<Vec<TriggerDefinition>, TriggerDefinitionRepositoryError>;
 }
 
@@ -209,11 +211,15 @@ impl TriggerDefinitionRepository for PostgresTriggerDefinitionRepository {
     async fn list(
         &self,
         tenant_id: Uuid,
+        limit: i64,
+        offset: i64,
     ) -> Result<Vec<TriggerDefinition>, TriggerDefinitionRepositoryError> {
         let rows: Vec<TriggerRow> = sqlx::query_as(
-            "SELECT id, tenant_id, name, event_type_match, condition, window_seconds, actions, enabled FROM trigger_definitions WHERE tenant_id = $1 ORDER BY name",
+            "SELECT id, tenant_id, name, event_type_match, condition, window_seconds, actions, enabled FROM trigger_definitions WHERE tenant_id = $1 ORDER BY name LIMIT $2 OFFSET $3",
         )
         .bind(tenant_id)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| TriggerDefinitionRepositoryError::Backend(e.to_string()))?;

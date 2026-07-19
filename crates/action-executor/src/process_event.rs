@@ -59,6 +59,7 @@ pub async fn process_event(deps: &ActionDeps, event: &Event) -> Result<usize, Pr
 
         let execution = ActionExecution {
             id: Uuid::new_v4(),
+            tenant_id: event.tenant_id,
             trigger_id,
             event_id: event.id,
             action_type: action.action_type,

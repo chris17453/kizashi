@@ -54,6 +54,38 @@ async fn create_policy_writes_a_created_audit_row_in_the_same_transaction() {
 }
 
 #[tokio::test]
+async fn retention_audit_log_rejects_update_at_the_database_level() {
+    let pool = test_pool().await;
+    let repo = PostgresRetentionPolicyRepository::new(pool.clone());
+    let tenant_id = Uuid::new_v4();
+    let policy = sample_policy(tenant_id);
+    repo.create(policy.clone()).await.unwrap();
+
+    let err = sqlx::query("UPDATE retention_audit_log SET actor = 'tampered' WHERE entity_id = $1")
+        .bind(policy.id)
+        .execute(&pool)
+        .await
+        .expect_err("update should be rejected by the immutability trigger");
+    assert!(err.to_string().contains("append-only"));
+}
+
+#[tokio::test]
+async fn retention_audit_log_rejects_delete_at_the_database_level() {
+    let pool = test_pool().await;
+    let repo = PostgresRetentionPolicyRepository::new(pool.clone());
+    let tenant_id = Uuid::new_v4();
+    let policy = sample_policy(tenant_id);
+    repo.create(policy.clone()).await.unwrap();
+
+    let err = sqlx::query("DELETE FROM retention_audit_log WHERE entity_id = $1")
+        .bind(policy.id)
+        .execute(&pool)
+        .await
+        .expect_err("delete should be rejected by the immutability trigger");
+    assert!(err.to_string().contains("append-only"));
+}
+
+#[tokio::test]
 async fn update_policy_writes_an_updated_audit_row_with_before_and_after() {
     let pool = test_pool().await;
     let repo = PostgresRetentionPolicyRepository::new(pool.clone());

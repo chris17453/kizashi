@@ -26,6 +26,7 @@ async fn logout_deletes_the_session_and_expires_the_cookie() {
             bearer_token: "tok".to_string(),
             tenant_id: Uuid::new_v4(),
             username: "alice".to_string(),
+            role: common::Role::Admin,
         })
         .await;
     let session_store = Arc::new(session_store);
@@ -37,6 +38,14 @@ async fn logout_deletes_the_session_and_expires_the_cookie() {
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
+        agents_client: Arc::new(crate::agents_client::agents_client_test::InMemoryAgentsClient::default()),
+        api_keys_client: Arc::new(crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default()),
+        backlog_client: Arc::new(crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default()),
+        execution_client: std::sync::Arc::new(crate::execution_client::execution_client_test::InMemoryExecutionClient::default()),
+        stats_client: Arc::new(
+            crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
+        ),
+        ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
 
     let response = router(state)

@@ -6,6 +6,7 @@ use crate::normalization_mapping_repository::normalization_mapping_repository_te
 use crate::trigger_definition_repository::trigger_definition_repository_test::{
     FailingTriggerDefinitionRepository, InMemoryTriggerDefinitionRepository,
 };
+use crate::trigger_publisher::trigger_publisher_test::InMemoryTriggerPublisher;
 use axum::body::Body;
 use axum::http::Request;
 use axum::routing::{get, post};
@@ -49,6 +50,7 @@ fn default_state() -> AdminState {
         trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
     }
 }
 
@@ -62,7 +64,7 @@ async fn send(
     let mut req =
         Request::builder().method(method).uri(uri).header("content-type", "application/json");
     if let Some(tenant_id) = tenant_header {
-        req = req.header("x-tenant-id", tenant_id.to_string());
+        req = req.header("x-tenant-id", tenant_id.to_string()).header("x-role", "admin");
     }
     let body = body.map(|b| Body::from(b.to_string())).unwrap_or(Body::empty());
     app.oneshot(req.body(body).unwrap()).await.unwrap()
@@ -113,6 +115,85 @@ async fn create_trigger_requires_tenant_header() {
 }
 
 #[tokio::test]
+async fn create_trigger_requires_role_header() {
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id);
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/trigger-definitions")
+                .header("content-type", "application/json")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::from(serde_json::to_value(&trigger).unwrap().to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn create_trigger_rejects_a_viewer_role() {
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id);
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/trigger-definitions")
+                .header("content-type", "application/json")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "viewer")
+                .body(Body::from(serde_json::to_value(&trigger).unwrap().to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn create_trigger_allows_an_operator_role() {
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id);
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/trigger-definitions")
+                .header("content-type", "application/json")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "operator")
+                .body(Body::from(serde_json::to_value(&trigger).unwrap().to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn create_mapping_rejects_a_viewer_role() {
+    let tenant_id = Uuid::new_v4();
+    let mapping = sample_mapping(tenant_id);
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/normalization-mappings")
+                .header("content-type", "application/json")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "viewer")
+                .body(Body::from(serde_json::to_value(&mapping).unwrap().to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn get_trigger_returns_404_for_unknown_id() {
     let tenant_id = Uuid::new_v4();
     let response = send(
@@ -147,6 +228,7 @@ async fn list_triggers_returns_backend_error_as_500() {
         trigger_repository: Arc::new(FailingTriggerDefinitionRepository),
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
     };
     let response = send(
         router(state),
@@ -195,7 +277,9 @@ async fn full_trigger_crud_round_trip() {
     .await;
     assert_eq!(list.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(list.into_body(), usize::MAX).await.unwrap();
-    let triggers: Vec<TriggerDefinition> = serde_json::from_slice(&bytes).unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let triggers: Vec<TriggerDefinition> =
+        serde_json::from_value(body["triggers"].clone()).unwrap();
     assert_eq!(triggers.len(), 1);
 
     let mut updated = trigger.clone();
@@ -260,6 +344,7 @@ async fn list_mappings_returns_backend_error_as_500() {
         trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
         mapping_repository: Arc::new(FailingNormalizationMappingRepository),
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
     };
     let response = send(
         router(state),
@@ -331,6 +416,7 @@ async fn get_audit_log_returns_entries_scoped_to_tenant_and_entity() {
         trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(reader),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
     };
 
     let response =
@@ -348,6 +434,7 @@ async fn get_audit_log_returns_500_on_backend_failure() {
         trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(FailingAuditLogReader),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
     };
 
     let response = send(

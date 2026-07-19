@@ -30,11 +30,12 @@ impl EventQueryRepository for InMemoryEventQueryRepository {
             .filter(|e| filter.status.is_none_or(|s| e.status == s))
             .filter(|e| filter.since.is_none_or(|s| e.occurred_at >= s))
             .filter(|e| filter.until.is_none_or(|u| e.occurred_at <= u))
+            .filter(|e| filter.record_id.is_none_or(|r| e.record_ids.contains(&r)))
             .cloned()
             .collect();
         matching.sort_by_key(|e| std::cmp::Reverse(e.occurred_at));
         let limit = filter.limit.clamp(1, 1000) as usize;
-        matching.truncate(limit);
+        let matching = matching.into_iter().skip(filter.offset as usize).take(limit).collect();
         Ok(matching)
     }
 
@@ -84,6 +85,45 @@ async fn list_events_is_scoped_to_tenant() {
         .await
         .unwrap();
     assert_eq!(found.len(), 1);
+}
+
+#[tokio::test]
+async fn list_events_filters_by_record_id() {
+    let tenant_id = Uuid::new_v4();
+    let record_id = Uuid::new_v4();
+    let mut matching = sample_event(tenant_id);
+    matching.record_ids = vec![record_id];
+    let non_matching = sample_event(tenant_id);
+    let repo = InMemoryEventQueryRepository::with_events(vec![matching.clone(), non_matching]);
+
+    let found = repo
+        .list_events(
+            tenant_id,
+            &EventFilter { record_id: Some(record_id), limit: 10, ..Default::default() },
+        )
+        .await
+        .unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id, matching.id);
+}
+
+#[tokio::test]
+async fn list_events_offset_skips_earlier_pages() {
+    let tenant_id = Uuid::new_v4();
+    let now = Utc::now();
+    let mut events = Vec::new();
+    for days_ago in 0..3 {
+        let mut e = sample_event(tenant_id);
+        e.occurred_at = now - chrono::Duration::days(days_ago);
+        events.push(e);
+    }
+    let repo = InMemoryEventQueryRepository::with_events(events.clone());
+
+    let found = repo
+        .list_events(tenant_id, &EventFilter { limit: 1, offset: 1, ..Default::default() })
+        .await
+        .unwrap();
+    assert_eq!(found, vec![events[1].clone()]);
 }
 
 #[tokio::test]

@@ -3,6 +3,7 @@
 pub(crate) mod session_client_test;
 
 use async_trait::async_trait;
+use common::Role;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -16,12 +17,14 @@ pub enum SessionClientError {
 
 /// Mints a session token for a successfully-authenticated user by calling Query Gateway's
 /// internal API (ADR-0008/0009) — Auth Service never writes into `query_api_tokens` directly
-/// (spec §2 principle 1).
+/// (spec §2 principle 1). `role` (ADR-0016) is stored alongside the token so later resolution
+/// of the token recovers both the tenant and the caller's permission level.
 #[async_trait]
 pub trait SessionClient: Send + Sync {
     async fn mint_session(
         &self,
         tenant_id: Uuid,
+        role: Role,
         label: &str,
     ) -> Result<String, SessionClientError>;
 }
@@ -52,13 +55,14 @@ impl SessionClient for HttpSessionClient {
     async fn mint_session(
         &self,
         tenant_id: Uuid,
+        role: Role,
         label: &str,
     ) -> Result<String, SessionClientError> {
         let response = self
             .client
             .post(format!("{}/internal/tokens", self.query_gateway_url))
             .header("x-internal-secret", &self.internal_secret)
-            .json(&serde_json::json!({"tenant_id": tenant_id, "label": label}))
+            .json(&serde_json::json!({"tenant_id": tenant_id, "role": role, "label": label}))
             .send()
             .await
             .map_err(|e| SessionClientError::Unreachable(e.to_string()))?;

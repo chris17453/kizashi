@@ -4,28 +4,34 @@
 //! workspace-wide, so keep it schema-stable and additive where possible.
 
 pub mod action_execution;
+pub mod agent;
 pub mod analyzed_record;
 pub mod bus;
 pub mod connector;
 pub mod db;
+pub mod email_payload;
 pub mod event;
 pub mod event_type_definition;
 pub mod normalization_mapping;
 pub mod raw_record;
+pub mod role;
 pub mod trigger_definition;
 
 pub use action_execution::{ActionExecution, ActionExecutionStatus};
+pub use agent::Agent;
 pub use analyzed_record::AnalyzedRecord;
 pub use bus::{
     EVENT_CREATED_EXCHANGE, RECORD_ANALYZED_EXCHANGE, RECORD_INGESTED_EXCHANGE,
-    RECORD_NORMALIZED_EXCHANGE,
+    RECORD_NORMALIZED_EXCHANGE, TRIGGER_CHANGED_EXCHANGE,
 };
 pub use connector::{Connector, ConnectorError};
 pub use db::{connect_with_schema, ConnectError};
+pub use email_payload::{EmailAttachment, EmailPayload};
 pub use event::{Event, EventStatus};
 pub use event_type_definition::EventTypeDefinition;
 pub use normalization_mapping::NormalizationMapping;
 pub use raw_record::{RawRecord, SourceType};
+pub use role::{ParseRoleError, Role};
 pub use trigger_definition::{
     ActionRef, ActionType, ThresholdDirection, TriggerCondition, TriggerDefinition,
 };

@@ -57,8 +57,36 @@ async fn list_events_returns_events_scoped_to_the_tenant_header() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let events: Vec<Event> = serde_json::from_slice(&bytes).unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let events: Vec<Event> = serde_json::from_value(body["events"].clone()).unwrap();
     assert_eq!(events, vec![event]);
+    assert_eq!(body["has_more"], serde_json::json!(false));
+}
+
+#[tokio::test]
+async fn list_events_reports_has_more_when_results_exceed_the_page_size() {
+    let tenant_id = Uuid::new_v4();
+    let events: Vec<Event> = (0..3).map(|_| sample_event(tenant_id)).collect();
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::with_events(events)),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/events?limit=2")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["events"].as_array().unwrap().len(), 2);
+    assert_eq!(body["has_more"], serde_json::json!(true));
 }
 
 #[tokio::test]

@@ -1,6 +1,6 @@
 use action_executor::{
-    health_router, process_event, ActionDeps, HttpActionDispatcher, HttpTriggerClient,
-    PostgresExecutionRepository, EVENT_CREATED_EXCHANGE,
+    execution_router, health_router, process_event, ActionDeps, ExecutionState,
+    HttpActionDispatcher, HttpTriggerClient, PostgresExecutionRepository, EVENT_CREATED_EXCHANGE,
 };
 use futures_util::StreamExt;
 use lapin::options::{
@@ -38,13 +38,14 @@ async fn main() {
             .expect("failed to connect to rabbitmq");
     let consume_channel = connection.create_channel().await.expect("failed to open channel");
 
+    let execution_repository = Arc::new(PostgresExecutionRepository::new(pool));
     let deps = ActionDeps {
         trigger_client: Arc::new(HttpTriggerClient::new(
             reqwest::Client::new(),
             trigger_engine_url,
         )),
         dispatcher: Arc::new(HttpActionDispatcher::new(reqwest::Client::new())),
-        execution_repository: Arc::new(PostgresExecutionRepository::new(pool)),
+        execution_repository: execution_repository.clone(),
     };
 
     consume_channel
@@ -67,9 +68,11 @@ async fn main() {
         .expect("failed to bind queue");
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
-    tracing::info!(%addr, "action-executor healthz listening");
+    tracing::info!(%addr, "action-executor http listening");
+    let http_router =
+        health_router().merge(execution_router(ExecutionState { execution_repository }));
     tokio::spawn(async move {
-        axum::serve(listener, health_router()).await.expect("healthz server error");
+        axum::serve(listener, http_router).await.expect("http server error");
     });
 
     let mut consumer = consume_channel

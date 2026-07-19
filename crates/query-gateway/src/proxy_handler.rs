@@ -32,7 +32,9 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
 /// Forwards a read request to Dashboard/Query API after resolving the caller's bearer token to
 /// a tenant (spec §8: "gateway layer: auth context scopes all downstream queries"). The
 /// downstream service trusts `X-Tenant-Id` precisely because only this gateway is allowed to
-/// set it — Dashboard API is never reachable directly by a client.
+/// set it — Dashboard API is never reachable directly by a client. `role` is resolved but not
+/// enforced here — RBAC v1 (ADR-0016) scopes read-path gating out, since every authenticated
+/// user can already read within their own tenant and the gap is smaller than the write-path one.
 pub async fn proxy_get(
     State(state): State<GatewayState>,
     headers: HeaderMap,
@@ -43,8 +45,8 @@ pub async fn proxy_get(
         _ => return error_response(StatusCode::UNAUTHORIZED, "missing Bearer token"),
     };
 
-    let tenant_id = match state.token_store.tenant_for_token(token).await {
-        Ok(Some(tenant_id)) => tenant_id,
+    let tenant_id = match state.token_store.session_for_token(token).await {
+        Ok(Some((tenant_id, _role))) => tenant_id,
         Ok(None) => return error_response(StatusCode::UNAUTHORIZED, "invalid token"),
         Err(e) => {
             tracing::error!(error = %e, "token lookup failed");

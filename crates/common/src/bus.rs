@@ -6,3 +6,4 @@ pub const RECORD_INGESTED_EXCHANGE: &str = "record.ingested";
 pub const RECORD_NORMALIZED_EXCHANGE: &str = "record.normalized";
 pub const RECORD_ANALYZED_EXCHANGE: &str = "record.analyzed";
 pub const EVENT_CREATED_EXCHANGE: &str = "event.created";
+pub const TRIGGER_CHANGED_EXCHANGE: &str = "trigger.changed";
