@@ -79,13 +79,18 @@ so today's demo flow is unaffected by this change.
   column-plus-checks change, not a new concept. The pattern (role column → mint_session param →
   token-store column → forwarded header → handler check) is now proven and mechanical to repeat
   for `retention-service`/`action-executor`/`ingestion-gateway` in follow-up PRs.
-- Harder: until those follow-ups land, `retention-service` and `ingestion-gateway`'s API key
-  endpoints remain unenforced — a `Viewer` can still create/revoke API keys or edit retention
-  policies today. This is a real, acknowledged gap, not silently glossed over; it's the direct
-  cost of shipping incrementally rather than blocking this PR on covering every write path at
-  once. `query-gateway`'s read path (`proxy_get` → Dashboard API) is also not role-gated in v1 —
-  reads are lower-risk than writes and every authenticated user can already read within their own
-  tenant, so this is a smaller gap than the write-path one.
-- Reassigning another user's role has no UI yet — for now that's a direct SQL update against
-  `auth_service.local_users`, same as API keys were before Phase 1c's UI shipped. Tracked as
-  explicit follow-up, not a permanent gap.
+- Harder (at the time this ADR was written): until follow-up PRs landed, `retention-service` and
+  `ingestion-gateway`'s API key endpoints remained unenforced — a `Viewer` could create/revoke
+  API keys or edit retention policies. This is a real, acknowledged gap, not silently glossed
+  over; it's the direct cost of shipping incrementally rather than blocking this PR on covering
+  every write path at once. **Update:** this follow-up has since landed — `retention-service`'s
+  `policy_handlers.rs` and `ingestion-gateway`'s `api_key_handlers.rs` both call `require_
+  operator` on every write path today (fix/0003, and ingestion-gateway's own follow-up). `query-
+  gateway`'s read path (`proxy_get` → Dashboard API) is still not role-gated in v1 — reads are
+  lower-risk than writes and every authenticated user can already read within their own tenant,
+  so this remains a smaller, still-open gap than the write-path one was.
+- Reassigning another user's role had no UI at the time this ADR was written — that was a direct
+  SQL update against `auth_service.local_users`, same as API keys were before Phase 1c's UI
+  shipped. **Update:** this follow-up has since landed too — see the `/users` page
+  (feature/0030-user-management-role-assignment, ADR-0016 follow-up) and its last-admin
+  protection (feature/0031-last-admin-protection).
