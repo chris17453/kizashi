@@ -19,6 +19,7 @@ fn router(state: AppState) -> Router {
     Router::new()
         .route("/agents", get(get_agents).post(post_agents))
         .route("/agents/:id/delete", post(post_delete_agent))
+        .route("/agents/:id/toggle", post(post_toggle_agent))
         .with_state(state)
 }
 
@@ -180,4 +181,51 @@ async fn post_delete_agent_removes_it_and_redirects() {
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert!(agents_client.agents.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn post_toggle_agent_flips_enabled_and_redirects() {
+    let (mut state, session_id, tenant_id) = state_with_session().await;
+    let agents_client = Arc::new(InMemoryAgentsClient::default());
+    let agent = agents_client
+        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
+        .await
+        .unwrap();
+    assert!(agent.enabled);
+    state.agents_client = agents_client.clone();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/agents/{}/toggle", agent.id))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let stored = agents_client.agents.lock().unwrap();
+    assert!(!stored.iter().find(|a| a.id == agent.id).unwrap().enabled);
+}
+
+#[tokio::test]
+async fn post_toggle_agent_redirects_to_login_when_not_signed_in() {
+    let (state, _session_id, _tenant_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/agents/{}/toggle", Uuid::new_v4()))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers().get("location").unwrap(), "/login");
 }

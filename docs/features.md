@@ -916,3 +916,41 @@ Entry format:
   coverage (85% floor), `cargo audit` / `cargo deny check` clean, no new advisories.
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** [0015](../docs/adr/0015-console-ui-reverses-adr-0014-no-js-constraint-adds-client-side-js-for-charts-and-components.md)
+
+## [2026-07-18] feature/0014-docker-images — Enforce Agent enabled/disabled status at ingestion
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** `Agent.enabled` was stored since the registry shipped but never checked anywhere
+  — disabling an agent in the Console UI had zero effect on whether its data was accepted.
+  Closes that gap for real. Config/Admin Service gains `AgentRepository::find_by_name` and
+  `GET /v1/agents/by-name/:name`, the lookup Ingestion Gateway needs (agents are keyed by id,
+  but ingestion only ever has a `connector_id` string to check against). Ingestion Gateway
+  gains an `AgentStatusClient` and checks it on every `POST /v1/ingest`: a `connector_id` with
+  no matching registered `Agent` still ingests normally (permissive default — most connectors
+  today have no registered row at all, and this must never break them), a matching *enabled*
+  agent ingests normally, and a matching *disabled* agent is rejected with 403. A status-lookup
+  failure (Config/Admin Service down, network blip) also fails open — availability of the
+  ingest path matters more than this soft-enforcement check, so one dependency having a bad
+  moment must never take down ingestion for every connector. Console UI's Agents page gains an
+  actual Enable/Disable toggle button (previously there was no way to flip the flag at all
+  through the UI) and a status pill replacing the old plain yes/no text.
+- **Tests:** `cargo test -p config-admin-service --lib` — 40 passed (5 new:
+  `find_by_name`'s tenant-scoping and not-found cases, the `by-name` handler's 200/404). `cargo
+  test -p ingestion-gateway --lib` — 21 passed (7 new: `AgentStatusClient` against a real stub
+  server for enabled/disabled/404/unreachable, and the proxy handler's three enforcement
+  cases — disabled rejects, unregistered passes, lookup-failure fails open). `cargo test -p
+  kizashi-ui --lib` — 85 passed (3 new: `update_agent` against a real stub server, the toggle
+  handler flipping state and redirecting, and its login-required case). Beyond unit tests:
+  rebuilt and redeployed `ingestion-gateway`/`config-admin-service`/`kizashi-ui`, registered a
+  real agent through the live UI, ingested through the live `ingestion-gateway` while enabled
+  (201), disabled it through the UI's new toggle button, ingested again with the same
+  `connector_id` and got the real 403 with the exact expected error message, confirmed an
+  unrelated unregistered `connector_id` still ingests fine (permissive default holds), then
+  re-enabled and confirmed ingestion resumes (201) before cleaning up the test agent. Full
+  local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` clean, `cargo test --workspace --all-features` all green,
+  `cargo llvm-cov` 94.38% line coverage (85% floor), `cargo audit` / `cargo deny check` clean,
+  no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (closes a gap in the already-established Agent registry, not a new
+  architectural decision)

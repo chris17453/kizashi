@@ -156,3 +156,25 @@ pub async fn post_delete_agent(
     let _ = state.agents_client.delete_agent(session.tenant_id, id).await;
     Redirect::to("/agents").into_response()
 }
+
+/// POST /agents/:id/toggle — flips an agent's enabled/disabled status. This is the one place
+/// that flag actually does something: Ingestion Gateway checks it on every ingest and rejects
+/// a disabled agent's data (previously stored but never enforced anywhere).
+pub async fn post_toggle_agent(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+
+    if let Ok(agents) = state.agents_client.list_agents(session.tenant_id).await {
+        if let Some(mut agent) = agents.into_iter().find(|a| a.id == id) {
+            agent.enabled = !agent.enabled;
+            let _ = state.agents_client.update_agent(&agent).await;
+        }
+    }
+    Redirect::to("/agents").into_response()
+}

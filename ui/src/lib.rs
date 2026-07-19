@@ -47,7 +47,7 @@ pub use triggers_client::{
 
 pub use agent_detail_handler::get_agent_detail;
 pub use agent_script_handler::{get_generate_form, get_generate_select, post_generate_script};
-pub use agents_handler::{get_agents, post_agents, post_delete_agent};
+pub use agents_handler::{get_agents, post_agents, post_delete_agent, post_toggle_agent};
 pub use data_detail_handler::get_data_detail;
 pub use data_handler::get_data;
 pub use events_handler::get_events;
@@ -99,6 +99,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/agents/generate/script", axum::routing::post(post_generate_script))
         .route("/agents/:id", get(get_agent_detail))
         .route("/agents/:id/delete", axum::routing::post(post_delete_agent))
+        .route("/agents/:id/toggle", axum::routing::post(post_toggle_agent))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
         .route("/data/:id", get(get_data_detail))

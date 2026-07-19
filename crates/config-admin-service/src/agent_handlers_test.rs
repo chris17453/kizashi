@@ -11,6 +11,7 @@ use tower::ServiceExt;
 fn router(state: AgentState) -> Router {
     Router::new()
         .route("/v1/agents", post(create_agent).get(list_agents))
+        .route("/v1/agents/by-name/:name", get(get_agent_by_name))
         .route("/v1/agents/:id", get(get_agent).put(update_agent).delete(delete_agent))
         .with_state(state)
 }
@@ -132,4 +133,42 @@ async fn repository_failure_returns_500() {
         send(router(state), "GET", "/v1/agents".to_string(), Some(tenant_id), None).await;
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn get_agent_by_name_returns_the_matching_agent() {
+    let tenant_id = Uuid::new_v4();
+    let agent = sample_agent(tenant_id);
+    let state = AgentState {
+        agent_repository: Arc::new(InMemoryAgentRepository::with_agent(agent.clone())),
+    };
+
+    let response = send(
+        router(state),
+        "GET",
+        "/v1/agents/by-name/support-poller".to_string(),
+        Some(tenant_id),
+        None,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let found: Agent = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(found, agent);
+}
+
+#[tokio::test]
+async fn get_agent_by_name_returns_404_for_unknown_name() {
+    let tenant_id = Uuid::new_v4();
+    let response = send(
+        router(default_state()),
+        "GET",
+        "/v1/agents/by-name/nonexistent".to_string(),
+        Some(tenant_id),
+        None,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

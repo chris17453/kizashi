@@ -26,6 +26,15 @@ pub trait AgentRepository: Send + Sync {
     async fn get(&self, tenant_id: Uuid, id: Uuid) -> Result<Option<Agent>, AgentRepositoryError>;
     async fn list(&self, tenant_id: Uuid) -> Result<Vec<Agent>, AgentRepositoryError>;
     async fn delete(&self, tenant_id: Uuid, id: Uuid) -> Result<(), AgentRepositoryError>;
+
+    /// Looks up an agent by its registered `name` — the join key Ingestion Gateway uses to
+    /// enforce enabled/disabled status at ingest time (an agent's `name` is what a deployed
+    /// connector's own `CONNECTOR_ID` is set to, per `AgentsClient`'s documented convention).
+    async fn find_by_name(
+        &self,
+        tenant_id: Uuid,
+        name: &str,
+    ) -> Result<Option<Agent>, AgentRepositoryError>;
 }
 
 pub struct PostgresAgentRepository {
@@ -204,5 +213,21 @@ impl AgentRepository for PostgresAgentRepository {
 
         tx.commit().await.map_err(|e| AgentRepositoryError::Backend(e.to_string()))?;
         Ok(())
+    }
+
+    async fn find_by_name(
+        &self,
+        tenant_id: Uuid,
+        name: &str,
+    ) -> Result<Option<Agent>, AgentRepositoryError> {
+        let row: Option<AgentRow> = sqlx::query_as(
+            "SELECT id, tenant_id, connector_type, name, config, enabled FROM agents WHERE tenant_id = $1 AND name = $2",
+        )
+        .bind(tenant_id)
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AgentRepositoryError::Backend(e.to_string()))?;
+        Ok(row.map(row_to_agent))
     }
 }

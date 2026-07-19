@@ -32,6 +32,10 @@ pub trait AgentsClient: Send + Sync {
         config: serde_json::Value,
     ) -> Result<Agent, AgentsClientError>;
     async fn delete_agent(&self, tenant_id: Uuid, id: Uuid) -> Result<(), AgentsClientError>;
+
+    /// Persists `agent` as-is via `PUT /v1/agents/:id` — used for the enable/disable toggle
+    /// (flip `agent.enabled`, then call this with the rest of the fields unchanged).
+    async fn update_agent(&self, agent: &Agent) -> Result<Agent, AgentsClientError>;
 }
 
 pub struct HttpAgentsClient {
@@ -98,5 +102,21 @@ impl AgentsClient for HttpAgentsClient {
             return Err(AgentsClientError::Rejected(response.status().as_u16()));
         }
         Ok(())
+    }
+
+    async fn update_agent(&self, agent: &Agent) -> Result<Agent, AgentsClientError> {
+        let response = self
+            .client
+            .put(format!("{}/v1/agents/{}", self.config_admin_service_url, agent.id))
+            .header("x-tenant-id", agent.tenant_id.to_string())
+            .json(agent)
+            .send()
+            .await
+            .map_err(|e| AgentsClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(AgentsClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| AgentsClientError::Unreachable(e.to_string()))
     }
 }

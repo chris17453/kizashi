@@ -49,8 +49,15 @@
       <td class="muted">0</td>
       <td class="muted">—</td>
       {% endif %}
-      <td>{% if agent.enabled %}yes{% else %}no{% endif %}</td>
       <td>
+        <span class="pill {% if agent.enabled %}pill-up{% else %}pill-muted{% endif %}">
+          {% if agent.enabled %}enabled{% else %}disabled{% endif %}
+        </span>
+      </td>
+      <td>
+        <form class="inline" method="post" action="/agents/{{ agent.id }}/toggle" style="display:inline">
+          <button type="submit" class="btn">{% if agent.enabled %}Disable{% else %}Enable{% endif %}</button>
+        </form>
         <form class="inline" method="post" action="/agents/{{ agent.id }}/delete" style="display:inline">
           <button type="submit" class="btn-danger">Remove</button>
         </form>

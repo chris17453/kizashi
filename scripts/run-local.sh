@@ -115,7 +115,8 @@ wait_healthy config-admin-service "http://localhost:$CONFIG_ADMIN_SERVICE_PORT/h
 
 start ingestion-gateway ingestion-gateway \
   BIND_ADDR="0.0.0.0:$INGESTION_GATEWAY_PORT" DATABASE_URL="$DATABASE_URL" \
-  INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT"
+  INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT" \
+  CONFIG_ADMIN_SERVICE_URL="http://localhost:$CONFIG_ADMIN_SERVICE_PORT"
 wait_healthy ingestion-gateway "http://localhost:$INGESTION_GATEWAY_PORT/healthz"
 
 start query-gateway query-gateway \

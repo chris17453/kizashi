@@ -85,6 +85,25 @@ pub async fn get_agent(
     }
 }
 
+/// GET /v1/agents/by-name/:name — the lookup Ingestion Gateway uses to enforce an agent's
+/// enabled/disabled status at ingest time, matched on the same `name == connector_id`
+/// convention `AgentsClient` documents.
+pub async fn get_agent_by_name(
+    State(state): State<AgentState>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.agent_repository.find_by_name(tenant_id, &name).await {
+        Ok(Some(agent)) => Json(agent).into_response(),
+        Ok(None) => error_response(StatusCode::NOT_FOUND, format!("no agent named {name}")),
+        Err(e) => agent_error_response(e),
+    }
+}
+
 pub async fn list_agents(State(state): State<AgentState>, headers: HeaderMap) -> Response {
     let tenant_id = match tenant_id_from_headers(&headers) {
         Ok(id) => id,

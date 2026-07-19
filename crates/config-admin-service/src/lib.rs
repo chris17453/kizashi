@@ -11,7 +11,7 @@ mod normalization_mapping_repository;
 mod trigger_definition_repository;
 
 pub use agent_handlers::{
-    create_agent, delete_agent, get_agent, list_agents, update_agent, AgentState,
+    create_agent, delete_agent, get_agent, get_agent_by_name, list_agents, update_agent, AgentState,
 };
 pub use agent_repository::{AgentRepository, AgentRepositoryError, PostgresAgentRepository};
 pub use audit_log::{
@@ -47,6 +47,7 @@ pub fn build_router(state: AdminState, agent_state: AgentState) -> Router {
 
     let agent_routes = Router::new()
         .route("/v1/agents", post(create_agent).get(list_agents))
+        .route("/v1/agents/by-name/:name", get(get_agent_by_name))
         .route("/v1/agents/:id", get(get_agent).put(update_agent).delete(delete_agent))
         .with_state(agent_state);
 

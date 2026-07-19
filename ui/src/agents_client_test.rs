@@ -33,6 +33,17 @@ impl AgentsClient for InMemoryAgentsClient {
         self.agents.lock().unwrap().retain(|a| a.id != id);
         Ok(())
     }
+
+    async fn update_agent(&self, agent: &Agent) -> Result<Agent, AgentsClientError> {
+        let mut agents = self.agents.lock().unwrap();
+        match agents.iter_mut().find(|a| a.id == agent.id) {
+            Some(existing) => {
+                *existing = agent.clone();
+                Ok(agent.clone())
+            }
+            None => Err(AgentsClientError::Rejected(404)),
+        }
+    }
 }
 
 pub struct FailingAgentsClient;
@@ -54,6 +65,10 @@ impl AgentsClient for FailingAgentsClient {
     }
 
     async fn delete_agent(&self, _tenant_id: Uuid, _id: Uuid) -> Result<(), AgentsClientError> {
+        Err(AgentsClientError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn update_agent(&self, _agent: &Agent) -> Result<Agent, AgentsClientError> {
         Err(AgentsClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -81,9 +96,14 @@ async fn spawn_stub_server() -> String {
     async fn delete_handler() -> axum::http::StatusCode {
         axum::http::StatusCode::NO_CONTENT
     }
+    async fn update_handler(
+        JsonExtractor(agent): JsonExtractor<Agent>,
+    ) -> axum::response::Response {
+        Json(agent).into_response()
+    }
     let app = Router::new()
         .route("/v1/agents", get(list_handler).post(create_handler))
-        .route("/v1/agents/:id", delete(delete_handler));
+        .route("/v1/agents/:id", delete(delete_handler).put(update_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -124,6 +144,17 @@ async fn http_client_deletes_an_agent_against_a_real_server() {
     let client = HttpAgentsClient::new(reqwest::Client::new(), url);
 
     client.delete_agent(Uuid::new_v4(), Uuid::new_v4()).await.unwrap();
+}
+
+#[tokio::test]
+async fn http_client_updates_an_agent_against_a_real_server() {
+    let url = spawn_stub_server().await;
+    let client = HttpAgentsClient::new(reqwest::Client::new(), url);
+    let mut agent = Agent::new(Uuid::new_v4(), "zendesk", "support-poller", serde_json::json!({}));
+    agent.enabled = false;
+
+    let updated = client.update_agent(&agent).await.unwrap();
+    assert!(!updated.enabled);
 }
 
 #[tokio::test]
