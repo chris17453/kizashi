@@ -4,37 +4,41 @@
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
 <div class="section-title">Ingestion volume by connector</div>
-<div class="chart" data-chart-source="connector-stats-chart-data"></div>
-<script type="application/json" id="connector-stats-chart-data">{{ connector_stats_chart_json|safe }}</script>
-<table>
-  <thead>
-    <tr><th>Connector ID</th><th>Records</th><th>Last Ingested</th></tr>
-  </thead>
-  <tbody>
-    {% for row in connector_stats %}
-    <tr>
-      <td>{{ row.connector_id }}</td>
-      <td>{{ row.record_count }}</td>
-      <td>{{ row.last_ingested_at }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="chart-row">
+  <div class="chart" data-chart-source="connector-stats-chart-data"></div>
+  <script type="application/json" id="connector-stats-chart-data">{{ connector_stats_chart_json|safe }}</script>
+  <table>
+    <thead>
+      <tr><th>Connector ID</th><th>Records</th><th>Last Ingested</th></tr>
+    </thead>
+    <tbody>
+      {% for row in connector_stats %}
+      <tr>
+        <td>{{ row.connector_id }}</td>
+        <td>{{ row.record_count }}</td>
+        <td>{{ row.last_ingested_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 
 <div class="section-title">Events by type</div>
-<div class="chart" data-chart-source="event-counts-chart-data"></div>
-<script type="application/json" id="event-counts-chart-data">{{ event_counts_chart_json|safe }}</script>
-<table>
-  <thead>
-    <tr><th>Event Type</th><th>Count</th></tr>
-  </thead>
-  <tbody>
-    {% for row in event_counts %}
-    <tr>
-      <td>{{ row.event_type }}</td>
-      <td>{{ row.count }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="chart-row">
+  <div class="chart" data-chart-source="event-counts-chart-data"></div>
+  <script type="application/json" id="event-counts-chart-data">{{ event_counts_chart_json|safe }}</script>
+  <table>
+    <thead>
+      <tr><th>Event Type</th><th>Count</th></tr>
+    </thead>
+    <tbody>
+      {% for row in event_counts %}
+      <tr>
+        <td>{{ row.event_type }}</td>
+        <td>{{ row.count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}

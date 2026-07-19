@@ -31,4 +31,32 @@
   <a href="/reports">View reports</a> &middot;
   <a href="/health">Platform health detail</a>
 </p>
+
+<div class="section-title">Pipeline status</div>
+{% if !pipeline_items.is_empty() %}
+<div class="topology-frame">
+  <div class="topology">
+    {% for item in pipeline_items %}
+    {% match item %}
+      {% when TopologyItem::Stage with { label, status } %}
+      <div class="topology-node node-{{ status }}">
+        <div><span class="node-dot"></span><span class="node-label">{{ label }}</span></div>
+        <div class="node-status">{{ status }}</div>
+      </div>
+      {% when TopologyItem::Edge with { label, messages, severity } %}
+      <div class="topology-edge edge-{{ severity }}">
+        <div class="edge-line"></div>
+        <span class="edge-label">{{ label }}</span>
+        {% if let Some(count) = messages %}
+        <span class="edge-count">{{ count }} queued</span>
+        {% else %}
+        <span class="edge-count">n/a</span>
+        {% endif %}
+      </div>
+    {% endmatch %}
+    {% endfor %}
+  </div>
+</div>
+<p class="muted"><a href="/pipeline">View full pipeline map &rarr;</a></p>
+{% endif %}
 {% endblock %}

@@ -6,26 +6,35 @@ chain, with per-stage health and per-hop queue backlog.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
 {% if !items.is_empty() %}
-<div class="topology">
-  {% for item in items %}
-  {% match item %}
-    {% when TopologyItem::Stage with { label, status } %}
-    <div class="topology-node node-{{ status }}">
-      <div><span class="node-dot"></span><span class="node-label">{{ label }}</span></div>
-      <div class="node-status">{{ status }}</div>
-    </div>
-    {% when TopologyItem::Edge with { label, messages, severity } %}
-    <div class="topology-edge edge-{{ severity }}">
-      <div class="edge-line"></div>
-      <span class="edge-label">{{ label }}</span>
-      {% if let Some(count) = messages %}
-      <span class="edge-count">{{ count }} queued</span>
-      {% else %}
-      <span class="edge-count">n/a</span>
-      {% endif %}
-    </div>
-  {% endmatch %}
-  {% endfor %}
+<div class="topology-frame">
+  <div class="topology">
+    {% for item in items %}
+    {% match item %}
+      {% when TopologyItem::Stage with { label, status } %}
+      <div class="topology-node node-{{ status }}">
+        <div><span class="node-dot"></span><span class="node-label">{{ label }}</span></div>
+        <div class="node-status">{{ status }}</div>
+      </div>
+      {% when TopologyItem::Edge with { label, messages, severity } %}
+      <div class="topology-edge edge-{{ severity }}">
+        <div class="edge-line"></div>
+        <span class="edge-label">{{ label }}</span>
+        {% if let Some(count) = messages %}
+        <span class="edge-count">{{ count }} queued</span>
+        {% else %}
+        <span class="edge-count">n/a</span>
+        {% endif %}
+      </div>
+    {% endmatch %}
+    {% endfor %}
+  </div>
+  <div class="topology-legend">
+    <span><span class="legend-dot" style="background: var(--success)"></span> Service up</span>
+    <span><span class="legend-dot" style="background: var(--danger)"></span> Service down</span>
+    <span><span class="legend-dot" style="background: var(--border)"></span> Queue empty</span>
+    <span><span class="legend-dot" style="background: #fbbf24"></span> Backlog building</span>
+    <span><span class="legend-dot" style="background: var(--danger)"></span> Backlog critical</span>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

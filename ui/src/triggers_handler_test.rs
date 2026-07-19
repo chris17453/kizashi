@@ -48,6 +48,28 @@ async fn state_with_session() -> (AppState, String) {
 }
 
 #[tokio::test]
+async fn shows_an_empty_state_with_no_triggers_configured() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No triggers configured yet"));
+    assert!(!body.contains("<table>"));
+}
+
+#[tokio::test]
 async fn renders_the_triggers_table_when_signed_in() {
     let (mut state, session_id) = state_with_session().await;
     let triggers_client = InMemoryTriggersClient::default();

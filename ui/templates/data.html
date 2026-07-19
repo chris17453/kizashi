@@ -3,33 +3,54 @@
 <h1>Data Viewer</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
-<div class="panel">
-  <h2>Search</h2>
-  <form class="inline" method="get" action="/data">
-    <label for="connector_id">Connector ID</label>
-    <input type="text" id="connector_id" name="connector_id" value="{{ query.connector_id }}" placeholder="zendesk">
-    <label for="source_type">Source type</label>
-    <select id="source_type" name="source_type">
-      <option value="" {% if query.source_type.is_empty() %}selected{% endif %}>Any</option>
-      <option value="message" {% if query.source_type == "message" %}selected{% endif %}>Message</option>
-      <option value="ticket" {% if query.source_type == "ticket" %}selected{% endif %}>Ticket</option>
-      <option value="log" {% if query.source_type == "log" %}selected{% endif %}>Log</option>
-      <option value="sql_row" {% if query.source_type == "sql_row" %}selected{% endif %}>SQL Row</option>
-      <option value="fabric_record" {% if query.source_type == "fabric_record" %}selected{% endif %}>Fabric Record</option>
-      <option value="generic" {% if query.source_type == "generic" %}selected{% endif %}>Generic</option>
-    </select>
-    <label for="q">Search text (raw payload)</label>
-    <input type="text" id="q" name="q" value="{{ query.q }}" placeholder="printer on fire">
-    <label for="subject">Subject (email)</label>
-    <input type="text" id="subject" name="subject" value="{{ query.subject }}" placeholder="printer on fire">
-    <label for="email_from">From (email)</label>
-    <input type="text" id="email_from" name="email_from" value="{{ query.email_from }}" placeholder="alice@example.com">
-    <label for="attachment_filename">Attachment filename</label>
-    <input type="text" id="attachment_filename" name="attachment_filename" value="{{ query.attachment_filename }}" placeholder="invoice.pdf">
-    <button type="submit">Search</button>
-  </form>
+<div class="form-row">
+  <div class="panel">
+    <h2>Search</h2>
+    <form class="inline" method="get" action="/data">
+      <label for="connector_id">Connector ID</label>
+      <input type="text" id="connector_id" name="connector_id" value="{{ query.connector_id }}" placeholder="zendesk">
+      <label for="source_type">Source type</label>
+      <select id="source_type" name="source_type">
+        <option value="" {% if query.source_type.is_empty() %}selected{% endif %}>Any</option>
+        <option value="message" {% if query.source_type == "message" %}selected{% endif %}>Message</option>
+        <option value="ticket" {% if query.source_type == "ticket" %}selected{% endif %}>Ticket</option>
+        <option value="log" {% if query.source_type == "log" %}selected{% endif %}>Log</option>
+        <option value="sql_row" {% if query.source_type == "sql_row" %}selected{% endif %}>SQL Row</option>
+        <option value="fabric_record" {% if query.source_type == "fabric_record" %}selected{% endif %}>Fabric Record</option>
+        <option value="generic" {% if query.source_type == "generic" %}selected{% endif %}>Generic</option>
+      </select>
+      <label for="q">Search text (raw payload)</label>
+      <input type="text" id="q" name="q" value="{{ query.q }}" placeholder="printer on fire">
+      <label for="subject">Subject (email)</label>
+      <input type="text" id="subject" name="subject" value="{{ query.subject }}" placeholder="printer on fire">
+      <label for="email_from">From (email)</label>
+      <input type="text" id="email_from" name="email_from" value="{{ query.email_from }}" placeholder="alice@example.com">
+      <label for="attachment_filename">Attachment filename</label>
+      <input type="text" id="attachment_filename" name="attachment_filename" value="{{ query.attachment_filename }}" placeholder="invoice.pdf">
+      <button type="submit">Search</button>
+    </form>
+  </div>
+  <div class="info-panel">
+    <h2>Search tips</h2>
+    <ul>
+      <li><code>Connector ID</code> and <code>Source type</code> narrow by where a record came
+        from; leave either blank to match all.</li>
+      <li><code>Search text</code> matches anywhere in the record's raw payload — use it for a
+        quick free-text scan across any source type.</li>
+      <li><code>Subject</code>, <code>From</code>, and <code>Attachment filename</code> are
+        email-specific fields — they only match records ingested from mail connectors.</li>
+      <li>Combine fields to narrow results — filters are ANDed together, not ORed.</li>
+    </ul>
+  </div>
 </div>
 
+{% if records.is_empty() && page == 0 && !has_more %}
+<div class="empty-state">
+  <div class="empty-icon">&#9636;</div>
+  <p>No records match this search.</p>
+  <p>Try widening the filters above, or check that an agent has ingested data for this tenant.</p>
+</div>
+{% else %}
 <table>
   <thead>
     <tr><th>Record ID</th><th>Connector</th><th>Source Type</th><th>Ingested At</th><th>Normalized</th></tr>
@@ -76,4 +97,5 @@
   </form>
   {% endif %}
 </div>
+{% endif %}
 {% endblock %}

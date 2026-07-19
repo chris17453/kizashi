@@ -3,19 +3,20 @@
 <h1>Platform Health</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 {% if let Some(status) = platform_status %}
-<p>Overall status: <span class="status-{{ status }}">{{ status }}</span></p>
-<table>
-  <thead>
-    <tr><th>Service</th><th>Status</th></tr>
-  </thead>
-  <tbody>
-    {% for service in services %}
-    <tr>
-      <td>{{ service.name }}</td>
-      <td class="status-{{ service.status }}">{{ service.status }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 240px)); margin-bottom: 1.5rem;">
+  <div class="kpi-card {% if status == "up" %}kpi-success{% else %}kpi-danger{% endif %}">
+    <div class="kpi-label">Overall status</div>
+    <div class="kpi-value">{{ status }}</div>
+    <div class="kpi-sub">{{ services.len() }} services monitored</div>
+  </div>
+</div>
+<div class="status-grid">
+  {% for service in services %}
+  <div class="status-card">
+    <span class="status-name">{{ service.name }}</span>
+    <span class="pill {% if service.status == "up" %}pill-up{% else %}pill-down{% endif %}">{{ service.status }}</span>
+  </div>
+  {% endfor %}
+</div>
 {% endif %}
 {% endblock %}

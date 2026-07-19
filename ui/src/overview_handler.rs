@@ -3,6 +3,7 @@
 mod overview_handler_test;
 
 use crate::session_guard::require_session;
+use crate::topology::{build_topology_items, TopologyItem};
 use crate::AppState;
 use askama::Template;
 use axum::extract::State;
@@ -20,6 +21,9 @@ struct OverviewTemplate {
     platform_status: String,
     services_up: usize,
     services_total: usize,
+    /// Compact preview of the same topology `/pipeline` shows in full — turns the dashboard
+    /// landing page into something with real content below the KPI row, not just a link list.
+    pipeline_items: Vec<TopologyItem>,
 }
 
 /// GET /overview — the landing dashboard: KPI cards summarizing agents, ingestion volume,
@@ -51,6 +55,9 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
         .map(|page| page.events)
         .unwrap_or_default();
     let health = state.health_client.platform_health().await.ok();
+    let depths = state.backlog_client.queue_depths().await.unwrap_or_default();
+    let pipeline_items =
+        health.as_ref().map(|h| build_topology_items(h, &depths)).unwrap_or_default();
 
     let active_connector_ids: std::collections::HashSet<&str> =
         connector_stats.iter().map(|s| s.connector_id.as_str()).collect();
@@ -76,6 +83,7 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
             platform_status,
             services_up,
             services_total,
+            pipeline_items,
         }
         .render()
         .unwrap(),

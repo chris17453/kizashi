@@ -14,6 +14,7 @@ mod health_client;
 mod ingestion_stats_client;
 mod session;
 mod session_guard;
+mod topology;
 mod triggers_client;
 
 mod agent_detail_handler;

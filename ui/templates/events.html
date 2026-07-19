@@ -2,6 +2,14 @@
 {% block content %}
 <h1>Events</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if events.is_empty() && page == 0 && !has_more %}
+<div class="empty-state">
+  <div class="empty-icon">&#9672;</div>
+  <p>No events recorded yet for this tenant.</p>
+  <p>Events appear here once a trigger fires against analyzed data — check
+  <a href="/pipeline">Pipeline Map</a> to see whether records are flowing.</p>
+</div>
+{% else %}
 <table>
   <thead>
     <tr><th>Event Type</th><th>Group Key</th><th>Status</th><th>Occurred At</th></tr>
@@ -33,4 +41,5 @@
   </form>
   {% endif %}
 </div>
+{% endif %}
 {% endblock %}

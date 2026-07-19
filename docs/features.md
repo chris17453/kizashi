@@ -1321,3 +1321,66 @@ Entry format:
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a — implements the last follow-up explicitly scoped out of ADR-0016's v1, not a
   new architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — normalization-service live-RabbitMQ integration test
+- **Type:** test
+- **Summary:** Closes one of the three testing gaps from the gap-closing roadmap's Phase 3:
+  `normalization-service` had Postgres-repository and schema-contract tests but nothing
+  exercising its actual `record.ingested` → `record.normalized` processing path against real
+  infrastructure. New `tests/normalization_integration_test.rs` mirrors the pattern already
+  proven in `analysis-service`/`trigger-engine`'s integration tests — connect to real
+  RabbitMQ, declare/bind a queue, call `process_normalization` directly with real
+  `PostgresMappingRepository` + a stub HTTP server standing in for Ingestion Service's
+  `PATCH /v1/records/:id/normalized`, then assert the published `record.normalized` message.
+  A second test covers the no-mapping-configured path (asserts `NoMappingConfigured`, not an
+  error, and implicitly nothing is published). `action-executor`'s equivalent gap and
+  `dashboard-api`'s live-ClickHouse gap remain open, tracked as further Phase 3 follow-ups.
+- **Tests:** `cargo test -p normalization-service --test normalization_integration_test` — 2
+  passed against real RabbitMQ and real Postgres.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — closes a gap flagged in the standing gap-closing roadmap (Phase 3, testing
+  gaps), not a spec §11 open item.
+
+## [2026-07-19] feature/0014-docker-images — Console UI layout overhaul: fix wasted space and unprofessional appearance
+- **Type:** fix
+- **Summary:** Direct user feedback: "the ui is very unprofessional and a huge waste of
+  space." Verified with real headless-Chrome screenshots against the live running stack
+  (not guessed from CSS) — every page with a form panel (Agents, API Keys, Data Viewer) had a
+  bare 480px-wide `.panel` on the left and pure empty black space filling the rest of a
+  1600px-wide viewport; Overview was 4 KPI cards followed by ~700px of nothing; Platform
+  Health was a plain 2-column table wasting nearly the entire row width on a service name and
+  one status word; Reports showed the exact same connector/event data twice — once as a bar
+  chart, once as an identical table directly below it. Fixed all of it: `.form-row` pairs
+  every form panel with a new `.info-panel` (contextual tips/docs) so the row uses the full
+  width instead of leaving a void; `.chart-row` puts Reports' chart and its detail table
+  side by side instead of stacked duplicates; Platform Health became a `.status-grid` of
+  compact status cards instead of a bare table; every list page (Agents, Events, Triggers,
+  Data Viewer) gained a proper `.empty-state` block instead of rendering an empty table with
+  nothing below it; the Overview dashboard now embeds a compact live Pipeline Map preview
+  below the KPI row (extracted the topology-building logic from `pipeline_handler.rs` into a
+  shared `ui/src/topology.rs` module so both pages render the same real data, not a
+  duplicated/faked preview) instead of ending after one line of links; the Pipeline Map's own
+  topology nodes/edges were resized to stop wrapping/clipping (`flex: 0 1 170px` sizing found
+  by iterating against real screenshots, not guessed) and gained a color legend.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 121 passed (6 new for the extracted
+  `topology` module's stage/edge-building logic — status lookup, unknown-stage fallback,
+  severity thresholds, backlog-present vs. absent; 3 new empty-state tests for Agents/
+  Triggers/Events confirming the empty-state message renders and no `<table>` tag does when
+  there's genuinely nothing to show, `page == 0 && !has_more` in the empty-state condition
+  specifically to avoid hiding Previous/Next controls on a legitimately-empty later page — a
+  real bug the first pass introduced and the existing pagination tests caught immediately).
+  Beyond unit tests: rebuilt and redeployed `kizashi-ui` **twice** during this fix — the first
+  screenshot pass caught the topology wrapping bug (`Action Executor` dropping to its own
+  row) and a text-clipping regression from an over-aggressive `flex: 1 1 0` fix, both only
+  visible in an actual rendered screenshot, not in any test assertion. Final verification was
+  a full screenshot sweep of all 9 pages (Overview, Agents, API Keys, Pipeline Map, Events,
+  Reports, Platform Health, Data Viewer, Triggers) against the live running stack with real
+  session cookies, confirmed by direct visual inspection, not just "the page returned 200."
+  Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` clean, `cargo test --workspace --all-features` all green (0
+  failures across every crate, verified against a throwaway local `mssql` container standing
+  in for CI's Fabric TDS dependency), `cargo llvm-cov` 94.08% line coverage (85% floor),
+  `cargo audit` / `cargo deny check` clean (same two pre-existing allow-listed `unmaintained`
+  advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — CSS/template layout fix, not a new architectural decision.

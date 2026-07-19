@@ -158,6 +158,28 @@ async fn get_agents_renders_the_agents_table_when_signed_in() {
 }
 
 #[tokio::test]
+async fn get_agents_shows_an_empty_state_with_no_agents_registered() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/agents")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No agents registered yet"));
+    assert!(!body.contains("<table>"));
+}
+
+#[tokio::test]
 async fn get_agents_redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session().await;
 
