@@ -70,6 +70,12 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
         retention_audit_log_client: Arc::new(
             crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default(),
         ),
+        auth_audit_log_client: Arc::new(
+            crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default(),
+        ),
+        users_client: Arc::new(
+            crate::users_client::users_client_test::InMemoryUsersClient::default(),
+        ),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id, tenant_id)

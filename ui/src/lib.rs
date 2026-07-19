@@ -22,6 +22,7 @@ mod session;
 mod session_guard;
 mod topology;
 mod triggers_client;
+mod users_client;
 
 mod agent_detail_handler;
 mod agent_script_handler;
@@ -46,6 +47,7 @@ mod retention_policies_handler;
 mod root_handler;
 mod static_assets;
 mod triggers_handler;
+mod users_handler;
 
 pub use agents_client::{AgentsClient, AgentsClientError, HttpAgentsClient};
 pub use analysis_config_client::{
@@ -82,6 +84,7 @@ pub use session::{InMemorySessionStore, Session, SessionStore};
 pub use triggers_client::{
     HttpTriggersClient, TriggerSummary, TriggersClient, TriggersClientError, TriggersPage,
 };
+pub use users_client::{HttpUsersClient, UiUser, UsersClient, UsersClientError};
 
 pub use agent_detail_handler::get_agent_detail;
 pub use agent_script_handler::{get_generate_form, get_generate_select, post_generate_script};
@@ -109,6 +112,7 @@ pub use retention_policies_handler::{
 pub use root_handler::get_root;
 pub use static_assets::get_charts_js;
 pub use triggers_handler::{get_triggers, post_trigger};
+pub use users_handler::{get_users, post_delete_user, post_update_user_role, post_users};
 
 use axum::routing::get;
 use axum::Router;
@@ -132,12 +136,14 @@ pub struct AppState {
     pub normalization_mappings_client: Arc<dyn NormalizationMappingsClient>,
     pub retention_policies_client: Arc<dyn RetentionPoliciesClient>,
     pub egress_allowlist_client: Arc<dyn EgressAllowlistClient>,
-    /// Both fields hold an `Arc<dyn AuditLogClient>` built from the *same*
+    pub users_client: Arc<dyn UsersClient>,
+    /// All three fields hold an `Arc<dyn AuditLogClient>` built from the *same*
     /// `HttpAuditLogClient` implementation, just constructed with a different backend base
-    /// URL — `config-admin-service` and `retention-service` expose an identically shaped
-    /// `GET /v1/audit-log/:entity_id`, so one client type covers both.
+    /// URL — `config-admin-service`, `retention-service`, and `auth-service` all expose an
+    /// identically shaped `GET /v1/audit-log/:entity_id`, so one client type covers all three.
     pub config_audit_log_client: Arc<dyn AuditLogClient>,
     pub retention_audit_log_client: Arc<dyn AuditLogClient>,
+    pub auth_audit_log_client: Arc<dyn AuditLogClient>,
     /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
     /// reachable from inside this container (e.g. a customer-hosted connector polling in from
     /// outside the platform's own network), so it's a separate, operator-configurable value
@@ -175,6 +181,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/retention-policies/:id/edit", axum::routing::post(post_edit_retention_policy))
         .route("/retention-policies/:id/delete", axum::routing::post(post_delete_retention_policy))
         .route("/egress-allowlist", get(get_egress_allowlist).post(post_egress_allowlist))
+        .route("/users", get(get_users).post(post_users))
+        .route("/users/:id/role", axum::routing::post(post_update_user_role))
+        .route("/users/:id/delete", axum::routing::post(post_delete_user))
         .route("/audit-log/:service/:entity_id", get(get_entity_audit_log))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))

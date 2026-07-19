@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Users</h1>
+<p class="muted">Manage who can sign in to this workspace and what they're allowed to do.
+<code>Viewer</code> can read; <code>Operator</code> and above can create/update config entities;
+<code>Admin</code> can also manage users (ADR-0016).</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+<div class="panel">
+  <h2>Add a user</h2>
+  <form class="inline" method="post" action="/users">
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" required>
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" required>
+
+    <label for="role">Role</label>
+    <select id="role" name="role" required>
+      <option value="viewer">Viewer</option>
+      <option value="operator">Operator</option>
+      <option value="admin">Admin</option>
+    </select>
+
+    <button type="submit">Add user</button>
+  </form>
+</div>
+
+{% if users.is_empty() %}
+<div class="empty-state">
+  <div class="empty-icon">&#128100;</div>
+  <p>No users configured yet for this tenant.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Username</th><th>Role</th><th></th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for user in users %}
+    <tr>
+      <td>{{ user.username }}</td>
+      <td>
+        <form class="inline" method="post" action="/users/{{ user.id }}/role" style="display:inline">
+          <select name="role" onchange="this.form.submit()">
+            <option value="viewer" {% if user.role_str == "viewer" %}selected{% endif %}>Viewer</option>
+            <option value="operator" {% if user.role_str == "operator" %}selected{% endif %}>Operator</option>
+            <option value="admin" {% if user.role_str == "admin" %}selected{% endif %}>Admin</option>
+          </select>
+        </form>
+      </td>
+      <td>
+        <form class="inline" method="post" action="/users/{{ user.id }}/delete" style="display:inline">
+          <button type="submit" class="btn-danger" {% if user.is_current %}disabled title="you can't remove yourself"{% endif %}>Remove</button>
+        </form>
+      </td>
+      <td><a href="/audit-log/auth/{{ user.id }}">History</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

@@ -28,6 +28,9 @@ fn state_with_provider(
         tenant_repository: Arc::new(InMemoryTenantRepository::default()),
         session_client,
         oidc_clients,
+        audit_log_reader: Arc::new(
+            crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
+        ),
     }
 }
 

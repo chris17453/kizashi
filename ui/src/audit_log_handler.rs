@@ -64,6 +64,7 @@ pub async fn get_audit_log(
     let client = match service.as_str() {
         "config" => &state.config_audit_log_client,
         "retention" => &state.retention_audit_log_client,
+        "auth" => &state.auth_audit_log_client,
         _ => {
             return Html(
                 AuditLogTemplate {
