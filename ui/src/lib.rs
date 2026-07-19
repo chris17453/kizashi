@@ -7,6 +7,7 @@
 mod agents_client;
 mod analysis_config_client;
 mod api_keys_client;
+mod audit_log_client;
 mod auth_client;
 mod backlog_client;
 mod connector_field_catalog;
@@ -27,6 +28,7 @@ mod agent_script_handler;
 mod agents_handler;
 mod analysis_config_handler;
 mod api_keys_handler;
+mod audit_log_handler;
 mod data_detail_handler;
 mod data_handler;
 mod egress_allowlist_handler;
@@ -50,6 +52,9 @@ pub use analysis_config_client::{
     AnalysisConfigClient, AnalysisConfigClientError, AnalysisConfigView, HttpAnalysisConfigClient,
 };
 pub use api_keys_client::{ApiKeySummary, ApiKeysClient, ApiKeysClientError, HttpApiKeysClient};
+pub use audit_log_client::{
+    AuditLogClient, AuditLogClientError, AuditLogEntry, HttpAuditLogClient,
+};
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient};
 pub use backlog_client::{BacklogClient, BacklogClientError, HttpBacklogClient, QueueDepthSummary};
 pub use egress_allowlist_client::{
@@ -83,6 +88,7 @@ pub use agent_script_handler::{get_generate_form, get_generate_select, post_gene
 pub use agents_handler::{get_agents, post_agents, post_delete_agent, post_toggle_agent};
 pub use analysis_config_handler::{get_analysis_config_page, post_analysis_config};
 pub use api_keys_handler::{get_api_keys, post_api_keys, post_revoke_api_key};
+pub use audit_log_handler::get_audit_log as get_entity_audit_log;
 pub use data_detail_handler::get_data_detail;
 pub use data_handler::get_data;
 pub use egress_allowlist_handler::{get_egress_allowlist, post_egress_allowlist};
@@ -126,6 +132,12 @@ pub struct AppState {
     pub normalization_mappings_client: Arc<dyn NormalizationMappingsClient>,
     pub retention_policies_client: Arc<dyn RetentionPoliciesClient>,
     pub egress_allowlist_client: Arc<dyn EgressAllowlistClient>,
+    /// Both fields hold an `Arc<dyn AuditLogClient>` built from the *same*
+    /// `HttpAuditLogClient` implementation, just constructed with a different backend base
+    /// URL — `config-admin-service` and `retention-service` expose an identically shaped
+    /// `GET /v1/audit-log/:entity_id`, so one client type covers both.
+    pub config_audit_log_client: Arc<dyn AuditLogClient>,
+    pub retention_audit_log_client: Arc<dyn AuditLogClient>,
     /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
     /// reachable from inside this container (e.g. a customer-hosted connector polling in from
     /// outside the platform's own network), so it's a separate, operator-configurable value
@@ -163,6 +175,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/retention-policies/:id/edit", axum::routing::post(post_edit_retention_policy))
         .route("/retention-policies/:id/delete", axum::routing::post(post_delete_retention_policy))
         .route("/egress-allowlist", get(get_egress_allowlist).post(post_egress_allowlist))
+        .route("/audit-log/:service/:entity_id", get(get_entity_audit_log))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
         .route("/data/:id", get(get_data_detail))

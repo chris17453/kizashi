@@ -64,6 +64,12 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
         egress_allowlist_client: Arc::new(
             crate::egress_allowlist_client::egress_allowlist_client_test::InMemoryEgressAllowlistClient::default(),
         ),
+        config_audit_log_client: Arc::new(
+            crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default(),
+        ),
+        retention_audit_log_client: Arc::new(
+            crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default(),
+        ),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id, tenant_id)

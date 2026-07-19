@@ -50,7 +50,7 @@ overrides it.</p>
 {% else %}
 <table>
   <thead>
-    <tr><th>Data Class</th><th>TTL (days)</th><th>Status</th>{% if can_write %}<th></th>{% endif %}</tr>
+    <tr><th>Data Class</th><th>TTL (days)</th><th>Status</th>{% if can_write %}<th></th>{% endif %}<th></th></tr>
   </thead>
   <tbody>
     {% for policy in policies %}
@@ -81,6 +81,7 @@ overrides it.</p>
         </form>
       </td>
       {% endif %}
+      <td><a href="/audit-log/retention/{{ policy.id }}">History</a></td>
     </tr>
     {% endfor %}
   </tbody>

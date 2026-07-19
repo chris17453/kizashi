@@ -1,7 +1,7 @@
 use kizashi_ui::{
     build_router, AppState, HttpAgentsClient, HttpAnalysisConfigClient, HttpApiKeysClient,
-    HttpAuthClient, HttpBacklogClient, HttpEgressAllowlistClient, HttpEventsClient,
-    HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
+    HttpAuditLogClient, HttpAuthClient, HttpBacklogClient, HttpEgressAllowlistClient,
+    HttpEventsClient, HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
     HttpNormalizationMappingsClient, HttpRetentionPoliciesClient, HttpTriggersClient,
     InMemorySessionStore,
 };
@@ -59,15 +59,23 @@ async fn main() {
         )),
         normalization_mappings_client: Arc::new(HttpNormalizationMappingsClient::new(
             client.clone(),
-            config_admin_service_url,
+            config_admin_service_url.clone(),
         )),
         retention_policies_client: Arc::new(HttpRetentionPoliciesClient::new(
             client.clone(),
-            retention_service_url,
+            retention_service_url.clone(),
         )),
         egress_allowlist_client: Arc::new(HttpEgressAllowlistClient::new(
-            client,
+            client.clone(),
             egress_gateway_url,
+        )),
+        config_audit_log_client: Arc::new(HttpAuditLogClient::new(
+            client.clone(),
+            config_admin_service_url,
+        )),
+        retention_audit_log_client: Arc::new(HttpAuditLogClient::new(
+            client,
+            retention_service_url,
         )),
         ingestion_gateway_public_url,
     };
