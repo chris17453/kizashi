@@ -2098,3 +2098,40 @@ architectural decision.
   allow-listed advisories, no new ones.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [0026](adr/0026-query-gateway-tenant-isolation-e2e-test.md)
+
+## [2026-07-19] fix/0002-agent-rbac-enforcement — Enforce Operator-minimum role on Agent write endpoints
+- **Type:** fix
+- **Branch:** fix/0002-agent-rbac-enforcement
+- **Summary:** Closes a real privilege-escalation gap found by re-auditing the codebase for
+  CLAUDE.md/spec compliance: `config-admin-service`'s `create_agent`/`update_agent`/
+  `delete_agent` handlers never called `require_operator` at all, unlike their sibling
+  trigger-definition and normalization-mapping write handlers (ADR-0016). Any authenticated
+  Viewer-role session — or anyone hitting the API directly — could register, modify, or delete
+  another tenant's Agents (connector instances). Fixed by calling the existing
+  `require_operator` helper (already `pub(crate)` in `handlers.rs`) in all three write
+  handlers. Since the Console UI's `agents_client.rs` never sent an `X-Role` header at all for
+  these calls, it was updated in the same PR to thread the signed-in session's role through
+  `register_agent`/`update_agent`/`delete_agent` (matching `TriggersClient`'s existing
+  `role: Role` parameter convention) — otherwise this backend fix alone would have broken
+  every real Operator user's ability to manage Agents through the UI.
+- **Tests:** TDD — added 4 failing tests first (`create_agent_requires_role_header`,
+  `create_agent_rejects_a_viewer_role`, `update_agent_rejects_a_viewer_role`,
+  `delete_agent_rejects_a_viewer_role`), confirmed each failed for the expected reason (200/
+  201/204 instead of 401/403) against the real handler, then implemented the fix and confirmed
+  all pass. `cargo test -p config-admin-service --lib agent_handlers` — 14 tests, all passed.
+  `cargo test -p kizashi-ui --lib` — 155 tests, all passed (every existing `agents_client`
+  call site updated to pass a role, all pre-existing behavior unaffected). `cargo test
+  --workspace --all-features` (full real-infra stack) — all passed, 0 failed. `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check`
+  — clean. `cargo deny check` — clean. `cargo audit` — same 3 pre-existing allow-listed
+  advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `config-admin-service` and
+  `kizashi-ui` containers via `docker compose build`/`up --force-recreate`, then hit the real
+  running `config-admin-service` directly: `POST /v1/agents` with no `X-Role` header → `401`;
+  with `X-Role: viewer` → `403`; with `X-Role: operator` → `201` (agent actually created,
+  confirmed in the response body); `DELETE` with `X-Role: operator` on the same agent → `204`
+  (cleaned up test data — agents are deletable, unlike the append-only audit tables verified in
+  earlier phases).
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — closes a gap against an already-established pattern (ADR-0016), no new
+  architectural decision

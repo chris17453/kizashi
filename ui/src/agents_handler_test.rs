@@ -12,6 +12,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::{get, post};
 use axum::Router;
+use common::Role;
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -65,7 +66,13 @@ async fn viewer_role_does_not_see_register_form_or_write_buttons() {
     let (state, _admin_session_id, tenant_id) = state_with_session().await;
     state
         .agents_client
-        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
+        .register_agent(
+            Role::Operator,
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
         .await
         .unwrap();
     let viewer_session_id = state
@@ -105,7 +112,13 @@ async fn operator_role_sees_register_form_and_write_buttons() {
     let (state, _admin_session_id, tenant_id) = state_with_session().await;
     state
         .agents_client
-        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
+        .register_agent(
+            Role::Operator,
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
         .await
         .unwrap();
     let operator_session_id = state
@@ -141,7 +154,13 @@ async fn get_agents_renders_the_agents_table_when_signed_in() {
     let (state, session_id, tenant_id) = state_with_session().await;
     state
         .agents_client
-        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
+        .register_agent(
+            Role::Operator,
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
         .await
         .unwrap();
 
@@ -272,7 +291,13 @@ async fn post_delete_agent_removes_it_and_redirects() {
     let (mut state, session_id, tenant_id) = state_with_session().await;
     let agents_client = Arc::new(InMemoryAgentsClient::default());
     let agent = agents_client
-        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
+        .register_agent(
+            Role::Operator,
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
         .await
         .unwrap();
     state.agents_client = agents_client.clone();
@@ -298,7 +323,13 @@ async fn post_toggle_agent_flips_enabled_and_redirects() {
     let (mut state, session_id, tenant_id) = state_with_session().await;
     let agents_client = Arc::new(InMemoryAgentsClient::default());
     let agent = agents_client
-        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
+        .register_agent(
+            Role::Operator,
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
         .await
         .unwrap();
     assert!(agent.enabled);

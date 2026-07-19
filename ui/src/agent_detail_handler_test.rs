@@ -11,6 +11,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::get;
 use axum::Router;
+use common::Role;
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -60,7 +61,13 @@ async fn renders_the_agent_and_its_records_when_found() {
     let (mut state, session_id, tenant_id) = state_with_session().await;
     let agent = state
         .agents_client
-        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
+        .register_agent(
+            Role::Operator,
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
         .await
         .unwrap();
     let stats_client = Arc::new(InMemoryIngestionStatsClient::default());

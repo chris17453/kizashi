@@ -13,6 +13,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::get;
 use axum::Router;
+use common::Role;
 use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -64,11 +65,17 @@ async fn renders_kpi_cards_reflecting_real_data_when_signed_in() {
 
     let agents_client = Arc::new(InMemoryAgentsClient::default());
     agents_client
-        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
+        .register_agent(
+            Role::Operator,
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
         .await
         .unwrap();
     agents_client
-        .register_agent(tenant_id, "sql", "never-run-agent", serde_json::json!({}))
+        .register_agent(Role::Operator, tenant_id, "sql", "never-run-agent", serde_json::json!({}))
         .await
         .unwrap();
     state.agents_client = agents_client;
