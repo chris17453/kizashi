@@ -27,6 +27,8 @@ pub struct NewRawRecordRequest {
     pub raw_payload: serde_json::Value,
     #[serde(default)]
     pub occurred_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub external_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -83,11 +85,21 @@ pub async fn ingest_record(
     let mut record =
         RawRecord::new(req.connector_id, req.source_type, req.tenant_id, req.raw_payload);
     record.occurred_at = req.occurred_at;
+    record.external_id = req.external_id;
 
-    state.repository.insert(&record).await.map_err(|e| IngestError::Storage(e.to_string()))?;
+    let inserted =
+        state.repository.insert(&record).await.map_err(|e| IngestError::Storage(e.to_string()))?;
 
-    if let Err(e) = state.publisher.publish_record_ingested(&record).await {
-        tracing::error!(record_id = %record.id, error = %e, "failed to publish record.ingested");
+    if inserted {
+        if let Err(e) = state.publisher.publish_record_ingested(&record).await {
+            tracing::error!(record_id = %record.id, error = %e, "failed to publish record.ingested");
+        }
+    } else {
+        tracing::debug!(
+            connector_id = %record.connector_id,
+            external_id = ?record.external_id,
+            "duplicate external_id, skipping insert and publish"
+        );
     }
 
     Ok((StatusCode::CREATED, Json(IngestResponse { id: record.id })))

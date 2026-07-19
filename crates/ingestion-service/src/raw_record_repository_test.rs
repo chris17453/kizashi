@@ -10,9 +10,20 @@ pub struct InMemoryRawRecordRepository {
 
 #[async_trait]
 impl RawRecordRepository for InMemoryRawRecordRepository {
-    async fn insert(&self, record: &RawRecord) -> Result<(), RepositoryError> {
-        self.records.lock().unwrap().push(record.clone());
-        Ok(())
+    async fn insert(&self, record: &RawRecord) -> Result<bool, RepositoryError> {
+        let mut records = self.records.lock().unwrap();
+        if let Some(external_id) = &record.external_id {
+            let already_present = records.iter().any(|r| {
+                r.tenant_id == record.tenant_id
+                    && r.connector_id == record.connector_id
+                    && r.external_id.as_deref() == Some(external_id.as_str())
+            });
+            if already_present {
+                return Ok(false);
+            }
+        }
+        records.push(record.clone());
+        Ok(true)
     }
 
     async fn update_normalized_payload(
@@ -175,7 +186,7 @@ pub struct FailingRawRecordRepository;
 
 #[async_trait]
 impl RawRecordRepository for FailingRawRecordRepository {
-    async fn insert(&self, _record: &RawRecord) -> Result<(), RepositoryError> {
+    async fn insert(&self, _record: &RawRecord) -> Result<bool, RepositoryError> {
         Err(RepositoryError::Backend("simulated failure".to_string()))
     }
 
@@ -247,11 +258,65 @@ async fn in_memory_repository_stores_inserted_records() {
         serde_json::json!({}),
     );
 
-    repo.insert(&record).await.unwrap();
+    let inserted = repo.insert(&record).await.unwrap();
 
+    assert!(inserted);
     let stored = repo.records.lock().unwrap();
     assert_eq!(stored.len(), 1);
     assert_eq!(stored[0], record);
+}
+
+#[tokio::test]
+async fn inserting_a_record_with_no_external_id_is_never_deduped() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let record_a =
+        RawRecord::new("zendesk", common::SourceType::Ticket, tenant_id, serde_json::json!({}));
+    let record_b =
+        RawRecord::new("zendesk", common::SourceType::Ticket, tenant_id, serde_json::json!({}));
+
+    assert!(repo.insert(&record_a).await.unwrap());
+    assert!(repo.insert(&record_b).await.unwrap());
+    assert_eq!(repo.records.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn reinserting_the_same_external_id_for_the_same_tenant_and_connector_is_a_no_op() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let record =
+        RawRecord::new("imap", common::SourceType::Message, tenant_id, serde_json::json!({}))
+            .with_external_id("message-id-123");
+
+    let first = repo.insert(&record).await.unwrap();
+    let second = repo.insert(&record).await.unwrap();
+
+    assert!(first, "first insert of a new external_id must succeed");
+    assert!(!second, "re-inserting the same external_id must be a no-op, not a duplicate row");
+    assert_eq!(repo.records.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn the_same_external_id_is_not_deduped_across_different_tenants() {
+    let repo = InMemoryRawRecordRepository::default();
+    let record_a = RawRecord::new(
+        "imap",
+        common::SourceType::Message,
+        uuid::Uuid::new_v4(),
+        serde_json::json!({}),
+    )
+    .with_external_id("message-id-123");
+    let record_b = RawRecord::new(
+        "imap",
+        common::SourceType::Message,
+        uuid::Uuid::new_v4(),
+        serde_json::json!({}),
+    )
+    .with_external_id("message-id-123");
+
+    assert!(repo.insert(&record_a).await.unwrap());
+    assert!(repo.insert(&record_b).await.unwrap());
+    assert_eq!(repo.records.lock().unwrap().len(), 2);
 }
 
 #[tokio::test]

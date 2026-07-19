@@ -121,14 +121,118 @@ async fn posting_a_record_persists_it_and_publishes_record_ingested() {
     assert_eq!(row.1, "zendesk");
     assert_eq!(row.2, tenant_id);
 
-    let delivery = tokio::time::timeout(std::time::Duration::from_secs(5), consumer.next())
-        .await
-        .expect("timed out waiting for record.ingested message")
-        .expect("consumer stream ended unexpectedly")
-        .expect("delivery error");
-    delivery.ack(BasicAckOptions::default()).await.expect("ack failed");
-
-    let published: serde_json::Value = serde_json::from_slice(&delivery.data).unwrap();
-    assert_eq!(published["id"], serde_json::json!(record_id));
+    // The test queue is bound to the same fanout exchange every live service in this
+    // environment publishes to, so unrelated `record.ingested` messages from real background
+    // agents may arrive first — search by this record's own id rather than assuming the very
+    // next delivery is ours.
+    let published = loop {
+        let delivery = tokio::time::timeout(std::time::Duration::from_secs(5), consumer.next())
+            .await
+            .expect("timed out waiting for record.ingested message")
+            .expect("consumer stream ended unexpectedly")
+            .expect("delivery error");
+        let value: serde_json::Value = serde_json::from_slice(&delivery.data).unwrap();
+        delivery.ack(BasicAckOptions::default()).await.expect("ack failed");
+        if value["id"] == serde_json::json!(record_id) {
+            break value;
+        }
+    };
     assert_eq!(published["tenant_id"], serde_json::json!(tenant_id));
+}
+
+#[tokio::test]
+async fn reposting_the_same_external_id_against_real_postgres_does_not_duplicate_or_republish() {
+    let pool = test_pool().await;
+    let publish_channel = test_channel().await;
+    let consume_channel = test_channel().await;
+
+    let publisher =
+        RabbitMqEventPublisher::new(publish_channel).await.expect("failed to declare exchange");
+    let queue = consume_channel
+        .queue_declare(
+            "",
+            QueueDeclareOptions { exclusive: true, ..Default::default() },
+            FieldTable::default(),
+        )
+        .await
+        .expect("failed to declare queue");
+    consume_channel
+        .queue_bind(
+            queue.name().as_str(),
+            RECORD_INGESTED_EXCHANGE,
+            "",
+            QueueBindOptions::default(),
+            FieldTable::default(),
+        )
+        .await
+        .expect("failed to bind queue");
+    let mut consumer = consume_channel
+        .basic_consume(
+            queue.name().as_str(),
+            "ingest-integration-test-dedup",
+            BasicConsumeOptions::default(),
+            FieldTable::default(),
+        )
+        .await
+        .expect("failed to start consumer");
+
+    let state = IngestState {
+        repository: Arc::new(PostgresRawRecordRepository::new(pool.clone())),
+        publisher: Arc::new(publisher),
+    };
+    let app = build_router(state);
+
+    let tenant_id = Uuid::new_v4();
+    let body = serde_json::json!({
+        "connector_id": "imap-live-test",
+        "source_type": "message",
+        "tenant_id": tenant_id,
+        "raw_payload": {"subject": "same message polled twice"},
+        "external_id": "message-id-dedup-integration-test",
+    });
+
+    for _ in 0..2 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/records")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    let count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM raw_records WHERE tenant_id = $1 AND external_id = $2",
+    )
+    .bind(tenant_id)
+    .bind("message-id-dedup-integration-test")
+    .fetch_one(&pool)
+    .await
+    .expect("count query failed");
+    assert_eq!(count.0, 1, "the real unique index must have deduped the second insert");
+
+    // The test queue is bound to the same fanout exchange every live service in this
+    // environment publishes to, so it may also receive unrelated `record.ingested` messages
+    // from real background agents — filter by this test's own tenant_id rather than assuming
+    // the queue is otherwise silent.
+    let mut matching_deliveries = 0;
+    loop {
+        let next = tokio::time::timeout(std::time::Duration::from_secs(3), consumer.next()).await;
+        let Ok(Some(Ok(delivery))) = next else { break };
+        let published: serde_json::Value = serde_json::from_slice(&delivery.data).unwrap();
+        delivery.ack(BasicAckOptions::default()).await.expect("ack failed");
+        if published["tenant_id"] == serde_json::json!(tenant_id) {
+            matching_deliveries += 1;
+        }
+    }
+    assert_eq!(
+        matching_deliveries, 1,
+        "record.ingested must publish exactly once for this tenant, not once per re-post of a deduped external_id"
+    );
 }

@@ -21,6 +21,13 @@ pub struct RawRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub normalized_payload: Option<serde_json::Value>,
     pub tenant_id: Uuid,
+    /// A source-stable identifier a connector can supply (e.g. an email's `Message-ID` header,
+    /// a ticket's external ticket number) so re-polling an overlapping window is idempotent —
+    /// ingestion dedupes on `(tenant_id, connector_id, external_id)` rather than creating a
+    /// second `RawRecord` (and a second downstream Event/trigger fire) for the same source
+    /// item. `None` for connectors with no natural stable id; such records are never deduped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,7 +57,13 @@ impl RawRecord {
             raw_payload,
             normalized_payload: None,
             tenant_id,
+            external_id: None,
         }
+    }
+
+    pub fn with_external_id(mut self, external_id: impl Into<String>) -> Self {
+        self.external_id = Some(external_id.into());
+        self
     }
 
     pub fn is_normalized(&self) -> bool {

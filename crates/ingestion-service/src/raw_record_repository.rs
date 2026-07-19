@@ -28,7 +28,12 @@ pub struct ConnectorStats {
 /// per CLAUDE.md §2's requirement that unit tests not require the docker-compose stack.
 #[async_trait]
 pub trait RawRecordRepository: Send + Sync {
-    async fn insert(&self, record: &RawRecord) -> Result<(), RepositoryError>;
+    /// Inserts a new record. Returns `Ok(true)` if it was actually inserted, `Ok(false)` if it
+    /// was a no-op because `external_id` was already present for this tenant/connector — a
+    /// connector that re-scans an overlapping window (e.g. IMAP's date-only `SINCE` search)
+    /// must not create a duplicate row, and the caller uses this to also skip publishing
+    /// `record.ingested` for the no-op case.
+    async fn insert(&self, record: &RawRecord) -> Result<bool, RepositoryError>;
 
     /// Sets `normalized_payload` for a previously-ingested record. This is the only write
     /// path onto `raw_records` from outside Ingestion Service — Normalization Service calls
@@ -131,13 +136,15 @@ impl PostgresRawRecordRepository {
 
 #[async_trait]
 impl RawRecordRepository for PostgresRawRecordRepository {
-    async fn insert(&self, record: &RawRecord) -> Result<(), RepositoryError> {
-        sqlx::query(
+    async fn insert(&self, record: &RawRecord) -> Result<bool, RepositoryError> {
+        let result = sqlx::query(
             r#"
             INSERT INTO raw_records
                 (id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
-                 normalized_payload, tenant_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 normalized_payload, tenant_id, external_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (tenant_id, connector_id, external_id) WHERE external_id IS NOT NULL
+                DO NOTHING
             "#,
         )
         .bind(record.id)
@@ -148,10 +155,11 @@ impl RawRecordRepository for PostgresRawRecordRepository {
         .bind(&record.raw_payload)
         .bind(&record.normalized_payload)
         .bind(record.tenant_id)
+        .bind(&record.external_id)
         .execute(&self.pool)
         .await
         .map_err(|e| RepositoryError::Backend(e.to_string()))?;
-        Ok(())
+        Ok(result.rows_affected() > 0)
     }
 
     async fn update_normalized_payload(
@@ -177,7 +185,7 @@ impl RawRecordRepository for PostgresRawRecordRepository {
         let rows: Vec<RawRecordRow> = sqlx::query_as(
             r#"
             SELECT id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
-                   normalized_payload, tenant_id
+                   normalized_payload, tenant_id, external_id
             FROM raw_records
             WHERE tenant_id = $1 AND ingested_at < $2
             ORDER BY ingested_at ASC
@@ -242,7 +250,7 @@ impl RawRecordRepository for PostgresRawRecordRepository {
         let rows: Vec<RawRecordRow> = sqlx::query_as(
             r#"
             SELECT id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
-                   normalized_payload, tenant_id
+                   normalized_payload, tenant_id, external_id
             FROM raw_records
             WHERE tenant_id = $1 AND connector_id = $2
             ORDER BY ingested_at DESC
@@ -266,7 +274,7 @@ impl RawRecordRepository for PostgresRawRecordRepository {
         let row: Option<RawRecordRow> = sqlx::query_as(
             r#"
             SELECT id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
-                   normalized_payload, tenant_id
+                   normalized_payload, tenant_id, external_id
             FROM raw_records
             WHERE id = $1 AND tenant_id = $2
             "#,
@@ -287,7 +295,7 @@ impl RawRecordRepository for PostgresRawRecordRepository {
         let rows: Vec<RawRecordRow> = sqlx::query_as(
             r#"
             SELECT id, connector_id, source_type, ingested_at, occurred_at, raw_payload,
-                   normalized_payload, tenant_id
+                   normalized_payload, tenant_id, external_id
             FROM raw_records
             WHERE tenant_id = $1
               AND ($2::text IS NULL OR connector_id = $2)
@@ -333,6 +341,7 @@ type RawRecordRow = (
     serde_json::Value,
     Option<serde_json::Value>,
     uuid::Uuid,
+    Option<String>,
 );
 
 fn row_to_record(row: RawRecordRow) -> RawRecord {
@@ -345,6 +354,7 @@ fn row_to_record(row: RawRecordRow) -> RawRecord {
         raw_payload,
         normalized_payload,
         tenant_id,
+        external_id,
     ) = row;
     RawRecord {
         id,
@@ -355,5 +365,6 @@ fn row_to_record(row: RawRecordRow) -> RawRecord {
         raw_payload,
         normalized_payload,
         tenant_id,
+        external_id,
     }
 }

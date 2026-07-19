@@ -49,6 +49,31 @@ async fn valid_record_is_persisted_and_published_returns_201() {
 }
 
 #[tokio::test]
+async fn a_record_with_a_duplicate_external_id_is_a_no_op_that_still_returns_201() {
+    let repository = Arc::new(InMemoryRawRecordRepository::default());
+    let publisher = Arc::new(InMemoryEventPublisher::default());
+    let state = IngestState { repository: repository.clone(), publisher: publisher.clone() };
+
+    let mut body = valid_body();
+    body["external_id"] = serde_json::json!("message-id-123");
+
+    post_json(router(state.clone()), body.clone()).await;
+    let response = post_json(router(state), body).await;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        repository.records.lock().unwrap().len(),
+        1,
+        "the duplicate must not create a second row"
+    );
+    assert_eq!(
+        publisher.published.lock().unwrap().len(),
+        1,
+        "record.ingested must only publish once, not once per re-poll"
+    );
+}
+
+#[tokio::test]
 async fn empty_connector_id_is_rejected_with_400() {
     let repository = Arc::new(InMemoryRawRecordRepository::default());
     let publisher = Arc::new(InMemoryEventPublisher::default());

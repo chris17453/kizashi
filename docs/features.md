@@ -2788,3 +2788,44 @@ architectural decision.
 - **ADR:** [ADR-0031](../docs/adr/0031-per-tenant-ai-provider-and-model-configuration.md) —
   provider selection shape, why chat-completions can't be batched like Foundry, why the client
   is resolved per-call instead of cached, and the accepted-interim plaintext-`api_key` posture
+
+## [2026-07-19] feature/0040-idempotent-ingestion-dedup — Idempotent ingestion via external_id
+- **Type:** feature
+- **Summary:** Connectors are stateless per invocation (ADR-0013) and at least one — IMAP —
+  necessarily re-scans an overlapping poll window every cycle, since IMAP's `SEARCH SINCE` only
+  has day granularity. Before this change, every re-scanned message became a brand-new
+  `RawRecord`, flowing through Normalization/Analysis/Trigger Engine again and potentially
+  re-firing a Trigger for the same source item on every single poll, forever — a real
+  correctness gap surfaced while wiring up a genuine production email-monitoring use case.
+  Added an optional `external_id` field to `RawRecord`; Ingestion Service enforces uniqueness
+  on `(tenant_id, connector_id, external_id)` via a partial unique index (`WHERE external_id IS
+  NOT NULL`, so records with no external id are unaffected) and `ON CONFLICT ... DO NOTHING`,
+  and only publishes `record.ingested` on an actual new insert — a duplicate never reaches
+  downstream processing at all. The IMAP connector now sets `external_id` from the message's
+  `Message-Id` header (RFC 5322, globally stable), falling back to `"{connector_id}:{uid}"` for
+  the rare message without one (IMAP UIDs are unique within a mailbox). While verifying this
+  against real Postgres, also found and fixed a **pre-existing test flake**: the ingestion
+  integration tests bind to the same RabbitMQ fanout exchange every live service in this
+  shared dev environment publishes to, so a test could receive an unrelated `record.ingested`
+  message from a real background agent before its own — fixed by filtering received messages
+  by the record's own id/tenant instead of assuming the first delivery is the test's own.
+- **Tests:** `cargo test -p common --lib raw_record` — 5 passed (field addition, existing tests
+  unaffected). `cargo test -p ingestion-service --lib` — 61 passed (4 new: no-external-id is
+  never deduped, same external_id re-insert is a no-op, dedup is scoped per tenant, handler
+  returns 201 and skips publish on a dedup no-op). `cargo test -p ingestion-service --tests`
+  (real Postgres/RabbitMQ) — new integration test proving the real partial unique index
+  actually dedupes and `record.ingested` publishes exactly once, not once per re-post.
+  `cargo test -p connector-imap --lib message` — 5 passed (2 new: external_id from Message-Id,
+  fallback to connector_id:uid when absent). `cargo test -p connector-runtime --lib
+  ingestion_client` — 6 passed (1 new: external_id is included in the request body).
+  `cargo test --workspace --all-features` (full real-infra stack) — every test binary passed,
+  0 failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo audit` — same 3
+  pre-existing allow-listed advisories, no new ones.
+- **Live verification:** applied the new migration against the real running Postgres
+  (`ingestion_service.raw_records` gained `external_id` and the partial unique index, confirmed
+  via `\d raw_records`), manually verified the exact `ON CONFLICT` clause behaves as `INSERT 0
+  0` on a real conflicting insert via `psql`, and ran the new Rust integration test against the
+  real stack proving both DB-level dedup and publish-exactly-once end-to-end.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0032](../docs/adr/0032-idempotent-ingestion-via-external-id.md)
