@@ -129,10 +129,14 @@ pub struct PostTriggerForm {
     threshold: String,
     direction: Option<String>,
     action_url: Option<String>,
-    // ADR-0027: a correlated trigger's legs — up to 3 (event_type, min_count) pairs. A form
-    // can't submit a variable-length list without JS, so this is a fixed small number of rows;
-    // any row with a blank event_type is skipped, not an error. `#[serde(default)]` so
-    // existing/hand-built form submissions that predate this shape still deserialize.
+    // ADR-0027: a correlated trigger's legs — event/chat was just the illustrative example in
+    // the ADR, this is generic to any event types. Up to 6 (event_type, min_count) pairs — a
+    // form can't submit a truly variable-length list without JS, so this is a fixed number of
+    // rows (2 shown by default, up to 4 more revealed via the page's "+ Add another source"
+    // button — client-side reveal only, ADR-0014's no-JS-by-default stance intact since the
+    // rows themselves are still plain server-rendered inputs). Any row with a blank event_type
+    // is skipped, not an error. `#[serde(default)]` so existing/hand-built form submissions
+    // that predate this shape, or that only fill in fewer rows, still deserialize.
     #[serde(default)]
     correlated_event_type_1: String,
     #[serde(default)]
@@ -145,6 +149,18 @@ pub struct PostTriggerForm {
     correlated_event_type_3: String,
     #[serde(default)]
     correlated_min_count_3: String,
+    #[serde(default)]
+    correlated_event_type_4: String,
+    #[serde(default)]
+    correlated_min_count_4: String,
+    #[serde(default)]
+    correlated_event_type_5: String,
+    #[serde(default)]
+    correlated_min_count_5: String,
+    #[serde(default)]
+    correlated_event_type_6: String,
+    #[serde(default)]
+    correlated_min_count_6: String,
 }
 
 fn build_correlated_conditions(
@@ -154,6 +170,9 @@ fn build_correlated_conditions(
         (&form.correlated_event_type_1, &form.correlated_min_count_1),
         (&form.correlated_event_type_2, &form.correlated_min_count_2),
         (&form.correlated_event_type_3, &form.correlated_min_count_3),
+        (&form.correlated_event_type_4, &form.correlated_min_count_4),
+        (&form.correlated_event_type_5, &form.correlated_min_count_5),
+        (&form.correlated_event_type_6, &form.correlated_min_count_6),
     ];
     let mut conditions = Vec::new();
     for (event_type, min_count) in rows {

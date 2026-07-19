@@ -327,6 +327,47 @@ async fn post_creates_a_correlated_trigger_deriving_event_type_match_from_the_fi
 }
 
 #[tokio::test]
+async fn post_creates_a_correlated_trigger_with_all_six_sources() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    let mut state = state;
+    state.triggers_client = triggers_client.clone();
+
+    let body = "name=six-sources&event_type_match=&window_seconds=3600&condition_shape=correlated_over_window&field=&threshold=&direction=above&count=&action_url=\
+        &correlated_event_type_1=a&correlated_min_count_1=1\
+        &correlated_event_type_2=b&correlated_min_count_2=1\
+        &correlated_event_type_3=c&correlated_min_count_3=1\
+        &correlated_event_type_4=d&correlated_min_count_4=1\
+        &correlated_event_type_5=e&correlated_min_count_5=1\
+        &correlated_event_type_6=f&correlated_min_count_6=1";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let created = triggers_client.created.lock().unwrap();
+    match &created[0].condition {
+        common::TriggerCondition::CorrelatedOverWindow { conditions } => {
+            assert_eq!(conditions.len(), 6);
+            let event_types: Vec<&str> = conditions.iter().map(|c| c.event_type.as_str()).collect();
+            assert_eq!(event_types, vec!["a", "b", "c", "d", "e", "f"]);
+        }
+        other => panic!("expected CorrelatedOverWindow, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn post_rerenders_with_a_form_error_when_no_correlated_rows_are_filled_in() {
     let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
 
