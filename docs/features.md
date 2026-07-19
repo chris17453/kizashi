@@ -2491,3 +2491,51 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — implements ADR-0011 point 5's already-decided "external scheduling... or
   equivalent" for the docker-compose deployment target, no new architectural decision
+
+## [2026-07-19] feature/0033-cross-source-correlated-triggers — Cross-source correlated trigger conditions
+- **Type:** feature
+- **Branch:** feature/0033-cross-source-correlated-triggers
+- **Summary:** Closes the real use case ADR-0001 anticipated when it deferred compound trigger
+  conditions: operators reading from multiple agents/connectors need triggers that combine
+  signals across data streams for the same entity — e.g. "fire when a customer has a
+  negative-sentiment email AND an unresolved chat message within the same window," not just
+  within one source type. Added ADR-0027 and a new `TriggerCondition::CorrelatedOverWindow {
+  conditions: Vec<CorrelatedCondition> }` variant (`common::trigger_definition.rs`) — a closed
+  "every listed event type needs its own min_count within the window" shape, additive to the
+  two existing shapes with zero changes to their evaluation or tests. `TriggerRepository::
+  active_triggers_for` (`trigger-engine`) now finds a correlated trigger by any of its listed
+  event types via a Postgres JSONB containment query against the existing `condition` column
+  (no schema change). `process_analyzed_record` gained `evaluate_trigger`, which for a
+  correlated trigger queries `SignalRepository::window_stats` once per listed event type
+  (previously always exactly once, for the arriving candidate's own type) and evaluates via the
+  new `TriggerDefinition::evaluate_correlated`; the fired Event's `record_ids` lineage is the
+  union across every contributing source. Console UI authoring support is explicitly deferred
+  per the ADR — the API already accepts the new shape as arbitrary JSON.
+- **Tests:** `cargo test -p common --lib` — 54 passed (7 new: correlated fire/no-fire cases,
+  empty-conditions-never-fires, disabled-never-fires, unrelated-counts-ignored, and a new
+  `evaluate_correlated_never_panics_on_arbitrary_input` proptest extending the existing
+  trigger-DSL fuzz coverage CLAUDE.md §2 requires). `cargo test -p trigger-engine --lib` — 34
+  passed (4 new: correlated lookup-by-either-event-type, plus two full `process_analyzed_record`
+  end-to-end tests proving a correlated trigger only fires once every source has contributed
+  and doesn't cross-contaminate between entities). `cargo test -p trigger-engine --test
+  trigger_repository_integration_test` — 4 passed, real Postgres (2 new, including the JSONB
+  containment query proven against a real database). `cargo test --workspace --all-features`
+  (full real-infra stack) — 108 test binaries, all passed, 0 failed. `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean.
+  `cargo deny check` — clean. `cargo audit` — same 3 pre-existing allow-listed advisories, no
+  new ones.
+- **Live verification:** rebuilt and redeployed the real `config-admin-service`,
+  `trigger-engine`, and `action-executor` containers (all depend on `common`, where the new
+  variant lives). Created a real correlated trigger via `config-admin-service`'s actual API,
+  confirmed it synced to `trigger-engine`. Published two real `record.analyzed` messages over
+  RabbitMQ for the same entity from two different (simulated) connectors — an email-sentiment
+  signal, then an unresolved-chat signal — and confirmed via direct ClickHouse/Postgres queries
+  and `action-executor`'s own `ActionExecution` audit log that: (a) no event fired after only
+  the email signal, (b) the correlated Event fired only once the chat signal landed, and (c)
+  the fired event's `record_ids` contained both the email and chat record ids — proof the
+  condition genuinely joined signals across two connectors before firing, not just re-checking
+  one source. Cleaned up all test trigger/signal/event data afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0027](../docs/adr/0027-cross-source-correlated-trigger-conditions.md) — extends
+  ADR-0001's trigger condition DSL shape, the spec §11 open item CLAUDE.md flags for this exact
+  kind of change

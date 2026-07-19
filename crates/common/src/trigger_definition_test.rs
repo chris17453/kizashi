@@ -1,6 +1,7 @@
 use super::*;
 use proptest::prelude::*;
 use serde_json::json;
+use std::collections::HashMap;
 
 fn count_trigger(count: u32, enabled: bool) -> TriggerDefinition {
     TriggerDefinition {
@@ -73,6 +74,73 @@ fn threshold_condition_with_empty_field_values_never_fires() {
     assert!(!trigger.evaluate(0, &[]));
 }
 
+fn correlated_trigger(conditions: Vec<CorrelatedCondition>, enabled: bool) -> TriggerDefinition {
+    TriggerDefinition {
+        id: Uuid::new_v4(),
+        tenant_id: Uuid::new_v4(),
+        name: "email-and-chat".to_string(),
+        event_type_match: conditions.first().map(|c| c.event_type.clone()).unwrap_or_default(),
+        condition: TriggerCondition::CorrelatedOverWindow { conditions },
+        window_seconds: 3600,
+        actions: vec![],
+        enabled,
+    }
+}
+
+#[test]
+fn correlated_over_window_fires_only_when_every_event_type_meets_its_min_count() {
+    let trigger = correlated_trigger(
+        vec![
+            CorrelatedCondition { event_type: "sentiment_drop_email".to_string(), min_count: 1 },
+            CorrelatedCondition { event_type: "unresolved_chat".to_string(), min_count: 2 },
+        ],
+        true,
+    );
+
+    let mut counts = HashMap::new();
+    assert!(!trigger.evaluate_correlated(&counts), "no signals at all must not fire");
+
+    counts.insert("sentiment_drop_email".to_string(), 1);
+    assert!(!trigger.evaluate_correlated(&counts), "missing the chat leg must not fire");
+
+    counts.insert("unresolved_chat".to_string(), 1);
+    assert!(
+        !trigger.evaluate_correlated(&counts),
+        "chat leg below its own min_count must not fire"
+    );
+
+    counts.insert("unresolved_chat".to_string(), 2);
+    assert!(trigger.evaluate_correlated(&counts), "both legs satisfied must fire");
+}
+
+#[test]
+fn correlated_over_window_with_no_conditions_never_fires() {
+    let trigger = correlated_trigger(vec![], true);
+    assert!(!trigger.evaluate_correlated(&HashMap::new()));
+}
+
+#[test]
+fn disabled_correlated_trigger_never_fires_even_if_every_leg_is_satisfied() {
+    let trigger = correlated_trigger(
+        vec![CorrelatedCondition { event_type: "a".to_string(), min_count: 1 }],
+        false,
+    );
+    let mut counts = HashMap::new();
+    counts.insert("a".to_string(), 100);
+    assert!(!trigger.evaluate_correlated(&counts));
+}
+
+#[test]
+fn correlated_over_window_ignores_unrelated_event_types_in_counts() {
+    let trigger = correlated_trigger(
+        vec![CorrelatedCondition { event_type: "a".to_string(), min_count: 1 }],
+        true,
+    );
+    let mut counts = HashMap::new();
+    counts.insert("unrelated".to_string(), 999);
+    assert!(!trigger.evaluate_correlated(&counts));
+}
+
 #[test]
 fn condition_serializes_with_shape_tag() {
     let condition = TriggerCondition::CountOverWindow { count: 3 };
@@ -100,5 +168,24 @@ proptest! {
 
         let threshold_below_t = threshold_trigger(threshold, ThresholdDirection::Below, enabled);
         let _ = threshold_below_t.evaluate(matching_event_count, &field_values);
+    }
+
+    // Same guarantee for the correlated shape: arbitrary event-type/min_count legs and an
+    // arbitrary counts map (including entries that don't match any leg) must never panic.
+    #[test]
+    fn evaluate_correlated_never_panics_on_arbitrary_input(
+        event_types in proptest::collection::vec("[a-z_]{0,10}", 0..5),
+        min_counts in proptest::collection::vec(0u32..10_000, 0..5),
+        counts_values in proptest::collection::vec(("[a-z_]{0,10}", 0u32..10_000), 0..10),
+        enabled in any::<bool>(),
+    ) {
+        let conditions: Vec<CorrelatedCondition> = event_types
+            .into_iter()
+            .zip(min_counts)
+            .map(|(event_type, min_count)| CorrelatedCondition { event_type, min_count })
+            .collect();
+        let trigger = correlated_trigger(conditions, enabled);
+        let counts: HashMap<String, u32> = counts_values.into_iter().collect();
+        let _ = trigger.evaluate_correlated(&counts);
     }
 }

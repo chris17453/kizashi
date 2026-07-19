@@ -81,15 +81,26 @@ impl TriggerRepository for PostgresTriggerRepository {
         tenant_id: Uuid,
         event_type: &str,
     ) -> Result<Vec<TriggerDefinition>, TriggerRepositoryError> {
+        // ADR-0027: a trigger matches either by the plain `event_type_match` column (the two
+        // single-event-type shapes), or — for CorrelatedOverWindow triggers — if `event_type`
+        // appears anywhere in its `condition`'s `conditions` array, checked via JSONB
+        // containment against the same `condition` column already stored, no schema change.
+        let containment_probe = serde_json::json!([{"event_type": event_type}]);
         let rows: Vec<TriggerRow> = sqlx::query_as(
             r#"
             SELECT id, tenant_id, name, event_type_match, condition, window_seconds, actions, enabled
             FROM trigger_definitions
-            WHERE tenant_id = $1 AND event_type_match = $2 AND enabled = true
+            WHERE tenant_id = $1
+              AND enabled = true
+              AND (
+                event_type_match = $2
+                OR condition -> 'conditions' @> $3::jsonb
+              )
             "#,
         )
         .bind(tenant_id)
         .bind(event_type)
+        .bind(containment_probe)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| TriggerRepositoryError::Backend(e.to_string()))?;

@@ -206,3 +206,74 @@ async fn propagates_event_write_failure_when_a_trigger_fires() {
     let err = process_analyzed_record(&deps, &record).await.unwrap_err();
     assert!(matches!(err, ProcessError::EventWrite(_)));
 }
+
+fn correlated_trigger(tenant_id: Uuid) -> TriggerDefinition {
+    TriggerDefinition {
+        id: Uuid::new_v4(),
+        tenant_id,
+        name: "email-and-chat".to_string(),
+        event_type_match: "sentiment_drop_email".to_string(),
+        condition: TriggerCondition::CorrelatedOverWindow {
+            conditions: vec![
+                common::CorrelatedCondition {
+                    event_type: "sentiment_drop_email".to_string(),
+                    min_count: 1,
+                },
+                common::CorrelatedCondition {
+                    event_type: "unresolved_chat".to_string(),
+                    min_count: 1,
+                },
+            ],
+        },
+        window_seconds: 3600,
+        actions: vec![],
+        enabled: true,
+    }
+}
+
+#[tokio::test]
+async fn a_correlated_trigger_does_not_fire_until_every_source_has_contributed() {
+    let tenant_id = Uuid::new_v4();
+    let (deps, event_store, _publisher) =
+        deps(InMemoryTriggerRepository::with_trigger(correlated_trigger(tenant_id)));
+
+    let email_record = analyzed_record(tenant_id, "cust-1", json!({"sentiment_drop_email": 1.0}));
+    let created = process_analyzed_record(&deps, &email_record).await.unwrap();
+    assert_eq!(created, 0, "only the email leg has landed, chat is still missing");
+    assert!(event_store.events.lock().unwrap().is_empty());
+
+    let chat_record = analyzed_record(tenant_id, "cust-1", json!({"unresolved_chat": 1.0}));
+    let created = process_analyzed_record(&deps, &chat_record).await.unwrap();
+    assert_eq!(created, 1, "both legs have now landed for the same entity within the window");
+
+    let events = event_store.events.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].group_key, "cust-1");
+    // Lineage covers records from both correlated sources, not just the one that just arrived.
+    assert!(events[0].record_ids.contains(&email_record.record.id));
+    assert!(events[0].record_ids.contains(&chat_record.record.id));
+}
+
+#[tokio::test]
+async fn a_correlated_trigger_for_a_different_entity_does_not_cross_contaminate() {
+    let tenant_id = Uuid::new_v4();
+    let (deps, event_store, _publisher) =
+        deps(InMemoryTriggerRepository::with_trigger(correlated_trigger(tenant_id)));
+
+    process_analyzed_record(
+        &deps,
+        &analyzed_record(tenant_id, "cust-1", json!({"sentiment_drop_email": 1.0})),
+    )
+    .await
+    .unwrap();
+
+    let created = process_analyzed_record(
+        &deps,
+        &analyzed_record(tenant_id, "cust-2", json!({"unresolved_chat": 1.0})),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(created, 0, "cust-2's chat signal must not combine with cust-1's email signal");
+    assert!(event_store.events.lock().unwrap().is_empty());
+}
