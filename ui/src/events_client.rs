@@ -21,6 +21,12 @@ pub struct EventsPage {
     pub has_more: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct DailyCount {
+    pub date: String,
+    pub count: u64,
+}
+
 #[derive(Debug, Error)]
 pub enum EventsClientError {
     #[error("query gateway unreachable: {0}")]
@@ -47,6 +53,14 @@ pub trait EventsClient: Send + Sync {
         bearer_token: &str,
         record_id: Uuid,
     ) -> Result<Vec<EventSummary>, EventsClientError>;
+
+    /// Daily event counts over `[since, until]` — the Events page's over-time chart.
+    async fn daily_counts(
+        &self,
+        bearer_token: &str,
+        since: chrono::DateTime<chrono::Utc>,
+        until: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<DailyCount>, EventsClientError>;
 }
 
 pub struct HttpEventsClient {
@@ -116,5 +130,33 @@ impl EventsClient for HttpEventsClient {
         let body: ListEventsResponse =
             response.json().await.map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
         Ok(body.events)
+    }
+
+    async fn daily_counts(
+        &self,
+        bearer_token: &str,
+        since: chrono::DateTime<chrono::Utc>,
+        until: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<DailyCount>, EventsClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/events/daily-counts", self.query_gateway_url))
+            .query(&[("since", since.to_rfc3339()), ("until", until.to_rfc3339())])
+            .bearer_auth(bearer_token)
+            .send()
+            .await
+            .map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(EventsClientError::Rejected(response.status().as_u16()));
+        }
+
+        #[derive(serde::Deserialize)]
+        struct DailyCountsResponse {
+            counts: Vec<DailyCount>,
+        }
+        let body: DailyCountsResponse =
+            response.json().await.map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
+        Ok(body.counts)
     }
 }

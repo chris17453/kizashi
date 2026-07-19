@@ -48,6 +48,30 @@ impl EventQueryRepository for InMemoryEventQueryRepository {
             .find(|e| e.tenant_id == tenant_id && e.id == id)
             .cloned())
     }
+
+    async fn count_by_day(
+        &self,
+        tenant_id: Uuid,
+        event_type: Option<&str>,
+        since: DateTime<Utc>,
+        until: DateTime<Utc>,
+    ) -> Result<Vec<DailyEventCount>, QueryError> {
+        let mut counts: std::collections::BTreeMap<chrono::NaiveDate, u64> =
+            std::collections::BTreeMap::new();
+        for event in self.events.lock().unwrap().iter() {
+            if event.tenant_id != tenant_id {
+                continue;
+            }
+            if event_type.is_some_and(|t| event.event_type != t) {
+                continue;
+            }
+            if event.occurred_at < since || event.occurred_at > until {
+                continue;
+            }
+            *counts.entry(event.occurred_at.date_naive()).or_insert(0) += 1;
+        }
+        Ok(counts.into_iter().map(|(date, count)| DailyEventCount { date, count }).collect())
+    }
 }
 
 pub struct FailingEventQueryRepository;
@@ -63,6 +87,16 @@ impl EventQueryRepository for FailingEventQueryRepository {
     }
 
     async fn get_event(&self, _tenant_id: Uuid, _id: Uuid) -> Result<Option<Event>, QueryError> {
+        Err(QueryError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn count_by_day(
+        &self,
+        _tenant_id: Uuid,
+        _event_type: Option<&str>,
+        _since: DateTime<Utc>,
+        _until: DateTime<Utc>,
+    ) -> Result<Vec<DailyEventCount>, QueryError> {
         Err(QueryError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -245,4 +279,107 @@ async fn requests_always_carry_a_content_length_header() {
         result.is_ok(),
         "expected Content-Length to be present so the stub returns 200: {result:?}"
     );
+}
+
+fn event_at(tenant_id: Uuid, event_type: &str, occurred_at: DateTime<Utc>) -> Event {
+    Event::new(tenant_id, event_type, "cust-1", "cust-1", serde_json::json!({}), occurred_at)
+}
+
+#[tokio::test]
+async fn count_by_day_buckets_events_by_their_occurred_at_date() {
+    let tenant_id = Uuid::new_v4();
+    let day1 = DateTime::parse_from_rfc3339("2026-07-01T10:00:00Z").unwrap().to_utc();
+    let day1_later = DateTime::parse_from_rfc3339("2026-07-01T18:00:00Z").unwrap().to_utc();
+    let day2 = DateTime::parse_from_rfc3339("2026-07-02T09:00:00Z").unwrap().to_utc();
+    let repo = InMemoryEventQueryRepository::with_events(vec![
+        event_at(tenant_id, "sentiment", day1),
+        event_at(tenant_id, "sentiment", day1_later),
+        event_at(tenant_id, "sentiment", day2),
+    ]);
+
+    let counts = repo
+        .count_by_day(
+            tenant_id,
+            None,
+            DateTime::parse_from_rfc3339("2026-06-25T00:00:00Z").unwrap().to_utc(),
+            DateTime::parse_from_rfc3339("2026-07-10T00:00:00Z").unwrap().to_utc(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(counts.len(), 2);
+    assert_eq!(counts[0].count, 2);
+    assert_eq!(counts[1].count, 1);
+}
+
+#[tokio::test]
+async fn count_by_day_is_scoped_to_tenant_and_event_type() {
+    let tenant_id = Uuid::new_v4();
+    let other_tenant = Uuid::new_v4();
+    let day = DateTime::parse_from_rfc3339("2026-07-01T10:00:00Z").unwrap().to_utc();
+    let repo = InMemoryEventQueryRepository::with_events(vec![
+        event_at(tenant_id, "sentiment", day),
+        event_at(tenant_id, "acquisition_solicitation_score", day),
+        event_at(other_tenant, "sentiment", day),
+    ]);
+
+    let counts = repo
+        .count_by_day(
+            tenant_id,
+            Some("sentiment"),
+            DateTime::parse_from_rfc3339("2026-06-25T00:00:00Z").unwrap().to_utc(),
+            DateTime::parse_from_rfc3339("2026-07-10T00:00:00Z").unwrap().to_utc(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(counts.len(), 1);
+    assert_eq!(counts[0].count, 1);
+}
+
+#[tokio::test]
+async fn count_by_day_excludes_events_outside_the_range() {
+    let tenant_id = Uuid::new_v4();
+    let too_early = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z").unwrap().to_utc();
+    let in_range = DateTime::parse_from_rfc3339("2026-07-01T00:00:00Z").unwrap().to_utc();
+    let repo = InMemoryEventQueryRepository::with_events(vec![
+        event_at(tenant_id, "sentiment", too_early),
+        event_at(tenant_id, "sentiment", in_range),
+    ]);
+
+    let counts = repo
+        .count_by_day(
+            tenant_id,
+            None,
+            DateTime::parse_from_rfc3339("2026-06-25T00:00:00Z").unwrap().to_utc(),
+            DateTime::parse_from_rfc3339("2026-07-10T00:00:00Z").unwrap().to_utc(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(counts.len(), 1);
+    assert_eq!(counts[0].count, 1);
+}
+
+#[tokio::test]
+async fn clickhouse_count_by_day_parses_clickhouses_stringified_uint64_count() {
+    // Regression test: ClickHouse's JSONEachRow format quotes UInt64 values (what count()
+    // returns) as JSON strings, not numbers — caught live against the real deployed stack.
+    let body = "{\"d\":\"2026-07-17\",\"c\":\"2\"}\n{\"d\":\"2026-07-18\",\"c\":\"1\"}\n";
+    let url = spawn_stub_clickhouse(body.to_string(), axum::http::StatusCode::OK).await;
+    let repo = ClickHouseEventQueryRepository::new(reqwest::Client::new(), url);
+
+    let counts = repo
+        .count_by_day(
+            Uuid::new_v4(),
+            None,
+            DateTime::parse_from_rfc3339("2026-07-01T00:00:00Z").unwrap().to_utc(),
+            DateTime::parse_from_rfc3339("2026-07-20T00:00:00Z").unwrap().to_utc(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(counts.len(), 2);
+    assert_eq!(counts[0].count, 2);
+    assert_eq!(counts[1].count, 1);
 }

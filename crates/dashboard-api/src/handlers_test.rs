@@ -12,6 +12,7 @@ use tower::ServiceExt;
 fn router(state: DashboardState) -> Router {
     Router::new()
         .route("/v1/events", get(list_events))
+        .route("/v1/events/daily-counts", get(daily_event_counts))
         .route("/v1/events/:id", get(get_event))
         .with_state(state)
 }
@@ -192,4 +193,74 @@ async fn get_event_with_invalid_tenant_header_returns_400() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn daily_event_counts_requires_tenant_header() {
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::default()),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(
+                    "/v1/events/daily-counts?since=2026-07-01T00:00:00Z&until=2026-07-20T00:00:00Z",
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn daily_event_counts_returns_buckets_for_the_caller_tenant() {
+    let tenant_id = Uuid::new_v4();
+    let mut event = sample_event(tenant_id);
+    event.occurred_at = DateTime::parse_from_rfc3339("2026-07-15T10:00:00Z").unwrap().to_utc();
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::with_events(vec![event])),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(
+                    "/v1/events/daily-counts?since=2026-07-01T00:00:00Z&until=2026-07-20T00:00:00Z",
+                )
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["counts"][0]["date"], "2026-07-15");
+    assert_eq!(body["counts"][0]["count"], 1);
+}
+
+#[tokio::test]
+async fn daily_event_counts_returns_500_on_repository_failure() {
+    let state = DashboardState { event_query_repository: Arc::new(FailingEventQueryRepository) };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(
+                    "/v1/events/daily-counts?since=2026-07-01T00:00:00Z&until=2026-07-20T00:00:00Z",
+                )
+                .header("x-tenant-id", Uuid::new_v4().to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }

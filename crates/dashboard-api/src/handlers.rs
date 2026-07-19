@@ -2,7 +2,7 @@
 #[cfg(test)]
 mod handlers_test;
 
-use crate::event_query_repository::{EventFilter, EventQueryRepository};
+use crate::event_query_repository::{DailyEventCount, EventFilter, EventQueryRepository};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
@@ -118,6 +118,56 @@ pub async fn get_event(
     match state.event_query_repository.get_event(tenant_id, id).await {
         Ok(Some(event)) => Json(event).into_response(),
         Ok(None) => error_response(StatusCode::NOT_FOUND, format!("no event with id {id}")),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct DailyEventCountsQuery {
+    pub event_type: Option<String>,
+    pub since: DateTime<Utc>,
+    pub until: DateTime<Utc>,
+}
+
+#[derive(serde::Serialize)]
+struct DailyEventCountView {
+    date: String,
+    count: u64,
+}
+
+impl From<DailyEventCount> for DailyEventCountView {
+    fn from(c: DailyEventCount) -> Self {
+        Self { date: c.date.format("%Y-%m-%d").to_string(), count: c.count }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct DailyEventCountsResponse {
+    counts: Vec<DailyEventCountView>,
+}
+
+/// GET /v1/events/daily-counts — powers the Events page's over-time chart (spec §7's
+/// dashboard requirement, previously unimplemented — the Events page was a flat table with no
+/// trend visibility at all).
+pub async fn daily_event_counts(
+    State(state): State<DashboardState>,
+    headers: HeaderMap,
+    Query(query): Query<DailyEventCountsQuery>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, message)) => return error_response(status, message),
+    };
+
+    match state
+        .event_query_repository
+        .count_by_day(tenant_id, query.event_type.as_deref(), query.since, query.until)
+        .await
+    {
+        Ok(counts) => Json(DailyEventCountsResponse {
+            counts: counts.into_iter().map(DailyEventCountView::from).collect(),
+        })
+        .into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }

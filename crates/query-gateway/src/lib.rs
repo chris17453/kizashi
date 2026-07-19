@@ -18,6 +18,7 @@ use axum::Router;
 pub fn build_router(state: GatewayState) -> Router {
     Router::new()
         .route("/v1/events", get(proxy_get))
+        .route("/v1/events/daily-counts", get(proxy_get))
         .route("/v1/events/:id", get(proxy_get))
         .route("/internal/tokens", post(mint_token))
         .with_state(state)
