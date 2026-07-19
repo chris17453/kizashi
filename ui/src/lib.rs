@@ -42,7 +42,7 @@ pub use ingestion_stats_client::{
 };
 pub use session::{InMemorySessionStore, Session, SessionStore};
 pub use triggers_client::{
-    HttpTriggersClient, TriggerSummary, TriggersClient, TriggersClientError,
+    HttpTriggersClient, TriggerSummary, TriggersClient, TriggersClientError, TriggersPage,
 };
 
 pub use agent_detail_handler::get_agent_detail;

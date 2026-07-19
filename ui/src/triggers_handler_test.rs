@@ -86,6 +86,51 @@ async fn redirects_to_login_when_not_signed_in() {
 }
 
 #[tokio::test]
+async fn shows_a_next_link_when_there_are_more_triggers_but_no_previous_link_on_page_zero() {
+    let (mut state, session_id) = state_with_session().await;
+    let triggers_client = InMemoryTriggersClient::default();
+    *triggers_client.has_more.lock().unwrap() = true;
+    state.triggers_client = Arc::new(triggers_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Next"));
+    assert!(!body.contains("Previous"));
+}
+
+#[tokio::test]
+async fn shows_a_previous_link_on_page_two() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers?page=1")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Previous"));
+    assert!(body.contains("Page 2"));
+}
+
+#[tokio::test]
 async fn shows_an_error_when_the_backend_fails() {
     let (mut state, session_id) = state_with_session().await;
     state.triggers_client = Arc::new(FailingTriggersClient);

@@ -1023,3 +1023,35 @@ Entry format:
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a (additive query/response-shape change plus a bugfix, not a new architectural
   decision)
+
+## [2026-07-18] feature/0014-docker-images — Triggers pagination (last of the four flagged list pages)
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** Closes the last remaining item from the pagination backlog (Data Viewer, Events,
+  and Agents were already done). `TriggerDefinitionRepository::list` gains `limit`/`offset`
+  (Postgres impl adds `LIMIT $2 OFFSET $3`, ordered by `name`), `GET /v1/trigger-definitions`
+  now returns `{triggers, has_more}` using the same fetch-one-extra pattern as every other
+  paginated list endpoint in this codebase, and `/triggers` gets the same Previous/Next
+  `<form method="get">` controls as Agents/Events/Data Viewer. `TriggersClient::list_triggers`
+  and the Console UI handler/template were updated to match, mirroring `AgentsClient`/
+  `agents_handler.rs` exactly. Triggers had no existing "get one by id" call site (no detail
+  page), so this pass did not surface the same list-vs-lookup bug the Agents pagination work
+  found — there was nothing to fix beyond the list endpoint itself.
+- **Tests:** `cargo test -p config-admin-service --lib` — 43 passed (1 new: `list` respects
+  limit/offset at the repository level; the existing scoped-list test and the full CRUD
+  round-trip test were both updated for the new response shape). `cargo test -p kizashi-ui
+  --lib` — 92 passed (`TriggersClient` trait signature change threaded through
+  `triggers_handler`, 2 new pagination-control-rendering tests mirroring Agents/Events).
+  Beyond unit tests: rebuilt and redeployed `config-admin-service`/`kizashi-ui`, seeded 30
+  real trigger definitions directly against the live `config-admin-service` API, confirmed
+  `/triggers` shows Next-only on page 0 and Previous-only on page 1 with the 30th trigger
+  landing on page 1 as expected, then deleted all 30 test triggers (and their audit-log rows)
+  to leave the demo tenant clean. Full local CI gate: `cargo fmt --all --check` clean, `cargo
+  clippy --workspace --all-targets --all-features -- -D warnings` clean, `cargo test
+  --workspace --all-features` all green (0 failures across every crate, verified against a
+  throwaway local `mssql` container standing in for CI's Fabric TDS dependency), `cargo
+  llvm-cov` 93.90% line coverage (85% floor), `cargo audit` / `cargo deny check` clean (same
+  two pre-existing `unmaintained` advisories already allow-listed — `instant`,
+  `rustls-pemfile` — no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (additive query/response-shape change, not a new architectural decision)

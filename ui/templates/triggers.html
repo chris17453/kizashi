@@ -18,4 +18,20 @@
     {% endfor %}
   </tbody>
 </table>
+
+<div class="pagination">
+  {% if page > 0 %}
+  <form method="get" action="/triggers" class="pagination-form">
+    <input type="hidden" name="page" value="{{ page - 1 }}">
+    <button type="submit" class="btn">&larr; Previous</button>
+  </form>
+  {% endif %}
+  <span class="muted">Page {{ page + 1 }}</span>
+  {% if has_more %}
+  <form method="get" action="/triggers" class="pagination-form">
+    <input type="hidden" name="page" value="{{ page + 1 }}">
+    <button type="submit" class="btn">Next &rarr;</button>
+  </form>
+  {% endif %}
+</div>
 {% endblock %}

@@ -9,7 +9,7 @@ use crate::normalization_mapping_repository::{
 use crate::trigger_definition_repository::{
     TriggerDefinitionRepository, TriggerDefinitionRepositoryError,
 };
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use common::{NormalizationMapping, TriggerDefinition};
@@ -125,13 +125,39 @@ pub async fn get_trigger(
     }
 }
 
-pub async fn list_triggers(State(state): State<AdminState>, headers: HeaderMap) -> Response {
+#[derive(Debug, serde::Deserialize)]
+pub struct ListTriggersQuery {
+    #[serde(default = "default_list_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+}
+
+fn default_list_limit() -> i64 {
+    25
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct ListTriggersResponse {
+    pub triggers: Vec<TriggerDefinition>,
+    pub has_more: bool,
+}
+
+pub async fn list_triggers(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Query(query): Query<ListTriggersQuery>,
+) -> Response {
     let tenant_id = match tenant_id_from_headers(&headers) {
         Ok(id) => id,
         Err((status, msg)) => return error_response(status, msg),
     };
-    match state.trigger_repository.list(tenant_id).await {
-        Ok(triggers) => Json(triggers).into_response(),
+    match state.trigger_repository.list(tenant_id, query.limit + 1, query.offset).await {
+        Ok(mut triggers) => {
+            let has_more = triggers.len() as i64 > query.limit;
+            triggers.truncate(query.limit as usize);
+            Json(ListTriggersResponse { triggers, has_more }).into_response()
+        }
         Err(e) => trigger_error_response(e),
     }
 }

@@ -195,7 +195,9 @@ async fn full_trigger_crud_round_trip() {
     .await;
     assert_eq!(list.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(list.into_body(), usize::MAX).await.unwrap();
-    let triggers: Vec<TriggerDefinition> = serde_json::from_slice(&bytes).unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let triggers: Vec<TriggerDefinition> =
+        serde_json::from_value(body["triggers"].clone()).unwrap();
     assert_eq!(triggers.len(), 1);
 
     let mut updated = trigger.clone();
