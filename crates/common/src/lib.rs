@@ -40,5 +40,6 @@ pub use normalization_mapping::NormalizationMapping;
 pub use raw_record::{RawRecord, SourceType};
 pub use role::{ParseRoleError, Role};
 pub use trigger_definition::{
-    ActionRef, ActionType, ThresholdDirection, TriggerCondition, TriggerDefinition,
+    ActionRef, ActionType, CorrelatedCondition, ThresholdDirection, TriggerCondition,
+    TriggerDefinition,
 };

@@ -7,7 +7,8 @@ use crate::event_publisher::EventPublisher;
 use crate::event_store::EventStore;
 use crate::signal_repository::{AnalyzedSignal, SignalRepository};
 use crate::trigger_repository::TriggerRepository;
-use common::{AnalyzedRecord, Event};
+use common::{AnalyzedRecord, Event, TriggerCondition, TriggerDefinition};
+use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
@@ -69,13 +70,10 @@ pub async fn process_analyzed_record(
             .map_err(|e| ProcessError::TriggerLookup(e.to_string()))?;
 
         for trigger in triggers {
-            let (count, values, window_record_ids) = deps
-                .signal_repository
-                .window_stats(tenant_id, &candidate.event_type, &group_key, trigger.window_seconds)
-                .await
-                .map_err(|e| ProcessError::WindowStats(e.to_string()))?;
-
-            if !trigger.evaluate(count, &values) {
+            let (fired, window_record_ids) =
+                evaluate_trigger(deps, &trigger, tenant_id, &candidate.event_type, &group_key)
+                    .await?;
+            if !fired {
                 continue;
             }
 
@@ -102,4 +100,43 @@ pub async fn process_analyzed_record(
     }
 
     Ok(events_created)
+}
+
+/// Evaluates one trigger against the signal that was just recorded. For the two single-event-
+/// type shapes this is exactly the pre-ADR-0027 behavior: one `window_stats` call for the
+/// candidate's own event type. For `CorrelatedOverWindow` (ADR-0027), `window_stats` is called
+/// once per listed event type — not just the newly-arrived candidate's — since every leg must
+/// independently meet its own `min_count`; the returned record ids are the union across all
+/// legs, so a fired Event's lineage covers every signal that contributed to satisfying it.
+async fn evaluate_trigger(
+    deps: &TriggerDeps,
+    trigger: &TriggerDefinition,
+    tenant_id: Uuid,
+    candidate_event_type: &str,
+    group_key: &str,
+) -> Result<(bool, Vec<Uuid>), ProcessError> {
+    match &trigger.condition {
+        TriggerCondition::CorrelatedOverWindow { conditions } => {
+            let mut counts = HashMap::new();
+            let mut record_ids = Vec::new();
+            for leg in conditions {
+                let (count, _values, leg_record_ids) = deps
+                    .signal_repository
+                    .window_stats(tenant_id, &leg.event_type, group_key, trigger.window_seconds)
+                    .await
+                    .map_err(|e| ProcessError::WindowStats(e.to_string()))?;
+                counts.insert(leg.event_type.clone(), count);
+                record_ids.extend(leg_record_ids);
+            }
+            Ok((trigger.evaluate_correlated(&counts), record_ids))
+        }
+        _ => {
+            let (count, values, record_ids) = deps
+                .signal_repository
+                .window_stats(tenant_id, candidate_event_type, group_key, trigger.window_seconds)
+                .await
+                .map_err(|e| ProcessError::WindowStats(e.to_string()))?;
+            Ok((trigger.evaluate(count, &values), record_ids))
+        }
+    }
 }

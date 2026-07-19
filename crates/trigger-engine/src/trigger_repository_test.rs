@@ -1,5 +1,23 @@
 use super::*;
+use common::TriggerCondition;
 use std::sync::Mutex;
+
+/// True if `trigger` should be evaluated for an incoming `event_type` (ADR-0027): either its
+/// `event_type_match` matches directly (the single-event-type shapes), or it's a
+/// `CorrelatedOverWindow` trigger whose `conditions` list includes `event_type` — mirrors the
+/// real `PostgresTriggerRepository`'s JSONB containment query, which this in-memory double
+/// stands in for.
+fn matches_event_type(trigger: &TriggerDefinition, event_type: &str) -> bool {
+    if trigger.event_type_match == event_type {
+        return true;
+    }
+    match &trigger.condition {
+        TriggerCondition::CorrelatedOverWindow { conditions } => {
+            conditions.iter().any(|c| c.event_type == event_type)
+        }
+        _ => false,
+    }
+}
 
 #[derive(Default)]
 pub struct InMemoryTriggerRepository {
@@ -24,7 +42,7 @@ impl TriggerRepository for InMemoryTriggerRepository {
             .lock()
             .unwrap()
             .iter()
-            .filter(|t| t.enabled && t.tenant_id == tenant_id && t.event_type_match == event_type)
+            .filter(|t| t.enabled && t.tenant_id == tenant_id && matches_event_type(t, event_type))
             .cloned()
             .collect())
     }
@@ -84,6 +102,40 @@ async fn excludes_triggers_for_a_different_event_type() {
 
     let found = repo.active_triggers_for(tenant_id, "urgency").await.unwrap();
     assert!(found.is_empty());
+}
+
+fn correlated_sample_trigger(tenant_id: Uuid) -> TriggerDefinition {
+    TriggerDefinition {
+        id: Uuid::new_v4(),
+        tenant_id,
+        name: "email-and-chat".to_string(),
+        event_type_match: "sentiment_drop_email".to_string(),
+        condition: common::TriggerCondition::CorrelatedOverWindow {
+            conditions: vec![
+                common::CorrelatedCondition {
+                    event_type: "sentiment_drop_email".to_string(),
+                    min_count: 1,
+                },
+                common::CorrelatedCondition {
+                    event_type: "unresolved_chat".to_string(),
+                    min_count: 1,
+                },
+            ],
+        },
+        window_seconds: 3600,
+        actions: vec![],
+        enabled: true,
+    }
+}
+
+#[tokio::test]
+async fn a_correlated_trigger_is_found_by_any_of_its_listed_event_types() {
+    let tenant_id = Uuid::new_v4();
+    let repo = InMemoryTriggerRepository::with_trigger(correlated_sample_trigger(tenant_id));
+
+    assert_eq!(repo.active_triggers_for(tenant_id, "sentiment_drop_email").await.unwrap().len(), 1);
+    assert_eq!(repo.active_triggers_for(tenant_id, "unresolved_chat").await.unwrap().len(), 1);
+    assert!(repo.active_triggers_for(tenant_id, "unrelated").await.unwrap().is_empty());
 }
 
 #[tokio::test]
