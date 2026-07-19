@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0017         |
+| feature       | `feature/` | 0018         |
 | fix           | `fix/`     | 0002        |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -42,3 +42,4 @@ manually created branches.
 | 0014 | `feature/0014-docker-images` | feature | 2026-07-18 | open | pending | |
 | 0015 | `feature/0015-ai-analysis-config` | feature | 2026-07-19 | open | pending | |
 | 0016 | `feature/0016-agent-scheduler` | feature | 2026-07-19 | open | pending | |
+| 0017 | `feature/0017-agent-scheduler-docker-packaging` | feature | 2026-07-19 | open | pending | |
