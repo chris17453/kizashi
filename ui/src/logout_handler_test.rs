@@ -50,6 +50,7 @@ async fn logout_deletes_the_session_and_expires_the_cookie() {
         retention_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
         auth_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
         users_client: std::sync::Arc::new(crate::users_client::users_client_test::InMemoryUsersClient::default()),
+        saved_search_queries_client: std::sync::Arc::new(crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default()),
         stats_client: Arc::new(
             crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
         ),

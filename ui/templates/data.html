@@ -29,6 +29,17 @@
       <input type="text" id="attachment_filename" name="attachment_filename" value="{{ query.attachment_filename }}" placeholder="invoice.pdf">
       <button type="submit">Search</button>
     </form>
+    <form class="inline" method="post" action="/data/saved-searches" style="margin-top:1rem">
+      <input type="hidden" name="connector_id" value="{{ query.connector_id }}">
+      <input type="hidden" name="source_type" value="{{ query.source_type }}">
+      <input type="hidden" name="q" value="{{ query.q }}">
+      <input type="hidden" name="subject" value="{{ query.subject }}">
+      <input type="hidden" name="email_from" value="{{ query.email_from }}">
+      <input type="hidden" name="attachment_filename" value="{{ query.attachment_filename }}">
+      <label for="save_search_name">Save this search as</label>
+      <input type="text" id="save_search_name" name="name" placeholder="urgent tickets" required>
+      <button type="submit" class="btn">Save search</button>
+    </form>
   </div>
   <div class="info-panel">
     <h2>Search tips</h2>
@@ -41,6 +52,19 @@
         email-specific fields — they only match records ingested from mail connectors.</li>
       <li>Combine fields to narrow results — filters are ANDed together, not ORed.</li>
     </ul>
+    {% if !saved_searches.is_empty() %}
+    <h2>Saved searches</h2>
+    <ul>
+      {% for saved in saved_searches %}
+      <li>
+        <a href="{{ saved.load_url }}">{{ saved.name }}</a>
+        <form class="inline" method="post" action="/data/saved-searches/{{ saved.id }}/delete" style="display:inline">
+          <button type="submit" class="btn-danger">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
   </div>
 </div>
 

@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0036         |
+| feature       | `feature/` | 0037         |
 | fix           | `fix/`     | 0005         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -66,3 +66,4 @@ manually created branches.
 | 0034 | `feature/0034-correlated-triggers-console-ui` | feature | 2026-07-19 | open | pending | |
 | 0035 | `feature/0035-configurable-webhook-action-body` | feature | 2026-07-19 | open | pending | |
 | 0002 | `docs/0002-adr-0016-stale-followups-note` | docs | 2026-07-19 | open | pending | |
+| 0036 | `feature/0036-saved-search-queries` | feature | 2026-07-19 | open | pending | |

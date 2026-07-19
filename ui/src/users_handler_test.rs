@@ -62,6 +62,7 @@ async fn state_with_session(role: Role) -> (AppState, String, Uuid) {
         retention_policies_client: Arc::new(InMemoryRetentionPoliciesClient::default()),
         egress_allowlist_client: Arc::new(InMemoryEgressAllowlistClient::default()),
         users_client: Arc::new(InMemoryUsersClient::default()),
+        saved_search_queries_client: Arc::new(crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default()),
         config_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         retention_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         auth_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),

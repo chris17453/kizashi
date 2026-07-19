@@ -1,9 +1,9 @@
 use config_admin_service::{
     build_router, AdminState, AgentState, AnalysisConfigState, PostgresAgentRepository,
     PostgresAnalysisConfigRepository, PostgresAuditLogReader,
-    PostgresNormalizationMappingRepository, PostgresTriggerDefinitionRepository,
-    RabbitMqAgentPublisher, RabbitMqAnalysisConfigPublisher, RabbitMqMappingPublisher,
-    RabbitMqTriggerPublisher,
+    PostgresNormalizationMappingRepository, PostgresSavedSearchQueryRepository,
+    PostgresTriggerDefinitionRepository, RabbitMqAgentPublisher, RabbitMqAnalysisConfigPublisher,
+    RabbitMqMappingPublisher, RabbitMqTriggerPublisher, SavedSearchQueryState,
 };
 use std::sync::Arc;
 
@@ -62,13 +62,19 @@ async fn main() {
         agent_publisher: Arc::new(agent_publisher),
     };
     let analysis_config_state = AnalysisConfigState {
-        repository: Arc::new(PostgresAnalysisConfigRepository::new(pool)),
+        repository: Arc::new(PostgresAnalysisConfigRepository::new(pool.clone())),
         publisher: Arc::new(analysis_config_publisher),
+    };
+    let saved_search_query_state = SavedSearchQueryState {
+        saved_search_query_repository: Arc::new(PostgresSavedSearchQueryRepository::new(pool)),
     };
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "config-admin-service listening");
-    axum::serve(listener, build_router(state, agent_state, analysis_config_state))
-        .await
-        .expect("server error");
+    axum::serve(
+        listener,
+        build_router(state, agent_state, analysis_config_state, saved_search_query_state),
+    )
+    .await
+    .expect("server error");
 }

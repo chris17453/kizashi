@@ -18,6 +18,7 @@ pub mod event_type_definition;
 pub mod normalization_mapping;
 pub mod raw_record;
 pub mod role;
+pub mod saved_search_query;
 pub mod trigger_definition;
 
 pub use action_execution::{ActionExecution, ActionExecutionStatus};
@@ -39,6 +40,7 @@ pub use event_type_definition::EventTypeDefinition;
 pub use normalization_mapping::NormalizationMapping;
 pub use raw_record::{RawRecord, SourceType};
 pub use role::{ParseRoleError, Role};
+pub use saved_search_query::SavedSearchQuery;
 pub use trigger_definition::{
     ActionRef, ActionType, CorrelatedCondition, ThresholdDirection, TriggerCondition,
     TriggerDefinition,
