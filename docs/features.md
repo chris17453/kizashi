@@ -2570,3 +2570,38 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — implements the UI surface ADR-0027 already decided to defer, no new
   architectural decision
+
+## [2026-07-19] feature/0035-configurable-webhook-action-body — Configurable webhook action body template
+- **Type:** feature
+- **Branch:** feature/0035-configurable-webhook-action-body
+- **Summary:** Generalizes the fix/0004 pattern: `HttpActionDispatcher`'s generic `{action_
+  type, action_config, event}` envelope is rejected by most real third-party webhook targets
+  with their own required body shape (Slack's `{"text": "..."}` minimum, PagerDuty's Events
+  API v2 envelope, a Jira/ServiceNow REST body) — the same class of bug fixed for Teams, but
+  affecting every `Webhook`/`CreateTicket`/`Custom` action, which have no dedicated `ActionType`
+  variant of their own to build a per-vendor dispatcher against. Added ADR-0028 and an optional
+  `body_template` field to an action's `config`: when present, `render_body_template` walks the
+  JSON tree substituting `{{event_type}}`, `{{entity_ref}}`, `{{group_key}}`, `{{tenant_id}}`,
+  `{{occurred_at}}`, and `{{payload}}` placeholders in every string leaf with the firing
+  event's real values, and the rendered result is sent as the POST body instead of the generic
+  envelope. Without a `body_template`, behavior is unchanged (purely additive). An unrecognized
+  placeholder is left as literal text, not an error — no template compilation, no code
+  execution, can't panic on operator-authored config.
+- **Tests:** `cargo test -p action-executor --lib` — 49 passed (4 new: placeholder
+  substitution across strings/nested objects/arrays, unrecognized-placeholder-stays-literal, a
+  real-HTTP-round-trip test proving the rendered body — not the envelope — is what's actually
+  sent, and a test proving the generic envelope still sends when no `body_template` is
+  configured). `cargo test --workspace --all-features` (full real-infra stack) — 108 test
+  binaries, all passed, 0 failed. `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo
+  audit` — same 3 pre-existing allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `action-executor` container. Created
+  a real trigger via `config-admin-service`'s API with a `Webhook` action configured with a
+  Slack-style `body_template` (`{"text": "Kizashi alert: {{event_type}} for {{entity_ref}}"}`),
+  confirmed it synced to `trigger-engine`, published a real `event.created` message over
+  RabbitMQ, and confirmed the running container POSTed exactly `{"text": "Kizashi alert:
+  e2e_slack_test for cust-slack-e2e"}` — the genuine Slack-compatible shape, not the generic
+  envelope — to a stub webhook server. Cleaned up the test trigger/event afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0028](../docs/adr/0028-configurable-webhook-action-body-template.md) — extends
+  ADR-0007's dispatch model with a config-driven body shape, generalizing the ad hoc Teams fix
