@@ -95,8 +95,15 @@ jobs:
             (echo > /dev/tcp/127.0.0.1/13143) >/dev/null 2>&1 && break
             sleep 1
           done
-          printf 'From: sender@example.com\r\nTo: testuser@example.com\r\nSubject: Live IMAP connector test\r\nDate: Wed, 15 Jan 2025 10:00:00 +0000\r\n\r\nCI-seeded test message.\r\n' \
-            | curl -s --url "smtp://127.0.0.1:13025" --mail-from "sender@example.com" --mail-rcpt "testuser@example.com" --upload-file -
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/13025) >/dev/null 2>&1 && break
+            sleep 1
+          done
+          for i in $(seq 1 10); do
+            printf 'From: sender@example.com\r\nTo: testuser@example.com\r\nSubject: Live IMAP connector test\r\nDate: Wed, 15 Jan 2025 10:00:00 +0000\r\n\r\nCI-seeded test message.\r\n' \
+              | curl -sf --url "smtp://127.0.0.1:13025" --mail-from "sender@example.com" --mail-rcpt "testuser@example.com" --upload-file - && break
+            sleep 2
+          done
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
