@@ -351,6 +351,14 @@ services:
     depends_on:
       ingestion-gateway: { condition: service_healthy }
 
+  imap-connector:
+    build: { context: ., args: { BIN: connector-imap } }
+    profiles: ["connectors"]
+    environment:
+      INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
+    depends_on:
+      ingestion-gateway: { condition: service_healthy }
+
 volumes:
   postgres_data:
   rabbitmq_data:
