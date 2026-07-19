@@ -2359,3 +2359,46 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — extends ADR-0018's already-decided config-sync pattern to a sibling entity, no
   new architectural decision
+
+## [2026-07-19] feature/0030-user-management-role-assignment — User management + role-assignment Console UI (ADR-0016 follow-up)
+- **Type:** feature
+- **Branch:** feature/0030-user-management-role-assignment
+- **Summary:** Closes the "assign role to another user" gap ADR-0016 explicitly deferred as
+  out of scope for RBAC v1 — until now, `auth-service` had zero user-management endpoints
+  (only `local_login`), so there was no way for a workspace admin to add a teammate, change
+  someone's role, or remove access without hand-editing Postgres. Added full CRUD to
+  `auth-service`: `local_user_repository.rs` gained `list`/`create`/`update_role`/`delete`
+  (each writing an immutable audit row in the same transaction, mirroring
+  `trigger_definition_repository.rs`'s pattern), a new `auth_audit_log` table with a
+  `BEFORE UPDATE OR DELETE`-rejecting trigger (immutability enforced at the database level,
+  not just application convention), and `user_handlers.rs` exposing
+  `POST/GET /v1/users`, `PUT/DELETE /v1/users/:id`, gated by a new `require_admin` check — a
+  step above the `Operator` bar every other write path uses, since granting/revoking access is
+  more sensitive than editing config entities. Console UI gets a `/users` page
+  (`users_client.rs`, `users_handler.rs`, `users.html`): add-user form, inline role-change
+  dropdown, remove button (disabled for your own row), and a "History" link into the existing
+  shared audit-log viewer (extended to a third backend, `auth`).
+- **Tests:** `cargo test -p auth-service --lib` — 53 passed (16 new: repository CRUD tests,
+  handler RBAC tests for create/list/update/delete/audit-log across Admin/Operator/Viewer).
+  `cargo test -p auth-service --test local_user_repository_integration_test` — 5 passed, real
+  Postgres (4 new, including `auth_audit_log_rejects_delete_at_the_database_level` proving the
+  immutability trigger). `cargo test -p kizashi-ui --lib` — 207 passed (18 new: client tests
+  against a real stub HTTP server, handler tests covering Admin-only page access, create/
+  update-role/delete flows, and backend-failure handling). `cargo test --workspace
+  --all-features` (full real-infra stack) — 108 test binaries, all passed, 0 failed. `cargo
+  clippy --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all
+  --check` — clean. `cargo deny check` — clean. `cargo audit` — same 3 pre-existing
+  allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `auth-service` and `kizashi-ui`
+  containers. Via `auth-service`'s actual HTTP API: created a user, confirmed 403 for
+  non-admin callers, logged in as the new user, escalated its role to `admin`, read its real
+  audit trail (`created` then `updated` rows), deleted it, and confirmed the deleted user can
+  no longer log in. Via the real Console UI: logged in as the seeded demo admin, added a user
+  through the actual `/users` form, confirmed it appears in the table, removed it, and
+  confirmed removal — a headless-Chrome screenshot of the rendered page confirmed the table,
+  role dropdowns, and disabled self-remove button render correctly and match the platform's
+  existing visual design language.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — implements the "assign role to another user" surface ADR-0016 already decided
+  to defer, no new architectural decision; `Admin`-only gating for user management follows
+  directly from that ADR's role model

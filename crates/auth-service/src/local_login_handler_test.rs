@@ -38,6 +38,9 @@ async fn correct_credentials_mint_a_session_token() {
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
         session_client: session_client.clone(),
         oidc_clients: std::collections::HashMap::new(),
+        audit_log_reader: Arc::new(
+            crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
+        ),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "correct-password"});
@@ -74,6 +77,9 @@ async fn wrong_password_is_rejected_with_401() {
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
         session_client: Arc::new(InMemorySessionClient::default()),
         oidc_clients: std::collections::HashMap::new(),
+        audit_log_reader: Arc::new(
+            crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
+        ),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "wrong-password"});
@@ -100,6 +106,9 @@ async fn unknown_username_is_rejected_with_401_not_404() {
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
         session_client: Arc::new(InMemorySessionClient::default()),
         oidc_clients: std::collections::HashMap::new(),
+        audit_log_reader: Arc::new(
+            crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
+        ),
     };
 
     let body =
@@ -130,6 +139,9 @@ async fn unknown_tenant_name_is_rejected_with_401_not_404() {
         tenant_repository: Arc::new(InMemoryTenantRepository::default()),
         session_client: Arc::new(InMemorySessionClient::default()),
         oidc_clients: std::collections::HashMap::new(),
+        audit_log_reader: Arc::new(
+            crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
+        ),
     };
 
     let body = serde_json::json!({"tenant_name": "nonexistent", "username": "alice", "password": "whatever"});
@@ -160,6 +172,9 @@ async fn repository_failure_returns_500() {
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
         session_client: Arc::new(InMemorySessionClient::default()),
         oidc_clients: std::collections::HashMap::new(),
+        audit_log_reader: Arc::new(
+            crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
+        ),
     };
 
     let body =
@@ -186,6 +201,9 @@ async fn tenant_repository_failure_returns_500() {
         tenant_repository: Arc::new(FailingTenantRepository),
         session_client: Arc::new(InMemorySessionClient::default()),
         oidc_clients: std::collections::HashMap::new(),
+        audit_log_reader: Arc::new(
+            crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
+        ),
     };
 
     let body =
@@ -214,6 +232,9 @@ async fn session_mint_failure_returns_502() {
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
         session_client: Arc::new(FailingSessionClient),
         oidc_clients: std::collections::HashMap::new(),
+        audit_log_reader: Arc::new(
+            crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
+        ),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "correct-password"});

@@ -2,6 +2,7 @@
 #[cfg(test)]
 mod local_login_handler_test;
 
+use crate::audit_log::AuditLogReader;
 use crate::local_user_repository::LocalUserRepository;
 use crate::oidc_handler::OidcClients;
 use crate::password::verify_password;
@@ -19,6 +20,7 @@ pub struct AuthState {
     pub tenant_repository: Arc<dyn TenantRepository>,
     pub session_client: Arc<dyn SessionClient>,
     pub oidc_clients: OidcClients,
+    pub audit_log_reader: Arc<dyn AuditLogReader>,
 }
 
 #[derive(serde::Deserialize)]

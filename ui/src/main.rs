@@ -3,7 +3,7 @@ use kizashi_ui::{
     HttpAuditLogClient, HttpAuthClient, HttpBacklogClient, HttpEgressAllowlistClient,
     HttpEventsClient, HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
     HttpNormalizationMappingsClient, HttpRetentionPoliciesClient, HttpTriggersClient,
-    InMemorySessionStore,
+    HttpUsersClient, InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -35,7 +35,7 @@ async fn main() {
     let client = reqwest::Client::new();
     let state = AppState {
         session_store: Arc::new(InMemorySessionStore::default()),
-        auth_client: Arc::new(HttpAuthClient::new(client.clone(), auth_service_url)),
+        auth_client: Arc::new(HttpAuthClient::new(client.clone(), auth_service_url.clone())),
         events_client: Arc::new(HttpEventsClient::new(client.clone(), query_gateway_url)),
         triggers_client: Arc::new(HttpTriggersClient::new(
             client.clone(),
@@ -74,9 +74,14 @@ async fn main() {
             config_admin_service_url,
         )),
         retention_audit_log_client: Arc::new(HttpAuditLogClient::new(
-            client,
+            client.clone(),
             retention_service_url,
         )),
+        auth_audit_log_client: Arc::new(HttpAuditLogClient::new(
+            client.clone(),
+            auth_service_url.clone(),
+        )),
+        users_client: Arc::new(HttpUsersClient::new(client, auth_service_url)),
         ingestion_gateway_public_url,
     };
 
