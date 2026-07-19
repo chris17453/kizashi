@@ -11,10 +11,37 @@ use axum::response::{Html, IntoResponse, Response};
 use uuid::Uuid;
 
 /// One Event this record contributed to, plus every action execution it caused — a single
-/// link/hop in the journey view.
+/// link/hop in the journey view. `latency_from_ingest` and each execution's latency are
+/// pre-formatted here (not computed in the Askama template, which can't do date arithmetic) —
+/// the waterfall-style timing view (how long each pipeline hop actually took) that the plain
+/// lineage box diagram didn't show before.
 struct EventLink {
     event: EventSummary,
-    executions: Vec<ActionExecutionSummary>,
+    latency_from_ingest: Option<String>,
+    executions: Vec<ExecutionLink>,
+}
+
+struct ExecutionLink {
+    execution: ActionExecutionSummary,
+    latency_from_event: String,
+}
+
+/// Formats a (possibly negative, e.g. clock skew) duration as a short human-readable string —
+/// `"1.2s"`, `"450ms"`, `"2m 3s"`. Never panics on a negative delta; reports it as `"0ms"`
+/// rather than a confusing negative number, since a negative pipeline hop duration is always a
+/// clock-skew artifact, not a real "time travel" the operator should have to interpret.
+fn format_latency(
+    from: chrono::DateTime<chrono::Utc>,
+    to: chrono::DateTime<chrono::Utc>,
+) -> String {
+    let millis = (to - from).num_milliseconds().max(0);
+    if millis < 1000 {
+        format!("{millis}ms")
+    } else if millis < 60_000 {
+        format!("{:.1}s", millis as f64 / 1000.0)
+    } else {
+        format!("{}m {}s", millis / 60_000, (millis % 60_000) / 1000)
+    }
 }
 
 #[derive(Template)]
@@ -81,8 +108,16 @@ pub async fn get_record_journey(
             .execution_client
             .list_executions_for_event(session.tenant_id, event.id)
             .await
-            .unwrap_or_default();
-        event_links.push(EventLink { event, executions });
+            .unwrap_or_default()
+            .into_iter()
+            .map(|execution| ExecutionLink {
+                latency_from_event: format_latency(event.occurred_at, execution.executed_at),
+                execution,
+            })
+            .collect();
+        let latency_from_ingest =
+            record.as_ref().map(|r| format_latency(r.ingested_at, event.occurred_at));
+        event_links.push(EventLink { event, latency_from_ingest, executions });
     }
 
     Html(
