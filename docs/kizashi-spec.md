@@ -10,8 +10,7 @@ structured and unstructured data from arbitrary sources (email, chat, ticketing 
 databases, data lakes), normalizes it into a common event-oriented model, applies AI/ML-driven
 analysis, and lets operators define triggers that fire automated actions when patterns emerge
 (e.g. "3 emails from the same customer indicating a missed follow-up," "2 tickets with negative
-sentiment from the same account"). Results are surfaced through configurable, OpenShift/Instana-
-styled enterprise dashboards.
+sentiment from the same account"). Results are surfaced through configurable, dashboards.
 
 Kizashi is designed to be **white-labelable and multi-tenant** — it may be resold to other
 companies, so branding/theming, tenancy isolation, and generic connector configuration are
@@ -47,7 +46,7 @@ Fits a platform whose job is detecting early signals in data and acting on them.
 ## 3. High-Level Data Flow
 
 ```
- [Connectors/Agents]              (CronJob-scheduled pollers)
+ [Connectors/Sensors]              (CronJob-scheduled pollers)
         |
         v
  [Ingestion Gateway] -----------> [Ingestion Service] --> Raw Store (Postgres)
@@ -81,9 +80,9 @@ Fits a platform whose job is detecting early signals in data and acting on them.
 
 ## 4. Tech Stack
 
-| Layer                | Choice                                                        |
-|-----------------------|----------------------------------------------------------------|
-| Application code     | Rust                                                            |
+| Layer                 | Choice                                                          |
+|-----------------------|-----------------------------------------------------------------|
+| Application code      | Rust                                                            |
 | UI                    | Rust-based React-equivalent framework                           |
 | Message bus           | RabbitMQ                                                        |
 | Hot / live store      | Postgres                                                        |
