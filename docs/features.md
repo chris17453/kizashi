@@ -2429,3 +2429,38 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — a defensive guard on ADR-0016's already-decided role model, no new
   architectural decision
+
+## [2026-07-19] fix/0004-teams-alert-webhook-payload-shape — Send a real Teams MessageCard for TeamsAlert actions
+- **Type:** fix
+- **Branch:** fix/0004-teams-alert-webhook-payload-shape
+- **Summary:** `HttpActionDispatcher`'s doc comment claimed genuine support for "Teams incoming
+  webhooks" for every `ActionType`, but it POSTs a generic `{action_type, action_config,
+  event}` envelope — not the `@type: MessageCard` shape a real Microsoft Teams incoming
+  webhook validates and requires, so a `TeamsAlert` action configured against a real Teams
+  webhook URL would be rejected (400) despite looking correctly configured. Added
+  `teams_alert_action_dispatcher.rs` (`TeamsAlertActionDispatcher`), which formats the actual
+  Connector Card schema Teams expects (title, summary, themeColor, and a facts section built
+  from the firing `Event`'s type/entity/group key/occurred-at/payload), and wired it into
+  `RoutingActionDispatcher` for `ActionType::TeamsAlert` — mirroring the same routing pattern
+  ADR-0023/ADR-0024 already established for SMTP/Graph email. `Webhook`/`CreateTicket`/
+  `Custom` remain on the generic dispatcher, since those are intentionally bring-your-own-shape.
+- **Tests:** `cargo test -p action-executor --lib` — 45 passed (6 new: a real-HTTP-round-trip
+  test asserting the exact captured request body matches Teams' documented MessageCard shape,
+  a default-title test, missing-url/rejected/unreachable error-path tests, and a routing test
+  confirming `TeamsAlert` actions reach the new dispatcher not the generic one). `cargo test
+  --workspace --all-features` (full real-infra stack) — 108 test binaries, all passed, 0
+  failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo audit` — same 3
+  pre-existing allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `action-executor` container. Created
+  a real `TriggerDefinition` via `config-admin-service`'s actual HTTP API with a `TeamsAlert`
+  action pointing at a local stub webhook server, confirmed it synced to `trigger-engine`'s
+  local mirror over real RabbitMQ (ADR-0018's mechanism), published a real `event.created`
+  message via RabbitMQ's HTTP management API, and confirmed the running `action-executor`
+  container consumed it, resolved the real trigger, and POSTed the exact `MessageCard` JSON
+  shape (`@type`, `@context`, `title`, `summary`, `themeColor`, `sections[0].facts`) to the
+  stub server — the genuine end-to-end path a real Teams incoming webhook would now accept.
+  Cleaned up the test trigger from both services' tables afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — a defensive/correctness fix within ADR-0007's already-decided dispatch model,
+  no new architectural decision

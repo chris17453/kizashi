@@ -10,6 +10,7 @@ mod health;
 mod process_event;
 mod routing_action_dispatcher;
 mod smtp_action_dispatcher;
+mod teams_alert_action_dispatcher;
 mod trigger_client;
 
 pub use action_dispatcher::{ActionDispatcher, DispatchError, HttpActionDispatcher};
@@ -23,4 +24,5 @@ pub use health::build_router as health_router;
 pub use process_event::{process_event, ActionDeps, ProcessError};
 pub use routing_action_dispatcher::RoutingActionDispatcher;
 pub use smtp_action_dispatcher::SmtpActionDispatcher;
+pub use teams_alert_action_dispatcher::TeamsAlertActionDispatcher;
 pub use trigger_client::{HttpTriggerClient, TriggerClient, TriggerClientError};
