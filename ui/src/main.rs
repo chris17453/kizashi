@@ -1,6 +1,6 @@
 use kizashi_ui::{
-    build_router, AppState, HttpAgentsClient, HttpAuthClient, HttpEventsClient, HttpHealthClient,
-    HttpIngestionStatsClient, HttpTriggersClient, InMemorySessionStore,
+    build_router, AppState, HttpAgentsClient, HttpApiKeysClient, HttpAuthClient, HttpEventsClient,
+    HttpHealthClient, HttpIngestionStatsClient, HttpTriggersClient, InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -20,6 +20,8 @@ async fn main() {
         std::env::var("INGESTION_SERVICE_URL").expect("INGESTION_SERVICE_URL must be set");
     let ingestion_gateway_public_url = std::env::var("INGESTION_GATEWAY_PUBLIC_URL")
         .unwrap_or_else(|_| "http://localhost:8081".to_string());
+    let ingestion_gateway_url =
+        std::env::var("INGESTION_GATEWAY_URL").expect("INGESTION_GATEWAY_URL must be set");
 
     let client = reqwest::Client::new();
     let state = AppState {
@@ -32,6 +34,7 @@ async fn main() {
         )),
         health_client: Arc::new(HttpHealthClient::new(client.clone(), observability_url)),
         agents_client: Arc::new(HttpAgentsClient::new(client.clone(), config_admin_service_url)),
+        api_keys_client: Arc::new(HttpApiKeysClient::new(client.clone(), ingestion_gateway_url)),
         stats_client: Arc::new(HttpIngestionStatsClient::new(client, ingestion_service_url)),
         ingestion_gateway_public_url,
     };

@@ -5,6 +5,7 @@
 //! still server-renders its real data first, JS only progressively enhances it.
 
 mod agents_client;
+mod api_keys_client;
 mod auth_client;
 mod connector_field_catalog;
 mod events_client;
@@ -17,6 +18,7 @@ mod triggers_client;
 mod agent_detail_handler;
 mod agent_script_handler;
 mod agents_handler;
+mod api_keys_handler;
 mod data_detail_handler;
 mod data_handler;
 mod events_handler;
@@ -31,6 +33,7 @@ mod static_assets;
 mod triggers_handler;
 
 pub use agents_client::{AgentsClient, AgentsClientError, HttpAgentsClient};
+pub use api_keys_client::{ApiKeySummary, ApiKeysClient, ApiKeysClientError, HttpApiKeysClient};
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient};
 pub use events_client::{EventSummary, EventsClient, EventsClientError, HttpEventsClient};
 pub use health_client::{
@@ -48,6 +51,7 @@ pub use triggers_client::{
 pub use agent_detail_handler::get_agent_detail;
 pub use agent_script_handler::{get_generate_form, get_generate_select, post_generate_script};
 pub use agents_handler::{get_agents, post_agents, post_delete_agent, post_toggle_agent};
+pub use api_keys_handler::{get_api_keys, post_api_keys, post_revoke_api_key};
 pub use data_detail_handler::get_data_detail;
 pub use data_handler::get_data;
 pub use events_handler::get_events;
@@ -75,6 +79,7 @@ pub struct AppState {
     pub triggers_client: Arc<dyn TriggersClient>,
     pub health_client: Arc<dyn HealthClient>,
     pub agents_client: Arc<dyn AgentsClient>,
+    pub api_keys_client: Arc<dyn ApiKeysClient>,
     pub stats_client: Arc<dyn IngestionStatsClient>,
     /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
     /// reachable from inside this container (e.g. a customer-hosted connector polling in from
@@ -100,6 +105,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/agents/:id", get(get_agent_detail))
         .route("/agents/:id/delete", axum::routing::post(post_delete_agent))
         .route("/agents/:id/toggle", axum::routing::post(post_toggle_agent))
+        .route("/api-keys", get(get_api_keys).post(post_api_keys))
+        .route("/api-keys/:id/revoke", axum::routing::post(post_revoke_api_key))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
         .route("/data/:id", get(get_data_detail))

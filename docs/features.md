@@ -1096,3 +1096,52 @@ Entry format:
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a — closes a gap flagged in the standing gap-closing roadmap
   (Phase 1b, security/compliance), not a spec §11 open item.
+
+## [2026-07-18] feature/0014-docker-images — API key lifecycle management (create/list/revoke)
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Closes gap-closing-roadmap Phase 1c: until now `ApiKeyStore` only had
+  `tenant_for_key` (lookup) — there was no way to actually create or revoke a connector API
+  key except a manual `INSERT`/`UPDATE` against Postgres, a real problem for a resold
+  enterprise product whose customers need to self-serve issue and rotate credentials.
+  `ApiKeyStore` gains `create`/`list`/`revoke`, all backed by Postgres, with `create`/`revoke`
+  each writing an audit row in the same transaction as the key mutation (CLAUDE.md §5's
+  "new mutable config entity ships with an audit-log write in the same PR" rule) — this
+  required standing up ingestion-gateway's *first* audit log (`ingestion_gateway_audit_log`,
+  ported from config-admin-service's `audit_log.rs`), which ships with the same
+  `BEFORE UPDATE OR DELETE` immutability trigger just added to the other two audit tables, from
+  day one rather than as a follow-up gap. New endpoints: `POST /v1/api-keys` (returns the
+  plaintext key once — only its SHA-256 hash is ever persisted, matching the existing
+  `tenant_for_key` convention), `GET /v1/api-keys` (tenant-scoped summaries, no key material),
+  `DELETE /v1/api-keys/:id` (idempotent revoke), `GET /v1/api-keys/:id/audit-log`. Console UI
+  gets a new `/api-keys` page (nav: "API Keys") — create form, table with Revoke buttons, and
+  a one-time plaintext-key reveal panel shown only on the response immediately after creation,
+  never persisted or retrievable again. Required adding `INGESTION_GATEWAY_URL` (the internal
+  address) alongside the existing `INGESTION_GATEWAY_PUBLIC_URL` (the address a *deployed
+  connector* should point at, not necessarily reachable from inside the UI container) — Console
+  UI needed a way to reach ingestion-gateway's admin API that's distinct from the
+  connector-facing address.
+- **Tests:** `cargo test -p ingestion-gateway --lib` — 32 passed (in-memory `ApiKeyStore`/
+  `AuditLogReader` test doubles, HTTP handler tests for create/list/revoke/audit-log, a
+  never-exposes-key-material assertion on the list response, a missing-tenant-header 401
+  case). `cargo test -p ingestion-gateway --test api_key_store_integration_test` — 6 passed
+  against real Postgres (create writes a Created audit row and the key resolves; revoke writes
+  a Deleted audit row and the key stops resolving; revoking an already-revoked key writes no
+  duplicate audit row; list is tenant-scoped; the new `ingestion_gateway_audit_log` rejects
+  UPDATE/DELETE at the database level, same pattern as the previous PR's immutability tests).
+  `cargo test -p kizashi-ui --lib` — 106 passed (`ApiKeysClient` HTTP-client tests against a
+  real stub server, 5 new handler tests including the one-time-reveal assertion). Beyond unit
+  tests: rebuilt and redeployed `ingestion-gateway`/`kizashi-ui`, logged into the live UI,
+  created a real key through `/api-keys`, confirmed the plaintext was shown, used it to
+  authenticate a real `POST /v1/ingest` call (got 422 from the payload-shape check, not 401 —
+  proving auth passed), revoked it through the UI, and confirmed the exact same key now gets
+  401 "invalid API key" on the same ingest call — the complete lifecycle proven against the
+  real running stack, not just test doubles. Full local CI gate: `cargo fmt --all --check`
+  clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean, `cargo
+  test --workspace --all-features` all green (0 failures across every crate, verified against
+  a throwaway local `mssql` container standing in for CI's Fabric TDS dependency), `cargo
+  llvm-cov` 93.76% line coverage (85% floor), `cargo audit` / `cargo deny check` clean (same
+  two pre-existing allow-listed `unmaintained` advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — closes a gap flagged in the standing gap-closing roadmap (Phase 1c,
+  security/compliance), not a spec §11 open item.

@@ -38,6 +38,7 @@ async fn logout_deletes_the_session_and_expires_the_cookie() {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
         agents_client: Arc::new(crate::agents_client::agents_client_test::InMemoryAgentsClient::default()),
+        api_keys_client: Arc::new(crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default()),
         stats_client: Arc::new(
             crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
         ),

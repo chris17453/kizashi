@@ -1,33 +1,34 @@
 use super::*;
 use crate::agents_client::agents_client_test::InMemoryAgentsClient;
+use crate::api_keys_client::api_keys_client_test::{FailingApiKeysClient, InMemoryApiKeysClient};
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
-use crate::ingestion_stats_client::ingestion_stats_client_test::{
-    FailingIngestionStatsClient, InMemoryIngestionStatsClient,
-};
+use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
-use crate::EventSummary;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use std::sync::Arc;
 use tower::ServiceExt;
-use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/reports", get(get_reports)).with_state(state)
+    Router::new()
+        .route("/api-keys", get(get_api_keys).post(post_api_keys))
+        .route("/api-keys/:id/revoke", post(post_revoke_api_key))
+        .with_state(state)
 }
 
-async fn state_with_session() -> (AppState, String) {
+async fn state_with_session() -> (AppState, String, Uuid) {
     let session_store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
     let session_id = session_store
         .create(Session {
             bearer_token: "tok".to_string(),
-            tenant_id: Uuid::new_v4(),
+            tenant_id,
             username: "alice".to_string(),
         })
         .await;
@@ -40,39 +41,22 @@ async fn state_with_session() -> (AppState, String) {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
         agents_client: Arc::new(InMemoryAgentsClient::default()),
-        api_keys_client: Arc::new(
-            crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default(),
-        ),
+        api_keys_client: Arc::new(InMemoryApiKeysClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
-    (state, session_id)
+    (state, session_id, tenant_id)
 }
 
 #[tokio::test]
-async fn renders_connector_stats_and_event_counts_when_signed_in() {
-    let (mut state, session_id) = state_with_session().await;
-    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
-    stats_client.stats.lock().unwrap().push(ConnectorStatSummary {
-        connector_id: "zendesk".to_string(),
-        record_count: 7,
-        last_ingested_at: chrono::Utc::now(),
-    });
-    state.stats_client = stats_client;
-    let events_client = Arc::new(InMemoryEventsClient::default());
-    events_client.events.lock().unwrap().push(EventSummary {
-        id: Uuid::new_v4(),
-        event_type: "sentiment".to_string(),
-        group_key: "cust-1".to_string(),
-        status: "open".to_string(),
-        occurred_at: chrono::Utc::now(),
-    });
-    state.events_client = events_client;
+async fn get_api_keys_renders_the_table_when_signed_in() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state.api_keys_client.create_api_key(tenant_id, "ci-agent").await.unwrap();
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/reports")
+                .uri("/api-keys")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -83,16 +67,15 @@ async fn renders_connector_stats_and_event_counts_when_signed_in() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("zendesk"));
-    assert!(body.contains("sentiment"));
+    assert!(body.contains("ci-agent"));
 }
 
 #[tokio::test]
-async fn redirects_to_login_when_not_signed_in() {
-    let (state, _session_id) = state_with_session().await;
+async fn get_api_keys_redirects_to_login_when_not_signed_in() {
+    let (state, _session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
-        .oneshot(Request::builder().uri("/reports").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/api-keys").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -100,16 +83,42 @@ async fn redirects_to_login_when_not_signed_in() {
 }
 
 #[tokio::test]
-async fn shows_an_error_when_stats_backend_fails() {
-    let (mut state, session_id) = state_with_session().await;
-    state.stats_client = Arc::new(FailingIngestionStatsClient);
+async fn post_api_keys_creates_and_shows_the_plaintext_key_once() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/reports")
+                .method("POST")
+                .uri("/api-keys")
                 .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("label=ci-agent"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("kzsh_"));
+    assert!(body.contains("only time this key will be shown"));
+}
+
+#[tokio::test]
+async fn post_api_keys_backend_failure_rerenders_with_an_error() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    state.api_keys_client = Arc::new(FailingApiKeysClient);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api-keys")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("label=ci-agent"))
                 .unwrap(),
         )
         .await
@@ -122,20 +131,17 @@ async fn shows_an_error_when_stats_backend_fails() {
 }
 
 #[tokio::test]
-async fn chart_data_escapes_a_connector_id_that_could_close_the_script_tag() {
-    let (mut state, session_id) = state_with_session().await;
-    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
-    stats_client.stats.lock().unwrap().push(ConnectorStatSummary {
-        connector_id: "</script><script>alert(1)</script>".to_string(),
-        record_count: 1,
-        last_ingested_at: chrono::Utc::now(),
-    });
-    state.stats_client = stats_client;
+async fn post_revoke_api_key_revokes_and_redirects() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state.api_keys_client.create_api_key(tenant_id, "to-revoke").await.unwrap();
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let id = keys[0].id;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/reports")
+                .method("POST")
+                .uri(format!("/api-keys/{id}/revoke"))
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -143,16 +149,5 @@ async fn chart_data_escapes_a_connector_id_that_could_close_the_script_tag() {
         .await
         .unwrap();
 
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(
-        !body.contains("</script><script>alert(1)</script>"),
-        "the literal closing tag must never appear unescaped inside the JSON <script> block"
-    );
-    let expected_escaped = "{\"labels\":[\"\\u003c/script>\\u003cscript>alert(1)\\u003c/script>\"]";
-    assert!(
-        body.contains(expected_escaped),
-        "the script-tag JSON payload must escape every '<' as \\u003c so a value containing \
-         the literal text </script> can never be parsed as a real closing tag"
-    );
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
 }

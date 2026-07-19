@@ -36,6 +36,7 @@ fn gateway_state(
 ) -> GatewayState {
     GatewayState {
         api_key_store: Arc::new(InMemoryApiKeyStore::with_key(api_key, tenant_id)),
+        audit_reader: Arc::new(crate::audit_log::audit_log_test::InMemoryAuditLogReader::default()),
         rate_limiter: Arc::new(RateLimiter::new(
             rate_limit,
             Duration::from_secs(60),

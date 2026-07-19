@@ -1,6 +1,6 @@
 use ingestion_gateway::{
-    build_router, GatewayState, HttpAgentStatusClient, PostgresApiKeyStore, RateLimiter,
-    SystemClock,
+    build_router, GatewayState, HttpAgentStatusClient, PostgresApiKeyStore, PostgresAuditLogReader,
+    RateLimiter, SystemClock,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,7 +30,8 @@ async fn main() {
         .expect("failed to run migrations");
 
     let state = GatewayState {
-        api_key_store: Arc::new(PostgresApiKeyStore::new(pool)),
+        api_key_store: Arc::new(PostgresApiKeyStore::new(pool.clone())),
+        audit_reader: Arc::new(PostgresAuditLogReader::new(pool)),
         rate_limiter: Arc::new(RateLimiter::new(
             rate_limit_per_minute,
             Duration::from_secs(60),

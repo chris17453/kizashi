@@ -1,0 +1,51 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>API Keys</h1>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if let Some(key) = created_key %}
+<div class="panel">
+  <h2>Key created</h2>
+  <p class="muted">This is the only time this key will be shown. Copy it now — it cannot be
+  retrieved again, only revoked and replaced with a new one.</p>
+  <code class="key-reveal">{{ key }}</code>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>Create a new key</h2>
+  <p class="muted">Issue a key for a connector/agent to authenticate against
+  <code>POST /v1/ingest</code>. Label it by what it's for (e.g. the agent name) so it's
+  identifiable later.</p>
+  <form class="inline" method="post" action="/api-keys">
+    <label for="label">Label</label>
+    <input type="text" id="label" name="label" placeholder="support-poller" required>
+    <button type="submit">Create key</button>
+  </form>
+</div>
+
+<table>
+  <thead>
+    <tr><th>Label</th><th>Created</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for key in keys %}
+    <tr>
+      <td>{{ key.label }}</td>
+      <td>{{ key.created_at }}</td>
+      {% if let Some(revoked) = key.revoked_at %}
+      <td class="status-down">revoked {{ revoked }}</td>
+      <td></td>
+      {% else %}
+      <td class="status-up">active</td>
+      <td>
+        <form class="inline" method="post" action="/api-keys/{{ key.id }}/revoke" style="display:inline">
+          <button type="submit" class="btn-danger">Revoke</button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -4,6 +4,7 @@ mod ingest_proxy_handler_test;
 
 use crate::agent_status_client::{AgentStatus, AgentStatusClient};
 use crate::api_key_store::ApiKeyStore;
+use crate::audit_log::AuditLogReader;
 use crate::rate_limiter::RateLimiter;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
@@ -14,6 +15,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct GatewayState {
     pub api_key_store: Arc<dyn ApiKeyStore>,
+    pub audit_reader: Arc<dyn AuditLogReader>,
     pub rate_limiter: Arc<RateLimiter>,
     pub http_client: reqwest::Client,
     pub ingestion_service_url: String,
