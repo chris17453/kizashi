@@ -2037,3 +2037,36 @@ architectural decision.
   not permitted` — the immutability trigger working exactly as designed, left in place.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [0025](adr/0025-entra-token-fetch-egress-gateway-routing.md)
+
+## [2026-07-19] feature/0024-config-admin-tenant-isolation-tests — Tenant-isolation tests for config-admin-service repositories
+- **Type:** test
+- **Branch:** feature/0024-config-admin-tenant-isolation-tests
+- **Summary:** Closes a real CLAUDE.md §5 compliance gap: "every query path must be tested for
+  tenant isolation, not just implemented correctly by inspection." An audit of
+  `crates/config-admin-service/tests/repository_integration_test.rs` found every existing test
+  used exactly one `tenant_id` per test — none ever proved tenant A can't read/update/delete/
+  list a row owned by tenant B. Added 9 new integration tests against real Postgres covering
+  `TriggerDefinitionRepository` (get/update/list), `NormalizationMappingRepository` (get/list),
+  `AgentRepository` (get/delete/find_by_name — including a same-name-different-tenant
+  collision case), and `AnalysisConfigRepository` (get).
+- **Fact, not expectation:** every one of the 9 new tests passed on the first run against real
+  Postgres — the underlying `WHERE id = $1 AND tenant_id = $2` (or `WHERE tenant_id = $1` for
+  list/find) clauses were already correctly scoped in every repository's SQL (verified by
+  reading each repository's implementation before writing the tests, not assumed). This PR
+  closes a test-coverage gap, not an implementation bug — stated explicitly since CLAUDE.md
+  distinguishes "verified by running X" from "expected to work," and finding no bug is itself
+  a fact worth recording, not silently glossed over.
+- **Tests:** `cargo test -p config-admin-service --test repository_integration_test` — 16
+  tests (9 new + 7 pre-existing), all passed against real Postgres. `cargo test --workspace
+  --all-features` (full real-infra stack) — all passed, 0 failed. `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean.
+  `cargo deny check` — clean. `cargo audit` — same 3 pre-existing allow-listed advisories, no
+  new ones.
+- **Known gap, not closed here:** `query-gateway` (spec §6's designated single
+  tenant-enforcement point for all UI/dashboard traffic) still has no end-to-end tenant-
+  isolation test proving a resolved session can't retrieve another tenant's data through the
+  real proxy path — tracked as an immediate follow-up, arguably the more load-bearing gap of
+  the two found in this audit.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — test-coverage addition, no architectural decision, confirms existing
+  behavior rather than changing it
