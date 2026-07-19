@@ -34,7 +34,15 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
     let agents = state.agents_client.list_agents(session.tenant_id).await.unwrap_or_default();
     let connector_stats =
         state.stats_client.connector_stats(session.tenant_id).await.unwrap_or_default();
-    let events = state.events_client.list_events(&session.bearer_token).await.unwrap_or_default();
+    // Capped at 1000 (the same ceiling the backend itself clamps to) — a KPI tile approximates
+    // at very high volume rather than needing an exact count, same tradeoff this dashboard
+    // already made before pagination existed (it used to silently cap at the default limit).
+    let events = state
+        .events_client
+        .list_events(&session.bearer_token, 1000, 0)
+        .await
+        .map(|page| page.events)
+        .unwrap_or_default();
     let health = state.health_client.platform_health().await.ok();
 
     let active_connector_ids: std::collections::HashSet<&str> =

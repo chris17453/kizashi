@@ -109,3 +109,48 @@ async fn shows_an_error_when_the_backend_fails() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("unreachable"));
 }
+
+#[tokio::test]
+async fn shows_a_next_link_when_there_are_more_results_but_no_previous_link_on_page_zero() {
+    let (mut state, session_id) = state_with_session().await;
+    let events_client = Arc::new(InMemoryEventsClient::default());
+    *events_client.has_more.lock().unwrap() = true;
+    state.events_client = events_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Next"));
+    assert!(!body.contains("Previous"));
+}
+
+#[tokio::test]
+async fn shows_a_previous_link_on_page_two() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events?page=1")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Previous"));
+    assert!(body.contains("Page 2"));
+}

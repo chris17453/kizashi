@@ -72,8 +72,8 @@ pub async fn get_reports(State(state): State<AppState>, headers: HeaderMap) -> R
         }
     };
 
-    let event_counts = match state.events_client.list_events(&session.bearer_token).await {
-        Ok(events) => count_by_event_type(&events),
+    let event_counts = match state.events_client.list_events(&session.bearer_token, 1000, 0).await {
+        Ok(page) => count_by_event_type(&page.events),
         Err(_) => vec![],
     };
 

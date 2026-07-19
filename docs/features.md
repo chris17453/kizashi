@@ -954,3 +954,37 @@ Entry format:
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a (closes a gap in the already-established Agent registry, not a new
   architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Events pagination
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** Events was one of three list pages flagged as having a hardcoded limit with a
+  silent cutoff and no way to see more (Data Viewer got real pagination earlier; this closes
+  the same gap for Events). Dashboard API's `EventFilter` gains `offset`, the ClickHouse query
+  gains a matching `OFFSET`, and `GET /v1/events` now returns `{events, has_more}` instead of a
+  bare array — `has_more` computed the same way as the Data Viewer's search (fetch one extra
+  row, no second `COUNT(*)` query against ClickHouse). Query Gateway needed no changes — it
+  already passes the full query string through via `OriginalUri` untouched. Console UI's
+  `/events` gains the same Previous/Next `<form method="get">` pagination controls as the Data
+  Viewer. Agents and Triggers pagination remain open — flagged, not silently dropped; Triggers
+  in particular is low-volume (operator-configured, not per-record data) so it's lower priority
+  than Events/Data Viewer, which both read from tables that grow with real traffic.
+- **Tests:** `cargo test -p dashboard-api --lib` — 18 passed (3 new: offset skips earlier
+  pages at the repository level, the handler's `has_more` computation, and the response-shape
+  change reflected in the existing scoped-events test). `cargo test -p kizashi-ui --lib` — 85
+  passed (`EventsPage`/`EventsClient` trait signature change threaded through
+  `events_handler`, `overview_handler`, and `reports_handler`'s call sites, plus 2 new
+  pagination-control-rendering tests mirroring the Data Viewer's). Beyond unit tests: rebuilt
+  and redeployed `dashboard-api`/`kizashi-ui`, confirmed `/events` and `/events?page=1` both
+  return 200 through the real running stack (query-gateway → dashboard-api → ClickHouse) with
+  the new response shape, proving the plumbing holds end-to-end. Full live-data pagination
+  boundary behavior (Next/Previous appearing at exactly the right count) is unit-tested with
+  controlled data, not independently re-verified against real ClickHouse volume in this pass —
+  the demo tenant has no real event traffic to page through without standing up the full
+  ingest→normalize→analyze→trigger pipeline, called out explicitly rather than implied. Full
+  local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` clean, `cargo test --workspace --all-features` all green,
+  `cargo llvm-cov` 94.45% line coverage (85% floor), `cargo audit` / `cargo deny check` clean,
+  no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (additive query/response-shape change, not a new architectural decision)

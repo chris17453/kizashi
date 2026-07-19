@@ -15,6 +15,12 @@ pub struct EventSummary {
     pub occurred_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EventsPage {
+    pub events: Vec<EventSummary>,
+    pub has_more: bool,
+}
+
 #[derive(Debug, Error)]
 pub enum EventsClientError {
     #[error("query gateway unreachable: {0}")]
@@ -27,8 +33,12 @@ pub enum EventsClientError {
 /// bearer token — the same trust boundary any other Query Gateway client uses.
 #[async_trait]
 pub trait EventsClient: Send + Sync {
-    async fn list_events(&self, bearer_token: &str)
-        -> Result<Vec<EventSummary>, EventsClientError>;
+    async fn list_events(
+        &self,
+        bearer_token: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<EventsPage, EventsClientError>;
 }
 
 pub struct HttpEventsClient {
@@ -47,10 +57,13 @@ impl EventsClient for HttpEventsClient {
     async fn list_events(
         &self,
         bearer_token: &str,
-    ) -> Result<Vec<EventSummary>, EventsClientError> {
+        limit: u32,
+        offset: u32,
+    ) -> Result<EventsPage, EventsClientError> {
         let response = self
             .client
             .get(format!("{}/v1/events", self.query_gateway_url))
+            .query(&[("limit", limit.to_string()), ("offset", offset.to_string())])
             .bearer_auth(bearer_token)
             .send()
             .await
@@ -59,6 +72,14 @@ impl EventsClient for HttpEventsClient {
         if !response.status().is_success() {
             return Err(EventsClientError::Rejected(response.status().as_u16()));
         }
-        response.json().await.map_err(|e| EventsClientError::Unreachable(e.to_string()))
+
+        #[derive(serde::Deserialize)]
+        struct ListEventsResponse {
+            events: Vec<EventSummary>,
+            has_more: bool,
+        }
+        let body: ListEventsResponse =
+            response.json().await.map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
+        Ok(EventsPage { events: body.events, has_more: body.has_more })
     }
 }

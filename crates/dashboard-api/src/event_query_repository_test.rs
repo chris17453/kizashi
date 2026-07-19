@@ -34,7 +34,7 @@ impl EventQueryRepository for InMemoryEventQueryRepository {
             .collect();
         matching.sort_by_key(|e| std::cmp::Reverse(e.occurred_at));
         let limit = filter.limit.clamp(1, 1000) as usize;
-        matching.truncate(limit);
+        let matching = matching.into_iter().skip(filter.offset as usize).take(limit).collect();
         Ok(matching)
     }
 
@@ -84,6 +84,25 @@ async fn list_events_is_scoped_to_tenant() {
         .await
         .unwrap();
     assert_eq!(found.len(), 1);
+}
+
+#[tokio::test]
+async fn list_events_offset_skips_earlier_pages() {
+    let tenant_id = Uuid::new_v4();
+    let now = Utc::now();
+    let mut events = Vec::new();
+    for days_ago in 0..3 {
+        let mut e = sample_event(tenant_id);
+        e.occurred_at = now - chrono::Duration::days(days_ago);
+        events.push(e);
+    }
+    let repo = InMemoryEventQueryRepository::with_events(events.clone());
+
+    let found = repo
+        .list_events(tenant_id, &EventFilter { limit: 1, offset: 1, ..Default::default() })
+        .await
+        .unwrap();
+    assert_eq!(found, vec![events[1].clone()]);
 }
 
 #[tokio::test]

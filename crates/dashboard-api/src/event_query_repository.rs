@@ -26,6 +26,7 @@ pub struct EventFilter {
     pub since: Option<DateTime<Utc>>,
     pub until: Option<DateTime<Utc>>,
     pub limit: u32,
+    pub offset: u32,
 }
 
 /// Reads Events from the aggregate store (spec §5.2, ClickHouse) for dashboards/reports/event
@@ -165,9 +166,10 @@ impl EventQueryRepository for ClickHouseEventQueryRepository {
 
         let limit = filter.limit.clamp(1, 1000);
         let query = format!(
-            "SELECT id, tenant_id, event_type, source_connector_ids, entity_ref, group_key, payload, occurred_at, created_at, status FROM events WHERE {} ORDER BY occurred_at DESC LIMIT {} FORMAT JSONEachRow",
+            "SELECT id, tenant_id, event_type, source_connector_ids, entity_ref, group_key, payload, occurred_at, created_at, status FROM events WHERE {} ORDER BY occurred_at DESC LIMIT {} OFFSET {} FORMAT JSONEachRow",
             conditions.join(" AND "),
-            limit
+            limit,
+            filter.offset
         );
         let params_ref: Vec<(&str, String)> =
             params.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
