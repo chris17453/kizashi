@@ -58,6 +58,7 @@ async fn put_then_get_allowlist_round_trips() {
                 .method("PUT")
                 .uri("/v1/allowlist")
                 .header("x-tenant-id", "tenant-a")
+                .header("x-role", "operator")
                 .header("content-type", "application/json")
                 .body(Body::from(body.to_string()))
                 .unwrap(),
@@ -95,4 +96,85 @@ async fn get_allowlist_returns_500_on_backend_failure() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+// --- RBAC: PUT /v1/allowlist controls a tenant's egress SSRF/exfiltration containment
+// boundary (ADR-0021) and must require at least Operator, the same as every other
+// config-mutating write endpoint in the platform (ADR-0016).
+
+#[tokio::test]
+async fn put_allowlist_requires_role_header() {
+    let app = build_router(state());
+    let body = serde_json::json!({"domains": ["zendesk.com"]});
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/v1/allowlist")
+                .header("x-tenant-id", "tenant-a")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn put_allowlist_rejects_a_viewer_role() {
+    let app = build_router(state());
+    let body = serde_json::json!({"domains": ["zendesk.com"]});
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/v1/allowlist")
+                .header("x-tenant-id", "tenant-a")
+                .header("x-role", "viewer")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn put_allowlist_allows_an_operator_role() {
+    let app = build_router(state());
+    let body = serde_json::json!({"domains": ["zendesk.com"]});
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/v1/allowlist")
+                .header("x-tenant-id", "tenant-a")
+                .header("x-role", "operator")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn get_allowlist_never_requires_a_role_header_read_only_stays_unrestricted() {
+    // GET is not a config-mutation, so it deliberately keeps its existing behavior
+    // (tenant-scoped, no role check) — only the write path changes here.
+    let app = build_router(state());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/allowlist")
+                .header("x-tenant-id", "tenant-a")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
 }
