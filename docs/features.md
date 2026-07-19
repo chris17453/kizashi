@@ -2070,3 +2070,31 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — test-coverage addition, no architectural decision, confirms existing
   behavior rather than changing it
+
+## [2026-07-19] feature/0025-query-gateway-tenant-isolation-e2e — End-to-end tenant-isolation test for Query Gateway
+- **Type:** test
+- **Branch:** feature/0025-query-gateway-tenant-isolation-e2e
+- **Summary:** Closes the more load-bearing of the two tenant-isolation gaps flagged in the
+  prior audit (feature/0024). Query Gateway is spec §6's designated single tenant-enforcement
+  point for all UI/dashboard traffic, and its existing tests only asserted header-forwarding
+  behavior against mocks — nothing proved two real, independently-minted session tokens for
+  two different tenants actually produce correctly-scoped results through the real HTTP proxy
+  hop. New `crates/query-gateway/tests/tenant_isolation_integration_test.rs` spins up a real
+  `dashboard-api` server (backed by real ClickHouse) and a real `query-gateway` server (backed
+  by a real Postgres `TokenStore`), mints two real session tokens via the same `mint_token`
+  code path Auth Service uses in production, and proves through actual HTTP requests that
+  tenant B's token can never retrieve tenant A's event (even requesting the identical event
+  id), that listing never leaks another tenant's rows, and that an unminted token is rejected
+  before reaching dashboard-api at all.
+- **Fact, not expectation:** all 3 new tests passed on the first run — `proxy_handler.rs`
+  already built its outbound request with only its own resolved `x-tenant-id` header, never
+  forwarding the original request's headers wholesale, so a client-supplied `X-Tenant-Id`
+  could never leak through. This closes a test-coverage gap; it did not fix a bug.
+- **Tests:** `cargo test -p query-gateway --test tenant_isolation_integration_test` — 3 tests,
+  all passed against real Postgres + real ClickHouse + two real spawned HTTP servers.
+  `cargo test --workspace --all-features` (full real-infra stack) — all passed, 0 failed.
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt
+  --all --check` — clean. `cargo deny check` — clean. `cargo audit` — same 3 pre-existing
+  allow-listed advisories, no new ones.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0026](adr/0026-query-gateway-tenant-isolation-e2e-test.md)
