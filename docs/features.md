@@ -3023,3 +3023,38 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — a thin UI wrapper around an already-designed, already-ADR'd backend capability
   (feature/0044), no new architectural decision
+
+## [2026-07-19] feature/0047-record-journey-timing-waterfall — Timing waterfall on the Record Journey page
+- **Type:** feature
+- **Summary:** Responds to a request for "Instana-style" observability (a distributed-trace
+  waterfall + infrastructure topology map). Surveyed what already exists first (via a research
+  pass, not guessed): the Record Journey page (ADR-0017) already shows the correct
+  record→event→action lineage as a box diagram, and `RecordSummary`/`EventSummary`/
+  `ActionExecutionSummary` already carry `ingested_at`/`occurred_at`/`executed_at` — the data
+  was already flowing to the UI layer, it just was never rendered. The existing "Pipeline Map"
+  page already covers a live-health service topology view (5 app-service stages with
+  up/down coloring and queue-backlog counts), just not a discovered/dynamic graph — a larger,
+  more speculative rebuild than the timing gap, so left alone this pass. Extended Record
+  Journey into an actual timing waterfall: each hop (ingest→event, event→action) now shows a
+  pre-computed `+Nms`/`+N.Ns`/`+Nm Ns` latency delta and each node shows its real timestamp, no
+  new backend endpoint (same three existing calls this page already made). Duration
+  arithmetic is done in the handler (`format_latency`), not the Askama template, which can't do
+  date math; a negative delta (clock skew) reports as `"0ms"` rather than a confusing negative
+  number.
+- **Tests:** `cargo test -p kizashi-ui --lib record_journey` — 9 passed (5 new: `format_latency`
+  renders sub-second/seconds/minutes correctly, clamps a negative delta to zero, and a live
+  end-to-end test proving the actual computed latencies appear in the rendered page).
+  `cargo test --workspace --all-features` (full real-infra stack) — every test binary passed,
+  0 failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo deny check` / `cargo audit` — clean, same 3
+  pre-existing allow-listed advisories.
+- **Live verification:** (to be run against the real deployed Console UI once this merges and
+  `kizashi-ui` is rebuilt/redeployed — the real watkinslabs tenant's fired triggers give real
+  data to screenshot this against.)
+- **Known follow-up, not done here:** a real infrastructure topology graph (Postgres/RabbitMQ/
+  ClickHouse as nodes, discovered rather than hardcoded connections) is a larger, more
+  speculative rebuild of the existing Pipeline Map — scoped out of this pass deliberately
+  rather than guessed at.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — additive rendering of already-available data through an already-established
+  page/endpoint pattern, no new architectural decision

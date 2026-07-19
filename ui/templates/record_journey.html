@@ -11,6 +11,7 @@ because of it.</p>
     <div class="journey-node-label">Raw Record</div>
     <div class="journey-node-title"><a href="/data/{{ record.id }}">{{ record.id }}</a></div>
     <div class="journey-node-sub">{{ record.connector_id }} &middot; {{ record.source_type }}</div>
+    <div class="journey-node-timestamp muted">ingested {{ record.ingested_at }}</div>
   </div>
 
   {% if !event_links.is_empty() %}
@@ -18,18 +19,24 @@ because of it.</p>
   <div class="journey-branches">
     {% for link in event_links %}
     <div class="journey-branch">
+      {% if let Some(latency) = link.latency_from_ingest %}
+      <div class="journey-latency muted">+{{ latency }}</div>
+      {% endif %}
       <div class="journey-node">
         <div class="journey-node-label">Event</div>
         <div class="journey-node-title">{{ link.event.event_type }}</div>
         <div class="journey-node-sub">{{ link.event.group_key }} &middot; {{ link.event.status }}</div>
+        <div class="journey-node-timestamp muted">occurred {{ link.event.occurred_at }}</div>
       </div>
       {% if !link.executions.is_empty() %}
       <div class="journey-connector"></div>
       <div class="journey-executions">
-        {% for exec in link.executions %}
+        {% for exec_link in link.executions %}
         <div class="journey-execution">
-          <span class="exec-type">{{ exec.action_type }}</span>
-          <span class="status-{% if exec.status == "sent" %}up{% else %}down{% endif %}">{{ exec.status }}</span>
+          <div class="journey-latency muted">+{{ exec_link.latency_from_event }}</div>
+          <span class="exec-type">{{ exec_link.execution.action_type }}</span>
+          <span class="status-{% if exec_link.execution.status == "sent" %}up{% else %}down{% endif %}">{{ exec_link.execution.status }}</span>
+          <span class="journey-node-timestamp muted">{{ exec_link.execution.executed_at }}</span>
         </div>
         {% endfor %}
       </div>

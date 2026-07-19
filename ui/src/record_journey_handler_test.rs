@@ -200,6 +200,94 @@ async fn renders_event_with_no_executions_when_execution_client_fails() {
     assert!(body.contains("No actions executed yet"));
 }
 
+#[test]
+fn format_latency_renders_sub_second_as_milliseconds() {
+    let start = chrono::Utc::now();
+    let end = start + chrono::Duration::milliseconds(450);
+    assert_eq!(format_latency(start, end), "450ms");
+}
+
+#[test]
+fn format_latency_renders_seconds_with_one_decimal() {
+    let start = chrono::Utc::now();
+    let end = start + chrono::Duration::milliseconds(3200);
+    assert_eq!(format_latency(start, end), "3.2s");
+}
+
+#[test]
+fn format_latency_renders_minutes_and_seconds() {
+    let start = chrono::Utc::now();
+    let end = start + chrono::Duration::seconds(125);
+    assert_eq!(format_latency(start, end), "2m 5s");
+}
+
+#[test]
+fn format_latency_clamps_a_negative_delta_to_zero() {
+    let start = chrono::Utc::now();
+    let end = start - chrono::Duration::seconds(5);
+    assert_eq!(format_latency(start, end), "0ms");
+}
+
+#[tokio::test]
+async fn journey_shows_latency_between_ingest_event_and_execution() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let record_id = Uuid::new_v4();
+    let event_id = Uuid::new_v4();
+    let ingested_at =
+        chrono::DateTime::parse_from_rfc3339("2026-07-19T12:00:00Z").unwrap().to_utc();
+    let occurred_at = ingested_at + chrono::Duration::milliseconds(1500);
+    let executed_at = occurred_at + chrono::Duration::milliseconds(200);
+
+    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
+    stats_client.records.lock().unwrap().push(RecordSummary {
+        id: record_id,
+        connector_id: "zendesk".to_string(),
+        source_type: "ticket".to_string(),
+        ingested_at,
+        raw_payload: serde_json::json!({}),
+        normalized_payload: None,
+    });
+    state.stats_client = stats_client;
+
+    let events_client = Arc::new(InMemoryEventsClient::default());
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: event_id,
+        event_type: "spike".to_string(),
+        group_key: "zendesk:ticket".to_string(),
+        status: "open".to_string(),
+        occurred_at,
+    });
+    state.events_client = events_client;
+
+    let execution_client = Arc::new(InMemoryExecutionClient::default());
+    execution_client.executions.lock().unwrap().push(ActionExecutionSummary {
+        id: Uuid::new_v4(),
+        trigger_id: Uuid::new_v4(),
+        event_id,
+        action_type: "webhook".to_string(),
+        status: "sent".to_string(),
+        executed_at,
+        detail: serde_json::json!({}),
+    });
+    state.execution_client = execution_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/data/{record_id}/journey"))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("1.5s"), "expected the record->event latency in the page: {body}");
+    assert!(body.contains("200ms"), "expected the event->execution latency in the page: {body}");
+}
+
 #[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session().await;
