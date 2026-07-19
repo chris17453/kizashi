@@ -4,6 +4,7 @@ pub(crate) mod api_keys_client_test;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use common::Role;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -35,13 +36,21 @@ pub trait ApiKeysClient: Send + Sync {
     ) -> Result<Vec<ApiKeySummary>, ApiKeysClientError>;
 
     /// Creates a key and returns its plaintext value — the only time it's ever available.
+    /// `role` is forwarded as `X-Role` (RBAC v1 follow-up, ADR-0016) — ingestion-gateway
+    /// rejects this write path below `Operator`.
     async fn create_api_key(
         &self,
         tenant_id: Uuid,
+        role: Role,
         label: &str,
     ) -> Result<String, ApiKeysClientError>;
 
-    async fn revoke_api_key(&self, tenant_id: Uuid, id: Uuid) -> Result<(), ApiKeysClientError>;
+    async fn revoke_api_key(
+        &self,
+        tenant_id: Uuid,
+        role: Role,
+        id: Uuid,
+    ) -> Result<(), ApiKeysClientError>;
 }
 
 pub struct HttpApiKeysClient {
@@ -78,12 +87,14 @@ impl ApiKeysClient for HttpApiKeysClient {
     async fn create_api_key(
         &self,
         tenant_id: Uuid,
+        role: Role,
         label: &str,
     ) -> Result<String, ApiKeysClientError> {
         let response = self
             .client
             .post(format!("{}/v1/api-keys", self.ingestion_gateway_url))
             .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
             .json(&serde_json::json!({"label": label}))
             .send()
             .await
@@ -102,11 +113,17 @@ impl ApiKeysClient for HttpApiKeysClient {
         Ok(body.api_key)
     }
 
-    async fn revoke_api_key(&self, tenant_id: Uuid, id: Uuid) -> Result<(), ApiKeysClientError> {
+    async fn revoke_api_key(
+        &self,
+        tenant_id: Uuid,
+        role: Role,
+        id: Uuid,
+    ) -> Result<(), ApiKeysClientError> {
         let response = self
             .client
             .delete(format!("{}/v1/api-keys/{id}", self.ingestion_gateway_url))
             .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
             .send()
             .await
             .map_err(|e| ApiKeysClientError::Unreachable(e.to_string()))?;

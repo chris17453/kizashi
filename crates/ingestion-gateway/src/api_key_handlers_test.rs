@@ -45,6 +45,7 @@ async fn create_api_key_returns_the_plaintext_key_once() {
                 .method("POST")
                 .uri("/v1/api-keys")
                 .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "admin")
                 .header("content-type", "application/json")
                 .body(Body::from(r#"{"label":"ci-agent"}"#))
                 .unwrap(),
@@ -57,6 +58,49 @@ async fn create_api_key_returns_the_plaintext_key_once() {
     let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(body["label"], "ci-agent");
     assert!(body["api_key"].as_str().unwrap().starts_with("kzsh_"));
+}
+
+#[tokio::test]
+async fn create_api_key_requires_role_header() {
+    let state = state_with(Arc::new(InMemoryApiKeyStore::default()));
+    let tenant_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/api-keys")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"label":"ci-agent"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn create_api_key_rejects_a_viewer_role() {
+    let state = state_with(Arc::new(InMemoryApiKeyStore::default()));
+    let tenant_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/api-keys")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "viewer")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"label":"ci-agent"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]
@@ -120,6 +164,7 @@ async fn revoke_api_key_marks_it_revoked() {
                 .method("DELETE")
                 .uri(format!("/v1/api-keys/{}", summary.id))
                 .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "operator")
                 .body(Body::empty())
                 .unwrap(),
         )

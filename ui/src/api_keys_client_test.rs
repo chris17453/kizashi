@@ -22,6 +22,7 @@ impl ApiKeysClient for InMemoryApiKeysClient {
     async fn create_api_key(
         &self,
         _tenant_id: Uuid,
+        _role: Role,
         label: &str,
     ) -> Result<String, ApiKeysClientError> {
         self.keys.lock().unwrap().push(ApiKeySummary {
@@ -33,7 +34,12 @@ impl ApiKeysClient for InMemoryApiKeysClient {
         Ok(format!("kzsh_{}", Uuid::new_v4().simple()))
     }
 
-    async fn revoke_api_key(&self, _tenant_id: Uuid, id: Uuid) -> Result<(), ApiKeysClientError> {
+    async fn revoke_api_key(
+        &self,
+        _tenant_id: Uuid,
+        _role: Role,
+        id: Uuid,
+    ) -> Result<(), ApiKeysClientError> {
         if let Some(key) = self.keys.lock().unwrap().iter_mut().find(|k| k.id == id) {
             key.revoked_at = Some(Utc::now());
         }
@@ -55,12 +61,18 @@ impl ApiKeysClient for FailingApiKeysClient {
     async fn create_api_key(
         &self,
         _tenant_id: Uuid,
+        _role: Role,
         _label: &str,
     ) -> Result<String, ApiKeysClientError> {
         Err(ApiKeysClientError::Unreachable("simulated failure".to_string()))
     }
 
-    async fn revoke_api_key(&self, _tenant_id: Uuid, _id: Uuid) -> Result<(), ApiKeysClientError> {
+    async fn revoke_api_key(
+        &self,
+        _tenant_id: Uuid,
+        _role: Role,
+        _id: Uuid,
+    ) -> Result<(), ApiKeysClientError> {
         Err(ApiKeysClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -78,7 +90,10 @@ async fn spawn_stub_server() -> String {
         }]))
         .into_response()
     }
-    async fn create_handler() -> axum::response::Response {
+    async fn create_handler(headers: HeaderMap) -> axum::response::Response {
+        if headers.get("x-role").is_none() {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
         (
             axum::http::StatusCode::CREATED,
             Json(serde_json::json!({
@@ -119,7 +134,8 @@ async fn http_client_creates_an_api_key_against_a_real_server() {
     let url = spawn_stub_server().await;
     let client = HttpApiKeysClient::new(reqwest::Client::new(), url);
 
-    let plaintext = client.create_api_key(Uuid::new_v4(), "ci-agent").await.unwrap();
+    let plaintext =
+        client.create_api_key(Uuid::new_v4(), Role::Operator, "ci-agent").await.unwrap();
 
     assert_eq!(plaintext, "kzsh_test-plaintext-key");
 }
@@ -129,7 +145,7 @@ async fn http_client_revokes_an_api_key_against_a_real_server() {
     let url = spawn_stub_server().await;
     let client = HttpApiKeysClient::new(reqwest::Client::new(), url);
 
-    client.revoke_api_key(Uuid::new_v4(), Uuid::new_v4()).await.unwrap();
+    client.revoke_api_key(Uuid::new_v4(), Role::Operator, Uuid::new_v4()).await.unwrap();
 }
 
 #[tokio::test]

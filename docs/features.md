@@ -1286,3 +1286,38 @@ Entry format:
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a — implements a follow-up explicitly scoped into ADR-0016's v1 Console UI item,
   not a new architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — RBAC enforcement extended to ingestion-gateway API keys
+- **Type:** feature
+- **Summary:** Closes ADR-0016's last remaining deferred write path.
+  `action-executor` turned out to have no HTTP write surface at all (it's a pure RabbitMQ
+  consumer with only `/healthz`), so there was nothing to gate there — that leaves
+  `ingestion-gateway`'s `create_api_key`/`revoke_api_key` as the real remaining item, now
+  requiring `X-Role` at least `Operator` via the same `role_from_headers`/`require_operator`
+  pattern as every other write path. Because Console UI's Agents/API-Keys pages actively call
+  these endpoints (unlike config-admin-service's trigger/mapping writes, which have no UI form
+  yet), enabling enforcement without also updating the caller would have broken the live
+  create/revoke flow verified working in the previous PR — so `ApiKeysClient::create_api_key`/
+  `revoke_api_key` gained a `role: Role` parameter, forwarded as `X-Role`, with
+  `api_keys_handler.rs` passing `session.role` through. Every write-path service in the
+  platform's admin surface (config-admin-service, retention-service, ingestion-gateway) is now
+  role-gated; the only remaining gap from ADR-0016 is the "assign another user's role" admin UI,
+  still explicitly out of scope for v1.
+- **Tests:** `cargo test -p ingestion-gateway --lib` — 34 passed (2 new: missing-role 401,
+  viewer-rejected 403 on `create_api_key`; existing create/revoke tests updated to send
+  `X-Role`). `cargo test -p kizashi-ui --lib` — 112 passed (`ApiKeysClient` trait signature
+  change threaded through every call site; the HTTP-client stub server now rejects a missing
+  `X-Role` on create, proving the client actually sends it). Beyond unit tests: rebuilt and
+  redeployed `ingestion-gateway`/`kizashi-ui`, created a real key through the live UI as the
+  `admin`-role demo user (confirming the enforcement-plus-forwarding change didn't break the
+  working flow), then sent the same create request directly at `ingestion-gateway` three ways —
+  no `X-Role` (401), `X-Role: viewer` (403), `X-Role: operator` (201) — against the real
+  running service. Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` clean, `cargo test --workspace
+  --all-features` all green (0 failures across every crate, verified against a throwaway local
+  `mssql` container standing in for CI's Fabric TDS dependency), `cargo llvm-cov` 93.98% line
+  coverage (85% floor), `cargo audit` / `cargo deny check` clean (same two pre-existing
+  allow-listed `unmaintained` advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — implements the last follow-up explicitly scoped out of ADR-0016's v1, not a
+  new architectural decision.
