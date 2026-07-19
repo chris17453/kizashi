@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0026         |
-| fix           | `fix/`     | 0002        |
+| fix           | `fix/`     | 0003         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
 | chore         | `chore/`   | 0003         |
@@ -51,3 +51,4 @@ manually created branches.
 | 0023 | `feature/0023-entra-token-egress-routing` | feature | 2026-07-19 | open | pending | |
 | 0024 | `feature/0024-config-admin-tenant-isolation-tests` | feature | 2026-07-19 | open | pending | |
 | 0025 | `feature/0025-query-gateway-tenant-isolation-e2e` | feature | 2026-07-19 | open | pending | |
+| 0002 | `fix/0002-agent-rbac-enforcement` | fix | 2026-07-19 | open | pending | |

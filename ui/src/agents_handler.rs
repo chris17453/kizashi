@@ -186,7 +186,7 @@ pub async fn post_agents(
 
     if let Err(e) = state
         .agents_client
-        .register_agent(session.tenant_id, &form.connector_type, &form.name, config)
+        .register_agent(session.role, session.tenant_id, &form.connector_type, &form.name, config)
         .await
     {
         return rerender_with_error(
@@ -211,7 +211,7 @@ pub async fn post_delete_agent(
         Err(response) => return response,
     };
 
-    let _ = state.agents_client.delete_agent(session.tenant_id, id).await;
+    let _ = state.agents_client.delete_agent(session.role, session.tenant_id, id).await;
     Redirect::to("/agents").into_response()
 }
 
@@ -230,7 +230,7 @@ pub async fn post_toggle_agent(
 
     if let Ok(Some(mut agent)) = state.agents_client.get_agent(session.tenant_id, id).await {
         agent.enabled = !agent.enabled;
-        let _ = state.agents_client.update_agent(&agent).await;
+        let _ = state.agents_client.update_agent(session.role, &agent).await;
     }
     Redirect::to("/agents").into_response()
 }

@@ -4,7 +4,7 @@ mod agent_handlers_test;
 
 use crate::agent_publisher::AgentPublisher;
 use crate::agent_repository::{AgentRepository, AgentRepositoryError};
-use crate::handlers::{tenant_id_from_headers, tenant_mismatch};
+use crate::handlers::{require_operator, tenant_id_from_headers, tenant_mismatch};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
@@ -49,6 +49,9 @@ pub async fn create_agent(
     if let Some(response) = tenant_mismatch(&headers, agent.tenant_id) {
         return response;
     }
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
     match state.agent_repository.create(agent).await {
         Ok(created) => {
             let event = AgentChangeEvent::Upserted(created.clone());
@@ -68,6 +71,9 @@ pub async fn update_agent(
     Json(mut agent): Json<Agent>,
 ) -> Response {
     if let Some(response) = tenant_mismatch(&headers, agent.tenant_id) {
+        return response;
+    }
+    if let Some(response) = require_operator(&headers) {
         return response;
     }
     agent.id = id;
@@ -164,6 +170,9 @@ pub async fn delete_agent(
         Ok(id) => id,
         Err((status, msg)) => return error_response(status, msg),
     };
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
     match state.agent_repository.delete(tenant_id, id).await {
         Ok(()) => {
             let event = AgentChangeEvent::Deleted { id, tenant_id };

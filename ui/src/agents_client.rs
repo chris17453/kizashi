@@ -3,7 +3,7 @@
 pub(crate) mod agents_client_test;
 
 use async_trait::async_trait;
-use common::Agent;
+use common::{Agent, Role};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -45,18 +45,28 @@ pub trait AgentsClient: Send + Sync {
         id: Uuid,
     ) -> Result<Option<Agent>, AgentsClientError>;
 
+    /// Registers a new agent — operator-only (RBAC v1, ADR-0016 follow-up).
     async fn register_agent(
         &self,
+        role: Role,
         tenant_id: Uuid,
         connector_type: &str,
         name: &str,
         config: serde_json::Value,
     ) -> Result<Agent, AgentsClientError>;
-    async fn delete_agent(&self, tenant_id: Uuid, id: Uuid) -> Result<(), AgentsClientError>;
+
+    /// Deletes an agent — operator-only (RBAC v1, ADR-0016 follow-up).
+    async fn delete_agent(
+        &self,
+        role: Role,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<(), AgentsClientError>;
 
     /// Persists `agent` as-is via `PUT /v1/agents/:id` — used for the enable/disable toggle
     /// (flip `agent.enabled`, then call this with the rest of the fields unchanged).
-    async fn update_agent(&self, agent: &Agent) -> Result<Agent, AgentsClientError>;
+    /// Operator-only (RBAC v1, ADR-0016 follow-up).
+    async fn update_agent(&self, role: Role, agent: &Agent) -> Result<Agent, AgentsClientError>;
 }
 
 pub struct HttpAgentsClient {
@@ -125,6 +135,7 @@ impl AgentsClient for HttpAgentsClient {
 
     async fn register_agent(
         &self,
+        role: Role,
         tenant_id: Uuid,
         connector_type: &str,
         name: &str,
@@ -135,6 +146,7 @@ impl AgentsClient for HttpAgentsClient {
             .client
             .post(format!("{}/v1/agents", self.config_admin_service_url))
             .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
             .json(&agent)
             .send()
             .await
@@ -146,11 +158,17 @@ impl AgentsClient for HttpAgentsClient {
         response.json().await.map_err(|e| AgentsClientError::Unreachable(e.to_string()))
     }
 
-    async fn delete_agent(&self, tenant_id: Uuid, id: Uuid) -> Result<(), AgentsClientError> {
+    async fn delete_agent(
+        &self,
+        role: Role,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<(), AgentsClientError> {
         let response = self
             .client
             .delete(format!("{}/v1/agents/{id}", self.config_admin_service_url))
             .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
             .send()
             .await
             .map_err(|e| AgentsClientError::Unreachable(e.to_string()))?;
@@ -161,11 +179,12 @@ impl AgentsClient for HttpAgentsClient {
         Ok(())
     }
 
-    async fn update_agent(&self, agent: &Agent) -> Result<Agent, AgentsClientError> {
+    async fn update_agent(&self, role: Role, agent: &Agent) -> Result<Agent, AgentsClientError> {
         let response = self
             .client
             .put(format!("{}/v1/agents/{}", self.config_admin_service_url, agent.id))
             .header("x-tenant-id", agent.tenant_id.to_string())
+            .header("x-role", role.to_string())
             .json(agent)
             .send()
             .await

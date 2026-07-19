@@ -40,10 +40,25 @@ async fn send(
     tenant_header: Option<Uuid>,
     body: Option<serde_json::Value>,
 ) -> axum::http::Response<Body> {
+    send_with_role(app, method, uri, tenant_header, Some("operator"), body).await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn send_with_role(
+    app: Router,
+    method: &str,
+    uri: String,
+    tenant_header: Option<Uuid>,
+    role_header: Option<&str>,
+    body: Option<serde_json::Value>,
+) -> axum::http::Response<Body> {
     let mut req =
         Request::builder().method(method).uri(uri).header("content-type", "application/json");
     if let Some(tenant_id) = tenant_header {
         req = req.header("x-tenant-id", tenant_id.to_string());
+    }
+    if let Some(role) = role_header {
+        req = req.header("x-role", role);
     }
     let body = body.map(|b| Body::from(b.to_string())).unwrap_or(Body::empty());
     app.oneshot(req.body(body).unwrap()).await.unwrap()
@@ -205,4 +220,99 @@ async fn get_agent_by_name_returns_404_for_unknown_name() {
     .await;
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+// --- RBAC (ADR-0016 follow-up): agent write endpoints must enforce the same Operator-minimum
+// role check trigger-definition and normalization-mapping writes already have. Previously these
+// three handlers never called `require_operator` at all — any authenticated Viewer-role session
+// (or anyone hitting the API directly) could register/update/delete another tenant's Agents.
+
+#[tokio::test]
+async fn create_agent_requires_role_header() {
+    let tenant_id = Uuid::new_v4();
+    let agent = sample_agent(tenant_id);
+    let response = send_with_role(
+        router(default_state()),
+        "POST",
+        "/v1/agents".to_string(),
+        Some(tenant_id),
+        None,
+        Some(serde_json::to_value(&agent).unwrap()),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn create_agent_rejects_a_viewer_role() {
+    let tenant_id = Uuid::new_v4();
+    let agent = sample_agent(tenant_id);
+    let response = send_with_role(
+        router(default_state()),
+        "POST",
+        "/v1/agents".to_string(),
+        Some(tenant_id),
+        Some("viewer"),
+        Some(serde_json::to_value(&agent).unwrap()),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn create_agent_allows_an_operator_role() {
+    let tenant_id = Uuid::new_v4();
+    let agent = sample_agent(tenant_id);
+    let response = send_with_role(
+        router(default_state()),
+        "POST",
+        "/v1/agents".to_string(),
+        Some(tenant_id),
+        Some("operator"),
+        Some(serde_json::to_value(&agent).unwrap()),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn update_agent_rejects_a_viewer_role() {
+    let tenant_id = Uuid::new_v4();
+    let agent = sample_agent(tenant_id);
+    let state = AgentState {
+        agent_repository: Arc::new(InMemoryAgentRepository::with_agent(agent.clone())),
+        agent_publisher: Arc::new(InMemoryAgentPublisher::default()),
+    };
+    let mut updated = agent.clone();
+    updated.enabled = false;
+    let response = send_with_role(
+        router(state),
+        "PUT",
+        format!("/v1/agents/{}", agent.id),
+        Some(tenant_id),
+        Some("viewer"),
+        Some(serde_json::to_value(&updated).unwrap()),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn delete_agent_rejects_a_viewer_role() {
+    let tenant_id = Uuid::new_v4();
+    let agent = sample_agent(tenant_id);
+    let state = AgentState {
+        agent_repository: Arc::new(InMemoryAgentRepository::with_agent(agent.clone())),
+        agent_publisher: Arc::new(InMemoryAgentPublisher::default()),
+    };
+    let response = send_with_role(
+        router(state),
+        "DELETE",
+        format!("/v1/agents/{}", agent.id),
+        Some(tenant_id),
+        Some("viewer"),
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
