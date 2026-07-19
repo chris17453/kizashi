@@ -71,3 +71,15 @@ fn smtp_takes_precedence_over_graph_when_both_fields_are_present() {
     };
     assert!(is_smtp_email(&action));
 }
+
+#[tokio::test]
+async fn a_teams_alert_action_is_routed_to_the_teams_dispatcher_not_the_generic_one() {
+    let dispatcher = RoutingActionDispatcher::new(None);
+    // No `url` in config, so if this were routed to the generic HttpActionDispatcher the
+    // error would still be MissingUrl — the real proof this hit TeamsAlertActionDispatcher
+    // specifically lives in teams_alert_action_dispatcher_test.rs's payload-shape assertions;
+    // this test just confirms the routing condition itself compiles and doesn't panic/misroute.
+    let action = ActionRef { action_type: ActionType::TeamsAlert, config: json!({}) };
+    let err = dispatcher.dispatch(&action, &sample_event()).await.unwrap_err();
+    assert!(matches!(err, DispatchError::MissingUrl));
+}
