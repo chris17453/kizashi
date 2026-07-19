@@ -109,6 +109,38 @@ fn sample_mapping(tenant_id: Uuid) -> common::NormalizationMapping {
 }
 
 #[tokio::test]
+async fn config_audit_log_rejects_update_at_the_database_level() {
+    let pool = test_pool().await;
+    let repo = PostgresTriggerDefinitionRepository::new(pool.clone());
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id);
+    repo.create(trigger.clone()).await.unwrap();
+
+    let err = sqlx::query("UPDATE config_audit_log SET actor = 'tampered' WHERE entity_id = $1")
+        .bind(trigger.id)
+        .execute(&pool)
+        .await
+        .expect_err("update should be rejected by the immutability trigger");
+    assert!(err.to_string().contains("append-only"));
+}
+
+#[tokio::test]
+async fn config_audit_log_rejects_delete_at_the_database_level() {
+    let pool = test_pool().await;
+    let repo = PostgresTriggerDefinitionRepository::new(pool.clone());
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id);
+    repo.create(trigger.clone()).await.unwrap();
+
+    let err = sqlx::query("DELETE FROM config_audit_log WHERE entity_id = $1")
+        .bind(trigger.id)
+        .execute(&pool)
+        .await
+        .expect_err("delete should be rejected by the immutability trigger");
+    assert!(err.to_string().contains("append-only"));
+}
+
+#[tokio::test]
 async fn create_mapping_writes_a_created_audit_row_in_the_same_transaction() {
     let pool = test_pool().await;
     let repo = PostgresNormalizationMappingRepository::new(pool.clone());

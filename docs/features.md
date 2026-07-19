@@ -1055,3 +1055,44 @@ Entry format:
   `rustls-pemfile` — no new advisories).
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a (additive query/response-shape change, not a new architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Audit log immutability enforced at the database level
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** `config_admin_service.config_audit_log` and `retention_service.retention_audit_log`
+  were append-only by application convention only (no Rust code path ever issues UPDATE/DELETE
+  against them) — nothing at the database level stopped a bug or a manual `psql` session from
+  mutating or deleting an audit row, a real gap against CLAUDE.md §5's "every admin/config
+  change is logged immutably" bar for a product that expects compliance audits. Since
+  `common::connect_with_schema` and every service's `main.rs` run migrations and runtime
+  queries through the same connection pool and the same shared `kizashi` Postgres role (no
+  role separation exists anywhere in this codebase), a `REVOKE UPDATE, DELETE` approach would
+  have required introducing a second privileged migration-only role — a much larger,
+  unprecedented change. Went with a `BEFORE UPDATE OR DELETE` trigger on each table that
+  `RAISE EXCEPTION`s instead — a single plain `.sql` migration per service, no new role, no
+  `docker-compose.yml`/`.env.example`/`common` changes, works regardless of which role issues
+  the mutation.
+- **Tests:** TDD'd against real Postgres: wrote the regression tests first, ran them without
+  the migration present to confirm they fail for the expected reason (`rows_affected: 1`, i.e.
+  the row-level trigger genuinely wasn't there yet), then added the migration and reran.
+  `cargo test -p config-admin-service --test repository_integration_test` — 6 passed (2 new:
+  `config_audit_log_rejects_update_at_the_database_level`,
+  `config_audit_log_rejects_delete_at_the_database_level`, both asserting the real Postgres
+  error text). `cargo test -p retention-service --test retention_policy_integration_test` — 6
+  passed (2 new, same pattern for `retention_audit_log`). Beyond integration tests: rebuilt and
+  redeployed `config-admin-service`/`retention-service`, created a real trigger definition and
+  a real retention policy through their live HTTP APIs (so each had a genuine audit row), then
+  ran a raw `UPDATE`/`DELETE` against each audit table directly via `psql` against the live
+  running Postgres container and confirmed Postgres itself rejected all four attempts with
+  `... is append-only: UPDATE/DELETE is not permitted` — proving the trigger is live against
+  the real running stack, not just the test database. Full local CI gate: `cargo fmt --all
+  --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  clean, `cargo test --workspace --all-features` all green (0 failures across every crate,
+  verified against a throwaway local `mssql` container standing in for CI's Fabric TDS
+  dependency), `cargo llvm-cov` 93.90% line coverage (85% floor — unchanged, since the new
+  code is pure SQL plus integration tests, neither counted in the Rust line-coverage ratchet),
+  `cargo audit` / `cargo deny check` clean (same two pre-existing allow-listed `unmaintained`
+  advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — closes a gap flagged in the standing gap-closing roadmap
+  (Phase 1b, security/compliance), not a spec §11 open item.
