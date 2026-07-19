@@ -2829,3 +2829,34 @@ architectural decision.
   real stack proving both DB-level dedup and publish-exactly-once end-to-end.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0032](../docs/adr/0032-idempotent-ingestion-via-external-id.md)
+
+## [2026-07-19] feature/0041-imap-since-date-narrowing — Narrow IMAP's poll window after the first poll
+- **Type:** feature
+- **Summary:** Caught live against a real personal mailbox before it ran unattended: an IMAP
+  Agent's `IMAP_SINCE_DATE` came straight from the Agent's static config on every poll, forever
+  — an Agent configured with a 6-month backfill re-fetched the *entire* 6 months of message
+  bodies over IMAP every single poll interval, not just new mail. ADR-0032's dedup made this
+  safe (no duplicate rows/events), but not efficient — repeated full-history re-fetches against
+  a real mail server is real bandwidth/IMAP load, not just a cosmetic inefficiency.
+  `agent-scheduler` already tracked `last_polled_at` per Agent for scheduling cadence but never
+  passed it to the invoker. `Invoker::invoke` now takes `last_polled_at`, and
+  `DockerInvoker::build_run_args` uses it to override `IMAP_SINCE_DATE` to `last_polled_at - 1
+  day` (a coarse but safe overlap, since IMAP's `SEARCH SINCE` is date-granularity only) on
+  every poll after the first — narrowly special-cased to `connector_type == "imap"`, not a
+  generic mechanism, since it's the one connector currently known to re-scan a stateless date
+  window. **Also disabled a real Agent immediately upon spotting this in production** — a
+  registered `mail-watkinslabs-com` IMAP Agent was pulled while this fix was built, to stop it
+  from repeatedly re-downloading six months of real mail every 5 minutes in the meantime.
+- **Tests:** `cargo test -p agent-scheduler --lib` — 13 passed (3 new:
+  `IMAP_SINCE_DATE` unchanged on a first-ever poll, overridden to `last_polled_at - 1 day` on a
+  later poll, non-IMAP connectors unaffected by `last_polled_at`). `cargo test --workspace
+  --all-features` (full real-infra stack) — every test binary passed, 0 failed. `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check`
+  — clean. `cargo deny check` / `cargo audit` — clean, same 3 pre-existing allow-listed
+  advisories.
+- **Live verification:** discovered via a real deployment — a real IMAP Agent against a real
+  mailbox ingested exactly 600 records (hit the ingestion-gateway rate limit ceiling on a
+  single burst-backfill poll, confirming a substantial multi-hundred-message real inbox
+  history) before the re-scan problem was noticed and the Agent disabled pending this fix.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0033](../docs/adr/0033-imap-since-date-narrowing-on-later-polls.md)

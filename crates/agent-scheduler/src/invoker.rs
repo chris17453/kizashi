@@ -17,7 +17,15 @@ pub enum InvokeError {
 /// affecting the scheduler or any other tenant's Agent, matching ADR-0013's isolation stance.
 #[async_trait]
 pub trait Invoker: Send + Sync {
-    async fn invoke(&self, agent: &Agent) -> Result<(), InvokeError>;
+    /// `last_polled_at` is `None` on an agent's first-ever poll (use its configured backfill
+    /// window as-is) and `Some` on every later poll — connectors that understand a `since`-
+    /// style window narrow it instead of re-scanning from the original configured start every
+    /// time (see `DockerInvoker::build_run_args`'s IMAP override).
+    async fn invoke(
+        &self,
+        agent: &Agent,
+        last_polled_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<(), InvokeError>;
 }
 
 /// Runs each due Agent's connector via `docker run --rm <image>` against the local Docker
@@ -55,11 +63,18 @@ impl DockerInvoker {
     /// gateway env vars the deploy-script wizard already computes by hand
     /// (`ui/src/agent_script_handler.rs::build_scripts`). Exposed at `pub(crate)` visibility
     /// purely so this method is independently unit-testable without shelling out.
+    /// `last_polled_at` narrows the IMAP connector's `IMAP_SINCE_DATE` on every poll after the
+    /// first, instead of re-scanning from the operator's originally-configured backfill start
+    /// forever — see the `Invoker::invoke` doc comment. This is deliberately special-cased to
+    /// `connector_type == "imap"` rather than a generic mechanism: it's the one connector this
+    /// scheduler currently knows re-scans a stateless date window, and a generic per-connector
+    /// cursor protocol is real follow-up work (see ADR-0033), not something to fake here.
     pub(crate) fn build_run_args(
         &self,
         agent: &Agent,
         ingestion_gateway_url: &str,
         ingestion_gateway_api_key: &str,
+        last_polled_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Vec<String> {
         let mut args = vec![
             "run".to_string(),
@@ -76,8 +91,25 @@ impl DockerInvoker {
             format!("INGESTION_GATEWAY_API_KEY={ingestion_gateway_api_key}"),
         ];
 
+        // A one-day overlap, not an exact cursor: IMAP's SEARCH SINCE command only has date
+        // granularity, so this is the coarsest safe margin against missing a message that
+        // landed right at a previous poll's boundary. Real dedup (ADR-0032) is what makes the
+        // resulting re-scan of that overlap day safe rather than duplicating anything.
+        let imap_since_override = if agent.connector_type == "imap" {
+            last_polled_at.map(|t| (t - chrono::Duration::days(1)).format("%Y-%m-%d").to_string())
+        } else {
+            None
+        };
+
         if let Some(fields) = agent.config.as_object() {
             for (key, value) in fields {
+                if key == "IMAP_SINCE_DATE" {
+                    if let Some(overridden) = &imap_since_override {
+                        args.push("-e".to_string());
+                        args.push(format!("IMAP_SINCE_DATE={overridden}"));
+                        continue;
+                    }
+                }
                 let value_str =
                     value.as_str().map(str::to_string).unwrap_or_else(|| value.to_string());
                 args.push("-e".to_string());
@@ -92,11 +124,16 @@ impl DockerInvoker {
 
 #[async_trait]
 impl Invoker for DockerInvoker {
-    async fn invoke(&self, agent: &Agent) -> Result<(), InvokeError> {
+    async fn invoke(
+        &self,
+        agent: &Agent,
+        last_polled_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<(), InvokeError> {
         let args = self.build_run_args(
             agent,
             &self.ingestion_gateway_url,
             &self.ingestion_gateway_api_key,
+            last_polled_at,
         );
 
         let output = tokio::process::Command::new("docker")
