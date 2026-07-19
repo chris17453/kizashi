@@ -83,10 +83,12 @@ jobs:
           sleep 15
 
       # Same rationale as MinIO/SQL Server above: connector-imap's live integration test needs
-      # a real IMAP server (ADR-0022) — greenmail is a small, fast-starting IMAP+SMTP test
-      # server built exactly for this. Seeds one message via SMTP so the "poll returns a real
+      # a real IMAP server (ADR-0022), and action-executor's SMTP send action live test
+      # (ADR-0023) needs a real SMTP server that it can also read back from via IMAP — greenmail
+      # is a small, fast-starting IMAP+SMTP test server built exactly for this and both tests
+      # share one instance/mailbox. Seeds one message via SMTP so the "poll returns a real
       # message" test has something to find.
-      - name: Start greenmail (IMAP test server)
+      - name: Start greenmail (IMAP + SMTP test server)
         run: |
           docker run -d --name greenmail -p 13143:3143 -p 13025:3025 \
             -e GREENMAIL_OPTS='-Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imap -Dgreenmail.users=testuser:testpass@example.com -Dgreenmail.hostname=0.0.0.0' \
@@ -138,4 +140,6 @@ jobs:
           IMAP_TEST_PORT: "13143"
           IMAP_TEST_USERNAME: testuser
           IMAP_TEST_PASSWORD: testpass
+          SMTP_TEST_HOST: 127.0.0.1
+          SMTP_TEST_PORT: "13025"
         run: ./scripts/ci-local.sh

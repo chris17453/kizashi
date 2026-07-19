@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0021         |
+| feature       | `feature/` | 0022         |
 | fix           | `fix/`     | 0002        |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -46,3 +46,4 @@ manually created branches.
 | 0018 | `feature/0018-egress-gateway` | feature | 2026-07-19 | open | pending | |
 | 0019 | `feature/0019-egress-proxy-connector-wiring` | feature | 2026-07-19 | open | pending | |
 | 0020 | `feature/0020-imap-inbound-connector` | feature | 2026-07-19 | open | pending | |
+| 0021 | `feature/0021-smtp-send-action` | feature | 2026-07-19 | open | pending | |

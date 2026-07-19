@@ -1945,3 +1945,36 @@ architectural decision.
   append-only audit tables verified in earlier phases).
 - **PR:** (opened in this branch's PR)
 - **ADR:** [0022](adr/0022-imap-connector-plain-auth-stateless-cursor.md)
+
+## [2026-07-19] feature/0021-smtp-send-action — SMTP send action (Phase 5)
+- **Type:** feature
+- **Branch:** feature/0021-smtp-send-action
+- **Summary:** Closes the second Phase 5 gap: `action-executor` can now send a real SMTP email,
+  not just POST a webhook labeled "Email." New `SmtpActionDispatcher` (uses `lettre`) reads
+  `smtp_host`/`smtp_port`/`smtp_use_tls`/`from`/`to`/`subject`/`smtp_username`/`smtp_password`
+  from an action's config and sends an actual RFC 5322 message. A new `RoutingActionDispatcher`
+  (now the dispatcher `main.rs` wires up) routes `ActionType::Email` actions with an
+  `smtp_host` field to `SmtpActionDispatcher`, everything else to the existing
+  `HttpActionDispatcher` unchanged — no breaking change for already-configured
+  Email-as-webhook triggers. Added `DispatchError::InvalidConfig` for SMTP-specific
+  config-validation failures, distinct from HTTP dispatch's `MissingUrl`.
+- **Tests:** `cargo test -p action-executor --lib` — 32 tests, all passed (config-validation
+  unit tests for `SmtpActionDispatcher`, routing-decision unit tests for
+  `RoutingActionDispatcher`, plus all pre-existing `HttpActionDispatcher`/`process_event`
+  tests unaffected). `tests/smtp_action_dispatcher_integration_test.rs` — 1 test against a
+  **real SMTP+IMAP server** (reusing ADR-0022's `greenmail` container): sends a real message
+  via `SmtpActionDispatcher`, then reads it back with a real `ImapConnector::poll` call to
+  prove actual delivery, not just SMTP accepting the DATA command. Also fixed a fragility this
+  surfaced in `connector-imap`'s own live test: it assumed its seeded message was the only one
+  in the shared CI mailbox, which broke once this action's test started seeding its own
+  message there too — changed to search by subject instead of assuming index `0`. `cargo test
+  --workspace --all-features` (full real-infra stack including both greenmail-backed tests
+  together) — all passed, 0 failed. `cargo clippy --workspace --all-targets --all-features --
+  -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo audit` — same 3
+  pre-existing allow-listed advisories, no new ones from `lettre` and its transitive deps.
+- **Known gaps, explicitly not done here:** SMTP connection pooling (a fresh transport is built
+  per dispatch, matching `HttpActionDispatcher`'s existing per-dispatch-client pattern) and
+  Egress Gateway routing for SMTP (not an HTTP-CONNECT-tunnelable protocol, same limitation
+  ADR-0022 already documents for IMAP) are tracked as follow-ups.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0023](adr/0023-smtp-send-action-routing-dispatcher.md)
