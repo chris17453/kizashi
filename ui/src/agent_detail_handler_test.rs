@@ -124,7 +124,7 @@ async fn renders_not_found_for_an_unknown_agent_id() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Agent not found"));
+    assert!(body.contains("Sensor not found"));
 }
 
 #[tokio::test]

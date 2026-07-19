@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0048         |
+| feature       | `feature/` | 0049         |
 | fix           | `fix/`     | 0005         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -77,4 +77,5 @@ manually created branches.
 | 0044 | `feature/0044-reprocess-unnormalized-records` | feature | 2026-07-19 | merged | #53 | |
 | 0045 | `feature/0045-analysis-concurrency` | feature | 2026-07-19 | merged | #54 | |
 | 0046 | `feature/0046-reprocess-ui-button` | feature | 2026-07-19 | merged | #55 | |
-| 0047 | `feature/0047-record-journey-timing-waterfall` | feature | 2026-07-19 | open | pending | |
+| 0047 | `feature/0047-record-journey-timing-waterfall` | feature | 2026-07-19 | merged | #56 | |
+| 0048 | `feature/0048-sensor-naming-stage1-ui-labels` | feature | 2026-07-19 | open | pending | |

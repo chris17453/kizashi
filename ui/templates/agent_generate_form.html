@@ -1,12 +1,12 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Deploy a {{ connector_type_label }} Agent</h1>
+<h1>Deploy a {{ connector_type_label }} Sensor</h1>
 
 <div class="panel">
   <h2>2. Fill in your details</h2>
   <form class="inline" method="post" action="/agents/generate/script">
     <input type="hidden" name="connector_type" value="{{ connector_type }}">
-    <label for="name">Agent name</label>
+    <label for="name">Sensor name</label>
     <input type="text" id="name" name="name" placeholder="support-poller" required>
     <label for="gateway_url">Ingestion Gateway URL</label>
     <input type="text" id="gateway_url" name="gateway_url" value="{{ gateway_url }}" required>

@@ -107,7 +107,7 @@ async fn viewer_role_does_not_see_register_form_or_write_buttons() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("support-poller"));
-    assert!(!body.contains("Register an already-deployed agent"));
+    assert!(!body.contains("Register an already-deployed sensor"));
     assert!(!body.contains("Generate a deploy script"));
     assert!(!body.contains(">Remove<"));
     assert!(!body.contains(">Disable<"));
@@ -152,7 +152,7 @@ async fn operator_role_sees_register_form_and_write_buttons() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Register an already-deployed agent"));
+    assert!(body.contains("Register an already-deployed sensor"));
     assert!(body.contains(">Disable<"));
 }
 
@@ -206,7 +206,7 @@ async fn get_agents_shows_an_empty_state_with_no_agents_registered() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("No agents registered yet"));
+    assert!(body.contains("No sensors registered yet"));
     assert!(!body.contains("<table>"));
 }
 
