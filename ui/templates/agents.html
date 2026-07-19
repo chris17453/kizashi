@@ -3,6 +3,7 @@
 <h1>Agents</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
+{% if can_write %}
 <p><a href="/agents/generate">Generate a deploy script for a new agent &rarr;</a></p>
 
 <div class="panel">
@@ -26,6 +27,7 @@
     <button type="submit">Register</button>
   </form>
 </div>
+{% endif %}
 
 <table>
   <thead>
@@ -55,12 +57,14 @@
         </span>
       </td>
       <td>
+        {% if can_write %}
         <form class="inline" method="post" action="/agents/{{ agent.id }}/toggle" style="display:inline">
           <button type="submit" class="btn">{% if agent.enabled %}Disable{% else %}Enable{% endif %}</button>
         </form>
         <form class="inline" method="post" action="/agents/{{ agent.id }}/delete" style="display:inline">
           <button type="submit" class="btn-danger">Remove</button>
         </form>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

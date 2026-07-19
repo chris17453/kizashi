@@ -56,6 +56,82 @@ async fn state_with_session() -> (AppState, String, Uuid) {
 }
 
 #[tokio::test]
+async fn viewer_role_does_not_see_register_form_or_write_buttons() {
+    let (state, _admin_session_id, tenant_id) = state_with_session().await;
+    state
+        .agents_client
+        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
+        .await
+        .unwrap();
+    let viewer_session_id = state
+        .session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "viewer-alice".to_string(),
+            role: common::Role::Viewer,
+        })
+        .await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/agents")
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("support-poller"));
+    assert!(!body.contains("Register an already-deployed agent"));
+    assert!(!body.contains("Generate a deploy script"));
+    assert!(!body.contains(">Remove<"));
+    assert!(!body.contains(">Disable<"));
+    assert!(!body.contains(">Enable<"));
+}
+
+#[tokio::test]
+async fn operator_role_sees_register_form_and_write_buttons() {
+    let (state, _admin_session_id, tenant_id) = state_with_session().await;
+    state
+        .agents_client
+        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
+        .await
+        .unwrap();
+    let operator_session_id = state
+        .session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "operator-alice".to_string(),
+            role: common::Role::Operator,
+        })
+        .await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/agents")
+                .header("cookie", format!("kizashi_session={operator_session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Register an already-deployed agent"));
+    assert!(body.contains(">Disable<"));
+}
+
+#[tokio::test]
 async fn get_agents_renders_the_agents_table_when_signed_in() {
     let (state, session_id, tenant_id) = state_with_session().await;
     state

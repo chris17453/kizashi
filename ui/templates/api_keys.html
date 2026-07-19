@@ -12,6 +12,7 @@
 </div>
 {% endif %}
 
+{% if can_write %}
 <div class="panel">
   <h2>Create a new key</h2>
   <p class="muted">Issue a key for a connector/agent to authenticate against
@@ -23,6 +24,7 @@
     <button type="submit">Create key</button>
   </form>
 </div>
+{% endif %}
 
 <table>
   <thead>
@@ -39,9 +41,11 @@
       {% else %}
       <td class="status-up">active</td>
       <td>
+        {% if can_write %}
         <form class="inline" method="post" action="/api-keys/{{ key.id }}/revoke" style="display:inline">
           <button type="submit" class="btn-danger">Revoke</button>
         </form>
+        {% endif %}
       </td>
       {% endif %}
     </tr>

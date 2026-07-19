@@ -61,6 +61,11 @@ struct AgentsTemplate {
     agents: Vec<AgentRow>,
     page: i64,
     has_more: bool,
+    /// RBAC v1 (ADR-0016): hides the register form and enable/disable/remove buttons from a
+    /// `Viewer` — the backend doesn't enforce this particular write path yet (only
+    /// config-admin-service's trigger/mapping writes and retention-service's policy writes do),
+    /// so this is presentation-layer only for now, not a substitute for server-side gating.
+    can_write: bool,
     error: Option<String>,
 }
 
@@ -73,6 +78,7 @@ pub async fn get_agents(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let can_write = session.role.at_least(common::Role::Operator);
 
     let page = query.page.max(0);
     let result = state
@@ -88,6 +94,7 @@ pub async fn get_agents(
                     agents: vec![],
                     page,
                     has_more: false,
+                    can_write,
                     error: Some(e.to_string()),
                 }
                 .render()
@@ -105,6 +112,7 @@ pub async fn get_agents(
             agents: join_agent_stats(agents, stats),
             page,
             has_more,
+            can_write,
             error: None,
         }
         .render()
@@ -121,7 +129,12 @@ pub struct RegisterAgentForm {
     config: String,
 }
 
-async fn rerender_with_error(state: &AppState, tenant_id: Uuid, error: String) -> Response {
+async fn rerender_with_error(
+    state: &AppState,
+    tenant_id: Uuid,
+    can_write: bool,
+    error: String,
+) -> Response {
     let agents = state
         .agents_client
         .list_agents(tenant_id, DEFAULT_PAGE_SIZE, 0)
@@ -135,6 +148,7 @@ async fn rerender_with_error(state: &AppState, tenant_id: Uuid, error: String) -
             agents: join_agent_stats(agents, stats),
             page: 0,
             has_more: false,
+            can_write,
             error: Some(error),
         }
         .render()
@@ -162,6 +176,7 @@ pub async fn post_agents(
                 return rerender_with_error(
                     &state,
                     session.tenant_id,
+                    session.role.at_least(common::Role::Operator),
                     "config must be valid JSON".to_string(),
                 )
                 .await;
@@ -174,7 +189,13 @@ pub async fn post_agents(
         .register_agent(session.tenant_id, &form.connector_type, &form.name, config)
         .await
     {
-        return rerender_with_error(&state, session.tenant_id, e.to_string()).await;
+        return rerender_with_error(
+            &state,
+            session.tenant_id,
+            session.role.at_least(common::Role::Operator),
+            e.to_string(),
+        )
+        .await;
     }
 
     Redirect::to("/agents").into_response()

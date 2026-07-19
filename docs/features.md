@@ -1257,3 +1257,32 @@ Entry format:
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a — additive UI feature consuming already-decided ADR-0012/ADR-0015 capabilities,
   not a new architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — Role-aware nav: hide write actions from Viewers
+- **Type:** feature
+- **Summary:** Closes ADR-0016's last still-open Console UI v1 item: "role-aware nav (hide
+  admin actions from viewer)." `/agents` and `/api-keys` now compute
+  `can_write = session.role.at_least(Role::Operator)` and gate the register/create forms and
+  every per-row Enable/Disable/Remove/Revoke button behind it — a `Viewer` sees the same data
+  (agent list, key list) with none of the mutation controls. This is presentation-layer only:
+  `agents`-write and `ingestion-gateway`'s API-key endpoints don't enforce role server-side yet
+  (only config-admin-service's trigger/mapping writes and retention-service's policy writes
+  do, per ADR-0016 and its retention-service follow-up) — noted explicitly in code comments so
+  it isn't mistaken for a security boundary.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 112 passed (4 new: a `Viewer` session sees the
+  agent/key data but none of the write UI; an `Operator` session sees both). Beyond unit
+  tests: rebuilt and redeployed `kizashi-ui`, inserted a real `viewer`-role user directly into
+  the running `auth_service.local_users` table (via the existing `hash_password` bin for a
+  real Argon2 hash), logged in as that user through the live UI, and confirmed zero matches for
+  every write control on both `/agents` and `/api-keys` — then logged back in as the existing
+  `admin`-role demo user and confirmed all controls are present, proving the gate works both
+  directions against the real running stack, not just template unit tests. Full local CI gate:
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green (0 failures across every
+  crate, verified against a throwaway local `mssql` container standing in for CI's Fabric TDS
+  dependency), `cargo llvm-cov` 93.96% line coverage (85% floor), `cargo audit` / `cargo deny
+  check` clean (same two pre-existing allow-listed `unmaintained` advisories, no new
+  advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — implements a follow-up explicitly scoped into ADR-0016's v1 Console UI item,
+  not a new architectural decision.

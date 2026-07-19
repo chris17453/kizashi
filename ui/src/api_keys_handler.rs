@@ -18,6 +18,10 @@ struct ApiKeysTemplate {
     /// Set only immediately after a successful create — the one and only render where the
     /// plaintext key is ever available to show the operator.
     created_key: Option<String>,
+    /// RBAC v1 (ADR-0016): hides the create form and revoke buttons from a `Viewer` —
+    /// presentation-layer only; `ingestion-gateway`'s API-key endpoints don't enforce this
+    /// server-side yet (tracked as a follow-up in the ADR).
+    can_write: bool,
     error: Option<String>,
 }
 
@@ -26,10 +30,11 @@ pub async fn get_api_keys(State(state): State<AppState>, headers: HeaderMap) -> 
         Ok(session) => session,
         Err(response) => return response,
     };
+    let can_write = session.role.at_least(common::Role::Operator);
 
     match state.api_keys_client.list_api_keys(session.tenant_id).await {
         Ok(keys) => Html(
-            ApiKeysTemplate { show_nav: true, keys, created_key: None, error: None }
+            ApiKeysTemplate { show_nav: true, keys, created_key: None, can_write, error: None }
                 .render()
                 .unwrap(),
         )
@@ -39,6 +44,7 @@ pub async fn get_api_keys(State(state): State<AppState>, headers: HeaderMap) -> 
                 show_nav: true,
                 keys: vec![],
                 created_key: None,
+                can_write,
                 error: Some(e.to_string()),
             }
             .render()
@@ -62,6 +68,7 @@ pub async fn post_api_keys(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let can_write = session.role.at_least(common::Role::Operator);
 
     let created_key = match state
         .api_keys_client
@@ -77,6 +84,7 @@ pub async fn post_api_keys(
                     show_nav: true,
                     keys,
                     created_key: None,
+                    can_write,
                     error: Some(e.to_string()),
                 }
                 .render()
@@ -87,8 +95,12 @@ pub async fn post_api_keys(
     };
 
     let keys = state.api_keys_client.list_api_keys(session.tenant_id).await.unwrap_or_default();
-    Html(ApiKeysTemplate { show_nav: true, keys, created_key, error: None }.render().unwrap())
-        .into_response()
+    Html(
+        ApiKeysTemplate { show_nav: true, keys, created_key, can_write, error: None }
+            .render()
+            .unwrap(),
+    )
+    .into_response()
 }
 
 pub async fn post_revoke_api_key(
