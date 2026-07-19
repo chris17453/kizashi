@@ -75,6 +75,11 @@ async fn a_firing_threshold_trigger_writes_and_publishes_an_event() {
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].event_type, "sentiment");
     assert_eq!(events[0].group_key, "cust-1");
+    assert_eq!(
+        events[0].record_ids,
+        vec![record.record.id],
+        "the fired event must carry the id of the record whose signal satisfied the condition"
+    );
     assert_eq!(publisher.published.lock().unwrap().len(), 1);
 }
 
@@ -106,22 +111,23 @@ async fn a_count_over_window_trigger_fires_only_once_the_threshold_count_is_reac
     };
     let (deps, event_store, _publisher) = deps(InMemoryTriggerRepository::with_trigger(trigger));
 
-    let first = process_analyzed_record(
-        &deps,
-        &analyzed_record(tenant_id, "cust-1", json!({"sentiment": -0.2})),
-    )
-    .await
-    .unwrap();
+    let record1 = analyzed_record(tenant_id, "cust-1", json!({"sentiment": -0.2}));
+    let first = process_analyzed_record(&deps, &record1).await.unwrap();
     assert_eq!(first, 0, "only one signal recorded so far");
 
-    let second = process_analyzed_record(
-        &deps,
-        &analyzed_record(tenant_id, "cust-1", json!({"sentiment": -0.3})),
-    )
-    .await
-    .unwrap();
+    let record2 = analyzed_record(tenant_id, "cust-1", json!({"sentiment": -0.3}));
+    let second = process_analyzed_record(&deps, &record2).await.unwrap();
     assert_eq!(second, 1, "second signal reaches the count-over-window threshold");
-    assert_eq!(event_store.events.lock().unwrap().len(), 1);
+    let events = event_store.events.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    let mut record_ids = events[0].record_ids.clone();
+    record_ids.sort();
+    let mut expected = vec![record1.record.id, record2.record.id];
+    expected.sort();
+    assert_eq!(
+        record_ids, expected,
+        "the fired event must carry both records whose signals reached the count threshold"
+    );
 }
 
 #[tokio::test]

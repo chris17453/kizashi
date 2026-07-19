@@ -98,6 +98,8 @@ struct ClickHouseEventRow {
     occurred_at: String,
     created_at: String,
     status: String,
+    #[serde(default)]
+    record_ids: Vec<Uuid>,
 }
 
 impl TryFrom<ClickHouseEventRow> for Event {
@@ -123,6 +125,7 @@ impl TryFrom<ClickHouseEventRow> for Event {
             occurred_at: parse_clickhouse_datetime(&row.occurred_at)?,
             created_at: parse_clickhouse_datetime(&row.created_at)?,
             status,
+            record_ids: row.record_ids,
         })
     }
 }
@@ -166,7 +169,7 @@ impl EventQueryRepository for ClickHouseEventQueryRepository {
 
         let limit = filter.limit.clamp(1, 1000);
         let query = format!(
-            "SELECT id, tenant_id, event_type, source_connector_ids, entity_ref, group_key, payload, occurred_at, created_at, status FROM events WHERE {} ORDER BY occurred_at DESC LIMIT {} OFFSET {} FORMAT JSONEachRow",
+            "SELECT id, tenant_id, event_type, source_connector_ids, entity_ref, group_key, payload, occurred_at, created_at, status, record_ids FROM events WHERE {} ORDER BY occurred_at DESC LIMIT {} OFFSET {} FORMAT JSONEachRow",
             conditions.join(" AND "),
             limit,
             filter.offset
@@ -178,7 +181,7 @@ impl EventQueryRepository for ClickHouseEventQueryRepository {
     }
 
     async fn get_event(&self, tenant_id: Uuid, id: Uuid) -> Result<Option<Event>, QueryError> {
-        let query = "SELECT id, tenant_id, event_type, source_connector_ids, entity_ref, group_key, payload, occurred_at, created_at, status FROM events WHERE tenant_id = {tenant_id:UUID} AND id = {id:UUID} LIMIT 1 FORMAT JSONEachRow";
+        let query = "SELECT id, tenant_id, event_type, source_connector_ids, entity_ref, group_key, payload, occurred_at, created_at, status, record_ids FROM events WHERE tenant_id = {tenant_id:UUID} AND id = {id:UUID} LIMIT 1 FORMAT JSONEachRow";
         let rows = self
             .run_query(query, &[("tenant_id", tenant_id.to_string()), ("id", id.to_string())])
             .await?;

@@ -20,6 +20,13 @@ pub struct Event {
     pub occurred_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub status: EventStatus,
+    /// The `RawRecord` ids whose analyzed signals satisfied the trigger condition that
+    /// produced this Event — the record→event hop of the platform's full data lineage
+    /// (ingest → normalize → analyze → event → action). Empty for Events predating this field
+    /// or where the originating trigger-engine build didn't populate it. Defaulted so existing
+    /// `Event::new` callers/serialized messages don't break.
+    #[serde(default)]
+    pub record_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,7 +58,16 @@ impl Event {
             occurred_at,
             created_at: Utc::now(),
             status: EventStatus::New,
+            record_ids: Vec::new(),
         }
+    }
+
+    /// Attaches the `RawRecord` ids whose signals satisfied the trigger condition — the
+    /// record→event lineage link. Consuming builder so call sites read as
+    /// `Event::new(...).with_record_ids(ids)`.
+    pub fn with_record_ids(mut self, record_ids: Vec<Uuid>) -> Self {
+        self.record_ids = record_ids;
+        self
     }
 
     pub fn is_actionable(&self) -> bool {

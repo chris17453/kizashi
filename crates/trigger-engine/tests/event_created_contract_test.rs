@@ -30,9 +30,28 @@ fn event_created_message_has_all_required_fields() {
         "occurred_at",
         "created_at",
         "status",
+        "record_ids",
     ] {
         assert!(obj.contains_key(field), "event.created payload missing required field `{field}`");
     }
+}
+
+#[test]
+fn event_created_message_carries_the_records_that_satisfied_the_trigger_condition() {
+    let event = Event::new(
+        Uuid::new_v4(),
+        "sentiment",
+        "cust-1",
+        "cust-1",
+        json!({"value": -0.8}),
+        chrono::Utc::now(),
+    )
+    .with_record_ids(vec![Uuid::new_v4(), Uuid::new_v4()]);
+
+    let message = serde_json::to_vec(&event).unwrap();
+    let deserialized: Event = serde_json::from_slice(&message).unwrap();
+    assert_eq!(deserialized.record_ids, event.record_ids);
+    assert_eq!(deserialized.record_ids.len(), 2);
 }
 
 #[test]

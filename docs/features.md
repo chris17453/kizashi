@@ -1384,3 +1384,44 @@ Entry format:
   advisories, no new advisories).
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a — CSS/template layout fix, not a new architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — Event record lineage: record_ids field closes the last untraceable pipeline hop
+- **Type:** feature
+- **Summary:** `Event → ActionExecution` was already traceable (`ActionExecution.event_id`) and
+  `RawRecord → AnalyzedRecord` needs no lookup (same row), but `RawRecord → Event` — which
+  records actually caused a trigger to fire — was completely untraceable: `SignalRepository::
+  window_stats` computed count/values for trigger evaluation and then discarded which record
+  ids contributed. `common::Event` gains `record_ids: Vec<Uuid>`; `window_stats` now returns
+  `(count, values, record_ids)` from the same `analyzed_signals` scan (no new query);
+  `process_analyzed_record` attaches them via `Event::new(...).with_record_ids(...)`. The
+  ClickHouse `events` table gains a matching `record_ids Array(UUID)` column. This closes the
+  only remaining gap in the platform's full ingest→normalize→analyze→event→action lineage —
+  unblocking a record-journey/link-analysis view in Console UI without further backend work,
+  since `GET /data/:id` and `GET /v1/events/:id` already exist and now the second one returns
+  the link. See ADR-0017 for the full decision including why a builder method (not a changed
+  `Event::new` signature) and the live-ClickHouse migration note.
+- **Tests:** `cargo test -p trigger-engine --lib` — 29 passed (`window_stats` test now asserts
+  record ids are returned; both a single-record threshold-trigger fire and a multi-record
+  count-over-window fire assert the resulting Event carries the correct record id(s)). `cargo
+  test -p trigger-engine --test event_created_contract_test` — 3 passed (1 new: `record_ids`
+  round-trips through the wire message). `cargo test -p trigger-engine --test
+  trigger_integration_test` — 1 passed against real Postgres/ClickHouse/RabbitMQ, confirming
+  the altered schema doesn't break the existing write path. `cargo test -p dashboard-api --test
+  event_query_integration_test` — 2 passed, new test file closing another Phase 3 testing gap
+  (dashboard-api had zero tests against real ClickHouse before this): inserts a real row with
+  `record_ids` via ClickHouse's HTTP interface, reads it back through
+  `ClickHouseEventQueryRepository::get_event`/`list_events`, asserts the ids round-trip; a
+  second test confirms `get_event` returns `None` for an unknown id against the real service
+  (not a stub). Beyond tests: applied `ALTER TABLE events ADD COLUMN IF NOT EXISTS record_ids
+  Array(UUID)` directly against this build's live ClickHouse instance (a pre-existing table
+  `CREATE TABLE IF NOT EXISTS` doesn't alter — noted as a real rollout gotcha in ADR-0017),
+  then confirmed both the trigger-engine write path and the dashboard-api read path work
+  against the now-altered live table before any test ran. Full local CI gate: `cargo fmt --all
+  --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  clean, `cargo test --workspace --all-features` all green (0 failures across every crate,
+  verified against a throwaway local `mssql` container standing in for CI's Fabric TDS
+  dependency), `cargo llvm-cov` 94.10% line coverage (85% floor), `cargo audit` / `cargo deny
+  check` clean (same two pre-existing allow-listed `unmaintained` advisories, no new
+  advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** [0017-event-record-lineage-record-ids-field-on-event.md](../adr/0017-event-record-lineage-record-ids-field-on-event.md)

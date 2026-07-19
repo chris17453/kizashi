@@ -48,6 +48,7 @@ fn sample_event() -> Event {
         occurred_at: chrono::Utc::now(),
         created_at: chrono::Utc::now(),
         status: EventStatus::New,
+        record_ids: vec![],
     }
 }
 

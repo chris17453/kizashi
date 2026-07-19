@@ -19,7 +19,7 @@ impl SignalRepository for InMemorySignalRepository {
         event_type: &str,
         group_key: &str,
         window_seconds: i64,
-    ) -> Result<(u32, Vec<f64>), SignalRepositoryError> {
+    ) -> Result<(u32, Vec<f64>, Vec<Uuid>), SignalRepositoryError> {
         let cutoff = Utc::now() - chrono::Duration::seconds(window_seconds);
         let matching: Vec<AnalyzedSignal> = self
             .signals
@@ -36,7 +36,8 @@ impl SignalRepository for InMemorySignalRepository {
             .collect();
         let count = matching.len() as u32;
         let values = matching.iter().filter_map(|s| s.numeric_value).collect();
-        Ok((count, values))
+        let record_ids = matching.iter().map(|s| s.record_id).collect();
+        Ok((count, values, record_ids))
     }
 }
 
@@ -54,7 +55,7 @@ impl SignalRepository for FailingSignalRepository {
         _event_type: &str,
         _group_key: &str,
         _window_seconds: i64,
-    ) -> Result<(u32, Vec<f64>), SignalRepositoryError> {
+    ) -> Result<(u32, Vec<f64>, Vec<Uuid>), SignalRepositoryError> {
         Err(SignalRepositoryError::Backend("simulated failure".to_string()))
     }
 }
@@ -88,9 +89,11 @@ async fn window_stats_counts_and_collects_values_within_the_window() {
     .await
     .unwrap();
 
-    let (count, values) = repo.window_stats(tenant_id, "sentiment", "cust-1", 3600).await.unwrap();
+    let (count, values, record_ids) =
+        repo.window_stats(tenant_id, "sentiment", "cust-1", 3600).await.unwrap();
     assert_eq!(count, 2, "the signal outside the 1h window must not count");
     assert_eq!(values, vec![-0.8, -0.8]);
+    assert_eq!(record_ids.len(), 2, "each in-window signal's record id must be returned");
 }
 
 #[tokio::test]
@@ -102,6 +105,6 @@ async fn window_stats_is_scoped_to_tenant_and_group_key() {
     repo.record_signal(&sample_signal(tenant_id, "cust-2", Utc::now())).await.unwrap();
     repo.record_signal(&sample_signal(Uuid::new_v4(), "cust-1", Utc::now())).await.unwrap();
 
-    let (count, _) = repo.window_stats(tenant_id, "sentiment", "cust-1", 3600).await.unwrap();
+    let (count, _, _) = repo.window_stats(tenant_id, "sentiment", "cust-1", 3600).await.unwrap();
     assert_eq!(count, 1);
 }

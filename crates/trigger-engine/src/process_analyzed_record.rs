@@ -69,7 +69,7 @@ pub async fn process_analyzed_record(
             .map_err(|e| ProcessError::TriggerLookup(e.to_string()))?;
 
         for trigger in triggers {
-            let (count, values) = deps
+            let (count, values, window_record_ids) = deps
                 .signal_repository
                 .window_stats(tenant_id, &candidate.event_type, &group_key, trigger.window_seconds)
                 .await
@@ -86,7 +86,8 @@ pub async fn process_analyzed_record(
                 group_key.clone(),
                 serde_json::json!({"triggered_by": trigger.id, "value": candidate.numeric_value}),
                 record.analyzed_at,
-            );
+            )
+            .with_record_ids(window_record_ids);
 
             deps.event_store
                 .insert_event(&event)

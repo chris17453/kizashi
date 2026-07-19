@@ -35,6 +35,7 @@ struct ClickHouseEventRow<'a> {
     occurred_at: String,
     created_at: String,
     status: &'a str,
+    record_ids: &'a [uuid::Uuid],
 }
 
 pub struct ClickHouseEventStore {
@@ -59,7 +60,8 @@ impl ClickHouseEventStore {
                 payload String,
                 occurred_at DateTime64(3),
                 created_at DateTime64(3),
-                status String
+                status String,
+                record_ids Array(UUID)
             ) ENGINE = MergeTree() ORDER BY (tenant_id, occurred_at)
         "#;
         let response = self
@@ -102,6 +104,7 @@ impl EventStore for ClickHouseEventStore {
             occurred_at: event.occurred_at.format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
             created_at: event.created_at.format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
             status: status_str(event.status),
+            record_ids: &event.record_ids,
         };
         let body =
             serde_json::to_vec(&row).map_err(|e| EventStoreError::Serialization(e.to_string()))?;
