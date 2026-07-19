@@ -39,6 +39,7 @@ async fn state_with_session() -> (AppState, String) {
         agents_client: Arc::new(crate::agents_client::agents_client_test::InMemoryAgentsClient::default()),
         api_keys_client: Arc::new(crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default()),
         backlog_client: Arc::new(crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default()),
+        execution_client: std::sync::Arc::new(crate::execution_client::execution_client_test::InMemoryExecutionClient::default()),
         stats_client: Arc::new(
             crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
         ),

@@ -10,6 +10,7 @@ mod auth_client;
 mod backlog_client;
 mod connector_field_catalog;
 mod events_client;
+mod execution_client;
 mod health_client;
 mod ingestion_stats_client;
 mod session;
@@ -30,6 +31,7 @@ mod login_handler;
 mod logout_handler;
 mod overview_handler;
 mod pipeline_handler;
+mod record_journey_handler;
 mod reports_handler;
 mod root_handler;
 mod static_assets;
@@ -40,6 +42,9 @@ pub use api_keys_client::{ApiKeySummary, ApiKeysClient, ApiKeysClientError, Http
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient};
 pub use backlog_client::{BacklogClient, BacklogClientError, HttpBacklogClient, QueueDepthSummary};
 pub use events_client::{EventSummary, EventsClient, EventsClientError, HttpEventsClient};
+pub use execution_client::{
+    ActionExecutionSummary, ExecutionClient, ExecutionClientError, HttpExecutionClient,
+};
 pub use health_client::{
     HealthClient, HealthClientError, HttpHealthClient, PlatformHealthSummary, ServiceHealthSummary,
 };
@@ -65,6 +70,7 @@ pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
 pub use overview_handler::get_overview;
 pub use pipeline_handler::get_pipeline;
+pub use record_journey_handler::get_record_journey;
 pub use reports_handler::get_reports;
 pub use root_handler::get_root;
 pub use static_assets::get_charts_js;
@@ -86,6 +92,7 @@ pub struct AppState {
     pub agents_client: Arc<dyn AgentsClient>,
     pub api_keys_client: Arc<dyn ApiKeysClient>,
     pub backlog_client: Arc<dyn BacklogClient>,
+    pub execution_client: Arc<dyn ExecutionClient>,
     pub stats_client: Arc<dyn IngestionStatsClient>,
     /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
     /// reachable from inside this container (e.g. a customer-hosted connector polling in from
@@ -117,6 +124,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
         .route("/data/:id", get(get_data_detail))
+        .route("/data/:id/journey", get(get_record_journey))
         .route("/static/charts.js", get(get_charts_js))
         .with_state(state)
 }

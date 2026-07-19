@@ -3,6 +3,7 @@
 {% if let Some(r) = record %}
 <h1>Record {{ r.id }}</h1>
 <p class="muted">{{ r.connector_id }} &middot; {{ r.source_type }} &middot; {{ r.ingested_at }}</p>
+<p><a href="/data/{{ r.id }}/journey">View record journey &rarr;</a></p>
 
 <div class="section-title">Raw payload</div>
 <pre class="panel" style="max-width:none; overflow-x:auto;">{{ raw_payload_pretty }}</pre>

@@ -1464,3 +1464,57 @@ Entry format:
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a — a compliance bugfix (missing tenant scoping) and additive query capability
   surfaced while implementing ADR-0017, not a new architectural decision itself.
+
+## [2026-07-19] feature/0014-docker-images — Console UI Record Journey page (Palantir-style lineage view)
+- **Type:** feature
+- **Branch:** feature/0014-docker-images
+- **Summary:** Adds `GET /data/:id/journey`, a link/investigative view that renders a raw
+  record's full pipeline lineage — the record, every Event it contributed to (via ADR-0017's
+  `record_ids`), and every ActionExecution each Event caused — as a vertical tree
+  (record → event branches → execution cards), each execution colored by status. Built
+  entirely from existing read endpoints (`GET /data/:id`, `GET /v1/events?record_id=`,
+  Action Executor's `GET /v1/action-executions?event_id=`); no new backend query added. A
+  "View record journey →" link was added to the existing `/data/:id` page. New
+  `ui/src/execution_client.rs` (`ExecutionClient`/`HttpExecutionClient`) and
+  `ui/src/record_journey_handler.rs` wire a new `ACTION_EXECUTOR_URL` env var into
+  `AppState`, `docker-compose.yml`, `.env.example`, and `scripts/run-local.sh` (which was
+  also missing `INGESTION_GATEWAY_URL` for the UI — a pre-existing gap, fixed alongside since
+  it's the same env-wiring block).
+- **Tests:** `cargo test -p kizashi-ui` — 128 passed, 0 failed (12 new:
+  `record_journey_handler_test` covers no-events, events-with-executions, an
+  execution-client-failure-still-renders-the-event case, and the login-redirect guard;
+  `execution_client_test` covers the HTTP client against a real stub server and an
+  unreachable-server case; every other `*_handler_test.rs`'s `AppState` construction was
+  swept to add the new `execution_client` field). Full local CI gate:
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features --
+  -D warnings` clean, `cargo test --workspace --all-features` all green (0 failures,
+  verified against a throwaway local `mssql` container for Fabric), `cargo audit` clean (same
+  two pre-existing allow-listed `unmaintained` advisories, no new ones). Live-verified against
+  the running docker-compose stack: rebuilt/redeployed `kizashi-ui`, seeded a real
+  record→event→action chain (a trigger inserted directly into `trigger_engine`'s schema, an
+  `AnalyzedRecord` published onto the real `record.analyzed` RabbitMQ exchange, consumed by
+  the real trigger-engine and action-executor), then fetched and screenshotted both
+  `/data/:id` and `/data/:id/journey` against the live server — confirmed the journey tree
+  renders the record, event, and a "webhook — failed" execution card with correct red
+  styling, and confirmed the empty-state ("hasn't contributed to any events yet") renders
+  for a record with no events. This surfaced and fixed a real bug: the template and test
+  fixtures assumed `ActionExecutionStatus`/`ActionType` serialize PascalCase
+  (`"Sent"`/`"Webhook"`), but both actually derive `#[serde(rename_all = "snake_case")]`
+  (`"sent"`/`"webhook"`) — the live screenshot showed the status pill always rendering red
+  regardless of real status, which caught it; fixed the template's status comparison and all
+  test fixtures to match the real backend casing.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — reuses ADR-0017's `record_ids` lineage field and the existing
+  Action Executor query endpoint; no new architectural decision.
+
+**Known gap surfaced while seeding live test data (not fixed in this PR):** triggers created
+via `config-admin-service` (the Console UI's Triggers page) are written only to
+`config_admin_service.trigger_definitions` — `trigger-engine` reads triggers exclusively from
+its own separate `trigger_engine.trigger_definitions` schema (`crates/trigger-engine/src/
+trigger_repository.rs`), and nothing syncs the two. In this dev environment
+`trigger_engine.trigger_definitions` already holds thousands of directly-inserted rows from
+past sessions, meaning triggers made through the UI/API have likely never actually fired in
+this environment. This is a real functional gap, not a cosmetic one — tracked for a follow-up
+fix (either a shared table/view, or config-admin-service publishing trigger-created/updated
+events for trigger-engine to consume) with its own ADR, since the fix shape is an
+architectural decision.

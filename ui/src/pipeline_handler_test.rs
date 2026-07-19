@@ -59,6 +59,9 @@ async fn state_with_session() -> (AppState, String) {
         agents_client: Arc::new(InMemoryAgentsClient::default()),
         api_keys_client: Arc::new(InMemoryApiKeysClient::default()),
         backlog_client: Arc::new(InMemoryBacklogClient::default()),
+        execution_client: std::sync::Arc::new(
+            crate::execution_client::execution_client_test::InMemoryExecutionClient::default(),
+        ),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };

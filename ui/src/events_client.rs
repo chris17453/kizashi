@@ -39,6 +39,14 @@ pub trait EventsClient: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<EventsPage, EventsClientError>;
+
+    /// Lists the Events whose `record_ids` contain `record_id` — the record→event lineage
+    /// lookup (ADR-0017) a record-journey view uses to find what a record contributed to.
+    async fn list_events_for_record(
+        &self,
+        bearer_token: &str,
+        record_id: Uuid,
+    ) -> Result<Vec<EventSummary>, EventsClientError>;
 }
 
 pub struct HttpEventsClient {
@@ -81,5 +89,32 @@ impl EventsClient for HttpEventsClient {
         let body: ListEventsResponse =
             response.json().await.map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
         Ok(EventsPage { events: body.events, has_more: body.has_more })
+    }
+
+    async fn list_events_for_record(
+        &self,
+        bearer_token: &str,
+        record_id: Uuid,
+    ) -> Result<Vec<EventSummary>, EventsClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/events", self.query_gateway_url))
+            .query(&[("record_id", record_id.to_string()), ("limit", "100".to_string())])
+            .bearer_auth(bearer_token)
+            .send()
+            .await
+            .map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(EventsClientError::Rejected(response.status().as_u16()));
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ListEventsResponse {
+            events: Vec<EventSummary>,
+        }
+        let body: ListEventsResponse =
+            response.json().await.map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
+        Ok(body.events)
     }
 }
