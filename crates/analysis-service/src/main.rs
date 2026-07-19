@@ -1,12 +1,14 @@
 use analysis_service::{
-    health_router, process_batch, AnalysisConfigRepository, AnalysisDeps, FoundryAnalysisClient,
+    health_router, process_batch, retry_count, should_dead_letter, with_incremented_retry_count,
+    AnalysisConfigRepository, AnalysisDeps, ConsumerHeartbeat, FoundryAnalysisClient,
     PostgresAnalysisConfigRepository, RabbitMqEventPublisher, ANALYSIS_CONFIG_CHANGED_EXCHANGE,
     RECORD_NORMALIZED_EXCHANGE,
 };
 use futures_util::StreamExt;
 use lapin::message::Delivery;
 use lapin::options::{
-    BasicAckOptions, BasicConsumeOptions, BasicNackOptions, QueueBindOptions, QueueDeclareOptions,
+    BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions, QueueBindOptions,
+    QueueDeclareOptions,
 };
 use lapin::types::FieldTable;
 use std::collections::HashMap;
@@ -15,6 +17,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 const QUEUE_NAME: &str = "analysis-service.record.normalized";
+const DEAD_LETTER_QUEUE_NAME: &str = "analysis-service.record.normalized.dead";
 const ANALYSIS_CONFIG_CHANGED_QUEUE_NAME: &str = "analysis-service.analysis_config.changed";
 
 fn batch_size() -> usize {
@@ -88,6 +91,14 @@ async fn main() {
         )
         .await
         .expect("failed to declare queue");
+    consume_channel
+        .queue_declare(
+            DEAD_LETTER_QUEUE_NAME,
+            QueueDeclareOptions { durable: true, ..Default::default() },
+            FieldTable::default(),
+        )
+        .await
+        .expect("failed to declare dead-letter queue");
     consume_channel
         .queue_bind(
             QUEUE_NAME,
@@ -171,80 +182,130 @@ async fn main() {
         }
     });
 
+    let heartbeat = Arc::new(ConsumerHeartbeat::new());
+
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "analysis-service healthz listening");
+    let health_heartbeat = heartbeat.clone();
     tokio::spawn(async move {
-        axum::serve(listener, health_router()).await.expect("healthz server error");
+        axum::serve(listener, health_router(health_heartbeat)).await.expect("healthz server error");
     });
-
-    let mut consumer = consume_channel
-        .basic_consume(
-            QUEUE_NAME,
-            "analysis-service",
-            BasicConsumeOptions::default(),
-            FieldTable::default(),
-        )
-        .await
-        .expect("failed to start consumer");
 
     let max_batch_size = batch_size();
     let max_wait = batch_max_wait();
     tracing::info!(max_batch_size, ?max_wait, "analysis-service consuming record.normalized");
 
-    loop {
-        let mut buffer: Vec<(Delivery, common::RawRecord)> = Vec::new();
-        let deadline = tokio::time::sleep(max_wait);
-        tokio::pin!(deadline);
+    'reconnect: loop {
+        let mut consumer = match consume_channel
+            .basic_consume(
+                QUEUE_NAME,
+                "analysis-service",
+                BasicConsumeOptions::default(),
+                FieldTable::default(),
+            )
+            .await
+        {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!(error = %e, "failed to start record.normalized consumer, retrying");
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue 'reconnect;
+            }
+        };
 
         loop {
-            tokio::select! {
-                maybe_delivery = consumer.next() => {
-                    match maybe_delivery {
-                        Some(Ok(delivery)) => {
-                            match serde_json::from_slice::<common::RawRecord>(&delivery.data) {
-                                Ok(record) => buffer.push((delivery, record)),
-                                Err(e) => {
-                                    tracing::error!(error = %e, "failed to deserialize record.normalized message, dropping");
-                                    let _ = delivery.ack(BasicAckOptions::default()).await;
+            let mut buffer: Vec<(Delivery, common::RawRecord)> = Vec::new();
+            let deadline = tokio::time::sleep(max_wait);
+            tokio::pin!(deadline);
+
+            let stream_ended = 'batch: loop {
+                tokio::select! {
+                    maybe_delivery = consumer.next() => {
+                        heartbeat.tick();
+                        match maybe_delivery {
+                            Some(Ok(delivery)) => {
+                                match serde_json::from_slice::<common::RawRecord>(&delivery.data) {
+                                    Ok(record) => buffer.push((delivery, record)),
+                                    Err(e) => {
+                                        tracing::error!(error = %e, "failed to deserialize record.normalized message, dropping");
+                                        let _ = delivery.ack(BasicAckOptions::default()).await;
+                                    }
+                                }
+                                if buffer.len() >= max_batch_size {
+                                    break 'batch false;
                                 }
                             }
-                            if buffer.len() >= max_batch_size {
-                                break;
+                            Some(Err(e)) => tracing::error!(error = %e, "consumer delivery error"),
+                            None => {
+                                tracing::error!(
+                                    "record.normalized consumer stream ended unexpectedly, reconnecting"
+                                );
+                                break 'batch true;
                             }
                         }
-                        Some(Err(e)) => tracing::error!(error = %e, "consumer delivery error"),
-                        None => return,
+                    }
+                    _ = &mut deadline => {
+                        heartbeat.tick();
+                        break 'batch false;
                     }
                 }
-                _ = &mut deadline => break,
+            };
+
+            if !buffer.is_empty() {
+                let mut groups: HashMap<Uuid, Vec<(Delivery, common::RawRecord)>> = HashMap::new();
+                for (delivery, record) in buffer {
+                    groups.entry(record.tenant_id).or_default().push((delivery, record));
+                }
+
+                for (tenant_id, entries) in groups {
+                    let (deliveries, records): (Vec<_>, Vec<_>) = entries.into_iter().unzip();
+                    match process_batch(&deps, tenant_id, records).await {
+                        Ok(_) => {
+                            for delivery in deliveries {
+                                let _ = delivery.ack(BasicAckOptions::default()).await;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(%tenant_id, error = %e, "batch analysis failed");
+                            for delivery in deliveries {
+                                let headers = delivery.properties.headers().as_ref();
+                                if should_dead_letter(headers) {
+                                    tracing::error!(
+                                        %tenant_id,
+                                        retries = retry_count(headers),
+                                        "message exceeded max retries, dead-lettering"
+                                    );
+                                    let _ = consume_channel
+                                        .basic_publish(
+                                            "",
+                                            DEAD_LETTER_QUEUE_NAME,
+                                            BasicPublishOptions::default(),
+                                            &delivery.data,
+                                            delivery.properties.clone(),
+                                        )
+                                        .await;
+                                } else {
+                                    let next_headers = with_incremented_retry_count(headers);
+                                    let _ = consume_channel
+                                        .basic_publish(
+                                            "",
+                                            QUEUE_NAME,
+                                            BasicPublishOptions::default(),
+                                            &delivery.data,
+                                            delivery.properties.clone().with_headers(next_headers),
+                                        )
+                                        .await;
+                                }
+                                let _ = delivery.ack(BasicAckOptions::default()).await;
+                            }
+                        }
+                    }
+                }
             }
-        }
 
-        if buffer.is_empty() {
-            continue;
-        }
-
-        let mut groups: HashMap<Uuid, Vec<(Delivery, common::RawRecord)>> = HashMap::new();
-        for (delivery, record) in buffer {
-            groups.entry(record.tenant_id).or_default().push((delivery, record));
-        }
-
-        for (tenant_id, entries) in groups {
-            let (deliveries, records): (Vec<_>, Vec<_>) = entries.into_iter().unzip();
-            match process_batch(&deps, tenant_id, records).await {
-                Ok(_) => {
-                    for delivery in deliveries {
-                        let _ = delivery.ack(BasicAckOptions::default()).await;
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(%tenant_id, error = %e, "batch analysis failed, requeueing");
-                    for delivery in deliveries {
-                        let _ = delivery
-                            .nack(BasicNackOptions { requeue: true, ..Default::default() })
-                            .await;
-                    }
-                }
+            if stream_ended {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue 'reconnect;
             }
         }
     }

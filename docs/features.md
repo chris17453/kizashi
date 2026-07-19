@@ -3087,3 +3087,49 @@ architectural decision.
   rename) — see ADR-0036 for the full plan and why they're sequenced after this one.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0036](../docs/adr/0036-sensor-vs-agent-terminology.md)
+
+## [2026-07-19] feature/0049-analysis-service-consumer-liveness-healthcheck — analysis-service health check reflects real consumer liveness
+- **Type:** fix
+- **Branch:** feature/0049-analysis-service-consumer-liveness-healthcheck
+- **Summary:** Fixes a real production incident: `analysis-service`'s `record.normalized`
+  RabbitMQ consumer stopped making progress (0 consumers, queue growing 384 → 520 → 563
+  messages against the real watkinslabs tenant) while `/healthz` kept reporting `"ok"` the
+  entire time, because it only checked that the HTTP server was up. Adds a `ConsumerHeartbeat`
+  (`Arc<Mutex<Instant>>`) that the main consume loop ticks on every `tokio::select!` iteration
+  — including the idle-timeout branch, which fires every 500ms regardless of queue depth, so
+  it's a genuine "still being scheduled" signal — and `/healthz` now returns `503` when the
+  heartbeat is stale (>30s) instead of always `200`. Also fixes the structural bug found during
+  root-causing: the consume loop treated the AMQP consumer stream ending (`None`) as `return`,
+  silently killing the whole process with no diagnostic trail; it now logs, backs off 1s, and
+  re-establishes `basic_consume` on the existing channel instead.
+  Also adds a retry cap: live verification after the two fixes above showed the queue was
+  still stuck (not draining) because pre-existing poison messages from long-dead test tenants
+  were being `nack(requeue: true)`'d forever with no limit, starving the real tenant's messages
+  behind them. A custom `x-analysis-retry-count` header (`retry.rs`) now tracks attempts across
+  redeliveries; a message failing 5 times is published to a new durable
+  `analysis-service.record.normalized.dead` queue for operator inspection instead of looping
+  forever.
+- **Tests:** `cargo test -p analysis-service` — 3 new tests in `health_test.rs`
+  (`healthz_returns_200_when_the_consumer_has_ticked_recently`,
+  `healthz_returns_503_when_the_consumer_has_not_ticked_within_the_staleness_window`,
+  `tick_resets_the_heartbeat_to_alive`) and 5 new tests in `retry_test.rs`
+  (`retry_count_is_zero_when_headers_are_absent`, `retry_count_is_zero_when_the_header_is_not_present`,
+  `retry_count_reads_the_stored_value`, `with_incremented_retry_count_sets_the_header_to_one_more_than_before`,
+  `should_dead_letter_is_false_below_the_max_and_true_at_or_above_it`), 32 existing unit tests
+  unaffected, 3 real-Postgres + 1 real-RabbitMQ integration tests pass. `cargo test --workspace
+  --all-features` (real Postgres/RabbitMQ/ClickHouse/greenmail/mssql-CI containers) — 998
+  passed, 0 failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings` —
+  clean. `cargo fmt --all --check` — clean. `cargo deny check` / `cargo audit` — clean, same 3
+  pre-existing allow-listed advisories.
+- **Live verification:** rebuilt and redeployed the real `analysis-service` container against
+  the live watkinslabs stack. `/healthz` returned 200 with the heartbeat wired in;
+  `rabbitmqctl list_queues` confirmed 1 active consumer (vs 0 during the incident). Before the
+  retry-cap fix, the queue was stuck at 501 messages for 15s straight despite 1 consumer being
+  attached (poison messages hot-looping); after adding the retry cap and redeploying, queue
+  depth actually decreased (501 → 473 → 469) over the same observation window, confirming the
+  backlog is draining again.
+- **Follow-up (explicitly out of scope, see ADR-0037):** the `analysis_config.changed` consume
+  loop still uses unbounded `nack(requeue: true)` — deferred since it's low-volume and wasn't
+  implicated in the incident. No operator UI yet for inspecting/replaying the dead-letter queue.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0037](../docs/adr/0037-analysis-service-consumer-liveness-healthcheck.md)
