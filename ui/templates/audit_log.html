@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Audit History</h1>
+<p class="muted">The immutable record of every change to this <code>{{ service }}</code>-owned
+entity (<code>{{ entity_id }}</code>) — written in the same database transaction as the change
+itself, and never editable or deletable, even by an admin.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if entries.is_empty() %}
+<div class="empty-state">
+  <div class="empty-icon">&#9776;</div>
+  <p>No audit history found for this entity.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr><th>When</th><th>Change</th><th>Actor</th><th>Before</th><th>After</th></tr>
+  </thead>
+  <tbody>
+    {% for entry in entries %}
+    <tr>
+      <td>{{ entry.changed_at }}</td>
+      <td>{{ entry.change_type }}</td>
+      <td><code>{{ entry.actor }}</code></td>
+      <td>
+        {% if let Some(before) = entry.before %}
+        <pre class="panel" style="max-width:24rem; overflow-x:auto; font-size:0.85em;">{{ before }}</pre>
+        {% else %}
+        <span class="muted">&mdash;</span>
+        {% endif %}
+      </td>
+      <td>
+        <pre class="panel" style="max-width:24rem; overflow-x:auto; font-size:0.85em;">{{ entry.after }}</pre>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

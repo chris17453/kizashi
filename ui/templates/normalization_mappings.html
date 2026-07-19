@@ -45,7 +45,7 @@ analysis. One mapping per source type — the most specific one for a record's
 {% else %}
 <table>
   <thead>
-    <tr><th>Source Type</th><th>Fields</th><th>Version</th></tr>
+    <tr><th>Source Type</th><th>Fields</th><th>Version</th><th></th></tr>
   </thead>
   <tbody>
     {% for mapping in mappings %}
@@ -57,6 +57,7 @@ analysis. One mapping per source type — the most specific one for a record's
         {% endfor %}
       </td>
       <td>{{ mapping.version }}</td>
+      <td><a href="/audit-log/config/{{ mapping.id }}">History</a></td>
     </tr>
     {% endfor %}
   </tbody>

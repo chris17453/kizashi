@@ -2285,3 +2285,38 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — implements a UI surface for an already-existing, already-decided backend API
   (ADR-0021), no new architectural decision
+
+## [2026-07-19] feature/0028-audit-log-console-ui — Audit history Console UI viewer
+- **Type:** feature
+- **Branch:** feature/0028-audit-log-console-ui
+- **Summary:** Closes the last "backend exists, UI can't see it" gap found in the Console UI
+  completeness audit. Every config write (triggers, mappings, agents, retention policies) has
+  always written to an immutable audit trail (CLAUDE.md §5) via `record_audit_entry`, readable
+  through `config-admin-service`'s and `retention-service`'s identically-shaped
+  `GET /v1/audit-log/:entity_id` — but nothing in the Console UI could read it back. Added a
+  shared `/audit-log/:service/:entity_id` page: `audit_log_client.rs` (one `AuditLogClient`
+  trait + `HttpAuditLogClient` impl, constructed twice in `AppState` —
+  `config_audit_log_client` and `retention_audit_log_client` — against the two backends' own
+  base URLs, since both expose the same shape), `audit_log_handler.rs` (dispatches on the
+  `:service` path segment, pretty-prints `before`/`after` JSON for display since Askama can't
+  call arbitrary Rust functions), and a new `audit_log.html` template. Added "History" links to
+  every row on the Triggers, Field Mappings, Agents, and Retention Policies pages, pointing at
+  the correct `config`/`retention` service segment for each entity type.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 192 tests, all passed (8 new: client tests
+  against a real stub HTTP server, handler tests covering both services' entries rendering
+  correctly, an unknown-`:service` error path, empty-history state, and backend-failure
+  handling). `cargo test --workspace --all-features` (full real-infra stack) — all passed, 0
+  failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo audit` — same 3
+  pre-existing allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `kizashi-ui` container, logged in
+  with the seeded demo user, created a real trigger through the actual Triggers page,
+  confirmed the new "History" link on that page points at the correct URL, then fetched
+  `/audit-log/config/:id` and confirmed it shows the real `created` audit entry with the
+  trigger's actual JSON payload — not a stub. A headless-Chrome screenshot confirmed the
+  pretty-printed JSON diff panel renders correctly and matches the platform's existing visual
+  design language. Cleaned up the test trigger afterward (the audit entry itself correctly
+  remains — append-only, by design).
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — implements a UI surface for already-existing, already-decided backend APIs
+  (the audit-log write path itself predates this session), no new architectural decision

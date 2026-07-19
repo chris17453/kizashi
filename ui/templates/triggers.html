@@ -68,7 +68,7 @@
 {% else %}
 <table>
   <thead>
-    <tr><th>Name</th><th>Event Type Match</th><th>Enabled</th></tr>
+    <tr><th>Name</th><th>Event Type Match</th><th>Enabled</th><th></th></tr>
   </thead>
   <tbody>
     {% for trigger in triggers %}
@@ -78,6 +78,7 @@
       <td class="status-{% if trigger.enabled %}up{% else %}down{% endif %}">
         {% if trigger.enabled %}enabled{% else %}disabled{% endif %}
       </td>
+      <td><a href="/audit-log/config/{{ trigger.id }}">History</a></td>
     </tr>
     {% endfor %}
   </tbody>
