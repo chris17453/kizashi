@@ -4,12 +4,12 @@
 //! test doubles used for handler unit tests can't: `record_audit_entry` writing a real row in
 //! the same Postgres transaction as the entity change.
 
-use common::{AnalysisConfig, TriggerCondition};
+use common::{Agent, AnalysisConfig, TriggerCondition};
 use config_admin_service::{
-    AnalysisConfigRepository, AuditLogReader, ChangeType, NormalizationMappingRepository,
-    PostgresAnalysisConfigRepository, PostgresAuditLogReader,
-    PostgresNormalizationMappingRepository, PostgresTriggerDefinitionRepository,
-    TriggerDefinitionRepository,
+    AgentRepository, AnalysisConfigRepository, AuditLogReader, ChangeType,
+    NormalizationMappingRepository, PostgresAgentRepository, PostgresAnalysisConfigRepository,
+    PostgresAuditLogReader, PostgresNormalizationMappingRepository,
+    PostgresTriggerDefinitionRepository, TriggerDefinitionRepository,
 };
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -181,4 +181,143 @@ async fn upsert_analysis_config_writes_created_then_updated_audit_rows_against_r
     assert_eq!(entries[0].change_type, ChangeType::Created);
     assert_eq!(entries[1].change_type, ChangeType::Updated);
     assert_eq!(entries[0].entity_type, "analysis_config");
+}
+
+// --- Tenant isolation (CLAUDE.md §5: "every query path must be tested for tenant isolation,
+// not just implemented correctly by inspection") — every repository below is queried from
+// tenant B's context for a row that actually belongs to tenant A, against real Postgres.
+
+#[tokio::test]
+async fn a_trigger_owned_by_one_tenant_is_invisible_to_get_from_a_different_tenant() {
+    let pool = test_pool().await;
+    let repo = PostgresTriggerDefinitionRepository::new(pool.clone());
+    let tenant_a = Uuid::new_v4();
+    let tenant_b = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_a);
+    repo.create(trigger.clone()).await.unwrap();
+
+    assert_eq!(repo.get(tenant_a, trigger.id).await.unwrap(), Some(trigger.clone()));
+    assert_eq!(repo.get(tenant_b, trigger.id).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn updating_a_trigger_owned_by_another_tenant_fails_as_not_found() {
+    let pool = test_pool().await;
+    let repo = PostgresTriggerDefinitionRepository::new(pool.clone());
+    let tenant_a = Uuid::new_v4();
+    let tenant_b = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_a);
+    repo.create(trigger.clone()).await.unwrap();
+
+    let mut cross_tenant_update = trigger.clone();
+    cross_tenant_update.tenant_id = tenant_b;
+    cross_tenant_update.enabled = false;
+    let err = repo.update(cross_tenant_update).await.unwrap_err();
+    assert!(matches!(err, config_admin_service::TriggerDefinitionRepositoryError::NotFound(_)));
+
+    // the original, owned by tenant_a, must be unchanged
+    assert_eq!(repo.get(tenant_a, trigger.id).await.unwrap(), Some(trigger));
+}
+
+#[tokio::test]
+async fn listing_triggers_for_one_tenant_never_returns_another_tenants_rows() {
+    let pool = test_pool().await;
+    let repo = PostgresTriggerDefinitionRepository::new(pool.clone());
+    let tenant_a = Uuid::new_v4();
+    let tenant_b = Uuid::new_v4();
+    repo.create(sample_trigger(tenant_a)).await.unwrap();
+    repo.create(sample_trigger(tenant_b)).await.unwrap();
+
+    let tenant_a_triggers = repo.list(tenant_a, 100, 0).await.unwrap();
+    assert_eq!(tenant_a_triggers.len(), 1);
+    assert_eq!(tenant_a_triggers[0].tenant_id, tenant_a);
+}
+
+#[tokio::test]
+async fn a_normalization_mapping_owned_by_one_tenant_is_invisible_to_get_from_a_different_tenant() {
+    let pool = test_pool().await;
+    let repo = PostgresNormalizationMappingRepository::new(pool.clone());
+    let tenant_a = Uuid::new_v4();
+    let tenant_b = Uuid::new_v4();
+    let mapping = sample_mapping(tenant_a);
+    repo.create(mapping.clone()).await.unwrap();
+
+    assert_eq!(repo.get(tenant_a, mapping.id).await.unwrap(), Some(mapping.clone()));
+    assert_eq!(repo.get(tenant_b, mapping.id).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn listing_normalization_mappings_for_one_tenant_never_returns_another_tenants_rows() {
+    let pool = test_pool().await;
+    let repo = PostgresNormalizationMappingRepository::new(pool.clone());
+    let tenant_a = Uuid::new_v4();
+    let tenant_b = Uuid::new_v4();
+    repo.create(sample_mapping(tenant_a)).await.unwrap();
+    repo.create(sample_mapping(tenant_b)).await.unwrap();
+
+    let tenant_a_mappings = repo.list(tenant_a).await.unwrap();
+    assert_eq!(tenant_a_mappings.len(), 1);
+    assert_eq!(tenant_a_mappings[0].tenant_id, tenant_a);
+}
+
+fn sample_agent(tenant_id: Uuid) -> Agent {
+    Agent::new(tenant_id, "generic", "isolation-test-agent", serde_json::json!({}))
+}
+
+#[tokio::test]
+async fn an_agent_owned_by_one_tenant_is_invisible_to_get_from_a_different_tenant() {
+    let pool = test_pool().await;
+    let repo = PostgresAgentRepository::new(pool.clone());
+    let tenant_a = Uuid::new_v4();
+    let tenant_b = Uuid::new_v4();
+    let agent = sample_agent(tenant_a);
+    repo.create(agent.clone()).await.unwrap();
+
+    assert_eq!(repo.get(tenant_a, agent.id).await.unwrap(), Some(agent.clone()));
+    assert_eq!(repo.get(tenant_b, agent.id).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn deleting_an_agent_owned_by_another_tenant_fails_and_leaves_it_intact() {
+    let pool = test_pool().await;
+    let repo = PostgresAgentRepository::new(pool.clone());
+    let tenant_a = Uuid::new_v4();
+    let tenant_b = Uuid::new_v4();
+    let agent = sample_agent(tenant_a);
+    repo.create(agent.clone()).await.unwrap();
+
+    let err = repo.delete(tenant_b, agent.id).await.unwrap_err();
+    assert!(matches!(err, config_admin_service::AgentRepositoryError::NotFound(_)));
+    assert_eq!(repo.get(tenant_a, agent.id).await.unwrap(), Some(agent));
+}
+
+#[tokio::test]
+async fn find_by_name_never_crosses_tenant_boundaries_even_with_a_matching_name() {
+    let pool = test_pool().await;
+    let repo = PostgresAgentRepository::new(pool.clone());
+    let tenant_a = Uuid::new_v4();
+    let tenant_b = Uuid::new_v4();
+    // Both tenants register an agent with the identical name - a realistic collision since
+    // connector_id/name is operator-chosen, not globally unique.
+    let agent_a = sample_agent(tenant_a);
+    let mut agent_b = sample_agent(tenant_b);
+    agent_b.name = agent_a.name.clone();
+    repo.create(agent_a.clone()).await.unwrap();
+    repo.create(agent_b.clone()).await.unwrap();
+
+    let found = repo.find_by_name(tenant_a, &agent_a.name).await.unwrap();
+    assert_eq!(found.map(|a| a.id), Some(agent_a.id));
+}
+
+#[tokio::test]
+async fn an_analysis_config_owned_by_one_tenant_is_invisible_to_get_from_a_different_tenant() {
+    let pool = test_pool().await;
+    let repo = PostgresAnalysisConfigRepository::new(pool.clone());
+    let tenant_a = Uuid::new_v4();
+    let tenant_b = Uuid::new_v4();
+    repo.upsert(AnalysisConfig::new(tenant_a, "tenant a's prompt")).await.unwrap();
+
+    let found_a = repo.get(tenant_a).await.unwrap();
+    assert_eq!(found_a.map(|c| c.prompt), Some("tenant a's prompt".to_string()));
+    assert_eq!(repo.get(tenant_b).await.unwrap(), None);
 }
