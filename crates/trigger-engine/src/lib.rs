@@ -14,7 +14,7 @@ mod trigger_repository;
 
 pub use api::{build_router as api_router, ApiState};
 pub use classify::{candidates, group_key, Candidate};
-pub use common::{EVENT_CREATED_EXCHANGE, RECORD_ANALYZED_EXCHANGE};
+pub use common::{EVENT_CREATED_EXCHANGE, RECORD_ANALYZED_EXCHANGE, TRIGGER_CHANGED_EXCHANGE};
 pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
 pub use event_store::{ClickHouseEventStore, EventStore, EventStoreError};
 pub use health::build_router as health_router;

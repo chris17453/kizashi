@@ -6,6 +6,7 @@ use crate::normalization_mapping_repository::normalization_mapping_repository_te
 use crate::trigger_definition_repository::trigger_definition_repository_test::{
     FailingTriggerDefinitionRepository, InMemoryTriggerDefinitionRepository,
 };
+use crate::trigger_publisher::trigger_publisher_test::InMemoryTriggerPublisher;
 use axum::body::Body;
 use axum::http::Request;
 use axum::routing::{get, post};
@@ -49,6 +50,7 @@ fn default_state() -> AdminState {
         trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
     }
 }
 
@@ -226,6 +228,7 @@ async fn list_triggers_returns_backend_error_as_500() {
         trigger_repository: Arc::new(FailingTriggerDefinitionRepository),
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
     };
     let response = send(
         router(state),
@@ -341,6 +344,7 @@ async fn list_mappings_returns_backend_error_as_500() {
         trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
         mapping_repository: Arc::new(FailingNormalizationMappingRepository),
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
     };
     let response = send(
         router(state),
@@ -412,6 +416,7 @@ async fn get_audit_log_returns_entries_scoped_to_tenant_and_entity() {
         trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(reader),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
     };
 
     let response =
@@ -429,6 +434,7 @@ async fn get_audit_log_returns_500_on_backend_failure() {
         trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(FailingAuditLogReader),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
     };
 
     let response = send(

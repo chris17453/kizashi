@@ -9,6 +9,7 @@ mod handlers;
 mod health;
 mod normalization_mapping_repository;
 mod trigger_definition_repository;
+mod trigger_publisher;
 
 pub use agent_handlers::{
     create_agent, delete_agent, get_agent, get_agent_by_name, list_agents, update_agent, AgentState,
@@ -31,6 +32,7 @@ pub use trigger_definition_repository::{
     PostgresTriggerDefinitionRepository, TriggerDefinitionRepository,
     TriggerDefinitionRepositoryError,
 };
+pub use trigger_publisher::{RabbitMqTriggerPublisher, TriggerPublishError, TriggerPublisher};
 
 use axum::routing::{get, post};
 use axum::Router;

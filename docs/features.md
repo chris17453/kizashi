@@ -1518,3 +1518,41 @@ this environment. This is a real functional gap, not a cosmetic one — tracked 
 fix (either a shared table/view, or config-admin-service publishing trigger-created/updated
 events for trigger-engine to consume) with its own ADR, since the fix shape is an
 architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — Fix trigger-engine/config-admin-service sync gap (ADR-0018)
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** Closes the gap logged in the entry above: `config-admin-service` now publishes
+  a `trigger.changed` fanout message (new `TRIGGER_CHANGED_EXCHANGE` in `crates/common/src/
+  bus.rs`, same pattern as the three existing pipeline exchanges) on every successful trigger
+  create/update, carrying the full `TriggerDefinition`. `trigger-engine` gains a second
+  RabbitMQ consumer (spawned alongside its existing `record.analyzed` loop) that upserts the
+  message into its own `trigger_definitions` table by id via a new
+  `TriggerRepository::upsert` method. Triggers authored through the Console UI's Triggers
+  page now actually reach the component that evaluates them. Per ADR-0018, deletes are out of
+  scope (no delete endpoint exists yet — `enabled: false` is how a trigger is turned off), and
+  pre-existing rows created before this change require a one-time backfill per environment
+  (not performed here — this PR only fixes go-forward sync).
+- **Tests:** `cargo test -p config-admin-service` — 49 passed (2 new:
+  `trigger_publisher_test` unit tests for the in-memory/failing publisher doubles; every
+  `AdminState` test constructor swept to add the new `trigger_publisher` field). `cargo test -p
+  config-admin-service --test trigger_publisher_integration_test` — 1 passed, publishing a
+  real `TriggerDefinition` over real RabbitMQ and consuming it back to prove the wire shape
+  round-trips. `cargo test -p trigger-engine` — 31 passed (2 new: `upsert_inserts_a_new_
+  trigger`/`upsert_replaces_an_existing_trigger_with_the_same_id` against the in-memory
+  double). `cargo test -p trigger-engine --test trigger_repository_integration_test` — 2
+  passed against real Postgres, proving the `ON CONFLICT (id) DO UPDATE` SQL actually inserts
+  then replaces a row. Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` clean, `cargo test --workspace
+  --all-features` all green (0 failures across every crate, verified against a throwaway
+  local `mssql` container for Fabric), `cargo audit` clean (same two pre-existing
+  allow-listed `unmaintained` advisories, no new ones). Live-verified against the running
+  docker-compose stack: rebuilt/redeployed `config-admin-service` and `trigger-engine`
+  (surfaced and fixed a missing `RABBITMQ_URL` env var for `config-admin-service` in both
+  `docker-compose.yml` and `scripts/run-local.sh` — it never needed RabbitMQ before this
+  change), created a trigger through the real `POST /v1/trigger-definitions` API, and
+  confirmed via direct Postgres query that it appeared in `trigger_engine.trigger_definitions`
+  within seconds; updated it and confirmed the update (including flipping `enabled` to
+  `false`) propagated the same way.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0018](adr/0018-trigger-definition-sync-config-admin-to-trigger-engine.md)

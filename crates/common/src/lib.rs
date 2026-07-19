@@ -22,7 +22,7 @@ pub use agent::Agent;
 pub use analyzed_record::AnalyzedRecord;
 pub use bus::{
     EVENT_CREATED_EXCHANGE, RECORD_ANALYZED_EXCHANGE, RECORD_INGESTED_EXCHANGE,
-    RECORD_NORMALIZED_EXCHANGE,
+    RECORD_NORMALIZED_EXCHANGE, TRIGGER_CHANGED_EXCHANGE,
 };
 pub use connector::{Connector, ConnectorError};
 pub use db::{connect_with_schema, ConnectError};

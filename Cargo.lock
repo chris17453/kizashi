@@ -1234,6 +1234,8 @@ dependencies = [
  "axum",
  "chrono",
  "common",
+ "futures-util",
+ "lapin",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

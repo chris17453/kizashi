@@ -1,6 +1,7 @@
 use config_admin_service::{
     build_router, AdminState, AgentState, PostgresAgentRepository, PostgresAuditLogReader,
     PostgresNormalizationMappingRepository, PostgresTriggerDefinitionRepository,
+    RabbitMqTriggerPublisher,
 };
 use std::sync::Arc;
 
@@ -9,6 +10,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let rabbitmq_url = std::env::var("RABBITMQ_URL").expect("RABBITMQ_URL must be set");
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
     let pool = common::connect_with_schema(&database_url, "config_admin_service")
@@ -22,10 +24,20 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
+    let connection =
+        lapin::Connection::connect(&rabbitmq_url, lapin::ConnectionProperties::default())
+            .await
+            .expect("failed to connect to rabbitmq");
+    let publish_channel = connection.create_channel().await.expect("failed to open channel");
+    let trigger_publisher = RabbitMqTriggerPublisher::new(publish_channel)
+        .await
+        .expect("failed to declare trigger.changed exchange");
+
     let state = AdminState {
         trigger_repository: Arc::new(PostgresTriggerDefinitionRepository::new(pool.clone())),
         mapping_repository: Arc::new(PostgresNormalizationMappingRepository::new(pool.clone())),
         audit_reader: Arc::new(PostgresAuditLogReader::new(pool.clone())),
+        trigger_publisher: Arc::new(trigger_publisher),
     };
     let agent_state = AgentState { agent_repository: Arc::new(PostgresAgentRepository::new(pool)) };
 

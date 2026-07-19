@@ -9,6 +9,7 @@ use crate::normalization_mapping_repository::{
 use crate::trigger_definition_repository::{
     TriggerDefinitionRepository, TriggerDefinitionRepositoryError,
 };
+use crate::trigger_publisher::TriggerPublisher;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
@@ -21,6 +22,7 @@ pub struct AdminState {
     pub trigger_repository: Arc<dyn TriggerDefinitionRepository>,
     pub mapping_repository: Arc<dyn NormalizationMappingRepository>,
     pub audit_reader: Arc<dyn AuditLogReader>,
+    pub trigger_publisher: Arc<dyn TriggerPublisher>,
 }
 
 #[derive(serde::Serialize)]
@@ -114,7 +116,12 @@ pub async fn create_trigger(
         return response;
     }
     match state.trigger_repository.create(trigger).await {
-        Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
+        Ok(created) => {
+            if let Err(e) = state.trigger_publisher.publish_trigger_changed(&created).await {
+                tracing::error!(trigger_id = %created.id, error = %e, "failed to publish trigger.changed");
+            }
+            (StatusCode::CREATED, Json(created)).into_response()
+        }
         Err(e) => trigger_error_response(e),
     }
 }
@@ -133,7 +140,12 @@ pub async fn update_trigger(
     }
     trigger.id = id;
     match state.trigger_repository.update(trigger).await {
-        Ok(updated) => Json(updated).into_response(),
+        Ok(updated) => {
+            if let Err(e) = state.trigger_publisher.publish_trigger_changed(&updated).await {
+                tracing::error!(trigger_id = %updated.id, error = %e, "failed to publish trigger.changed");
+            }
+            Json(updated).into_response()
+        }
         Err(e) => trigger_error_response(e),
     }
 }

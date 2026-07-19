@@ -35,6 +35,15 @@ impl TriggerRepository for InMemoryTriggerRepository {
     ) -> Result<Option<TriggerDefinition>, TriggerRepositoryError> {
         Ok(self.triggers.lock().unwrap().iter().find(|t| t.id == id).cloned())
     }
+
+    async fn upsert(&self, trigger: TriggerDefinition) -> Result<(), TriggerRepositoryError> {
+        let mut triggers = self.triggers.lock().unwrap();
+        match triggers.iter_mut().find(|t| t.id == trigger.id) {
+            Some(existing) => *existing = trigger,
+            None => triggers.push(trigger),
+        }
+        Ok(())
+    }
 }
 
 fn sample_trigger(tenant_id: Uuid, enabled: bool) -> TriggerDefinition {
@@ -92,4 +101,30 @@ async fn get_by_id_returns_none_for_unknown_id() {
     let repo = InMemoryTriggerRepository::default();
     let found = repo.get_by_id(Uuid::new_v4()).await.unwrap();
     assert!(found.is_none());
+}
+
+#[tokio::test]
+async fn upsert_inserts_a_new_trigger() {
+    let repo = InMemoryTriggerRepository::default();
+    let trigger = sample_trigger(Uuid::new_v4(), true);
+
+    repo.upsert(trigger.clone()).await.unwrap();
+
+    let found = repo.get_by_id(trigger.id).await.unwrap();
+    assert_eq!(found, Some(trigger));
+}
+
+#[tokio::test]
+async fn upsert_replaces_an_existing_trigger_with_the_same_id() {
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id, true);
+    let repo = InMemoryTriggerRepository::with_trigger(trigger.clone());
+
+    let mut updated = trigger.clone();
+    updated.enabled = false;
+    updated.name = "renamed".to_string();
+    repo.upsert(updated.clone()).await.unwrap();
+
+    let found = repo.get_by_id(trigger.id).await.unwrap();
+    assert_eq!(found, Some(updated));
 }

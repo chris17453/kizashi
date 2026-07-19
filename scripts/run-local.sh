@@ -110,7 +110,8 @@ start dashboard-api dashboard-api \
 wait_healthy dashboard-api "http://localhost:$DASHBOARD_API_PORT/healthz"
 
 start config-admin-service config-admin-service \
-  BIND_ADDR="0.0.0.0:$CONFIG_ADMIN_SERVICE_PORT" DATABASE_URL="$DATABASE_URL"
+  BIND_ADDR="0.0.0.0:$CONFIG_ADMIN_SERVICE_PORT" DATABASE_URL="$DATABASE_URL" \
+  RABBITMQ_URL="$RABBITMQ_URL"
 wait_healthy config-admin-service "http://localhost:$CONFIG_ADMIN_SERVICE_PORT/healthz"
 
 start ingestion-gateway ingestion-gateway \
