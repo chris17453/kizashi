@@ -77,6 +77,7 @@ async fn processing_a_batch_publishes_record_analyzed_over_real_rabbitmq() {
         )),
         publisher: Arc::new(publisher),
         analysis_config_repository: Arc::new(NoAnalysisConfig),
+        http_client: reqwest::Client::new(),
     };
 
     let queue = consume_channel

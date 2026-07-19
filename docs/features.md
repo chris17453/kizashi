@@ -2733,3 +2733,58 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — extends ADR-0027's already-generic correlated-condition shape past a UI-only
   row limit, no new architectural decision
+
+## [2026-07-19] feature/0039-ai-provider-config — Per-tenant AI provider/model configuration (Ollama, OpenAI, Azure Foundry)
+- **Type:** feature
+- **Summary:** Every tenant's AI analysis was hardcoded to a single platform-wide Azure AI
+  Foundry endpoint — there was no way for a tenant to point analysis at a different backend.
+  Added `AnalysisProvider` (`AzureFoundry` default | `OpenAiCompatible`) plus `model`/
+  `endpoint`/`api_key` fields to `common::AnalysisConfig`, propagated through
+  `config-admin-service` (source of truth, new migration + `redact_for_audit` so `api_key`
+  never reaches the audit log in plaintext even though the primary row stores it as-entered —
+  config-as-data convention, no secrets-manager integration exists yet, flagged as real
+  follow-up work) and `analysis-service` (its own read-mostly Postgres mirror, kept in sync via
+  the existing `analysis_config.changed` bus message — no consumer/publisher code changes
+  needed since both sides serialize/deserialize the whole struct). Built
+  `OpenAiCompatibleAnalysisClient` targeting the standard `/v1/chat/completions` shape — one
+  client covers Ollama, OpenAI, and Azure OpenAI in compatible mode — making one sequential
+  call per record (chat-completions isn't a batch API; asking a model to return N JSON results
+  reliably in one response is unreliable). `batch_processor::process_batch` now resolves the
+  client per-tenant per-call based on the tenant's configured provider, falling back to the
+  platform-default Foundry client for tenants with no config or `AzureFoundry`. Extended the
+  Console UI's `/analysis-config` page with a provider selector and conditional model/endpoint/
+  API-key fields. **Bug found and fixed during TDD**: `AnalysisProvider`'s original
+  `#[serde(rename_all = "snake_case")]` produced `open_ai_compatible` for `OpenAiCompatible`
+  ("Ai" splits into its own word) while the hand-written Postgres `provider` column
+  read/write code used `openai_compatible` — two different spellings for the same variant
+  across the wire format and storage format. Fixed with an explicit `#[serde(rename = ...)]`
+  per variant so both agree; a real API round-trip test caught this before it ever reached a
+  live deploy.
+- **Tests:** `cargo test -p common --lib analysis_config` — 5 passed (2 new: default-provider
+  behavior, wire-format-matches-storage-format regression test for the rename bug).
+  `cargo test -p config-admin-service --lib analysis_config` — 18 passed (5 new: redaction with
+  and without an api_key present, provider/model/endpoint/api_key round-trip through the HTTP
+  handler, defaults-to-azure-foundry-when-omitted). `cargo test -p analysis-service --lib` — 28
+  passed (11 new: `OpenAiCompatibleAnalysisClient` against a stub chat-completions server —
+  parses JSON replies, wraps non-JSON replies as `{"text": ...}`, sends model/bearer-auth/
+  prompt correctly, reports Unreachable/Rejected correctly — plus `process_batch` routing to
+  the OpenAI-compatible client for a configured tenant while leaving the platform-default
+  client untouched, plus a repository round-trip test for the new columns).
+  `cargo test -p kizashi-ui --lib analysis_config` — 11 passed (3 new: form round-trips
+  provider/model/endpoint through the page, HTTP client sends/receives the new fields).
+  `cargo test --workspace --all-features` (full real-infra stack: Postgres, RabbitMQ,
+  ClickHouse, MinIO, throwaway MSSQL for Fabric, throwaway greenmail for IMAP/SMTP) — every
+  test binary passed, 0 failed. `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo
+  audit` — same 3 pre-existing allow-listed advisories (`instant`, `rustls-pemfile` x2), no new
+  ones.
+- **Live verification:** built a throwaway `OpenAiCompatibleAnalysisClient` smoke test and ran
+  it against the actual local Ollama instance at `localhost:11434` (model `qwen3:8b`, confirmed
+  running via `ollama list`/`curl .../api/version`) — sent a real record + prompt, got back a
+  real model-generated JSON reply (`{"urgent":true}`), proving a genuine end-to-end round trip
+  through the new client against real inference, not a stub. Removed the throwaway test
+  afterward since it depends on infra not guaranteed present in CI/other environments.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0031](../docs/adr/0031-per-tenant-ai-provider-and-model-configuration.md) —
+  provider selection shape, why chat-completions can't be batched like Foundry, why the client
+  is resolved per-call instead of cached, and the accepted-interim plaintext-`api_key` posture

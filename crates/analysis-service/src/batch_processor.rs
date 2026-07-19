@@ -2,10 +2,10 @@
 #[cfg(test)]
 mod batch_processor_test;
 
-use crate::analysis_client::AnalysisClient;
+use crate::analysis_client::{AnalysisClient, OpenAiCompatibleAnalysisClient};
 use crate::analysis_config_repository::AnalysisConfigRepository;
 use crate::event_publisher::EventPublisher;
-use common::{AnalyzedRecord, RawRecord};
+use common::{AnalysisConfig, AnalysisProvider, AnalyzedRecord, RawRecord};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -21,9 +21,33 @@ pub enum BatchError {
 
 #[derive(Clone)]
 pub struct AnalysisDeps {
+    /// The platform-wide default client (Foundry), used for tenants with no config or
+    /// `AnalysisProvider::AzureFoundry` (ADR-0031).
     pub analysis_client: Arc<dyn AnalysisClient>,
     pub publisher: Arc<dyn EventPublisher>,
     pub analysis_config_repository: Arc<dyn AnalysisConfigRepository>,
+    /// Reused to build per-tenant `OpenAiCompatibleAnalysisClient`s so each call doesn't pay
+    /// for a fresh connection pool.
+    pub http_client: reqwest::Client,
+}
+
+/// Picks the client for a tenant's configured provider. Resolved per call, not cached, so a
+/// credential/endpoint change in `analysis_configs` takes effect on the very next batch (ADR-0031).
+fn resolve_analysis_client(
+    deps: &AnalysisDeps,
+    config: Option<&AnalysisConfig>,
+) -> Arc<dyn AnalysisClient> {
+    match config {
+        Some(config) if config.provider == AnalysisProvider::OpenAiCompatible => {
+            Arc::new(OpenAiCompatibleAnalysisClient::new(
+                deps.http_client.clone(),
+                config.endpoint.clone().unwrap_or_default(),
+                config.api_key.clone(),
+                config.model.clone().unwrap_or_default(),
+            ))
+        }
+        _ => deps.analysis_client.clone(),
+    }
 }
 
 /// Splits a mixed-tenant batch of consumed messages into per-tenant groups, preserving
@@ -50,15 +74,15 @@ pub async fn process_batch(
         return Ok(0);
     }
 
-    let prompt = deps
+    let config = deps
         .analysis_config_repository
         .get(tenant_id)
         .await
-        .map_err(|e| BatchError::ConfigLookup(e.to_string()))?
-        .map(|c| c.prompt);
+        .map_err(|e| BatchError::ConfigLookup(e.to_string()))?;
+    let prompt = config.as_ref().map(|c| c.prompt.clone());
+    let analysis_client = resolve_analysis_client(deps, config.as_ref());
 
-    let results = deps
-        .analysis_client
+    let results = analysis_client
         .analyze_batch(tenant_id, &records, prompt.as_deref())
         .await
         .map_err(|e| BatchError::Analysis(e.to_string()))?;

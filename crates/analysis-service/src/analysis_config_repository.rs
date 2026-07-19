@@ -35,11 +35,30 @@ impl PostgresAnalysisConfigRepository {
     }
 }
 
-type AnalysisConfigRow = (Uuid, String, chrono::DateTime<chrono::Utc>);
+type AnalysisConfigRow = (
+    Uuid,
+    String,
+    chrono::DateTime<chrono::Utc>,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
 
 fn row_to_config(row: AnalysisConfigRow) -> AnalysisConfig {
-    let (tenant_id, prompt, updated_at) = row;
-    AnalysisConfig { tenant_id, prompt, updated_at }
+    let (tenant_id, prompt, updated_at, provider, model, endpoint, api_key) = row;
+    let provider = match provider.as_str() {
+        "openai_compatible" => common::AnalysisProvider::OpenAiCompatible,
+        _ => common::AnalysisProvider::AzureFoundry,
+    };
+    AnalysisConfig { tenant_id, prompt, provider, model, endpoint, api_key, updated_at }
+}
+
+fn provider_str(provider: common::AnalysisProvider) -> &'static str {
+    match provider {
+        common::AnalysisProvider::AzureFoundry => "azure_foundry",
+        common::AnalysisProvider::OpenAiCompatible => "openai_compatible",
+    }
 }
 
 #[async_trait]
@@ -49,7 +68,7 @@ impl AnalysisConfigRepository for PostgresAnalysisConfigRepository {
         tenant_id: Uuid,
     ) -> Result<Option<AnalysisConfig>, AnalysisConfigRepositoryError> {
         let row: Option<AnalysisConfigRow> = sqlx::query_as(
-            "SELECT tenant_id, prompt, updated_at FROM analysis_configs WHERE tenant_id = $1",
+            "SELECT tenant_id, prompt, updated_at, provider, model, endpoint, api_key FROM analysis_configs WHERE tenant_id = $1",
         )
         .bind(tenant_id)
         .fetch_optional(&self.pool)
@@ -61,14 +80,24 @@ impl AnalysisConfigRepository for PostgresAnalysisConfigRepository {
     async fn upsert(&self, config: AnalysisConfig) -> Result<(), AnalysisConfigRepositoryError> {
         sqlx::query(
             r#"
-            INSERT INTO analysis_configs (tenant_id, prompt, updated_at)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (tenant_id) DO UPDATE SET prompt = EXCLUDED.prompt, updated_at = EXCLUDED.updated_at
+            INSERT INTO analysis_configs (tenant_id, prompt, updated_at, provider, model, endpoint, api_key)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (tenant_id) DO UPDATE SET
+                prompt = EXCLUDED.prompt,
+                updated_at = EXCLUDED.updated_at,
+                provider = EXCLUDED.provider,
+                model = EXCLUDED.model,
+                endpoint = EXCLUDED.endpoint,
+                api_key = EXCLUDED.api_key
             "#,
         )
         .bind(config.tenant_id)
-        .bind(config.prompt)
+        .bind(&config.prompt)
         .bind(config.updated_at)
+        .bind(provider_str(config.provider))
+        .bind(&config.model)
+        .bind(&config.endpoint)
+        .bind(&config.api_key)
         .execute(&self.pool)
         .await
         .map_err(|e| AnalysisConfigRepositoryError::Backend(e.to_string()))?;

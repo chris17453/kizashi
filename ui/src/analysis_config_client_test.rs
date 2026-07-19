@@ -23,12 +23,18 @@ impl AnalysisConfigClient for InMemoryAnalysisConfigClient {
         &self,
         tenant_id: Uuid,
         role: Role,
-        prompt: &str,
+        input: AnalysisConfigInput<'_>,
     ) -> Result<AnalysisConfigView, AnalysisConfigClientError> {
         if !role.at_least(Role::Operator) {
             return Err(AnalysisConfigClientError::Rejected(403));
         }
-        let view = AnalysisConfigView { prompt: prompt.to_string() };
+        let view = AnalysisConfigView {
+            prompt: input.prompt.to_string(),
+            provider: input.provider,
+            model: input.model.map(str::to_string),
+            endpoint: input.endpoint.map(str::to_string),
+            api_key: input.api_key.map(str::to_string),
+        };
         self.configs.lock().unwrap().insert(tenant_id, view.clone());
         Ok(view)
     }
@@ -49,7 +55,7 @@ impl AnalysisConfigClient for FailingAnalysisConfigClient {
         &self,
         _tenant_id: Uuid,
         _role: Role,
-        _prompt: &str,
+        _input: AnalysisConfigInput<'_>,
     ) -> Result<AnalysisConfigView, AnalysisConfigClientError> {
         Err(AnalysisConfigClientError::Unreachable("simulated failure".to_string()))
     }
@@ -63,6 +69,10 @@ async fn spawn_stub_server() -> String {
         Json(serde_json::json!({
             "tenant_id": "11111111-1111-1111-1111-111111111111",
             "prompt": "look for urgent tickets",
+            "provider": "azure_foundry",
+            "model": null,
+            "endpoint": null,
+            "api_key": null,
             "updated_at": "2026-07-19T00:00:00Z"
         }))
         .into_response()
@@ -77,6 +87,10 @@ async fn spawn_stub_server() -> String {
         Json(serde_json::json!({
             "tenant_id": "11111111-1111-1111-1111-111111111111",
             "prompt": body["prompt"],
+            "provider": body.get("provider").cloned().unwrap_or(serde_json::json!("azure_foundry")),
+            "model": body.get("model").cloned().unwrap_or(serde_json::Value::Null),
+            "endpoint": body.get("endpoint").cloned().unwrap_or(serde_json::Value::Null),
+            "api_key": body.get("api_key").cloned().unwrap_or(serde_json::Value::Null),
             "updated_at": "2026-07-19T00:00:00Z"
         }))
         .into_response()
@@ -105,10 +119,45 @@ async fn http_client_puts_a_new_prompt_against_a_real_server() {
     let client = HttpAnalysisConfigClient::new(reqwest::Client::new(), url);
 
     let config = client
-        .put_analysis_config(Uuid::new_v4(), Role::Operator, "flag policy violations")
+        .put_analysis_config(
+            Uuid::new_v4(),
+            Role::Operator,
+            AnalysisConfigInput {
+                prompt: "flag policy violations",
+                provider: AnalysisProvider::AzureFoundry,
+                model: None,
+                endpoint: None,
+                api_key: None,
+            },
+        )
         .await
         .unwrap();
     assert_eq!(config.prompt, "flag policy violations");
+}
+
+#[tokio::test]
+async fn http_client_puts_an_openai_compatible_config_and_round_trips_the_new_fields() {
+    let url = spawn_stub_server().await;
+    let client = HttpAnalysisConfigClient::new(reqwest::Client::new(), url);
+
+    let config = client
+        .put_analysis_config(
+            Uuid::new_v4(),
+            Role::Operator,
+            AnalysisConfigInput {
+                prompt: "flag urgent issues",
+                provider: AnalysisProvider::OpenAiCompatible,
+                model: Some("qwen3:8b"),
+                endpoint: Some("http://localhost:11434/v1"),
+                api_key: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(config.provider, AnalysisProvider::OpenAiCompatible);
+    assert_eq!(config.model, Some("qwen3:8b".to_string()));
+    assert_eq!(config.endpoint, Some("http://localhost:11434/v1".to_string()));
 }
 
 #[tokio::test]
@@ -116,7 +165,20 @@ async fn http_client_put_is_rejected_for_insufficient_role() {
     let url = spawn_stub_server().await;
     let client = HttpAnalysisConfigClient::new(reqwest::Client::new(), url);
 
-    let err = client.put_analysis_config(Uuid::new_v4(), Role::Viewer, "x").await.unwrap_err();
+    let err = client
+        .put_analysis_config(
+            Uuid::new_v4(),
+            Role::Viewer,
+            AnalysisConfigInput {
+                prompt: "x",
+                provider: AnalysisProvider::AzureFoundry,
+                model: None,
+                endpoint: None,
+                api_key: None,
+            },
+        )
+        .await
+        .unwrap_err();
     assert!(matches!(err, AnalysisConfigClientError::Rejected(403)));
 }
 

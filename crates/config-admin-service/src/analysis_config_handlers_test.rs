@@ -106,6 +106,53 @@ async fn put_then_get_round_trips() {
 }
 
 #[tokio::test]
+async fn put_accepts_and_round_trips_provider_model_endpoint_and_api_key() {
+    let state = default_state();
+    let tenant_id = Uuid::new_v4();
+    let response = send(
+        router(state),
+        "PUT",
+        Some(tenant_id),
+        Some("operator"),
+        Some(serde_json::json!({
+            "prompt": "flag urgent issues",
+            "provider": "openai_compatible",
+            "model": "qwen3:8b",
+            "endpoint": "http://localhost:11434/v1",
+            "api_key": "unused-for-ollama",
+        })),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let config: AnalysisConfig = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(config.provider, common::AnalysisProvider::OpenAiCompatible);
+    assert_eq!(config.model, Some("qwen3:8b".to_string()));
+    assert_eq!(config.endpoint, Some("http://localhost:11434/v1".to_string()));
+    assert_eq!(config.api_key, Some("unused-for-ollama".to_string()));
+}
+
+#[tokio::test]
+async fn put_without_provider_fields_defaults_to_azure_foundry() {
+    let state = default_state();
+    let tenant_id = Uuid::new_v4();
+    let response = send(
+        router(state),
+        "PUT",
+        Some(tenant_id),
+        Some("operator"),
+        Some(serde_json::json!({"prompt": "look for urgent tickets"})),
+    )
+    .await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let config: AnalysisConfig = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(config.provider, common::AnalysisProvider::AzureFoundry);
+    assert!(config.model.is_none());
+}
+
+#[tokio::test]
 async fn put_rejects_a_viewer_role() {
     let response = send(
         router(default_state()),

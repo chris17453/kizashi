@@ -14,10 +14,28 @@ your Triggers. Leave blank to keep the platform's default analysis behavior.</p>
     <form class="inline" method="post" action="/analysis-config">
       <label for="prompt">Describe what to look for</label>
       <textarea id="prompt" name="prompt" rows="6" placeholder="e.g. Flag any ticket that mentions a security incident, outage, or legal threat. Score urgency from 0 (routine) to 10 (drop everything).">{{ prompt }}</textarea>
-      <button type="submit">Save prompt</button>
+
+      <label for="provider">AI provider</label>
+      <select id="provider" name="provider" onchange="document.getElementById('openai-fields').style.display = this.value === 'openai_compatible' ? 'block' : 'none';">
+        <option value="azure_foundry" {% if !is_openai_compatible %}selected{% endif %}>Azure AI Foundry (platform default)</option>
+        <option value="openai_compatible" {% if is_openai_compatible %}selected{% endif %}>OpenAI-compatible (Ollama, OpenAI, Azure OpenAI)</option>
+      </select>
+
+      <div id="openai-fields" style="display:{% if is_openai_compatible %}block{% else %}none{% endif %};">
+        <label for="model">Model</label>
+        <input id="model" name="model" type="text" value="{{ model }}" placeholder="e.g. qwen3:8b, gpt-4o-mini">
+
+        <label for="endpoint">Endpoint (base URL, e.g. http://localhost:11434/v1)</label>
+        <input id="endpoint" name="endpoint" type="text" value="{{ endpoint }}" placeholder="http://localhost:11434/v1">
+
+        <label for="api_key">API key (leave blank for a local Ollama instance)</label>
+        <input id="api_key" name="api_key" type="password" value="{{ api_key }}">
+      </div>
+
+      <button type="submit">Save</button>
     </form>
     {% else %}
-    <p class="muted">Your role can't edit the analysis prompt.</p>
+    <p class="muted">Your role can't edit the analysis configuration.</p>
     {% if !prompt.is_empty() %}
     <pre class="panel" style="max-width:none; overflow-x:auto;">{{ prompt }}</pre>
     {% endif %}
@@ -26,14 +44,19 @@ your Triggers. Leave blank to keep the platform's default analysis behavior.</p>
   <div class="info-panel">
     <h2>How this works</h2>
     <ul>
-      <li>Analysis Service includes this prompt in every batched call to Azure AI Foundry/ML
-        for this tenant, alongside the records being analyzed.</li>
+      <li>By default, Analysis Service includes this prompt in every batched call to Azure AI
+        Foundry/ML for this tenant, alongside the records being analyzed.</li>
+      <li>Choosing "OpenAI-compatible" switches this tenant to the standard
+        <code>/v1/chat/completions</code> API instead — one client covers Ollama, OpenAI, and
+        Azure OpenAI in compatible mode, called once per record rather than batched.</li>
       <li>Changes take effect within seconds — Config/Admin Service publishes the change over
         the message bus and Analysis Service picks it up automatically, no restart needed.</li>
       <li>Trigger Engine still decides when to actually create an Event: it evaluates your
         Triggers against whatever numeric fields the AI returns, so a prompt that changes what
         the AI reports may also change which Triggers fire.</li>
-      <li>Every save is written to an immutable audit log for compliance review.</li>
+      <li>Every save is written to an immutable audit log for compliance review — the API key is
+        redacted before it reaches that log, but is otherwise stored as entered
+        (config-as-data convention; see ADR-0031).</li>
     </ul>
   </div>
 </div>

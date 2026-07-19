@@ -3,13 +3,31 @@
 pub(crate) mod analysis_config_client_test;
 
 use async_trait::async_trait;
-use common::Role;
+use common::{AnalysisProvider, Role};
 use thiserror::Error;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, serde::Deserialize, PartialEq)]
 pub struct AnalysisConfigView {
     pub prompt: String,
+    #[serde(default)]
+    pub provider: AnalysisProvider,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+}
+
+/// What an operator submits through the Console UI's analysis-config form (ADR-0031). Kept
+/// separate from `AnalysisConfigView` (the read shape) since a PUT never needs `updated_at`.
+pub struct AnalysisConfigInput<'a> {
+    pub prompt: &'a str,
+    pub provider: AnalysisProvider,
+    pub model: Option<&'a str>,
+    pub endpoint: Option<&'a str>,
+    pub api_key: Option<&'a str>,
 }
 
 #[derive(Debug, Error)]
@@ -34,7 +52,7 @@ pub trait AnalysisConfigClient: Send + Sync {
         &self,
         tenant_id: Uuid,
         role: Role,
-        prompt: &str,
+        input: AnalysisConfigInput<'_>,
     ) -> Result<AnalysisConfigView, AnalysisConfigClientError>;
 }
 
@@ -73,14 +91,20 @@ impl AnalysisConfigClient for HttpAnalysisConfigClient {
         &self,
         tenant_id: Uuid,
         role: Role,
-        prompt: &str,
+        input: AnalysisConfigInput<'_>,
     ) -> Result<AnalysisConfigView, AnalysisConfigClientError> {
         let response = self
             .client
             .put(format!("{}/v1/analysis-config", self.config_admin_service_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
-            .json(&serde_json::json!({"prompt": prompt}))
+            .json(&serde_json::json!({
+                "prompt": input.prompt,
+                "provider": input.provider,
+                "model": input.model,
+                "endpoint": input.endpoint,
+                "api_key": input.api_key,
+            }))
             .send()
             .await
             .map_err(|e| AnalysisConfigClientError::Unreachable(e.to_string()))?;

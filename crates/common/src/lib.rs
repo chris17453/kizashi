@@ -24,7 +24,7 @@ pub mod trigger_definition;
 pub use action_execution::{ActionExecution, ActionExecutionStatus};
 pub use agent::Agent;
 pub use agent_change_event::AgentChangeEvent;
-pub use analysis_config::AnalysisConfig;
+pub use analysis_config::{AnalysisConfig, AnalysisProvider};
 pub use analyzed_record::AnalyzedRecord;
 pub use bus::{
     AGENT_CHANGED_EXCHANGE, ANALYSIS_CONFIG_CHANGED_EXCHANGE, EVENT_CREATED_EXCHANGE,
