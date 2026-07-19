@@ -2402,3 +2402,30 @@ architectural decision.
 - **ADR:** n/a — implements the "assign role to another user" surface ADR-0016 already decided
   to defer, no new architectural decision; `Admin`-only gating for user management follows
   directly from that ADR's role model
+
+## [2026-07-19] feature/0031-last-admin-protection — Prevent removing a tenant's last Admin
+- **Type:** feature
+- **Branch:** feature/0031-last-admin-protection
+- **Summary:** Closes a real safety gap in the user-management feature just shipped: nothing
+  stopped an operator from demoting or deleting the only `Admin` in a tenant, which would leave
+  that workspace with no one able to manage users/roles at all — an unrecoverable-without-direct-
+  Postgres-access lockout. Added `is_sole_admin` in `crates/auth-service/src/user_handlers.rs`,
+  checked before `update_user_role` (only when the request would actually change the role away
+  from `Admin`) and before `delete_user` (always) — both now return `409 Conflict` with a clear
+  message ("promote another user first") instead of silently allowing the mutation. This can be
+  checked tenant-wide without a user identity in the session (ADR-0016's still-open limitation),
+  since it only needs to count admins, not identify "self".
+- **Tests:** `cargo test -p auth-service --lib` — 58 passed (5 new: rejects demoting/deleting
+  the sole admin, allows demoting/deleting when a second admin exists, allows reassigning the
+  sole admin to admin as a no-op). `cargo test --workspace --all-features` (full real-infra
+  stack) — 108 test binaries, all passed, 0 failed. `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny
+  check` — clean. `cargo audit` — same 3 pre-existing allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `auth-service` container. Against the
+  seeded demo tenant (one `Admin` user): confirmed both `PUT .../role` (demote) and `DELETE`
+  against the sole admin return `409` with the expected message. Created a second real admin,
+  confirmed the demotion then succeeds (`200`), restored the original admin's role, and
+  cleaned up the second admin afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — a defensive guard on ADR-0016's already-decided role model, no new
+  architectural decision
