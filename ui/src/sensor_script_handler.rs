@@ -1,6 +1,6 @@
-#[path = "agent_script_handler_test.rs"]
+#[path = "sensor_script_handler_test.rs"]
 #[cfg(test)]
-mod agent_script_handler_test;
+mod sensor_script_handler_test;
 
 use crate::connector_field_catalog::{display_name, fields_for, ConnectorField, CONNECTOR_TYPES};
 use crate::session_guard::require_session;
@@ -12,13 +12,13 @@ use axum::response::{Html, IntoResponse, Response};
 use std::collections::BTreeMap;
 
 #[derive(Template)]
-#[template(path = "agent_generate_select.html")]
+#[template(path = "sensor_generate_select.html")]
 struct SelectConnectorTypeTemplate {
     show_nav: bool,
     connector_types: &'static [(&'static str, &'static str)],
 }
 
-/// GET /agents/generate — step 1: pick a connector type. Split into its own step (rather than
+/// GET /sensors/generate — step 1: pick a connector type. Split into its own step (rather than
 /// one big form with every connector's fields crammed in) because this app renders no
 /// JavaScript (ADR-0014) — there's no way to show/hide fields based on a dropdown without a
 /// page load, so the page load *is* the mechanism.
@@ -48,7 +48,7 @@ impl From<&ConnectorField> for FieldView {
 }
 
 #[derive(Template)]
-#[template(path = "agent_generate_form.html")]
+#[template(path = "sensor_generate_form.html")]
 struct GenerateFormTemplate {
     show_nav: bool,
     connector_type: String,
@@ -64,7 +64,7 @@ pub struct SelectConnectorTypeQuery {
     pub connector_type: String,
 }
 
-/// GET /agents/generate/form?connector_type=X — step 2: the connector-specific field form.
+/// GET /sensors/generate/form?connector_type=X — step 2: the connector-specific field form.
 /// The gateway URL and (for operators) the API key are pre-filled from the platform's own
 /// admin configuration rather than left for the operator to hunt down and paste in — the
 /// gateway URL comes from `AppState` (already the case), and a fresh, single-use deploy key
@@ -122,7 +122,7 @@ pub async fn get_generate_form(
 }
 
 #[derive(Template)]
-#[template(path = "agent_generate_result.html")]
+#[template(path = "sensor_generate_result.html")]
 struct GenerateResultTemplate {
     show_nav: bool,
     connector_type_label: &'static str,
@@ -176,7 +176,7 @@ fn build_scripts(
     (bash, powershell, docker)
 }
 
-/// POST /agents/generate — step 3: renders ready-to-run bash, PowerShell, and `docker compose
+/// POST /sensors/generate — step 3: renders ready-to-run bash, PowerShell, and `docker compose
 /// run` scripts with every value the operator entered substituted in. No secret is ever
 /// invented here — the API key and every connector credential comes from what the operator
 /// typed into the form, never generated or stored by this handler.

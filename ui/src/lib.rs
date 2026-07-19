@@ -4,7 +4,6 @@
 //! top for charts/components (ADR-0015, reversing ADR-0014's no-JS constraint) — every page
 //! still server-renders its real data first, JS only progressively enhances it.
 
-mod agents_client;
 mod analysis_config_client;
 mod api_keys_client;
 mod audit_log_client;
@@ -19,15 +18,13 @@ mod ingestion_stats_client;
 mod normalization_mappings_client;
 mod retention_policies_client;
 mod saved_search_queries_client;
+mod sensors_client;
 mod session;
 mod session_guard;
 mod topology;
 mod triggers_client;
 mod users_client;
 
-mod agent_detail_handler;
-mod agent_script_handler;
-mod agents_handler;
 mod analysis_config_handler;
 mod api_keys_handler;
 mod audit_log_handler;
@@ -46,11 +43,13 @@ mod record_journey_handler;
 mod reports_handler;
 mod retention_policies_handler;
 mod root_handler;
+mod sensor_detail_handler;
+mod sensor_script_handler;
+mod sensors_handler;
 mod static_assets;
 mod triggers_handler;
 mod users_handler;
 
-pub use agents_client::{AgentsClient, AgentsClientError, HttpAgentsClient};
 pub use analysis_config_client::{
     AnalysisConfigClient, AnalysisConfigClientError, AnalysisConfigView, HttpAnalysisConfigClient,
 };
@@ -84,6 +83,7 @@ pub use retention_policies_client::{
 pub use saved_search_queries_client::{
     HttpSavedSearchQueriesClient, SavedSearchQueriesClient, SavedSearchQueriesClientError,
 };
+pub use sensors_client::{HttpSensorsClient, SensorsClient, SensorsClientError};
 pub use session::{InMemorySessionStore, Session, SessionStore};
 pub use triggers_client::{
     HttpTriggersClient, TriggerSummary, TriggerTestResult, TriggersClient, TriggersClientError,
@@ -91,9 +91,6 @@ pub use triggers_client::{
 };
 pub use users_client::{HttpUsersClient, UiUser, UsersClient, UsersClientError};
 
-pub use agent_detail_handler::get_agent_detail;
-pub use agent_script_handler::{get_generate_form, get_generate_select, post_generate_script};
-pub use agents_handler::{get_agents, post_agents, post_delete_agent, post_toggle_agent};
 pub use analysis_config_handler::{get_analysis_config_page, post_analysis_config};
 pub use api_keys_handler::{get_api_keys, post_api_keys, post_revoke_api_key};
 pub use audit_log_handler::get_audit_log as get_entity_audit_log;
@@ -115,6 +112,9 @@ pub use retention_policies_handler::{
     post_retention_policies, post_toggle_retention_policy,
 };
 pub use root_handler::get_root;
+pub use sensor_detail_handler::get_sensor_detail;
+pub use sensor_script_handler::{get_generate_form, get_generate_select, post_generate_script};
+pub use sensors_handler::{get_sensors, post_delete_sensor, post_sensors, post_toggle_sensor};
 pub use static_assets::get_charts_js;
 pub use triggers_handler::{get_triggers, post_trigger};
 pub use users_handler::{get_users, post_delete_user, post_update_user_role, post_users};
@@ -132,7 +132,7 @@ pub struct AppState {
     pub events_client: Arc<dyn EventsClient>,
     pub triggers_client: Arc<dyn TriggersClient>,
     pub health_client: Arc<dyn HealthClient>,
-    pub agents_client: Arc<dyn AgentsClient>,
+    pub sensors_client: Arc<dyn SensorsClient>,
     pub api_keys_client: Arc<dyn ApiKeysClient>,
     pub backlog_client: Arc<dyn BacklogClient>,
     pub execution_client: Arc<dyn ExecutionClient>,
@@ -168,13 +168,13 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", get(get_health))
         .route("/pipeline", get(get_pipeline))
         .route("/overview", get(get_overview))
-        .route("/agents", get(get_agents).post(post_agents))
-        .route("/agents/generate", get(get_generate_select))
-        .route("/agents/generate/form", get(get_generate_form))
-        .route("/agents/generate/script", axum::routing::post(post_generate_script))
-        .route("/agents/:id", get(get_agent_detail))
-        .route("/agents/:id/delete", axum::routing::post(post_delete_agent))
-        .route("/agents/:id/toggle", axum::routing::post(post_toggle_agent))
+        .route("/sensors", get(get_sensors).post(post_sensors))
+        .route("/sensors/generate", get(get_generate_select))
+        .route("/sensors/generate/form", get(get_generate_form))
+        .route("/sensors/generate/script", axum::routing::post(post_generate_script))
+        .route("/sensors/:id", get(get_sensor_detail))
+        .route("/sensors/:id/delete", axum::routing::post(post_delete_sensor))
+        .route("/sensors/:id/toggle", axum::routing::post(post_toggle_sensor))
         .route("/api-keys", get(get_api_keys).post(post_api_keys))
         .route("/api-keys/:id/revoke", axum::routing::post(post_revoke_api_key))
         .route("/analysis-config", get(get_analysis_config_page).post(post_analysis_config))

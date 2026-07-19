@@ -1,11 +1,11 @@
 use super::*;
-use crate::agents_client::agents_client_test::{FailingAgentsClient, InMemoryAgentsClient};
-use crate::agents_client::AgentsClient;
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
+use crate::sensors_client::sensors_client_test::{FailingSensorsClient, InMemorySensorsClient};
+use crate::sensors_client::SensorsClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
@@ -18,9 +18,9 @@ use tower::ServiceExt;
 
 fn router(state: AppState) -> Router {
     Router::new()
-        .route("/agents", get(get_agents).post(post_agents))
-        .route("/agents/:id/delete", post(post_delete_agent))
-        .route("/agents/:id/toggle", post(post_toggle_agent))
+        .route("/sensors", get(get_sensors).post(post_sensors))
+        .route("/sensors/:id/delete", post(post_delete_sensor))
+        .route("/sensors/:id/toggle", post(post_toggle_sensor))
         .with_state(state)
 }
 
@@ -43,7 +43,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
-        agents_client: Arc::new(InMemoryAgentsClient::default()),
+        sensors_client: Arc::new(InMemorySensorsClient::default()),
         api_keys_client: Arc::new(
             crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default(),
         ),
@@ -72,8 +72,8 @@ async fn state_with_session() -> (AppState, String, Uuid) {
 async fn viewer_role_does_not_see_register_form_or_write_buttons() {
     let (state, _admin_session_id, tenant_id) = state_with_session().await;
     state
-        .agents_client
-        .register_agent(
+        .sensors_client
+        .register_sensor(
             Role::Operator,
             tenant_id,
             "zendesk",
@@ -95,7 +95,7 @@ async fn viewer_role_does_not_see_register_form_or_write_buttons() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/agents")
+                .uri("/sensors")
                 .header("cookie", format!("kizashi_session={viewer_session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -118,8 +118,8 @@ async fn viewer_role_does_not_see_register_form_or_write_buttons() {
 async fn operator_role_sees_register_form_and_write_buttons() {
     let (state, _admin_session_id, tenant_id) = state_with_session().await;
     state
-        .agents_client
-        .register_agent(
+        .sensors_client
+        .register_sensor(
             Role::Operator,
             tenant_id,
             "zendesk",
@@ -141,7 +141,7 @@ async fn operator_role_sees_register_form_and_write_buttons() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/agents")
+                .uri("/sensors")
                 .header("cookie", format!("kizashi_session={operator_session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -157,11 +157,11 @@ async fn operator_role_sees_register_form_and_write_buttons() {
 }
 
 #[tokio::test]
-async fn get_agents_renders_the_agents_table_when_signed_in() {
+async fn get_sensors_renders_the_sensors_table_when_signed_in() {
     let (state, session_id, tenant_id) = state_with_session().await;
     state
-        .agents_client
-        .register_agent(
+        .sensors_client
+        .register_sensor(
             Role::Operator,
             tenant_id,
             "zendesk",
@@ -174,7 +174,7 @@ async fn get_agents_renders_the_agents_table_when_signed_in() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/agents")
+                .uri("/sensors")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -189,13 +189,13 @@ async fn get_agents_renders_the_agents_table_when_signed_in() {
 }
 
 #[tokio::test]
-async fn get_agents_shows_an_empty_state_with_no_agents_registered() {
+async fn get_sensors_shows_an_empty_state_with_no_sensors_registered() {
     let (state, session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/agents")
+                .uri("/sensors")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -211,11 +211,11 @@ async fn get_agents_shows_an_empty_state_with_no_agents_registered() {
 }
 
 #[tokio::test]
-async fn get_agents_redirects_to_login_when_not_signed_in() {
+async fn get_sensors_redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
-        .oneshot(Request::builder().uri("/agents").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/sensors").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -223,16 +223,16 @@ async fn get_agents_redirects_to_login_when_not_signed_in() {
 }
 
 #[tokio::test]
-async fn post_agents_registers_and_redirects() {
+async fn post_sensors_registers_and_redirects() {
     let (mut state, session_id, _tenant_id) = state_with_session().await;
-    let agents_client = Arc::new(InMemoryAgentsClient::default());
-    state.agents_client = agents_client.clone();
+    let sensors_client = Arc::new(InMemorySensorsClient::default());
+    state.sensors_client = sensors_client.clone();
 
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/agents")
+                .uri("/sensors")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .header("content-type", "application/x-www-form-urlencoded")
                 .body(Body::from("connector_type=zendesk&name=support-poller&config={}"))
@@ -242,19 +242,19 @@ async fn post_agents_registers_and_redirects() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    assert_eq!(response.headers().get("location").unwrap(), "/agents");
-    assert_eq!(agents_client.agents.lock().unwrap().len(), 1);
+    assert_eq!(response.headers().get("location").unwrap(), "/sensors");
+    assert_eq!(sensors_client.sensors.lock().unwrap().len(), 1);
 }
 
 #[tokio::test]
-async fn post_agents_with_invalid_json_config_rerenders_with_an_error() {
+async fn post_sensors_with_invalid_json_config_rerenders_with_an_error() {
     let (state, session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/agents")
+                .uri("/sensors")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .header("content-type", "application/x-www-form-urlencoded")
                 .body(Body::from("connector_type=zendesk&name=support-poller&config=not-json"))
@@ -270,15 +270,15 @@ async fn post_agents_with_invalid_json_config_rerenders_with_an_error() {
 }
 
 #[tokio::test]
-async fn post_agents_backend_failure_rerenders_with_an_error() {
+async fn post_sensors_backend_failure_rerenders_with_an_error() {
     let (mut state, session_id, _tenant_id) = state_with_session().await;
-    state.agents_client = Arc::new(FailingAgentsClient);
+    state.sensors_client = Arc::new(FailingSensorsClient);
 
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/agents")
+                .uri("/sensors")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .header("content-type", "application/x-www-form-urlencoded")
                 .body(Body::from("connector_type=zendesk&name=support-poller&config={}"))
@@ -294,11 +294,11 @@ async fn post_agents_backend_failure_rerenders_with_an_error() {
 }
 
 #[tokio::test]
-async fn post_delete_agent_removes_it_and_redirects() {
+async fn post_delete_sensor_removes_it_and_redirects() {
     let (mut state, session_id, tenant_id) = state_with_session().await;
-    let agents_client = Arc::new(InMemoryAgentsClient::default());
-    let agent = agents_client
-        .register_agent(
+    let sensors_client = Arc::new(InMemorySensorsClient::default());
+    let sensor = sensors_client
+        .register_sensor(
             Role::Operator,
             tenant_id,
             "zendesk",
@@ -307,13 +307,13 @@ async fn post_delete_agent_removes_it_and_redirects() {
         )
         .await
         .unwrap();
-    state.agents_client = agents_client.clone();
+    state.sensors_client = sensors_client.clone();
 
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/agents/{}/delete", agent.id))
+                .uri(format!("/sensors/{}/delete", sensor.id))
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -322,15 +322,15 @@ async fn post_delete_agent_removes_it_and_redirects() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    assert!(agents_client.agents.lock().unwrap().is_empty());
+    assert!(sensors_client.sensors.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
-async fn post_toggle_agent_flips_enabled_and_redirects() {
+async fn post_toggle_sensor_flips_enabled_and_redirects() {
     let (mut state, session_id, tenant_id) = state_with_session().await;
-    let agents_client = Arc::new(InMemoryAgentsClient::default());
-    let agent = agents_client
-        .register_agent(
+    let sensors_client = Arc::new(InMemorySensorsClient::default());
+    let sensor = sensors_client
+        .register_sensor(
             Role::Operator,
             tenant_id,
             "zendesk",
@@ -339,14 +339,14 @@ async fn post_toggle_agent_flips_enabled_and_redirects() {
         )
         .await
         .unwrap();
-    assert!(agent.enabled);
-    state.agents_client = agents_client.clone();
+    assert!(sensor.enabled);
+    state.sensors_client = sensors_client.clone();
 
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/agents/{}/toggle", agent.id))
+                .uri(format!("/sensors/{}/toggle", sensor.id))
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -355,19 +355,19 @@ async fn post_toggle_agent_flips_enabled_and_redirects() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let stored = agents_client.agents.lock().unwrap();
-    assert!(!stored.iter().find(|a| a.id == agent.id).unwrap().enabled);
+    let stored = sensors_client.sensors.lock().unwrap();
+    assert!(!stored.iter().find(|a| a.id == sensor.id).unwrap().enabled);
 }
 
 #[tokio::test]
-async fn post_toggle_agent_redirects_to_login_when_not_signed_in() {
+async fn post_toggle_sensor_redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/agents/{}/toggle", Uuid::new_v4()))
+                .uri(format!("/sensors/{}/toggle", Uuid::new_v4()))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -379,16 +379,16 @@ async fn post_toggle_agent_redirects_to_login_when_not_signed_in() {
 }
 
 #[tokio::test]
-async fn shows_a_next_link_when_there_are_more_agents_but_no_previous_link_on_page_zero() {
+async fn shows_a_next_link_when_there_are_more_sensors_but_no_previous_link_on_page_zero() {
     let (mut state, session_id, _tenant_id) = state_with_session().await;
-    let agents_client = Arc::new(InMemoryAgentsClient::default());
-    *agents_client.has_more.lock().unwrap() = true;
-    state.agents_client = agents_client;
+    let sensors_client = Arc::new(InMemorySensorsClient::default());
+    *sensors_client.has_more.lock().unwrap() = true;
+    state.sensors_client = sensors_client;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/agents")
+                .uri("/sensors")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -409,7 +409,7 @@ async fn shows_a_previous_link_on_page_two() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/agents?page=1")
+                .uri("/sensors?page=1")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),

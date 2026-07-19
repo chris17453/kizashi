@@ -3,17 +3,17 @@ use std::sync::Mutex;
 
 #[derive(Default)]
 pub struct InMemoryInvoker {
-    pub invocations: Mutex<Vec<Agent>>,
+    pub invocations: Mutex<Vec<Sensor>>,
 }
 
 #[async_trait]
 impl Invoker for InMemoryInvoker {
     async fn invoke(
         &self,
-        agent: &Agent,
+        sensor: &Sensor,
         _last_checkpoint: Option<String>,
     ) -> Result<Option<String>, InvokeError> {
-        self.invocations.lock().unwrap().push(agent.clone());
+        self.invocations.lock().unwrap().push(sensor.clone());
         Ok(None)
     }
 }
@@ -24,15 +24,15 @@ pub struct FailingInvoker;
 impl Invoker for FailingInvoker {
     async fn invoke(
         &self,
-        _agent: &Agent,
+        _sensor: &Sensor,
         _last_checkpoint: Option<String>,
     ) -> Result<Option<String>, InvokeError> {
         Err(InvokeError::Failed("simulated failure".to_string()))
     }
 }
 
-fn sample_agent() -> Agent {
-    Agent::new(
+fn sample_sensor() -> Sensor {
+    Sensor::new(
         uuid::Uuid::new_v4(),
         "zendesk",
         "support-poller",
@@ -53,19 +53,19 @@ fn docker_invoker_builds_the_expected_image_name() {
 }
 
 #[test]
-fn docker_invoker_builds_env_args_from_agent_config_and_identity() {
+fn docker_invoker_builds_env_args_from_sensor_config_and_identity() {
     let invoker = DockerInvoker::new(
         "kizashi".to_string(),
         "kizashi-net".to_string(),
         "http://ingestion-gateway:8080".to_string(),
         "test-key".to_string(),
     );
-    let agent = sample_agent();
+    let sensor = sample_sensor();
 
-    let args = invoker.build_run_args(&agent, "http://ingestion-gateway:8080", "test-key", None);
+    let args = invoker.build_run_args(&sensor, "http://ingestion-gateway:8080", "test-key", None);
 
     let joined = args.join(" ");
-    assert!(joined.contains(&format!("TENANT_ID={}", agent.tenant_id)));
+    assert!(joined.contains(&format!("TENANT_ID={}", sensor.tenant_id)));
     assert!(joined.contains("CONNECTOR_ID=support-poller"));
     assert!(joined.contains("INGESTION_GATEWAY_URL=http://ingestion-gateway:8080"));
     assert!(joined.contains("INGESTION_GATEWAY_API_KEY=test-key"));
@@ -74,8 +74,8 @@ fn docker_invoker_builds_env_args_from_agent_config_and_identity() {
     assert!(joined.contains("kizashi-zendesk-connector"));
 }
 
-fn imap_agent(since_date: &str) -> Agent {
-    Agent::new(
+fn imap_sensor(since_date: &str) -> Sensor {
+    Sensor::new(
         uuid::Uuid::new_v4(),
         "imap",
         "mail-poller",
@@ -91,9 +91,9 @@ fn imap_since_date_is_unmodified_on_a_first_ever_poll() {
         "http://ingestion-gateway:8080".to_string(),
         "test-key".to_string(),
     );
-    let agent = imap_agent("2025-01-19");
+    let sensor = imap_sensor("2025-01-19");
 
-    let args = invoker.build_run_args(&agent, "http://ingestion-gateway:8080", "test-key", None);
+    let args = invoker.build_run_args(&sensor, "http://ingestion-gateway:8080", "test-key", None);
 
     let joined = args.join(" ");
     assert!(joined.contains("IMAP_SINCE_DATE=2025-01-19"));
@@ -108,10 +108,10 @@ fn imap_since_uid_is_injected_from_the_last_checkpoint_on_a_later_poll() {
         "http://ingestion-gateway:8080".to_string(),
         "test-key".to_string(),
     );
-    let agent = imap_agent("2025-01-19");
+    let sensor = imap_sensor("2025-01-19");
 
     let args =
-        invoker.build_run_args(&agent, "http://ingestion-gateway:8080", "test-key", Some("42"));
+        invoker.build_run_args(&sensor, "http://ingestion-gateway:8080", "test-key", Some("42"));
 
     let joined = args.join(" ");
     assert!(joined.contains("IMAP_SINCE_UID=42"));
@@ -129,10 +129,10 @@ fn non_imap_connectors_are_unaffected_by_a_checkpoint() {
         "http://ingestion-gateway:8080".to_string(),
         "test-key".to_string(),
     );
-    let agent = sample_agent();
+    let sensor = sample_sensor();
 
     let args = invoker.build_run_args(
-        &agent,
+        &sensor,
         "http://ingestion-gateway:8080",
         "test-key",
         Some("some-checkpoint"),
@@ -158,9 +158,9 @@ fn extract_checkpoint_returns_none_when_the_marker_is_absent() {
 #[tokio::test]
 async fn in_memory_invoker_records_invocations() {
     let invoker = InMemoryInvoker::default();
-    let agent = sample_agent();
+    let sensor = sample_sensor();
 
-    invoker.invoke(&agent, None).await.unwrap();
+    invoker.invoke(&sensor, None).await.unwrap();
 
     assert_eq!(invoker.invocations.lock().unwrap().len(), 1);
 }
@@ -168,6 +168,6 @@ async fn in_memory_invoker_records_invocations() {
 #[tokio::test]
 async fn failing_invoker_returns_an_error() {
     let invoker = FailingInvoker;
-    let err = invoker.invoke(&sample_agent(), None).await.unwrap_err();
+    let err = invoker.invoke(&sample_sensor(), None).await.unwrap_err();
     assert!(matches!(err, InvokeError::Failed(_)));
 }

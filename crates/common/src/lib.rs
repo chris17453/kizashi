@@ -4,8 +4,6 @@
 //! workspace-wide, so keep it schema-stable and additive where possible.
 
 pub mod action_execution;
-pub mod agent;
-pub mod agent_change_event;
 pub mod analysis_config;
 pub mod analyzed_record;
 pub mod bus;
@@ -19,17 +17,17 @@ pub mod normalization_mapping;
 pub mod raw_record;
 pub mod role;
 pub mod saved_search_query;
+pub mod sensor;
+pub mod sensor_change_event;
 pub mod trigger_definition;
 
 pub use action_execution::{ActionExecution, ActionExecutionStatus};
-pub use agent::Agent;
-pub use agent_change_event::AgentChangeEvent;
 pub use analysis_config::{AnalysisConfig, AnalysisProvider};
 pub use analyzed_record::AnalyzedRecord;
 pub use bus::{
-    AGENT_CHANGED_EXCHANGE, ANALYSIS_CONFIG_CHANGED_EXCHANGE, EVENT_CREATED_EXCHANGE,
-    MAPPING_CHANGED_EXCHANGE, RECORD_ANALYZED_EXCHANGE, RECORD_INGESTED_EXCHANGE,
-    RECORD_NORMALIZED_EXCHANGE, TRIGGER_CHANGED_EXCHANGE,
+    ANALYSIS_CONFIG_CHANGED_EXCHANGE, EVENT_CREATED_EXCHANGE, MAPPING_CHANGED_EXCHANGE,
+    RECORD_ANALYZED_EXCHANGE, RECORD_INGESTED_EXCHANGE, RECORD_NORMALIZED_EXCHANGE,
+    SENSOR_CHANGED_EXCHANGE, TRIGGER_CHANGED_EXCHANGE,
 };
 pub use connector::{Connector, ConnectorError};
 pub use db::{connect_with_schema, ConnectError};
@@ -41,6 +39,8 @@ pub use normalization_mapping::NormalizationMapping;
 pub use raw_record::{RawRecord, SourceType};
 pub use role::{ParseRoleError, Role};
 pub use saved_search_query::SavedSearchQuery;
+pub use sensor::Sensor;
+pub use sensor_change_event::SensorChangeEvent;
 pub use trigger_definition::{
     ActionRef, ActionType, CorrelatedCondition, ThresholdDirection, TriggerCondition,
     TriggerDefinition,

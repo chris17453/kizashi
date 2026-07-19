@@ -1,5 +1,4 @@
 use super::*;
-use crate::agents_client::agents_client_test::InMemoryAgentsClient;
 use crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient;
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::backlog_client::backlog_client_test::{FailingBacklogClient, InMemoryBacklogClient};
@@ -8,6 +7,7 @@ use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::{FailingHealthClient, InMemoryHealthClient};
 use crate::health_client::{PlatformHealthSummary, ServiceHealthSummary};
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
+use crate::sensors_client::sensors_client_test::InMemorySensorsClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
@@ -56,7 +56,7 @@ async fn state_with_session() -> (AppState, String) {
                 ],
             },
         }),
-        agents_client: Arc::new(InMemoryAgentsClient::default()),
+        sensors_client: Arc::new(InMemorySensorsClient::default()),
         api_keys_client: Arc::new(InMemoryApiKeysClient::default()),
         backlog_client: Arc::new(InMemoryBacklogClient::default()),
         execution_client: std::sync::Arc::new(

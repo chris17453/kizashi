@@ -1,10 +1,10 @@
 use super::*;
-use crate::agents_client::agents_client_test::InMemoryAgentsClient;
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
+use crate::sensors_client::sensors_client_test::InMemorySensorsClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
@@ -17,9 +17,9 @@ use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
     Router::new()
-        .route("/agents/generate", get(get_generate_select))
-        .route("/agents/generate/form", get(get_generate_form))
-        .route("/agents/generate/script", post(post_generate_script))
+        .route("/sensors/generate", get(get_generate_select))
+        .route("/sensors/generate/form", get(get_generate_form))
+        .route("/sensors/generate/script", post(post_generate_script))
         .with_state(state)
 }
 
@@ -42,7 +42,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
-        agents_client: Arc::new(InMemoryAgentsClient::default()),
+        sensors_client: Arc::new(InMemorySensorsClient::default()),
         api_keys_client: Arc::new(
             crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default(),
         ),
@@ -74,7 +74,7 @@ async fn get_generate_select_lists_every_connector_type() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/agents/generate")
+                .uri("/sensors/generate")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -94,7 +94,7 @@ async fn get_generate_select_redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
-        .oneshot(Request::builder().uri("/agents/generate").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/sensors/generate").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -108,7 +108,7 @@ async fn get_generate_form_shows_the_zendesk_specific_fields() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/agents/generate/form?connector_type=zendesk")
+                .uri("/sensors/generate/form?connector_type=zendesk")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -130,7 +130,7 @@ async fn get_generate_form_auto_fills_a_freshly_generated_api_key_for_an_operato
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/agents/generate/form?connector_type=zendesk")
+                .uri("/sensors/generate/form?connector_type=zendesk")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -163,7 +163,7 @@ async fn get_generate_form_leaves_the_api_key_blank_for_a_viewer() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/agents/generate/form?connector_type=zendesk")
+                .uri("/sensors/generate/form?connector_type=zendesk")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -188,7 +188,7 @@ async fn post_generate_script_renders_all_three_variants_with_submitted_values()
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/agents/generate/script")
+                .uri("/sensors/generate/script")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .header("content-type", "application/x-www-form-urlencoded")
                 .body(Body::from(body))
@@ -219,7 +219,7 @@ async fn post_generate_script_omits_empty_optional_fields() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/agents/generate/script")
+                .uri("/sensors/generate/script")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .header("content-type", "application/x-www-form-urlencoded")
                 .body(Body::from(body))

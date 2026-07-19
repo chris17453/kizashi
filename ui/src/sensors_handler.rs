@@ -1,6 +1,6 @@
-#[path = "agents_handler_test.rs"]
+#[path = "sensors_handler_test.rs"]
 #[cfg(test)]
-mod agents_handler_test;
+mod sensors_handler_test;
 
 use crate::ingestion_stats_client::DEFAULT_PAGE_SIZE;
 use crate::session_guard::require_session;
@@ -10,15 +10,15 @@ use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use chrono::{DateTime, Utc};
-use common::Agent;
+use common::Sensor;
 use uuid::Uuid;
 
-/// One row of the Agents table: a registered `Agent` joined against Ingestion Service's
-/// per-connector stats, matched on `agent.name == connector_stats.connector_id` (the
-/// operational convention `AgentsClient` documents — an agent's registered `name` is what the
-/// deployed connector's `CONNECTOR_ID` env var is set to). No match means the agent has never
+/// One row of the Sensors table: a registered `Sensor` joined against Ingestion Service's
+/// per-connector stats, matched on `sensor.name == connector_stats.connector_id` (the
+/// operational convention `SensorsClient` documents — a sensor's registered `name` is what the
+/// deployed connector's `CONNECTOR_ID` env var is set to). No match means the sensor has never
 /// ingested anything yet, not an error.
-struct AgentRow {
+struct SensorRow {
     id: Uuid,
     connector_type: String,
     name: String,
@@ -27,16 +27,16 @@ struct AgentRow {
     last_ingested_at: Option<DateTime<Utc>>,
 }
 
-fn join_agent_stats(agents: Vec<Agent>, stats: Vec<ConnectorStatSummary>) -> Vec<AgentRow> {
-    agents
+fn join_sensor_stats(sensors: Vec<Sensor>, stats: Vec<ConnectorStatSummary>) -> Vec<SensorRow> {
+    sensors
         .into_iter()
-        .map(|agent| {
-            let matched = stats.iter().find(|s| s.connector_id == agent.name);
-            AgentRow {
-                id: agent.id,
-                connector_type: agent.connector_type,
-                name: agent.name,
-                enabled: agent.enabled,
+        .map(|sensor| {
+            let matched = stats.iter().find(|s| s.connector_id == sensor.name);
+            SensorRow {
+                id: sensor.id,
+                connector_type: sensor.connector_type,
+                name: sensor.name,
+                enabled: sensor.enabled,
                 record_count: matched.map(|s| s.record_count),
                 last_ingested_at: matched.map(|s| s.last_ingested_at),
             }
@@ -49,16 +49,16 @@ fn default_page() -> i64 {
 }
 
 #[derive(Debug, serde::Deserialize, Default)]
-pub struct AgentsQuery {
+pub struct SensorsQuery {
     #[serde(default = "default_page")]
     pub page: i64,
 }
 
 #[derive(Template)]
-#[template(path = "agents.html")]
-struct AgentsTemplate {
+#[template(path = "sensors.html")]
+struct SensorsTemplate {
     show_nav: bool,
-    agents: Vec<AgentRow>,
+    sensors: Vec<SensorRow>,
     page: i64,
     has_more: bool,
     /// RBAC v1 (ADR-0016): hides the register form and enable/disable/remove buttons from a
@@ -69,10 +69,10 @@ struct AgentsTemplate {
     error: Option<String>,
 }
 
-pub async fn get_agents(
+pub async fn get_sensors(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(query): Query<AgentsQuery>,
+    Query(query): Query<SensorsQuery>,
 ) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(session) => session,
@@ -82,16 +82,16 @@ pub async fn get_agents(
 
     let page = query.page.max(0);
     let result = state
-        .agents_client
-        .list_agents(session.tenant_id, DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE)
+        .sensors_client
+        .list_sensors(session.tenant_id, DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE)
         .await;
-    let (agents, has_more) = match result {
-        Ok(page_result) => (page_result.agents, page_result.has_more),
+    let (sensors, has_more) = match result {
+        Ok(page_result) => (page_result.sensors, page_result.has_more),
         Err(e) => {
             return Html(
-                AgentsTemplate {
+                SensorsTemplate {
                     show_nav: true,
-                    agents: vec![],
+                    sensors: vec![],
                     page,
                     has_more: false,
                     can_write,
@@ -107,9 +107,9 @@ pub async fn get_agents(
     let stats = state.stats_client.connector_stats(session.tenant_id).await.unwrap_or_default();
 
     Html(
-        AgentsTemplate {
+        SensorsTemplate {
             show_nav: true,
-            agents: join_agent_stats(agents, stats),
+            sensors: join_sensor_stats(sensors, stats),
             page,
             has_more,
             can_write,
@@ -122,7 +122,7 @@ pub async fn get_agents(
 }
 
 #[derive(serde::Deserialize)]
-pub struct RegisterAgentForm {
+pub struct RegisterSensorForm {
     connector_type: String,
     name: String,
     #[serde(default)]
@@ -135,17 +135,17 @@ async fn rerender_with_error(
     can_write: bool,
     error: String,
 ) -> Response {
-    let agents = state
-        .agents_client
-        .list_agents(tenant_id, DEFAULT_PAGE_SIZE, 0)
+    let sensors = state
+        .sensors_client
+        .list_sensors(tenant_id, DEFAULT_PAGE_SIZE, 0)
         .await
-        .map(|p| p.agents)
+        .map(|p| p.sensors)
         .unwrap_or_default();
     let stats = state.stats_client.connector_stats(tenant_id).await.unwrap_or_default();
     Html(
-        AgentsTemplate {
+        SensorsTemplate {
             show_nav: true,
-            agents: join_agent_stats(agents, stats),
+            sensors: join_sensor_stats(sensors, stats),
             page: 0,
             has_more: false,
             can_write,
@@ -157,10 +157,10 @@ async fn rerender_with_error(
     .into_response()
 }
 
-pub async fn post_agents(
+pub async fn post_sensors(
     State(state): State<AppState>,
     headers: HeaderMap,
-    axum::extract::Form(form): axum::extract::Form<RegisterAgentForm>,
+    axum::extract::Form(form): axum::extract::Form<RegisterSensorForm>,
 ) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(session) => session,
@@ -185,8 +185,8 @@ pub async fn post_agents(
     };
 
     if let Err(e) = state
-        .agents_client
-        .register_agent(session.role, session.tenant_id, &form.connector_type, &form.name, config)
+        .sensors_client
+        .register_sensor(session.role, session.tenant_id, &form.connector_type, &form.name, config)
         .await
     {
         return rerender_with_error(
@@ -198,10 +198,10 @@ pub async fn post_agents(
         .await;
     }
 
-    Redirect::to("/agents").into_response()
+    Redirect::to("/sensors").into_response()
 }
 
-pub async fn post_delete_agent(
+pub async fn post_delete_sensor(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
@@ -211,14 +211,14 @@ pub async fn post_delete_agent(
         Err(response) => return response,
     };
 
-    let _ = state.agents_client.delete_agent(session.role, session.tenant_id, id).await;
-    Redirect::to("/agents").into_response()
+    let _ = state.sensors_client.delete_sensor(session.role, session.tenant_id, id).await;
+    Redirect::to("/sensors").into_response()
 }
 
-/// POST /agents/:id/toggle — flips an agent's enabled/disabled status. This is the one place
+/// POST /sensors/:id/toggle — flips a sensor's enabled/disabled status. This is the one place
 /// that flag actually does something: Ingestion Gateway checks it on every ingest and rejects
-/// a disabled agent's data (previously stored but never enforced anywhere).
-pub async fn post_toggle_agent(
+/// a disabled sensor's data (previously stored but never enforced anywhere).
+pub async fn post_toggle_sensor(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
@@ -228,9 +228,9 @@ pub async fn post_toggle_agent(
         Err(response) => return response,
     };
 
-    if let Ok(Some(mut agent)) = state.agents_client.get_agent(session.tenant_id, id).await {
-        agent.enabled = !agent.enabled;
-        let _ = state.agents_client.update_agent(session.role, &agent).await;
+    if let Ok(Some(mut sensor)) = state.sensors_client.get_sensor(session.tenant_id, id).await {
+        sensor.enabled = !sensor.enabled;
+        let _ = state.sensors_client.update_sensor(session.role, &sensor).await;
     }
-    Redirect::to("/agents").into_response()
+    Redirect::to("/sensors").into_response()
 }

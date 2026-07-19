@@ -1,9 +1,9 @@
 use kizashi_ui::{
-    build_router, AppState, HttpAgentsClient, HttpAnalysisConfigClient, HttpApiKeysClient,
-    HttpAuditLogClient, HttpAuthClient, HttpBacklogClient, HttpEgressAllowlistClient,
-    HttpEventsClient, HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
+    build_router, AppState, HttpAnalysisConfigClient, HttpApiKeysClient, HttpAuditLogClient,
+    HttpAuthClient, HttpBacklogClient, HttpEgressAllowlistClient, HttpEventsClient,
+    HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
     HttpNormalizationMappingsClient, HttpRetentionPoliciesClient, HttpSavedSearchQueriesClient,
-    HttpTriggersClient, HttpUsersClient, InMemorySessionStore,
+    HttpSensorsClient, HttpTriggersClient, HttpUsersClient, InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -45,7 +45,7 @@ async fn main() {
             trigger_engine_url,
         )),
         health_client: Arc::new(HttpHealthClient::new(client.clone(), observability_url.clone())),
-        agents_client: Arc::new(HttpAgentsClient::new(
+        sensors_client: Arc::new(HttpSensorsClient::new(
             client.clone(),
             config_admin_service_url.clone(),
         )),

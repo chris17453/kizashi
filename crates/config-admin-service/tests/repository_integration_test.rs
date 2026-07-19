@@ -4,12 +4,12 @@
 //! test doubles used for handler unit tests can't: `record_audit_entry` writing a real row in
 //! the same Postgres transaction as the entity change.
 
-use common::{Agent, AnalysisConfig, TriggerCondition};
+use common::{AnalysisConfig, Sensor, TriggerCondition};
 use config_admin_service::{
-    AgentRepository, AnalysisConfigRepository, AuditLogReader, ChangeType,
-    NormalizationMappingRepository, PostgresAgentRepository, PostgresAnalysisConfigRepository,
-    PostgresAuditLogReader, PostgresNormalizationMappingRepository,
-    PostgresTriggerDefinitionRepository, TriggerDefinitionRepository,
+    AnalysisConfigRepository, AuditLogReader, ChangeType, NormalizationMappingRepository,
+    PostgresAnalysisConfigRepository, PostgresAuditLogReader,
+    PostgresNormalizationMappingRepository, PostgresSensorRepository,
+    PostgresTriggerDefinitionRepository, SensorRepository, TriggerDefinitionRepository,
 };
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -260,53 +260,53 @@ async fn listing_normalization_mappings_for_one_tenant_never_returns_another_ten
     assert_eq!(tenant_a_mappings[0].tenant_id, tenant_a);
 }
 
-fn sample_agent(tenant_id: Uuid) -> Agent {
-    Agent::new(tenant_id, "generic", "isolation-test-agent", serde_json::json!({}))
+fn sample_sensor(tenant_id: Uuid) -> Sensor {
+    Sensor::new(tenant_id, "generic", "isolation-test-sensor", serde_json::json!({}))
 }
 
 #[tokio::test]
-async fn an_agent_owned_by_one_tenant_is_invisible_to_get_from_a_different_tenant() {
+async fn a_sensor_owned_by_one_tenant_is_invisible_to_get_from_a_different_tenant() {
     let pool = test_pool().await;
-    let repo = PostgresAgentRepository::new(pool.clone());
+    let repo = PostgresSensorRepository::new(pool.clone());
     let tenant_a = Uuid::new_v4();
     let tenant_b = Uuid::new_v4();
-    let agent = sample_agent(tenant_a);
-    repo.create(agent.clone()).await.unwrap();
+    let sensor = sample_sensor(tenant_a);
+    repo.create(sensor.clone()).await.unwrap();
 
-    assert_eq!(repo.get(tenant_a, agent.id).await.unwrap(), Some(agent.clone()));
-    assert_eq!(repo.get(tenant_b, agent.id).await.unwrap(), None);
+    assert_eq!(repo.get(tenant_a, sensor.id).await.unwrap(), Some(sensor.clone()));
+    assert_eq!(repo.get(tenant_b, sensor.id).await.unwrap(), None);
 }
 
 #[tokio::test]
-async fn deleting_an_agent_owned_by_another_tenant_fails_and_leaves_it_intact() {
+async fn deleting_a_sensor_owned_by_another_tenant_fails_and_leaves_it_intact() {
     let pool = test_pool().await;
-    let repo = PostgresAgentRepository::new(pool.clone());
+    let repo = PostgresSensorRepository::new(pool.clone());
     let tenant_a = Uuid::new_v4();
     let tenant_b = Uuid::new_v4();
-    let agent = sample_agent(tenant_a);
-    repo.create(agent.clone()).await.unwrap();
+    let sensor = sample_sensor(tenant_a);
+    repo.create(sensor.clone()).await.unwrap();
 
-    let err = repo.delete(tenant_b, agent.id).await.unwrap_err();
-    assert!(matches!(err, config_admin_service::AgentRepositoryError::NotFound(_)));
-    assert_eq!(repo.get(tenant_a, agent.id).await.unwrap(), Some(agent));
+    let err = repo.delete(tenant_b, sensor.id).await.unwrap_err();
+    assert!(matches!(err, config_admin_service::SensorRepositoryError::NotFound(_)));
+    assert_eq!(repo.get(tenant_a, sensor.id).await.unwrap(), Some(sensor));
 }
 
 #[tokio::test]
 async fn find_by_name_never_crosses_tenant_boundaries_even_with_a_matching_name() {
     let pool = test_pool().await;
-    let repo = PostgresAgentRepository::new(pool.clone());
+    let repo = PostgresSensorRepository::new(pool.clone());
     let tenant_a = Uuid::new_v4();
     let tenant_b = Uuid::new_v4();
-    // Both tenants register an agent with the identical name - a realistic collision since
+    // Both tenants register a sensor with the identical name - a realistic collision since
     // connector_id/name is operator-chosen, not globally unique.
-    let agent_a = sample_agent(tenant_a);
-    let mut agent_b = sample_agent(tenant_b);
-    agent_b.name = agent_a.name.clone();
-    repo.create(agent_a.clone()).await.unwrap();
-    repo.create(agent_b.clone()).await.unwrap();
+    let sensor_a = sample_sensor(tenant_a);
+    let mut sensor_b = sample_sensor(tenant_b);
+    sensor_b.name = sensor_a.name.clone();
+    repo.create(sensor_a.clone()).await.unwrap();
+    repo.create(sensor_b.clone()).await.unwrap();
 
-    let found = repo.find_by_name(tenant_a, &agent_a.name).await.unwrap();
-    assert_eq!(found.map(|a| a.id), Some(agent_a.id));
+    let found = repo.find_by_name(tenant_a, &sensor_a.name).await.unwrap();
+    assert_eq!(found.map(|a| a.id), Some(sensor_a.id));
 }
 
 #[tokio::test]

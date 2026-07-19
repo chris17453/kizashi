@@ -1,9 +1,9 @@
 use config_admin_service::{
-    build_router, AdminState, AgentState, AnalysisConfigState, PostgresAgentRepository,
-    PostgresAnalysisConfigRepository, PostgresAuditLogReader,
-    PostgresNormalizationMappingRepository, PostgresSavedSearchQueryRepository,
-    PostgresTriggerDefinitionRepository, RabbitMqAgentPublisher, RabbitMqAnalysisConfigPublisher,
-    RabbitMqMappingPublisher, RabbitMqTriggerPublisher, SavedSearchQueryState,
+    build_router, AdminState, AnalysisConfigState, PostgresAnalysisConfigRepository,
+    PostgresAuditLogReader, PostgresNormalizationMappingRepository,
+    PostgresSavedSearchQueryRepository, PostgresSensorRepository,
+    PostgresTriggerDefinitionRepository, RabbitMqAnalysisConfigPublisher, RabbitMqMappingPublisher,
+    RabbitMqSensorPublisher, RabbitMqTriggerPublisher, SavedSearchQueryState, SensorState,
 };
 use std::sync::Arc;
 
@@ -40,10 +40,10 @@ async fn main() {
         RabbitMqAnalysisConfigPublisher::new(analysis_config_publish_channel)
             .await
             .expect("failed to declare analysis_config.changed exchange");
-    let agent_publish_channel = connection.create_channel().await.expect("failed to open channel");
-    let agent_publisher = RabbitMqAgentPublisher::new(agent_publish_channel)
+    let sensor_publish_channel = connection.create_channel().await.expect("failed to open channel");
+    let sensor_publisher = RabbitMqSensorPublisher::new(sensor_publish_channel)
         .await
-        .expect("failed to declare agent.changed exchange");
+        .expect("failed to declare sensor.changed exchange");
     let mapping_publish_channel =
         connection.create_channel().await.expect("failed to open channel");
     let mapping_publisher = RabbitMqMappingPublisher::new(mapping_publish_channel)
@@ -57,9 +57,9 @@ async fn main() {
         trigger_publisher: Arc::new(trigger_publisher),
         mapping_publisher: Arc::new(mapping_publisher),
     };
-    let agent_state = AgentState {
-        agent_repository: Arc::new(PostgresAgentRepository::new(pool.clone())),
-        agent_publisher: Arc::new(agent_publisher),
+    let sensor_state = SensorState {
+        sensor_repository: Arc::new(PostgresSensorRepository::new(pool.clone())),
+        sensor_publisher: Arc::new(sensor_publisher),
     };
     let analysis_config_state = AnalysisConfigState {
         repository: Arc::new(PostgresAnalysisConfigRepository::new(pool.clone())),
@@ -73,7 +73,7 @@ async fn main() {
     tracing::info!(%addr, "config-admin-service listening");
     axum::serve(
         listener,
-        build_router(state, agent_state, analysis_config_state, saved_search_query_state),
+        build_router(state, sensor_state, analysis_config_state, saved_search_query_state),
     )
     .await
     .expect("server error");
