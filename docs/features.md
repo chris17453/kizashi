@@ -2464,3 +2464,30 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — a defensive/correctness fix within ADR-0007's already-decided dispatch model,
   no new architectural decision
+
+## [2026-07-19] feature/0032-retention-sweep-scheduler — Schedule retention-service's sweep in docker-compose
+- **Type:** feature
+- **Branch:** feature/0032-retention-sweep-scheduler
+- **Summary:** Closes a real operational gap ADR-0011 point 5 flagged but never followed up on:
+  `retention-service`'s `POST /v1/sweep` is deliberately HTTP-triggered rather than an
+  in-process timer, with the decision explicitly requiring "external scheduling (a Kubernetes
+  CronJob or equivalent)" — but no such equivalent existed in the actual deployed
+  docker-compose environment, so sweeps have never run automatically; archived/expired data
+  was only ever cleaned up by someone manually curling the endpoint. Added
+  `retention-sweep-scheduler` to `docker-compose.yml`: a minimal `alpine` sidecar that POSTs
+  `/v1/sweep` on a configurable interval (`RETENTION_SWEEP_INTERVAL_SECONDS`, default 3600),
+  added to `.env.example`. This is the docker-compose "or equivalent" the ADR called for; a
+  real Kubernetes CronJob manifest replaces this sidecar 1:1 later without touching
+  `retention-service` itself, since both just call the same stateless HTTP endpoint.
+- **Tests:** No Rust code changed beyond a doc comment (`cargo build -p retention-service`
+  confirmed it still compiles); this is infra/config, verified via live deployment below
+  rather than a unit test.
+- **Live verification:** brought up the real `retention-sweep-scheduler` container against
+  the real `retention-service`. Confirmed it triggers a sweep immediately on startup (real
+  `{"records_archived":0,"batches_written":[]}` response logged) and again on every configured
+  interval — overrode `RETENTION_SWEEP_INTERVAL_SECONDS=5` and observed four consecutive real
+  sweep triggers in the container's logs at the expected cadence, then restored the production
+  default (3600s) and confirmed it still sweeps on startup.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — implements ADR-0011 point 5's already-decided "external scheduling... or
+  equivalent" for the docker-compose deployment target, no new architectural decision

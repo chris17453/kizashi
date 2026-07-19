@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0032         |
+| feature       | `feature/` | 0033         |
 | fix           | `fix/`     | 0005         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -61,3 +61,4 @@ manually created branches.
 | 0030 | `feature/0030-user-management-role-assignment` | feature | 2026-07-19 | open | pending | |
 | 0031 | `feature/0031-last-admin-protection` | feature | 2026-07-19 | open | pending | |
 | 0004 | `fix/0004-teams-alert-webhook-payload-shape` | fix | 2026-07-19 | open | pending | |
+| 0032 | `feature/0032-retention-sweep-scheduler` | feature | 2026-07-19 | open | pending | |
