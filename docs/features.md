@@ -1810,3 +1810,55 @@ architectural decision.
 - **ADR:** n/a — implements ADR-0020's already-decided Phase 1 packaging, no new decision;
   the Debian-package-vs-static-binary choice for the CLI itself is a small enough
   implementation detail to note in this entry rather than warrant its own ADR.
+
+## [2026-07-19] feature/0018-egress-gateway — Add Egress Gateway (ADR-0021), Phase 4 of the gap-closing roadmap
+- **Type:** feature
+- **Branch:** feature/0018-egress-gateway
+- **Summary:** New `crates/egress-gateway`: an HTTP CONNECT forward proxy every outbound
+  `reqwest::Client` in this codebase can optionally route through (connector polls to
+  Zendesk/Graph/Fabric/customer-SQL, `action-executor`'s webhook dispatch, OAuth2 token
+  fetches), so external calls get a tenant/connector-scoped audit trail and an optional
+  per-tenant domain allowlist — closing the "no answer to what external hosts did tenant X's
+  connectors talk to" gap flagged in the roadmap's Phase 4. Caller identity travels via
+  `Proxy-Authorization: Basic base64(tenant_id:connector_id)` (exactly what
+  `reqwest::Proxy::basic_auth` already sends, so zero new client-side protocol work — see
+  ADR-0021 for the full design and three rejected alternatives: a generic proxy with no
+  Kizashi code, a TLS-terminating/MITM proxy, and a per-connector client-wrapper library).
+  HTTPS traffic is tunneled byte-for-byte after the CONNECT handshake — Egress Gateway never
+  sees request paths/bodies, only the destination host:port, a deliberate scope boundary
+  (destination-level audit, not deep inspection). The per-tenant domain allowlist is
+  Egress-Gateway-owned outright (`GET/PUT /v1/allowlist`) rather than synced from
+  config-admin-service, since no other service ever reads it.
+- **Tests:** `cargo test -p egress-gateway` — 29 unit tests (parsing `Proxy-Authorization` and
+  CONNECT targets never panics on malformed input; allowlist host-matching correctly handles
+  subdomain matching without being fooled by a same-suffix-but-different-domain like
+  `notzendesk.com`; the allow/deny/audit decision logic, tested against in-memory doubles) + 6
+  new Postgres integration tests (`repository_integration_test.rs`: allowlist round-trip,
+  audit log persistence, and — critically — proving the `BEFORE UPDATE OR DELETE` immutability
+  trigger really rejects mutation against a real table, same pattern as every other audit log
+  in this system). Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` clean, `cargo test --workspace
+  --all-features` all green (0 failures across every crate including the new one, verified
+  against a throwaway local `mssql` container for Fabric), `cargo audit` clean (same three
+  pre-existing allow-listed `unmaintained` advisories — no new ones from the new `hyper`/
+  `hyper-util` dependencies this crate needed for low-level CONNECT/upgrade handling, which
+  axum's router doesn't support directly).
+- **Live verification:** ran the real binary against the live Postgres and proxied a real
+  HTTPS request (`curl -x http://localhost:3128 -U tenant:connector https://api.github.com/zen`)
+  through it — got a real 200 response back, confirmed the audit row landed with the correct
+  tenant/connector/destination. Configured a real per-tenant allowlist via the live
+  `PUT /v1/allowlist` API, confirmed an allowlisted host tunneled successfully and a
+  non-allowlisted host was denied (`403`, `curl` reports this as a failed proxy CONNECT, which
+  is the correct client-visible behavior) — both outcomes correctly audit-logged. Rebuilt and
+  redeployed via `docker compose up` (this surfaced and fixed a real Docker networking bug: the
+  first `up` attempt left the container with no network attached at all, because an earlier
+  port conflict — `3128` was still held by a leftover local test process — had left the
+  container in a bad created-but-not-networked state; `--force-recreate` fixed it), then
+  repeated the same live HTTPS-through-proxy test against the fully containerized service and
+  got the same correct result.
+- **Known gap, explicitly not done here:** no connector or `action-executor` has actually been
+  updated to set `EGRESS_PROXY_URL` yet — adoption is deliberately opt-in per ADR-0021, and
+  wiring it into all 6 connector crates' outbound clients plus `HttpActionDispatcher` is
+  tracked as a separate follow-up rather than scope-creeping this PR further.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0021](adr/0021-egress-gateway-http-connect-forward-proxy.md)

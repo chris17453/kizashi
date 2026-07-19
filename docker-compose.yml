@@ -179,6 +179,20 @@ services:
       clickhouse: { condition: service_healthy }
     healthcheck: *healthz
 
+  # ADR-0021: HTTP CONNECT forward proxy every outbound reqwest::Client (connectors,
+  # action-executor's dispatcher) can be pointed at via EGRESS_PROXY_URL. Adoption is opt-in
+  # per this ADR's Consequences — nothing here forces any caller to route through it yet.
+  egress-gateway:
+    build: { context: ., args: { BIN: egress-gateway } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      PROXY_BIND_ADDR: "0.0.0.0:3128"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+    ports: ["8094:8080", "3128:3128"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck: *healthz
+
   config-admin-service:
     build: { context: ., args: { BIN: config-admin-service } }
     environment:
