@@ -1718,3 +1718,53 @@ architectural decision.
   `unmaintained` advisories, no new ones).
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — a performance fix with no behavior change, not an architectural decision.
+
+## [2026-07-19] feature/0016-agent-scheduler — Agent Scheduler Phase 1: registry sync + invoker (ADR-0020)
+- **Type:** feature
+- **Branch:** feature/0016-agent-scheduler
+- **Summary:** First piece of "dynamic per-agent connector scheduling" (the other half of the
+  split "Scale-out" task, design captured in [ADR-0020](adr/0020-agent-scheduler-in-platform-connector-scheduling.md)).
+  Registering an Agent in the Console UI previously created a config record only — nothing in
+  the platform actually caused it to run; operators had to externally wire the deploy script's
+  output into their own cron/K8s infrastructure. Adds a new `agent-scheduler` service that: (1)
+  syncs its own copy of the Agent registry from `config-admin-service` via a new
+  `agent.changed` bus message (published on every Agent create/update/delete, same
+  ADR-0018/0019 pattern), and (2) on a tick loop, invokes each enabled Agent whose configured
+  `poll_interval_seconds` (read from `Agent.config`, defaulting to 300s) has elapsed via a new
+  `Invoker` trait. `DockerInvoker` (the docker-compose deployment path) builds a `docker run
+  --rm` invocation reusing the exact same env-var shape the deploy-script wizard
+  (`ui/src/agent_script_handler.rs`) already computes by hand.
+- **Tests:** `cargo test -p common --lib agent_change_event` — 2 passed. `cargo test -p
+  config-admin-service` — 67 passed (2 new: `agent_publisher_test` unit tests; every
+  `AgentState` test constructor swept for the new `agent_publisher` field) + 2 new RabbitMQ
+  integration tests (`agent_publisher_integration_test.rs`, proving both `Upserted` and
+  `Deleted` variants round-trip over the real bus). `cargo test -p agent-scheduler` — 11
+  passed (10 unit: `AgentRepository`'s in-memory double, `DockerInvoker`'s image-name and
+  `docker run` argument construction — verified as a pure function, not by actually shelling
+  out — plus the `Invoker` trait's in-memory/failing doubles) + 3 new Postgres integration
+  tests (`agent_repository_integration_test.rs`: upsert/list/mark-polled/delete against a real
+  table). Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` clean, `cargo test --workspace --all-features`
+  all green (0 failures across every crate including the two new ones, verified against a
+  throwaway local `mssql` container for Fabric), `cargo audit` clean (same two pre-existing
+  allow-listed `unmaintained` advisories, no new ones). Live-verified the registry-sync half
+  against the running docker-compose stack: rebuilt/redeployed `config-admin-service`, ran
+  `agent-scheduler` locally against the live Postgres/RabbitMQ (its own docker-compose service
+  entry isn't added yet — see below), created/updated/deleted a real Agent through
+  `config-admin-service`'s live API, and confirmed via direct Postgres queries that all three
+  operations propagated into `agent_scheduler.agents` within about two seconds.
+- **Known gap, explicitly not done in this PR:** the `DockerInvoker` shells out to the `docker`
+  CLI against the Docker socket, but the shared runtime `Dockerfile` (one image for all 20
+  binaries) has neither `docker` CLI installed nor socket access, and runs as a non-root user
+  that couldn't reach a root-owned socket anyway. Rather than claim this works, **no
+  `docker-compose.yml` entry was added for `agent-scheduler`** — adding an unhealthy/broken
+  service would break `docker compose up` for everyone. The actual `invoke()` → real
+  `docker run` → connector-actually-polls path was **not live-verified** and should not be
+  assumed to work end-to-end yet. Follow-up: extend the runtime image (or a dedicated
+  variant) with Docker CLI + socket access, verify with a real Agent whose connector actually
+  runs, then wire the compose entry. `KubernetesJobInvoker` (the K8s deployment path) is
+  unbuilt, per ADR-0020. Per-Agent API key lookup is also unbuilt — v1 uses one
+  platform-wide `INGESTION_GATEWAY_API_KEY` for every scheduled connector, documented as a
+  known simplification in `invoker.rs`.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0020](adr/0020-agent-scheduler-in-platform-connector-scheduling.md)

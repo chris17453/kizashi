@@ -2,18 +2,20 @@
 #[cfg(test)]
 mod agent_handlers_test;
 
+use crate::agent_publisher::AgentPublisher;
 use crate::agent_repository::{AgentRepository, AgentRepositoryError};
 use crate::handlers::{tenant_id_from_headers, tenant_mismatch};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use common::Agent;
+use common::{Agent, AgentChangeEvent};
 use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AgentState {
     pub agent_repository: Arc<dyn AgentRepository>,
+    pub agent_publisher: Arc<dyn AgentPublisher>,
 }
 
 #[derive(serde::Serialize)]
@@ -48,7 +50,13 @@ pub async fn create_agent(
         return response;
     }
     match state.agent_repository.create(agent).await {
-        Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
+        Ok(created) => {
+            let event = AgentChangeEvent::Upserted(created.clone());
+            if let Err(e) = state.agent_publisher.publish_agent_changed(&event).await {
+                tracing::error!(agent_id = %created.id, error = %e, "failed to publish agent.changed");
+            }
+            (StatusCode::CREATED, Json(created)).into_response()
+        }
         Err(e) => agent_error_response(e),
     }
 }
@@ -64,7 +72,13 @@ pub async fn update_agent(
     }
     agent.id = id;
     match state.agent_repository.update(agent).await {
-        Ok(updated) => Json(updated).into_response(),
+        Ok(updated) => {
+            let event = AgentChangeEvent::Upserted(updated.clone());
+            if let Err(e) = state.agent_publisher.publish_agent_changed(&event).await {
+                tracing::error!(agent_id = %updated.id, error = %e, "failed to publish agent.changed");
+            }
+            Json(updated).into_response()
+        }
         Err(e) => agent_error_response(e),
     }
 }
@@ -151,7 +165,13 @@ pub async fn delete_agent(
         Err((status, msg)) => return error_response(status, msg),
     };
     match state.agent_repository.delete(tenant_id, id).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Ok(()) => {
+            let event = AgentChangeEvent::Deleted { id, tenant_id };
+            if let Err(e) = state.agent_publisher.publish_agent_changed(&event).await {
+                tracing::error!(agent_id = %id, error = %e, "failed to publish agent.changed");
+            }
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(e) => agent_error_response(e),
     }
 }

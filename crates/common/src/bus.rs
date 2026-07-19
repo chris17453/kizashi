@@ -8,3 +8,4 @@ pub const RECORD_ANALYZED_EXCHANGE: &str = "record.analyzed";
 pub const EVENT_CREATED_EXCHANGE: &str = "event.created";
 pub const TRIGGER_CHANGED_EXCHANGE: &str = "trigger.changed";
 pub const ANALYSIS_CONFIG_CHANGED_EXCHANGE: &str = "analysis_config.changed";
+pub const AGENT_CHANGED_EXCHANGE: &str = "agent.changed";
