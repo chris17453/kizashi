@@ -78,3 +78,26 @@ async fn get_returns_none_for_a_tenant_with_no_config() {
     let found = repo.get(Uuid::new_v4()).await.unwrap();
     assert!(found.is_none());
 }
+
+#[test]
+fn redact_for_audit_masks_a_present_api_key_but_leaves_everything_else() {
+    let mut config = AnalysisConfig::new(Uuid::new_v4(), "look for urgent tickets");
+    config.provider = common::AnalysisProvider::OpenAiCompatible;
+    config.model = Some("llama3".to_string());
+    config.endpoint = Some("http://localhost:11434/v1".to_string());
+    config.api_key = Some("super-secret-key".to_string());
+
+    let redacted = redact_for_audit(&config);
+
+    assert_eq!(redacted["api_key"], "<redacted>");
+    assert_eq!(redacted["model"], "llama3");
+    assert_eq!(redacted["endpoint"], "http://localhost:11434/v1");
+    assert_eq!(redacted["prompt"], "look for urgent tickets");
+}
+
+#[test]
+fn redact_for_audit_leaves_a_missing_api_key_as_null() {
+    let config = AnalysisConfig::new(Uuid::new_v4(), "look for urgent tickets");
+    let redacted = redact_for_audit(&config);
+    assert!(redacted["api_key"].is_null());
+}

@@ -55,3 +55,19 @@ async fn upsert_replaces_an_existing_config_for_the_same_tenant() {
     let found = repo.get(tenant_id).await.unwrap();
     assert_eq!(found, Some(updated));
 }
+
+#[tokio::test]
+async fn upsert_then_get_round_trips_provider_and_model_fields() {
+    let tenant_id = Uuid::new_v4();
+    let repo = InMemoryAnalysisConfigRepository::default();
+    let mut config = AnalysisConfig::new(tenant_id, "flag policy violations");
+    config.provider = common::AnalysisProvider::OpenAiCompatible;
+    config.model = Some("qwen3:8b".to_string());
+    config.endpoint = Some("http://localhost:11434/v1".to_string());
+    config.api_key = Some("unused-for-ollama".to_string());
+
+    repo.upsert(config.clone()).await.unwrap();
+
+    let found = repo.get(tenant_id).await.unwrap();
+    assert_eq!(found, Some(config));
+}

@@ -7,7 +7,9 @@ mod batch_processor;
 mod event_publisher;
 mod health;
 
-pub use analysis_client::{AnalysisClient, AnalysisError, FoundryAnalysisClient};
+pub use analysis_client::{
+    AnalysisClient, AnalysisError, FoundryAnalysisClient, OpenAiCompatibleAnalysisClient,
+};
 pub use analysis_config_repository::{
     AnalysisConfigRepository, AnalysisConfigRepositoryError, PostgresAnalysisConfigRepository,
 };

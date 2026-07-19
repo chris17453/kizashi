@@ -72,6 +72,7 @@ async fn main() {
             RabbitMqEventPublisher::new(publish_channel).await.expect("failed to declare exchange"),
         ),
         analysis_config_repository: analysis_config_repository.clone(),
+        http_client: reqwest::Client::new(),
     };
 
     consume_channel

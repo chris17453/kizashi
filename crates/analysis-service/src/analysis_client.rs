@@ -91,3 +91,92 @@ impl AnalysisClient for FoundryAnalysisClient {
         Ok(body.results)
     }
 }
+
+/// Calls any provider speaking the standard `/v1/chat/completions` shape — Ollama, OpenAI, and
+/// Azure OpenAI in "compatible mode" all fit, so one client covers all three (ADR-0031). Unlike
+/// `FoundryAnalysisClient`'s single batched call, chat-completions isn't a batch API: asking a
+/// chat model to return N JSON results reliably in one response is unreliable, so this client
+/// makes one sequential request per record instead. `api_key` is optional since a local Ollama
+/// instance needs no credential at all.
+pub struct OpenAiCompatibleAnalysisClient {
+    client: reqwest::Client,
+    endpoint: String,
+    api_key: Option<String>,
+    model: String,
+}
+
+impl OpenAiCompatibleAnalysisClient {
+    pub fn new(
+        client: reqwest::Client,
+        endpoint: String,
+        api_key: Option<String>,
+        model: String,
+    ) -> Self {
+        Self { client, endpoint, api_key, model }
+    }
+
+    async fn analyze_one(
+        &self,
+        payload: &serde_json::Value,
+        prompt: Option<&str>,
+    ) -> Result<serde_json::Value, AnalysisError> {
+        let content = match prompt {
+            Some(prompt) => format!("{prompt}\n\n{payload}"),
+            None => payload.to_string(),
+        };
+        let body = serde_json::json!({
+            "model": self.model,
+            "messages": [{"role": "user", "content": content}],
+        });
+
+        let url = format!("{}/chat/completions", self.endpoint.trim_end_matches('/'));
+        let mut request = self.client.post(&url).json(&body);
+        if let Some(api_key) = &self.api_key {
+            request = request.bearer_auth(api_key);
+        }
+
+        let response =
+            request.send().await.map_err(|e| AnalysisError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(AnalysisError::Rejected(response.status().as_u16()));
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ChatCompletionResponse {
+            choices: Vec<ChatCompletionChoice>,
+        }
+        #[derive(serde::Deserialize)]
+        struct ChatCompletionChoice {
+            message: ChatCompletionMessage,
+        }
+        #[derive(serde::Deserialize)]
+        struct ChatCompletionMessage {
+            content: String,
+        }
+
+        let parsed: ChatCompletionResponse =
+            response.json().await.map_err(|e| AnalysisError::Unreachable(e.to_string()))?;
+        let content =
+            parsed.choices.into_iter().next().map(|c| c.message.content).unwrap_or_default();
+
+        Ok(serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({"text": content})))
+    }
+}
+
+#[async_trait]
+impl AnalysisClient for OpenAiCompatibleAnalysisClient {
+    async fn analyze_batch(
+        &self,
+        _tenant_id: Uuid,
+        records: &[RawRecord],
+        prompt: Option<&str>,
+    ) -> Result<Vec<serde_json::Value>, AnalysisError> {
+        let mut results = Vec::with_capacity(records.len());
+        for record in records {
+            let payload = record.normalized_payload.as_ref().unwrap_or(&record.raw_payload);
+            results.push(self.analyze_one(payload, prompt).await?);
+        }
+        Ok(results)
+    }
+}

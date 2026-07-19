@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0039         |
+| feature       | `feature/` | 0040         |
 | fix           | `fix/`     | 0005         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -68,4 +68,5 @@ manually created branches.
 | 0002 | `docs/0002-adr-0016-stale-followups-note` | docs | 2026-07-19 | open | pending | |
 | 0036 | `feature/0036-saved-search-queries` | feature | 2026-07-19 | open | pending | |
 | 0037 | `feature/0037-trigger-dry-run-test` | feature | 2026-07-19 | open | pending | |
-| 0038 | `feature/0038-correlated-trigger-form-more-rows` | feature | 2026-07-19 | open | pending | |
+| 0038 | `feature/0038-correlated-trigger-form-more-rows` | feature | 2026-07-19 | merged | #47 | |
+| 0039 | `feature/0039-ai-provider-config` | feature | 2026-07-19 | open | pending | |

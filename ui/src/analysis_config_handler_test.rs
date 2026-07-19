@@ -113,6 +113,32 @@ async fn post_saves_the_prompt_and_rerenders_it() {
 }
 
 #[tokio::test]
+async fn post_saves_an_openai_compatible_provider_config() {
+    let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/analysis-config")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(
+                    "prompt=flag+urgent+issues&provider=openai_compatible&model=qwen3%3A8b&endpoint=http%3A%2F%2Flocalhost%3A11434%2Fv1",
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("qwen3:8b"));
+    assert!(body.contains("http://localhost:11434/v1"));
+}
+
+#[tokio::test]
 async fn post_rejects_a_viewer_role() {
     let (state, session_id, _tenant_id) = state_with_session(common::Role::Viewer).await;
 

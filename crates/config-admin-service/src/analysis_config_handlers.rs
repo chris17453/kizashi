@@ -8,7 +8,7 @@ use crate::handlers::{require_operator, tenant_id_from_headers};
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use common::AnalysisConfig;
+use common::{AnalysisConfig, AnalysisProvider};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -29,6 +29,14 @@ fn error_response(status: StatusCode, message: impl Into<String>) -> Response {
 #[derive(serde::Deserialize)]
 pub struct PutAnalysisConfigBody {
     prompt: String,
+    #[serde(default)]
+    provider: AnalysisProvider,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    endpoint: Option<String>,
+    #[serde(default)]
+    api_key: Option<String>,
 }
 
 /// GET /v1/analysis-config — the calling tenant's AI analysis prompt (ADR-0019), or `null` if
@@ -68,7 +76,11 @@ pub async fn put_analysis_config(
         return response;
     }
 
-    let config = AnalysisConfig::new(tenant_id, body.prompt);
+    let mut config = AnalysisConfig::new(tenant_id, body.prompt);
+    config.provider = body.provider;
+    config.model = body.model;
+    config.endpoint = body.endpoint;
+    config.api_key = body.api_key;
     match state.repository.upsert(config).await {
         Ok(saved) => {
             if let Err(e) = state.publisher.publish_analysis_config_changed(&saved).await {
