@@ -30,6 +30,7 @@ pub struct FabricConnector {
     client_secret: String,
     query: String,
     trust_server_certificate: bool,
+    token_client: reqwest::Client,
 }
 
 impl FabricConnector {
@@ -44,6 +45,7 @@ impl FabricConnector {
         client_secret: impl Into<String>,
         query: impl Into<String>,
         trust_server_certificate: bool,
+        token_client: reqwest::Client,
     ) -> Self {
         Self {
             connector_id: connector_id.into(),
@@ -55,6 +57,7 @@ impl FabricConnector {
             client_secret: client_secret.into(),
             query: query.into(),
             trust_server_certificate,
+            token_client,
         }
     }
 }
@@ -75,6 +78,7 @@ impl Connector for FabricConnector {
             &self.client_id,
             &self.client_secret,
             FABRIC_SQL_SCOPE,
+            self.token_client.clone(),
         )
         .await
         .map_err(|e| ConnectorError::AuthFailed(e.to_string()))?;

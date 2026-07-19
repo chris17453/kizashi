@@ -11,6 +11,7 @@ fn connector() -> FabricConnector {
         "client-secret",
         "SELECT 1",
         true,
+        reqwest::Client::new(),
     )
 }
 

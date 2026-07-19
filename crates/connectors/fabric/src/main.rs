@@ -1,6 +1,6 @@
 use common::connector::Connector;
 use connector_fabric::FabricConnector;
-use connector_runtime::{run_poll_cycle, HttpIngestionClient};
+use connector_runtime::{build_outbound_client, run_poll_cycle, HttpIngestionClient};
 use uuid::Uuid;
 
 #[tokio::main]
@@ -28,6 +28,14 @@ async fn main() {
     let api_key =
         std::env::var("INGESTION_GATEWAY_API_KEY").expect("INGESTION_GATEWAY_API_KEY must be set");
 
+    // ADR-0021/ADR-0025: fabric's SQL data path is TDS, not HTTP, so it has no outbound
+    // reqwest::Client to proxy for the data-plane itself — but the Entra token fetch below IS
+    // an HTTP call, so it gets the same opt-in EGRESS_PROXY_URL treatment as every other
+    // connector's outbound HTTP calls.
+    let egress_proxy_url = std::env::var("EGRESS_PROXY_URL").ok();
+    let token_client = build_outbound_client(egress_proxy_url.as_deref(), tenant_id, &connector_id)
+        .expect("failed to configure outbound HTTP client for the Entra token fetch");
+
     let token_url =
         format!("https://login.microsoftonline.com/{entra_tenant_id}/oauth2/v2.0/token");
     let connector = FabricConnector::new(
@@ -40,6 +48,7 @@ async fn main() {
         client_secret,
         query,
         false, // real Fabric always presents a valid certificate
+        token_client,
     );
     let ingestion_client =
         HttpIngestionClient::new(reqwest::Client::new(), ingestion_gateway_url, api_key);

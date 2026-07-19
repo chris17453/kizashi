@@ -2006,3 +2006,34 @@ architectural decision.
   bearer-token attachment, and real success/failure status-code handling all execute correctly.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [0024](adr/0024-graph-send-mail-action-and-provable-test-boundary.md)
+
+## [2026-07-19] feature/0023-entra-token-egress-routing — Route Entra OAuth2 token fetch through Egress Gateway
+- **Type:** fix
+- **Branch:** feature/0023-entra-token-egress-routing
+- **Summary:** Closes a known gap logged when Egress Gateway's connector wiring first shipped:
+  `connector_runtime::fetch_access_token` (the Entra client-credentials flow used by
+  `graph-mail`, `graph-teams`, `fabric`, and `action-executor`'s Graph send-mail action) built
+  its own `reqwest::Client` internally via `oauth2::reqwest::async_http_client`, silently
+  bypassing `EGRESS_PROXY_URL` even when a connector's other outbound calls were proxied. Now
+  takes a caller-provided client and routes the OAuth2 exchange through it — every call site
+  updated to pass the same `build_outbound_client`-constructed client it already uses elsewhere.
+  `fabric` gained a new `token_client` field for this specifically, since its data path (TDS)
+  never needed a `reqwest::Client` before.
+- **Tests:** `cargo test -p connector-runtime --lib` — 13 tests, all passed, including a new
+  `the_token_request_actually_goes_through_the_provided_client_not_a_default_one` test proving
+  the client is genuinely used (a client proxied through a deliberately-broken address fails
+  the way a real misconfigured proxy would). `cargo test --workspace --all-features` (full
+  real-infra stack) — all passed, 0 failed, including all 3 real-TDS-server Fabric integration
+  tests. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo audit` — same 3
+  pre-existing allow-listed advisories, no new ones.
+- **Live verification:** ran the real `connector-fabric` binary locally with
+  `EGRESS_PROXY_URL` pointed at the deployed `egress-gateway` container and deliberately
+  invalid Entra credentials — the token request reached the real
+  `login.microsoftonline.com` and was correctly rejected (fake credentials), and a direct
+  Postgres query confirmed `egress_gateway.egress_audit_log` recorded the real call
+  (`login.microsoftonline.com:443`) with the correct `tenant_id`/`connector_id`. Attempted to
+  clean up the test audit row afterward and got `egress_audit_log is append-only: DELETE is
+  not permitted` — the immutability trigger working exactly as designed, left in place.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0025](adr/0025-entra-token-fetch-egress-gateway-routing.md)
