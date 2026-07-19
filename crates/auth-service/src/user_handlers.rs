@@ -51,6 +51,24 @@ fn require_admin(headers: &HeaderMap) -> Option<Response> {
     }
 }
 
+/// Guards against leaving a tenant with no `Admin` able to manage users/roles — the one
+/// self-inflicted lockout this service *can* detect and prevent without a user identity in the
+/// session (ADR-0016's still-open limitation, see `audit_log.rs`), since it only needs to count
+/// admins tenant-wide, not identify "self". Returns `true` when `target_id` is currently the
+/// tenant's only `Admin`.
+async fn is_sole_admin(
+    state: &AuthState,
+    tenant_id: Uuid,
+    target_id: Uuid,
+) -> Result<bool, Response> {
+    let users = state.local_user_repository.list(tenant_id).await.map_err(user_error_response)?;
+    let mut admins = users.iter().filter(|u| u.role == Role::Admin);
+    match (admins.next(), admins.next()) {
+        (Some(only), None) => Ok(only.id == target_id),
+        _ => Ok(false),
+    }
+}
+
 fn user_error_response(e: LocalUserRepositoryError) -> Response {
     match e {
         LocalUserRepositoryError::NotFound(id) => {
@@ -139,6 +157,18 @@ pub async fn update_user_role(
     if let Some(response) = require_admin(&headers) {
         return response;
     }
+    if req.role != Role::Admin {
+        match is_sole_admin(&state, tenant_id, id).await {
+            Ok(true) => {
+                return error_response(
+                    StatusCode::CONFLICT,
+                    "cannot demote the tenant's only Admin — promote another user first",
+                );
+            }
+            Ok(false) => {}
+            Err(response) => return response,
+        }
+    }
     match state
         .local_user_repository
         .update_role(tenant_id, id, req.role, &tenant_id.to_string())
@@ -160,6 +190,16 @@ pub async fn delete_user(
     };
     if let Some(response) = require_admin(&headers) {
         return response;
+    }
+    match is_sole_admin(&state, tenant_id, id).await {
+        Ok(true) => {
+            return error_response(
+                StatusCode::CONFLICT,
+                "cannot delete the tenant's only Admin — promote another user first",
+            );
+        }
+        Ok(false) => {}
+        Err(response) => return response,
     }
     match state.local_user_repository.delete(tenant_id, id, &tenant_id.to_string()).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),

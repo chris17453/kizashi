@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0031         |
+| feature       | `feature/` | 0032         |
 | fix           | `fix/`     | 0004         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -59,3 +59,4 @@ manually created branches.
 | 0028 | `feature/0028-audit-log-console-ui` | feature | 2026-07-19 | open | pending | |
 | 0029 | `feature/0029-normalization-mapping-sync` | feature | 2026-07-19 | open | pending | |
 | 0030 | `feature/0030-user-management-role-assignment` | feature | 2026-07-19 | open | pending | |
+| 0031 | `feature/0031-last-admin-protection` | feature | 2026-07-19 | open | pending | |

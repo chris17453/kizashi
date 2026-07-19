@@ -233,6 +233,147 @@ async fn delete_user_removes_the_user() {
 }
 
 #[tokio::test]
+async fn delete_user_rejects_deleting_the_last_admin() {
+    let tenant_id = Uuid::new_v4();
+    let state = default_state();
+    let admin = LocalUser {
+        id: Uuid::new_v4(),
+        tenant_id,
+        username: "sole-admin".to_string(),
+        password_hash: "hash".to_string(),
+        role: Role::Admin,
+    };
+    state.local_user_repository.create(admin.clone()).await.unwrap();
+
+    let response = send(
+        router(state),
+        "DELETE",
+        format!("/v1/users/{}", admin.id),
+        Some(tenant_id),
+        Some("admin"),
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn delete_user_allows_deleting_an_admin_when_another_admin_remains() {
+    let tenant_id = Uuid::new_v4();
+    let state = default_state();
+    let admin_one = LocalUser {
+        id: Uuid::new_v4(),
+        tenant_id,
+        username: "admin-one".to_string(),
+        password_hash: "hash".to_string(),
+        role: Role::Admin,
+    };
+    let admin_two = LocalUser {
+        id: Uuid::new_v4(),
+        tenant_id,
+        username: "admin-two".to_string(),
+        password_hash: "hash".to_string(),
+        role: Role::Admin,
+    };
+    state.local_user_repository.create(admin_one.clone()).await.unwrap();
+    state.local_user_repository.create(admin_two).await.unwrap();
+
+    let response = send(
+        router(state),
+        "DELETE",
+        format!("/v1/users/{}", admin_one.id),
+        Some(tenant_id),
+        Some("admin"),
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn update_user_role_rejects_demoting_the_last_admin() {
+    let tenant_id = Uuid::new_v4();
+    let state = default_state();
+    let admin = LocalUser {
+        id: Uuid::new_v4(),
+        tenant_id,
+        username: "sole-admin".to_string(),
+        password_hash: "hash".to_string(),
+        role: Role::Admin,
+    };
+    state.local_user_repository.create(admin.clone()).await.unwrap();
+
+    let response = send(
+        router(state),
+        "PUT",
+        format!("/v1/users/{}", admin.id),
+        Some(tenant_id),
+        Some("admin"),
+        Some(serde_json::json!({"role": "operator"})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn update_user_role_allows_reassigning_the_sole_admin_to_admin() {
+    let tenant_id = Uuid::new_v4();
+    let state = default_state();
+    let admin = LocalUser {
+        id: Uuid::new_v4(),
+        tenant_id,
+        username: "sole-admin".to_string(),
+        password_hash: "hash".to_string(),
+        role: Role::Admin,
+    };
+    state.local_user_repository.create(admin.clone()).await.unwrap();
+
+    let response = send(
+        router(state),
+        "PUT",
+        format!("/v1/users/{}", admin.id),
+        Some(tenant_id),
+        Some("admin"),
+        Some(serde_json::json!({"role": "admin"})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn update_user_role_allows_demoting_an_admin_when_another_admin_remains() {
+    let tenant_id = Uuid::new_v4();
+    let state = default_state();
+    let admin_one = LocalUser {
+        id: Uuid::new_v4(),
+        tenant_id,
+        username: "admin-one".to_string(),
+        password_hash: "hash".to_string(),
+        role: Role::Admin,
+    };
+    let admin_two = LocalUser {
+        id: Uuid::new_v4(),
+        tenant_id,
+        username: "admin-two".to_string(),
+        password_hash: "hash".to_string(),
+        role: Role::Admin,
+    };
+    state.local_user_repository.create(admin_one.clone()).await.unwrap();
+    state.local_user_repository.create(admin_two).await.unwrap();
+
+    let response = send(
+        router(state),
+        "PUT",
+        format!("/v1/users/{}", admin_one.id),
+        Some(tenant_id),
+        Some("admin"),
+        Some(serde_json::json!({"role": "operator"})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn delete_user_is_rejected_for_an_operator() {
     let tenant_id = Uuid::new_v4();
     let response = send(
