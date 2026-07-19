@@ -1,0 +1,55 @@
+use super::*;
+use common::EventStatus;
+use serde_json::json;
+use uuid::Uuid;
+
+fn sample_event() -> Event {
+    Event {
+        id: Uuid::new_v4(),
+        tenant_id: Uuid::new_v4(),
+        event_type: "sentiment".to_string(),
+        source_connector_ids: vec![],
+        entity_ref: "cust-1".to_string(),
+        group_key: "cust-1".to_string(),
+        payload: json!({}),
+        occurred_at: chrono::Utc::now(),
+        created_at: chrono::Utc::now(),
+        status: EventStatus::New,
+        record_ids: vec![],
+    }
+}
+
+#[test]
+fn an_email_action_with_smtp_host_is_routed_to_smtp() {
+    let action = ActionRef {
+        action_type: ActionType::Email,
+        config: json!({"smtp_host": "localhost", "from": "a@example.com", "to": "b@example.com"}),
+    };
+    assert!(is_smtp_email(&action));
+}
+
+#[test]
+fn an_email_action_without_smtp_host_is_routed_to_http() {
+    let action =
+        ActionRef { action_type: ActionType::Email, config: json!({"url": "http://example.com"}) };
+    assert!(!is_smtp_email(&action));
+}
+
+#[test]
+fn a_webhook_action_is_never_routed_to_smtp_even_with_an_smtp_host_field() {
+    let action = ActionRef {
+        action_type: ActionType::Webhook,
+        config: json!({"smtp_host": "localhost", "url": "http://example.com"}),
+    };
+    assert!(!is_smtp_email(&action));
+}
+
+#[tokio::test]
+async fn dispatch_of_a_non_smtp_email_action_without_a_url_fails_with_missing_url_not_invalid_config(
+) {
+    let dispatcher = RoutingActionDispatcher::new(None);
+    let action = ActionRef { action_type: ActionType::Email, config: json!({}) };
+
+    let err = dispatcher.dispatch(&action, &sample_event()).await.unwrap_err();
+    assert!(matches!(err, DispatchError::MissingUrl));
+}

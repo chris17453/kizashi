@@ -1,6 +1,6 @@
 use action_executor::{
-    execution_router, health_router, process_event, ActionDeps, ExecutionState,
-    HttpActionDispatcher, HttpTriggerClient, PostgresExecutionRepository, EVENT_CREATED_EXCHANGE,
+    execution_router, health_router, process_event, ActionDeps, ExecutionState, HttpTriggerClient,
+    PostgresExecutionRepository, RoutingActionDispatcher, EVENT_CREATED_EXCHANGE,
 };
 use futures_util::StreamExt;
 use lapin::options::{
@@ -50,7 +50,7 @@ async fn main() {
             reqwest::Client::new(),
             trigger_engine_url,
         )),
-        dispatcher: Arc::new(HttpActionDispatcher::new(egress_proxy_url)),
+        dispatcher: Arc::new(RoutingActionDispatcher::new(egress_proxy_url)),
         execution_repository: execution_repository.clone(),
     };
 

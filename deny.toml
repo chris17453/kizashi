@@ -39,6 +39,9 @@ allow = [
     # webpki-roots (transitive via sqlx's rustls TLS backend) ships Mozilla's CA bundle under
     # this permissive data license — not a code license concern.
     "CDLA-Permissive-2.0",
+    # quoted_printable (transitive via lettre, action-executor's SMTP send action, ADR-0023) —
+    # a public-domain-equivalent permissive license, OSI approved.
+    "0BSD",
 ]
 
 [bans]

@@ -22,6 +22,8 @@ sqlx = { workspace = true }
 lapin = { workspace = true }
 reqwest = { workspace = true }
 futures-util = { workspace = true }
+lettre = { workspace = true }
 
 [dev-dependencies]
 tower = { workspace = true }
+connector-imap = { path = "../connectors/imap" }

@@ -14,6 +14,8 @@ pub enum DispatchError {
     Unreachable(String),
     #[error("target rejected the action: HTTP {0}")]
     Rejected(u16),
+    #[error("action config invalid: {0}")]
+    InvalidConfig(String),
 }
 
 /// Executes one action for a firing event. v1 uses a single HTTP-POST dispatch model for every
