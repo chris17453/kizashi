@@ -15,17 +15,23 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/triggers", get(get_triggers)).with_state(state)
+    Router::new().route("/triggers", get(get_triggers).post(post_trigger)).with_state(state)
 }
 
 async fn state_with_session() -> (AppState, String) {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Admin).await;
+    (state, session_id)
+}
+
+async fn state_with_session_and_role(role: common::Role) -> (AppState, String, Uuid) {
     let session_store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
     let session_id = session_store
         .create(Session {
             bearer_token: "tok".to_string(),
-            tenant_id: Uuid::new_v4(),
+            tenant_id,
             username: "alice".to_string(),
-            role: common::Role::Admin,
+            role,
         })
         .await;
     let state = AppState {
@@ -46,7 +52,7 @@ async fn state_with_session() -> (AppState, String) {
         ),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
-    (state, session_id)
+    (state, session_id, tenant_id)
 }
 
 #[tokio::test]
@@ -177,4 +183,120 @@ async fn shows_an_error_when_the_backend_fails() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("unreachable"));
+}
+
+#[tokio::test]
+async fn post_creates_a_threshold_trigger_and_redirects() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    let mut state = state;
+    state.triggers_client = triggers_client.clone();
+
+    let body = "name=urgent-spike&event_type_match=priority_score&window_seconds=3600&condition_shape=threshold_over_window&field=priority_score&threshold=5&direction=above&count=&action_url=https%3A%2F%2Fexample.com%2Fhook";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let created = triggers_client.created.lock().unwrap();
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].name, "urgent-spike");
+    assert_eq!(created[0].event_type_match, "priority_score");
+    assert_eq!(created[0].window_seconds, 3600);
+    assert!(matches!(
+        created[0].condition,
+        common::TriggerCondition::ThresholdOverWindow { threshold, .. } if threshold == 5.0
+    ));
+    assert_eq!(created[0].actions.len(), 1);
+}
+
+#[tokio::test]
+async fn post_creates_a_count_trigger() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    let mut state = state;
+    state.triggers_client = triggers_client.clone();
+
+    let body = "name=high-volume&event_type_match=sentiment&window_seconds=1800&condition_shape=count_over_window&field=&threshold=&direction=above&count=3&action_url=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let created = triggers_client.created.lock().unwrap();
+    assert_eq!(created.len(), 1);
+    assert!(matches!(
+        created[0].condition,
+        common::TriggerCondition::CountOverWindow { count } if count == 3
+    ));
+    assert!(created[0].actions.is_empty());
+}
+
+#[tokio::test]
+async fn post_rerenders_with_a_form_error_when_the_threshold_field_is_missing() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+
+    let body = "name=bad&event_type_match=x&window_seconds=3600&condition_shape=threshold_over_window&field=&threshold=&direction=above&count=&action_url=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("field is required"));
+}
+
+#[tokio::test]
+async fn post_rejects_a_viewer_role() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Viewer).await;
+
+    let body = "name=x&event_type_match=x&window_seconds=3600&condition_shape=count_over_window&field=&threshold=&direction=above&count=1&action_url=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }

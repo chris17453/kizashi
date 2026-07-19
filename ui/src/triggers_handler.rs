@@ -6,9 +6,10 @@ use crate::ingestion_stats_client::DEFAULT_PAGE_SIZE;
 use crate::session_guard::require_session;
 use crate::{AppState, TriggerSummary};
 use askama::Template;
-use axum::extract::{Query, State};
+use axum::extract::{Form, Query, State};
 use axum::http::HeaderMap;
-use axum::response::{Html, IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Redirect, Response};
+use common::{ThresholdDirection, TriggerCondition, TriggerDefinition};
 
 fn default_page() -> i64 {
     0
@@ -27,7 +28,9 @@ struct TriggersTemplate {
     triggers: Vec<TriggerSummary>,
     page: i64,
     has_more: bool,
+    can_write: bool,
     error: Option<String>,
+    form_error: Option<String>,
 }
 
 pub async fn get_triggers(
@@ -39,6 +42,7 @@ pub async fn get_triggers(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let can_write = session.role.at_least(common::Role::Operator);
 
     let page = query.page.max(0);
     match state
@@ -52,7 +56,9 @@ pub async fn get_triggers(
                 triggers: result.triggers,
                 page,
                 has_more: result.has_more,
+                can_write,
                 error: None,
+                form_error: None,
             }
             .render()
             .unwrap(),
@@ -64,11 +70,151 @@ pub async fn get_triggers(
                 triggers: vec![],
                 page,
                 has_more: false,
+                can_write,
                 error: Some(e.to_string()),
+                form_error: None,
             }
             .render()
             .unwrap(),
         )
         .into_response(),
+    }
+}
+
+/// The create form only ever asks for one condition shape at a time — `condition_shape`
+/// picks which of the two field groups below actually gets used; the other group's inputs
+/// are ignored even if the browser submitted them (e.g. left at their defaults).
+/// Numeric/optional fields arrive as empty strings (not absent keys) from an HTML form that
+/// shows both condition shapes' inputs at once with the unused ones left blank — `Option<u32>`
+/// etc. would reject `""` as an invalid number, so every field the browser might leave blank
+/// is a plain `String`/`Option<String>`, parsed by hand in `build_condition`.
+#[derive(Debug, serde::Deserialize)]
+pub struct PostTriggerForm {
+    name: String,
+    event_type_match: String,
+    window_seconds: i64,
+    condition_shape: String,
+    count: String,
+    field: String,
+    threshold: String,
+    direction: Option<String>,
+    action_url: Option<String>,
+}
+
+fn build_condition(form: &PostTriggerForm) -> Result<TriggerCondition, &'static str> {
+    match form.condition_shape.as_str() {
+        "count_over_window" => {
+            let count: u32 = form
+                .count
+                .trim()
+                .parse()
+                .map_err(|_| "count is required for this condition shape")?;
+            Ok(TriggerCondition::CountOverWindow { count })
+        }
+        "threshold_over_window" => {
+            let field = form.field.trim();
+            if field.is_empty() {
+                return Err("field is required for this condition shape");
+            }
+            let threshold: f64 = form
+                .threshold
+                .trim()
+                .parse()
+                .map_err(|_| "threshold is required for this condition shape")?;
+            let direction = match form.direction.as_deref() {
+                Some("below") => ThresholdDirection::Below,
+                _ => ThresholdDirection::Above,
+            };
+            Ok(TriggerCondition::ThresholdOverWindow {
+                field: field.to_string(),
+                threshold,
+                direction,
+            })
+        }
+        _ => Err("unknown condition shape"),
+    }
+}
+
+pub async fn post_trigger(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<PostTriggerForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    let can_write = session.role.at_least(common::Role::Operator);
+    if !can_write {
+        return axum::http::StatusCode::FORBIDDEN.into_response();
+    }
+
+    let condition = match build_condition(&form) {
+        Ok(c) => c,
+        Err(msg) => {
+            let result = state
+                .triggers_client
+                .list_triggers(session.tenant_id, DEFAULT_PAGE_SIZE, 0)
+                .await
+                .unwrap_or(crate::TriggersPage { triggers: vec![], has_more: false });
+            return Html(
+                TriggersTemplate {
+                    show_nav: true,
+                    triggers: result.triggers,
+                    page: 0,
+                    has_more: result.has_more,
+                    can_write,
+                    error: None,
+                    form_error: Some(msg.to_string()),
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response();
+        }
+    };
+
+    let actions = match form.action_url.filter(|u| !u.is_empty()) {
+        Some(url) => vec![common::ActionRef {
+            action_type: common::ActionType::Webhook,
+            config: serde_json::json!({"url": url}),
+        }],
+        None => vec![],
+    };
+
+    let trigger = TriggerDefinition {
+        id: uuid::Uuid::new_v4(),
+        tenant_id: session.tenant_id,
+        name: form.name,
+        event_type_match: form.event_type_match,
+        condition,
+        window_seconds: form.window_seconds,
+        actions,
+        enabled: true,
+    };
+
+    match state.triggers_client.create_trigger(session.role, trigger).await {
+        Ok(_) => Redirect::to("/triggers").into_response(),
+        Err(e) => {
+            let result = state
+                .triggers_client
+                .list_triggers(session.tenant_id, DEFAULT_PAGE_SIZE, 0)
+                .await
+                .unwrap_or(crate::TriggersPage { triggers: vec![], has_more: false });
+            Html(
+                TriggersTemplate {
+                    show_nav: true,
+                    triggers: result.triggers,
+                    page: 0,
+                    has_more: result.has_more,
+                    can_write,
+                    error: None,
+                    form_error: Some(e.to_string()),
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response()
+        }
     }
 }

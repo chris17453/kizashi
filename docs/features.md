@@ -1611,3 +1611,46 @@ architectural decision.
   `kzsh_...` API key was minted and pre-filled in the rendered HTML, screenshotted both pages.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [0019](adr/0019-per-tenant-analysis-configuration-ai-prompt.md)
+
+## [2026-07-19] feature/0015-ai-analysis-config — Add Trigger creation to the Console UI
+- **Type:** feature
+- **Branch:** feature/0015-ai-analysis-config
+- **Summary:** Closes task "Support dynamic event-type creation with configurable logic/
+  flags": `/triggers` was read-only in the Console UI — the entire mechanism that decides
+  what counts as an Event and what action fires (the core of the whole platform) was only
+  reachable by hand-crafting a `POST /v1/trigger-definitions` request, which the old
+  empty-state literally instructed operators to do. Adds `TriggersClient::create_trigger`
+  (`ui/src/triggers_client.rs`) and `POST /triggers` (`ui/src/triggers_handler.rs`) backing a
+  new create form on the Triggers page: name, event type to match (with a direct link to the
+  new AI Analysis page so operators can see what keys the AI actually returns), window,
+  either-or condition fields for `CountOverWindow`/`ThresholdOverWindow` (both shown at once,
+  server-side parsing picks the right one based on a `condition_shape` select — no JS,
+  ADR-0014), and an optional webhook URL for the one functional action type
+  (`HttpActionDispatcher`, ADR-0007, only ever reads `config.url` regardless of
+  `action_type`). Gated behind `can_write` (RBAC v1, Operator+) with a server-side 403 on
+  `POST`, matching every other write surface in this UI.
+- **Tests:** `cargo test -p kizashi-ui` — 145 passed (10 new: 2 `triggers_client_test` HTTP
+  tests against a real stub server for create + role-rejection, 5 new `triggers_handler_test`
+  tests covering both condition shapes, a missing-required-field re-render with an inline
+  error, and a Viewer-role 403; every existing triggers test still passes unmodified since
+  the default test session role already satisfies `can_write`). This surfaced and fixed a
+  real bug during TDD: the form struct originally typed `count`/`threshold` as
+  `Option<u32>`/`Option<f64>`, which axum's `Form` extractor rejects with a 422 the moment a
+  real HTML form submits an empty string for an unused numeric field (as browsers always do
+  for a visible-but-blank `<input type="number">`) — not a missing key, which is what
+  `Option<T>` actually handles. Fixed by typing those fields as plain `String` and parsing by
+  hand in `build_condition`, trimming and treating empty/unparsable as the "this shape wasn't
+  selected" case. Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` clean, `cargo test --workspace
+  --all-features` all green (0 failures, verified against a throwaway local `mssql`
+  container for Fabric), `cargo audit` clean (same two pre-existing allow-listed
+  `unmaintained` advisories, no new ones). Live-verified against the running docker-compose
+  stack: rebuilt/redeployed `kizashi-ui`, submitted a real trigger through the actual HTML
+  form, and confirmed via direct Postgres queries that it landed in
+  `config_admin_service.trigger_definitions` *and* synced into
+  `trigger_engine.trigger_definitions` within about a second (ADR-0018's sync pipeline,
+  exercised end-to-end from the UI for the first time) — screenshotted the page showing the
+  form and the newly created row.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — reuses ADR-0007's action config shape and ADR-0018's sync pipeline; no new
+  architectural decision.

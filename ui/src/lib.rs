@@ -80,7 +80,7 @@ pub use record_journey_handler::get_record_journey;
 pub use reports_handler::get_reports;
 pub use root_handler::get_root;
 pub use static_assets::get_charts_js;
-pub use triggers_handler::get_triggers;
+pub use triggers_handler::{get_triggers, post_trigger};
 
 use axum::routing::get;
 use axum::Router;
@@ -115,7 +115,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/login", get(get_login).post(post_login))
         .route("/logout", get(get_logout))
         .route("/events", get(get_events))
-        .route("/triggers", get(get_triggers))
+        .route("/triggers", get(get_triggers).post(post_trigger))
         .route("/health", get(get_health))
         .route("/pipeline", get(get_pipeline))
         .route("/overview", get(get_overview))
