@@ -99,6 +99,49 @@ pub struct PostTriggerForm {
     threshold: String,
     direction: Option<String>,
     action_url: Option<String>,
+    // ADR-0027: a correlated trigger's legs — up to 3 (event_type, min_count) pairs. A form
+    // can't submit a variable-length list without JS, so this is a fixed small number of rows;
+    // any row with a blank event_type is skipped, not an error. `#[serde(default)]` so
+    // existing/hand-built form submissions that predate this shape still deserialize.
+    #[serde(default)]
+    correlated_event_type_1: String,
+    #[serde(default)]
+    correlated_min_count_1: String,
+    #[serde(default)]
+    correlated_event_type_2: String,
+    #[serde(default)]
+    correlated_min_count_2: String,
+    #[serde(default)]
+    correlated_event_type_3: String,
+    #[serde(default)]
+    correlated_min_count_3: String,
+}
+
+fn build_correlated_conditions(
+    form: &PostTriggerForm,
+) -> Result<Vec<common::CorrelatedCondition>, &'static str> {
+    let rows = [
+        (&form.correlated_event_type_1, &form.correlated_min_count_1),
+        (&form.correlated_event_type_2, &form.correlated_min_count_2),
+        (&form.correlated_event_type_3, &form.correlated_min_count_3),
+    ];
+    let mut conditions = Vec::new();
+    for (event_type, min_count) in rows {
+        let event_type = event_type.trim();
+        if event_type.is_empty() {
+            continue;
+        }
+        let min_count: u32 = min_count
+            .trim()
+            .parse()
+            .map_err(|_| "each correlated row with an event type needs a valid min count")?;
+        conditions
+            .push(common::CorrelatedCondition { event_type: event_type.to_string(), min_count });
+    }
+    if conditions.is_empty() {
+        return Err("at least one correlated event type/min count row is required");
+    }
+    Ok(conditions)
 }
 
 fn build_condition(form: &PostTriggerForm) -> Result<TriggerCondition, &'static str> {
@@ -131,6 +174,9 @@ fn build_condition(form: &PostTriggerForm) -> Result<TriggerCondition, &'static 
                 direction,
             })
         }
+        "correlated_over_window" => Ok(TriggerCondition::CorrelatedOverWindow {
+            conditions: build_correlated_conditions(form)?,
+        }),
         _ => Err("unknown condition shape"),
     }
 }
@@ -182,11 +228,19 @@ pub async fn post_trigger(
         None => vec![],
     };
 
+    // ADR-0027: a CorrelatedOverWindow trigger's `event_type_match` is just a display/audit
+    // label, set to its first listed condition's event type — lookup for that shape goes
+    // through the correlated `conditions` list, not this field.
+    let event_type_match = match &condition {
+        TriggerCondition::CorrelatedOverWindow { conditions } => conditions[0].event_type.clone(),
+        _ => form.event_type_match,
+    };
+
     let trigger = TriggerDefinition {
         id: uuid::Uuid::new_v4(),
         tenant_id: session.tenant_id,
         name: form.name,
-        event_type_match: form.event_type_match,
+        event_type_match,
         condition,
         window_seconds: form.window_seconds,
         actions,

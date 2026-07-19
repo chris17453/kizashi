@@ -12,8 +12,8 @@
       <label for="name">Name</label>
       <input type="text" id="name" name="name" placeholder="urgent-ticket-spike" required>
 
-      <label for="event_type_match">Event type to match</label>
-      <input type="text" id="event_type_match" name="event_type_match" placeholder="e.g. priority_score" required>
+      <label for="event_type_match">Event type to match (not used for "combine multiple sources")</label>
+      <input type="text" id="event_type_match" name="event_type_match" placeholder="e.g. priority_score">
 
       <label for="window_seconds">Window (seconds)</label>
       <input type="number" id="window_seconds" name="window_seconds" value="3600" min="1" required>
@@ -22,6 +22,7 @@
       <select id="condition_shape" name="condition_shape">
         <option value="threshold_over_window">Field crosses a threshold</option>
         <option value="count_over_window">At least N matching events in the window</option>
+        <option value="correlated_over_window">Combine multiple sources (e.g. email + chat)</option>
       </select>
 
       <label for="field">Field name (for "crosses a threshold")</label>
@@ -37,6 +38,21 @@
       <label for="count">Count (for "at least N matching events")</label>
       <input type="number" id="count" name="count" min="1" placeholder="3">
 
+      <label>Correlated sources (for "combine multiple sources") — every event type listed
+        needs its own minimum count within the window before this trigger fires</label>
+      <div class="form-row">
+        <input type="text" name="correlated_event_type_1" placeholder="event type, e.g. sentiment_drop_email">
+        <input type="number" name="correlated_min_count_1" min="1" placeholder="min count" style="width:6em">
+      </div>
+      <div class="form-row">
+        <input type="text" name="correlated_event_type_2" placeholder="event type, e.g. unresolved_chat">
+        <input type="number" name="correlated_min_count_2" min="1" placeholder="min count" style="width:6em">
+      </div>
+      <div class="form-row">
+        <input type="text" name="correlated_event_type_3" placeholder="event type (optional third source)">
+        <input type="number" name="correlated_min_count_3" min="1" placeholder="min count" style="width:6em">
+      </div>
+
       <label for="action_url">Webhook URL to call when this fires (optional)</label>
       <input type="text" id="action_url" name="action_url" placeholder="https://...">
 
@@ -48,8 +64,11 @@
     <ul>
       <li>"Event type to match" must be a key the AI/ML backend actually returns — see
         <a href="/analysis-config">AI Analysis</a> to see or change what it looks for.</li>
-      <li>Fill in either the threshold fields or the count field, matching whichever
-        Condition you selected above — the other set is ignored.</li>
+      <li>Fill in the field group matching whichever Condition you selected above — the
+        others are ignored.</li>
+      <li>"Combine multiple sources" fires only once every listed event type has reached its
+        own minimum count for the same entity within the window — e.g. a negative-sentiment
+        email and an unresolved chat message from the same customer.</li>
       <li>A firing trigger creates an Event, visible on the <a href="/events">Events</a> page
         and traceable back to its source records via <a href="/data">Data &rarr; record
         journey</a>.</li>
