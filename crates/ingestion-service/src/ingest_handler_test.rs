@@ -10,7 +10,10 @@ use axum::Router;
 use tower::ServiceExt;
 
 fn router(state: IngestState) -> Router {
-    Router::new().route("/v1/records", post(ingest_record)).with_state(state)
+    Router::new()
+        .route("/v1/records", post(ingest_record))
+        .route("/v1/records/reprocess", post(reprocess_records))
+        .with_state(state)
 }
 
 fn valid_body() -> serde_json::Value {
@@ -136,4 +139,81 @@ async fn publish_failure_still_returns_201_since_record_is_durably_stored() {
 
     assert_eq!(response.status(), StatusCode::CREATED);
     assert_eq!(repository.records.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn reprocess_republishes_record_ingested_for_unnormalized_records_only() {
+    let repository = Arc::new(InMemoryRawRecordRepository::default());
+    let publisher = Arc::new(InMemoryEventPublisher::default());
+    let tenant_id = Uuid::new_v4();
+    let unnormalized =
+        RawRecord::new("imap", SourceType::Message, tenant_id, serde_json::json!({}));
+    let mut normalized =
+        RawRecord::new("imap", SourceType::Message, tenant_id, serde_json::json!({}));
+    normalized.normalized_payload = Some(serde_json::json!({"subject": "hi"}));
+    repository.records.lock().unwrap().push(unnormalized.clone());
+    repository.records.lock().unwrap().push(normalized);
+    let state = IngestState { repository, publisher: publisher.clone() };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/records/reprocess")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["republished"], serde_json::json!(1));
+    assert_eq!(publisher.published.lock().unwrap().len(), 1);
+    assert_eq!(publisher.published.lock().unwrap()[0].id, unnormalized.id);
+}
+
+#[tokio::test]
+async fn reprocess_requires_tenant_header() {
+    let state = IngestState {
+        repository: Arc::new(InMemoryRawRecordRepository::default()),
+        publisher: Arc::new(InMemoryEventPublisher::default()),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/records/reprocess")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn reprocess_returns_500_on_search_failure() {
+    let state = IngestState {
+        repository: Arc::new(FailingRawRecordRepository),
+        publisher: Arc::new(InMemoryEventPublisher::default()),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/records/reprocess")
+                .header("x-tenant-id", Uuid::new_v4().to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }

@@ -2941,3 +2941,36 @@ architectural decision.
 - **ADR:** n/a — a straightforward read-path addition to an already-established query/proxy
   pattern (`EventQueryRepository` → dashboard-api → query-gateway's generic proxy → Console UI
   client), no new architectural decision
+
+## [2026-07-19] feature/0044-reprocess-unnormalized-records — Reprocess endpoint for records ingested before a mapping existed
+- **Type:** feature
+- **Summary:** A real gap surfaced by the watkinslabs email agent: 631 real messages were
+  ingested before a `NormalizationMapping` existed for tenant `515350d9-...`'s `message` source
+  type, so Normalization Service correctly (by design — `ProcessOutcome::NoMappingConfigured`)
+  skipped and acked every one of them. Once the mapping was created, those 631 records had no
+  way to ever get normalized/analyzed/trigger-evaluated — a real, permanent backlog with no
+  recovery path. Added `normalized: Option<bool>` to `RawRecordRepository`'s search filter
+  (`Some(false)` finds records with no `normalized_payload`), exposed via the existing
+  `/v1/records/search` endpoint, and a new `POST /v1/records/reprocess` endpoint (tenant-scoped
+  via header, optional `connector_id`, bounded to 500 records per call) that finds unnormalized
+  records and **republishes `record.ingested`** for each — deliberately not calling
+  normalization logic directly, so Normalization Service's existing queue consumer picks them
+  up exactly like a fresh poll would and the rest of the pipeline (analysis, triggers) runs
+  unchanged, with zero new code in Normalization/Analysis/Trigger Engine.
+- **Tests:** `cargo test -p ingestion-service --lib` — 65 passed (4 new: `normalized=false`
+  filter finds only unnormalized records, reprocess republishes only unnormalized records for
+  the caller's tenant, requires tenant header, 500 on repository failure). `cargo test
+  --workspace --all-features` (full real-infra stack) — every test binary passed, 0 failed.
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt
+  --all --check` — clean. `cargo deny check` / `cargo audit` — clean, same 3 pre-existing
+  allow-listed advisories.
+- **Live verification:** (to be run against the real `watkinslabs` tenant's 631-message backlog
+  after this merges and `ingestion-service` is rebuilt/redeployed.)
+- **Known gap, not closed by this PR:** no Console UI button for this yet — it's an
+  API-only admin action for now (`POST /v1/records/reprocess` directly against
+  ingestion-service). A UI trigger (likely on the Data page) is a reasonable follow-up once
+  this is proven against the real backlog.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — a bounded, tenant-scoped extension of the existing search filter plus a thin
+  republish handler; no new architectural decision (deliberately reuses the existing
+  `record.ingested` → Normalization Service pipeline rather than adding a parallel one)
