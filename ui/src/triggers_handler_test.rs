@@ -377,6 +377,105 @@ async fn post_rerenders_with_a_form_error_when_a_correlated_row_has_an_invalid_m
 }
 
 #[tokio::test]
+async fn test_query_params_render_a_would_fire_result() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Viewer).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    *triggers_client.test_result.lock().unwrap() =
+        Some(crate::TriggerTestResult { would_fire: true, contributing_record_count: 2 });
+    let mut state = state;
+    state.triggers_client = triggers_client;
+    let trigger_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/triggers?test_trigger_id={trigger_id}&test_group_key=cust-1"))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("cust-1"));
+    assert!(body.contains("would fire"));
+    assert!(body.contains("2 contributing record"));
+}
+
+#[tokio::test]
+async fn test_query_params_render_a_would_not_fire_result() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Viewer).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    *triggers_client.test_result.lock().unwrap() =
+        Some(crate::TriggerTestResult { would_fire: false, contributing_record_count: 0 });
+    let mut state = state;
+    state.triggers_client = triggers_client;
+    let trigger_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/triggers?test_trigger_id={trigger_id}&test_group_key=cust-2"))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("would not fire"));
+}
+
+#[tokio::test]
+async fn no_test_result_shown_without_test_query_params() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("would fire"));
+    assert!(!body.contains("would not fire"));
+}
+
+#[tokio::test]
+async fn a_backend_failure_testing_a_trigger_does_not_break_the_page() {
+    let (mut state, session_id) = state_with_session().await;
+    state.triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::FailingTriggersClient);
+    let trigger_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/triggers?test_trigger_id={trigger_id}&test_group_key=cust-1"))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn post_rejects_a_viewer_role() {
     let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Viewer).await;
 

@@ -101,7 +101,10 @@ async fn main() {
         .await
         .expect("failed to bind queue");
 
-    let api_state = ApiState { trigger_repository: deps.trigger_repository.clone() };
+    let api_state = ApiState {
+        trigger_repository: deps.trigger_repository.clone(),
+        signal_repository: deps.signal_repository.clone(),
+    };
     let app = health_router().merge(api_router(api_state));
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "trigger-engine API listening");

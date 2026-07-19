@@ -86,7 +86,8 @@ pub use saved_search_queries_client::{
 };
 pub use session::{InMemorySessionStore, Session, SessionStore};
 pub use triggers_client::{
-    HttpTriggersClient, TriggerSummary, TriggersClient, TriggersClientError, TriggersPage,
+    HttpTriggersClient, TriggerSummary, TriggerTestResult, TriggersClient, TriggersClientError,
+    TriggersPage,
 };
 pub use users_client::{HttpUsersClient, UiUser, UsersClient, UsersClientError};
 

@@ -2668,3 +2668,42 @@ architectural decision.
 - **ADR:** [ADR-0029](../docs/adr/0029-saved-data-search-queries.md) — scopes "saved
   queries/views" out of the larger deferred Reporting gap and places it in
   `config-admin-service`
+
+## [2026-07-19] feature/0037-trigger-dry-run-test — Trigger dry-run test endpoint (spec §7)
+- **Type:** feature
+- **Branch:** feature/0037-trigger-dry-run-test
+- **Summary:** Closes a real gap an audit against spec §7 found: no way to validate a trigger
+  before trusting it in production — the only prior feedback loop was enabling it and waiting
+  for real traffic, silently never firing if an `event_type` string or `min_count` was wrong.
+  Added ADR-0030 and `POST /v1/triggers/:id/test` (`trigger-engine`): given a `group_key`,
+  answers "would this trigger fire right now" by running the exact same `evaluate_trigger`
+  function the live `record.analyzed` path uses (extracted to be reusable, taking
+  `&Arc<dyn SignalRepository>` directly instead of the full `TriggerDeps` bundle) against real,
+  already-recorded signal history — never writes an `Event`, never runs an action, genuinely a
+  dry run rather than a reimplementation that could drift from production behavior. No
+  `require_operator` gate — reading whether a trigger would fire isn't a write path. Console UI:
+  `/triggers` gains a "Test" form per row (GET, not POST — a dry run has no side effects, so
+  it's shareable/bookmarkable) showing "would fire: yes/no" plus the contributing record count.
+- **Tests:** `cargo test -p trigger-engine --lib` — 38 passed (5 new: would-fire-true when
+  signals already satisfy the condition, would-fire-false otherwise, tenant-mismatch returns
+  404, missing tenant header returns 401, plus the existing `get_trigger` tests unaffected by
+  the `evaluate_trigger` signature refactor). `cargo test -p kizashi-ui --lib` — 224 passed (6
+  new: HTTP client round-trip against a real stub trigger-engine server, and handler tests for
+  would-fire/would-not-fire rendering, no-result-without-query-params, and backend-failure
+  doesn't break the page). `cargo test --workspace --all-features` (full real-infra stack) —
+  109 test binaries, all passed, 0 failed. `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny
+  check` — clean. `cargo audit` — same 3 pre-existing allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `trigger-engine` and `kizashi-ui`
+  containers. Created a real `count_over_window` trigger via `config-admin-service`'s API,
+  confirmed the dry-run endpoint correctly reported `would_fire: false` with zero signals,
+  published two real `record.analyzed` messages over RabbitMQ for the same entity, confirmed
+  the dry run then correctly reported `would_fire: true` with `contributing_record_count: 2` —
+  while separately confirming via ClickHouse that no *extra* `Event` was created by the dry-run
+  calls themselves (the one Event present came from the real live pipeline processing the
+  published records, an entirely separate mechanism unaffected by testing). Confirmed the same
+  result renders correctly through the actual Console UI `/triggers` page's "Test" form.
+  Cleaned up all test trigger/signal/event data afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0030](../docs/adr/0030-trigger-dry-run-test-endpoint.md) — a read-only
+  validation endpoint reusing existing evaluation logic, no schema change

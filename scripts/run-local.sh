@@ -160,7 +160,8 @@ start kizashi-ui kizashi-ui \
   INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT" \
   INGESTION_GATEWAY_URL="http://localhost:$INGESTION_GATEWAY_PORT" \
   INGESTION_GATEWAY_PUBLIC_URL="http://localhost:$INGESTION_GATEWAY_PORT" \
-  ACTION_EXECUTOR_URL="http://localhost:$ACTION_EXECUTOR_PORT"
+  ACTION_EXECUTOR_URL="http://localhost:$ACTION_EXECUTOR_PORT" \
+  TRIGGER_ENGINE_URL="http://localhost:$TRIGGER_ENGINE_PORT"
 sleep 2
 
 echo ""

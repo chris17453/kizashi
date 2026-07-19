@@ -31,6 +31,8 @@ async fn main() {
         std::env::var("RETENTION_SERVICE_URL").expect("RETENTION_SERVICE_URL must be set");
     let egress_gateway_url =
         std::env::var("EGRESS_GATEWAY_URL").expect("EGRESS_GATEWAY_URL must be set");
+    let trigger_engine_url =
+        std::env::var("TRIGGER_ENGINE_URL").expect("TRIGGER_ENGINE_URL must be set");
 
     let client = reqwest::Client::new();
     let state = AppState {
@@ -40,6 +42,7 @@ async fn main() {
         triggers_client: Arc::new(HttpTriggersClient::new(
             client.clone(),
             config_admin_service_url.clone(),
+            trigger_engine_url,
         )),
         health_client: Arc::new(HttpHealthClient::new(client.clone(), observability_url.clone())),
         agents_client: Arc::new(HttpAgentsClient::new(

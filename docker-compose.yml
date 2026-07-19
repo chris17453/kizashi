@@ -310,6 +310,7 @@ services:
       ACTION_EXECUTOR_URL: http://action-executor:8080
       RETENTION_SERVICE_URL: http://retention-service:8080
       EGRESS_GATEWAY_URL: http://egress-gateway:8080
+      TRIGGER_ENGINE_URL: http://trigger-engine:8080
     ports: ["8093:8080"]
     depends_on:
       auth-service: { condition: service_healthy }
@@ -321,6 +322,7 @@ services:
       action-executor: { condition: service_healthy }
       retention-service: { condition: service_healthy }
       egress-gateway: { condition: service_healthy }
+      trigger-engine: { condition: service_healthy }
     healthcheck: *healthz
 
   # --- Connectors --------------------------------------------------------------------------

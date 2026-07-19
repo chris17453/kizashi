@@ -3,6 +3,12 @@
 <h1>Triggers</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 {% if let Some(e) = form_error %}<p class="error">{{ e }}</p>{% endif %}
+{% if let Some(r) = test_result %}
+<p class="{% if r.would_fire %}status-up{% else %}status-down{% endif %}">
+  Test for entity "{{ r.group_key }}": would {% if !r.would_fire %}not {% endif %}fire
+  ({{ r.contributing_record_count }} contributing record{% if r.contributing_record_count != 1 %}s{% endif %} found).
+</p>
+{% endif %}
 
 {% if can_write %}
 <div class="form-row">
@@ -87,7 +93,7 @@
 {% else %}
 <table>
   <thead>
-    <tr><th>Name</th><th>Event Type Match</th><th>Enabled</th><th></th></tr>
+    <tr><th>Name</th><th>Event Type Match</th><th>Enabled</th><th>Test</th><th></th></tr>
   </thead>
   <tbody>
     {% for trigger in triggers %}
@@ -96,6 +102,13 @@
       <td>{{ trigger.event_type_match }}</td>
       <td class="status-{% if trigger.enabled %}up{% else %}down{% endif %}">
         {% if trigger.enabled %}enabled{% else %}disabled{% endif %}
+      </td>
+      <td>
+        <form class="inline" method="get" action="/triggers" style="display:inline">
+          <input type="hidden" name="test_trigger_id" value="{{ trigger.id }}">
+          <input type="text" name="test_group_key" placeholder="entity, e.g. cust-42" style="width:9em" required>
+          <button type="submit" class="btn">Test</button>
+        </form>
       </td>
       <td><a href="/audit-log/config/{{ trigger.id }}">History</a></td>
     </tr>
