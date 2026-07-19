@@ -2,6 +2,22 @@
 {% block content %}
 <h1>Events</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if !chart_bars.is_empty() %}
+<div class="panel" style="margin-bottom: 1.5rem;">
+  <h2>Events over the last 30 days</h2>
+  <svg viewBox="0 0 {{ chart_bars.len() * 24 }} 110" style="width: 100%; max-height: 140px;" role="img" aria-label="Daily event counts over the last 30 days">
+    {% for bar in chart_bars %}
+    <g>
+      <title>{{ bar.date }}: {{ bar.count }} event{% if bar.count != 1 %}s{% endif %}</title>
+      <rect x="{{ loop.index0 * 24 + 4 }}" y="{{ 100 - bar.height_pct }}" width="16" height="{{ bar.height_pct.max(2) }}" fill="var(--accent, #3b82f6)"></rect>
+      <text x="{{ loop.index0 * 24 + 12 }}" y="108" font-size="7" text-anchor="middle" fill="currentColor">{{ bar.count }}</text>
+    </g>
+    {% endfor %}
+  </svg>
+</div>
+{% endif %}
+
 {% if events.is_empty() && page == 0 && !has_more %}
 <div class="empty-state">
   <div class="empty-icon">&#9672;</div>

@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0043         |
+| feature       | `feature/` | 0044         |
 | fix           | `fix/`     | 0005         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -72,4 +72,5 @@ manually created branches.
 | 0039 | `feature/0039-ai-provider-config` | feature | 2026-07-19 | merged | #48 | |
 | 0040 | `feature/0040-idempotent-ingestion-dedup` | feature | 2026-07-19 | merged | #49 | |
 | 0041 | `feature/0041-imap-since-date-narrowing` | feature | 2026-07-19 | merged | #50 | |
-| 0042 | `feature/0042-imap-uid-cursor` | feature | 2026-07-19 | open | pending | |
+| 0042 | `feature/0042-imap-uid-cursor` | feature | 2026-07-19 | merged | #51 | |
+| 0043 | `feature/0043-events-over-time-chart` | feature | 2026-07-19 | open | pending | |

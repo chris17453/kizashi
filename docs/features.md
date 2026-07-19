@@ -2898,3 +2898,46 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0034](../docs/adr/0034-imap-uid-cursor-chunked-backfill.md) — supersedes
   ADR-0033
+
+## [2026-07-19] feature/0043-events-over-time-chart — Events-over-time chart on the Events page
+- **Type:** feature
+- **Summary:** The Events page was a flat paginated table with no trend visibility at all — a
+  real gap surfaced by a genuine "show me events on a dashboard over time" use case. Added
+  `EventQueryRepository::count_by_day(tenant_id, event_type, since, until)` (ClickHouse
+  `toDate(occurred_at)`/`GROUP BY`), a new `GET /v1/events/daily-counts` endpoint on
+  dashboard-api, proxied through query-gateway (generic `proxy_get`, no new proxy logic
+  needed), a `EventsClient::daily_counts` method on the Console UI side, and a plain inline SVG
+  bar chart on the Events page (last 30 days) — server-rendered, no JS, consistent with
+  ADR-0014's no-JS-by-default stance. A daily-counts failure degrades to an empty chart, not a
+  broken page — the table remains the primary content. **Two real bugs found and fixed during
+  live verification, not caught by unit tests alone**: (1) ClickHouse's JSONEachRow format
+  serializes `UInt64` (what `count()` returns) as a *quoted JSON string*, not a number —
+  deserializing straight into `u64` failed with "invalid type: string \"2\", expected u64"
+  against the real deployed stack; fixed by deserializing as `String` and parsing. (2) The SVG
+  used `preserveAspectRatio="none"` to stretch to a fixed container size, which non-uniformly
+  distorted the count-label text into illegible mirrored-looking glyphs — only visible in an
+  actual screenshot, not in raw HTML; fixed by dropping the aspect-ratio override and letting
+  the SVG size itself from its own viewBox.
+- **Tests:** `cargo test -p dashboard-api --lib` — 25 passed (7 new: daily counts bucket by
+  date, scoped to tenant/event_type, exclude out-of-range events, handler requires tenant
+  header, returns buckets for the caller, 500 on repository failure, regression test for
+  ClickHouse's stringified UInt64 count). `cargo test -p kizashi-ui --lib events_client` — 5
+  passed (1 new: HTTP client gets daily counts against a real stub server). `cargo test -p
+  kizashi-ui --lib events_handler` — 8 passed (2 new: renders a bar per day with events, a
+  daily-counts failure doesn't break the rest of the page). `cargo test --workspace
+  --all-features` (full real-infra stack) — every test binary passed, 0 failed. `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check`
+  — clean. `cargo deny check` / `cargo audit` — clean, same 3 pre-existing allow-listed
+  advisories.
+- **Live verification:** rebuilt and redeployed the real `dashboard-api`, `query-gateway`, and
+  `kizashi-ui` containers. Inserted real test `Event` rows directly into the actual running
+  ClickHouse for the `acme` demo tenant, hit `/v1/events/daily-counts` directly (caught bug #1
+  above), fixed and redeployed, then logged into the real Console UI and fetched/screenshotted
+  the actual rendered Events page via headless Chrome (caught bug #2 above — the raw HTML alone
+  wouldn't have shown the distorted text), fixed, rebuilt, redeployed, and re-screenshotted to
+  confirm the chart renders correctly with legible per-day counts and proportional bar heights.
+  Cleaned up the test event rows afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — a straightforward read-path addition to an already-established query/proxy
+  pattern (`EventQueryRepository` → dashboard-api → query-gateway's generic proxy → Console UI
+  client), no new architectural decision

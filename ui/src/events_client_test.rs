@@ -9,6 +9,7 @@ use std::sync::Mutex;
 pub struct InMemoryEventsClient {
     pub events: Mutex<Vec<EventSummary>>,
     pub has_more: Mutex<bool>,
+    pub daily_counts: Mutex<Vec<DailyCount>>,
 }
 
 #[async_trait]
@@ -32,6 +33,15 @@ impl EventsClient for InMemoryEventsClient {
     ) -> Result<Vec<EventSummary>, EventsClientError> {
         Ok(self.events.lock().unwrap().clone())
     }
+
+    async fn daily_counts(
+        &self,
+        _bearer_token: &str,
+        _since: chrono::DateTime<chrono::Utc>,
+        _until: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<DailyCount>, EventsClientError> {
+        Ok(self.daily_counts.lock().unwrap().clone())
+    }
 }
 
 pub struct FailingEventsClient;
@@ -54,6 +64,15 @@ impl EventsClient for FailingEventsClient {
     ) -> Result<Vec<EventSummary>, EventsClientError> {
         Err(EventsClientError::Unreachable("simulated failure".to_string()))
     }
+
+    async fn daily_counts(
+        &self,
+        _bearer_token: &str,
+        _since: chrono::DateTime<chrono::Utc>,
+        _until: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<DailyCount>, EventsClientError> {
+        Err(EventsClientError::Unreachable("simulated failure".to_string()))
+    }
 }
 
 async fn spawn_stub_server(expected_token: &'static str) -> String {
@@ -74,8 +93,16 @@ async fn spawn_stub_server(expected_token: &'static str) -> String {
         }))
         .into_response()
     }
+    async fn daily_counts_handler() -> axum::response::Response {
+        Json(serde_json::json!({
+            "counts": [{"date": "2026-07-18", "count": 3}]
+        }))
+        .into_response()
+    }
     let _ = expected_token;
-    let app = Router::new().route("/v1/events", get(handler));
+    let app = Router::new()
+        .route("/v1/events", get(handler))
+        .route("/v1/events/daily-counts", get(daily_counts_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -122,4 +149,21 @@ async fn http_client_lists_events_for_a_record_against_a_real_server() {
 
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].event_type, "sentiment_spike");
+}
+
+#[tokio::test]
+async fn http_client_gets_daily_counts_against_a_real_server() {
+    let url = spawn_stub_server("correct-token").await;
+    let client = HttpEventsClient::new(reqwest::Client::new(), url);
+
+    let counts = client
+        .daily_counts(
+            "correct-token",
+            chrono::Utc::now() - chrono::Duration::days(30),
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(counts, vec![DailyCount { date: "2026-07-18".to_string(), count: 3 }]);
 }

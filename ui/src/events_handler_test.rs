@@ -111,6 +111,86 @@ async fn renders_the_events_table_when_signed_in() {
 }
 
 #[tokio::test]
+async fn renders_a_bar_for_each_day_with_events() {
+    let (mut state, session_id) = state_with_session().await;
+    let events_client = InMemoryEventsClient::default();
+    events_client
+        .daily_counts
+        .lock()
+        .unwrap()
+        .push(crate::events_client::DailyCount { date: "2026-07-18".to_string(), count: 5 });
+    state.events_client = Arc::new(events_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("2026-07-18"));
+    assert!(body.contains("<svg"));
+}
+
+#[tokio::test]
+async fn a_daily_counts_failure_does_not_break_the_rest_of_the_page() {
+    let (mut state, session_id) = state_with_session().await;
+    // events_client already succeeds for list_events (InMemoryEventsClient default), but we
+    // want daily_counts specifically to fail — swap in a client whose daily_counts errors
+    // while list_events still succeeds, proving the two are independent.
+    struct EventsOkDailyCountsFailing;
+    #[async_trait::async_trait]
+    impl crate::events_client::EventsClient for EventsOkDailyCountsFailing {
+        async fn list_events(
+            &self,
+            _bearer_token: &str,
+            _limit: u32,
+            _offset: u32,
+        ) -> Result<crate::events_client::EventsPage, crate::events_client::EventsClientError>
+        {
+            Ok(crate::events_client::EventsPage { events: vec![], has_more: false })
+        }
+        async fn list_events_for_record(
+            &self,
+            _bearer_token: &str,
+            _record_id: Uuid,
+        ) -> Result<Vec<EventSummary>, crate::events_client::EventsClientError> {
+            Ok(vec![])
+        }
+        async fn daily_counts(
+            &self,
+            _bearer_token: &str,
+            _since: chrono::DateTime<chrono::Utc>,
+            _until: chrono::DateTime<chrono::Utc>,
+        ) -> Result<Vec<crate::events_client::DailyCount>, crate::events_client::EventsClientError>
+        {
+            Err(crate::events_client::EventsClientError::Unreachable("simulated".to_string()))
+        }
+    }
+    state.events_client = Arc::new(EventsOkDailyCountsFailing);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id) = state_with_session().await;
 

@@ -18,6 +18,13 @@ pub enum QueryError {
     Parse(String),
 }
 
+/// One bucket of the events-over-time chart on the Events page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DailyEventCount {
+    pub date: chrono::NaiveDate,
+    pub count: u64,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct EventFilter {
     pub event_type: Option<String>,
@@ -45,6 +52,16 @@ pub trait EventQueryRepository: Send + Sync {
         filter: &EventFilter,
     ) -> Result<Vec<Event>, QueryError>;
     async fn get_event(&self, tenant_id: Uuid, id: Uuid) -> Result<Option<Event>, QueryError>;
+
+    /// Daily event counts within `[since, until]`, ascending by date, optionally scoped to one
+    /// `event_type` — powers the Events page's over-time chart.
+    async fn count_by_day(
+        &self,
+        tenant_id: Uuid,
+        event_type: Option<&str>,
+        since: DateTime<Utc>,
+        until: DateTime<Utc>,
+    ) -> Result<Vec<DailyEventCount>, QueryError>;
 }
 
 pub struct ClickHouseEventQueryRepository {
@@ -194,6 +211,78 @@ impl EventQueryRepository for ClickHouseEventQueryRepository {
             .run_query(query, &[("tenant_id", tenant_id.to_string()), ("id", id.to_string())])
             .await?;
         rows.into_iter().next().map(Event::try_from).transpose()
+    }
+
+    async fn count_by_day(
+        &self,
+        tenant_id: Uuid,
+        event_type: Option<&str>,
+        since: DateTime<Utc>,
+        until: DateTime<Utc>,
+    ) -> Result<Vec<DailyEventCount>, QueryError> {
+        let mut conditions = vec![
+            "tenant_id = {tenant_id:UUID}".to_string(),
+            "occurred_at >= {since:DateTime64}".to_string(),
+            "occurred_at <= {until:DateTime64}".to_string(),
+        ];
+        let mut params = vec![
+            ("tenant_id".to_string(), tenant_id.to_string()),
+            ("since".to_string(), since.format("%Y-%m-%d %H:%M:%S%.3f").to_string()),
+            ("until".to_string(), until.format("%Y-%m-%d %H:%M:%S%.3f").to_string()),
+        ];
+        if let Some(event_type) = event_type {
+            conditions.push("event_type = {event_type:String}".to_string());
+            params.push(("event_type".to_string(), event_type.to_string()));
+        }
+
+        let query = format!(
+            "SELECT toDate(occurred_at) AS d, count() AS c FROM events WHERE {} GROUP BY d ORDER BY d FORMAT JSONEachRow",
+            conditions.join(" AND "),
+        );
+        let params_ref: Vec<(&str, String)> =
+            params.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+
+        let request = self
+            .client
+            .post(&self.base_url)
+            .query(&[("query", &query)])
+            .header(reqwest::header::CONTENT_LENGTH, "0")
+            .body(Vec::new());
+        let request = params_ref
+            .iter()
+            .fold(request, |req, (k, v)| req.query(&[(format!("param_{k}"), v.clone())]));
+        let response = request.send().await.map_err(|e| QueryError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().await.unwrap_or_default();
+            return Err(QueryError::Rejected(status, body));
+        }
+        let body = response.text().await.map_err(|e| QueryError::Unreachable(e.to_string()))?;
+
+        // ClickHouse's JSONEachRow format serializes UInt64 (what count() returns) as a
+        // quoted JSON string, not a number — JS can't represent a full 64-bit int precisely,
+        // so ClickHouse always quotes it regardless of client. `c` must deserialize from a
+        // string, not u64 directly, or every row here fails to parse (caught live: this threw
+        // `invalid type: string "2", expected u64` against the real deployed stack).
+        #[derive(serde::Deserialize)]
+        struct Row {
+            d: String,
+            c: String,
+        }
+        body.lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| {
+                let row: Row =
+                    serde_json::from_str(line).map_err(|e| QueryError::Parse(e.to_string()))?;
+                let date = chrono::NaiveDate::parse_from_str(&row.d, "%Y-%m-%d")
+                    .map_err(|e| QueryError::Parse(e.to_string()))?;
+                let count: u64 = row
+                    .c
+                    .parse()
+                    .map_err(|e: std::num::ParseIntError| QueryError::Parse(e.to_string()))?;
+                Ok(DailyEventCount { date, count })
+            })
+            .collect()
     }
 }
 
