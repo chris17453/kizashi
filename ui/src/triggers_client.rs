@@ -49,16 +49,37 @@ pub trait TriggersClient: Send + Sync {
         role: Role,
         trigger: TriggerDefinition,
     ) -> Result<TriggerDefinition, TriggersClientError>;
+
+    /// Dry-runs a trigger against real, already-recorded signal history for `group_key`
+    /// (ADR-0030) — calls `trigger-engine` directly, not config-admin-service, since
+    /// trigger-engine is what owns `SignalRepository`/evaluation. No role gate: read-only.
+    async fn test_trigger(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        group_key: &str,
+    ) -> Result<TriggerTestResult, TriggersClientError>;
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct TriggerTestResult {
+    pub would_fire: bool,
+    pub contributing_record_count: usize,
 }
 
 pub struct HttpTriggersClient {
     client: reqwest::Client,
     config_admin_service_url: String,
+    trigger_engine_url: String,
 }
 
 impl HttpTriggersClient {
-    pub fn new(client: reqwest::Client, config_admin_service_url: String) -> Self {
-        Self { client, config_admin_service_url }
+    pub fn new(
+        client: reqwest::Client,
+        config_admin_service_url: String,
+        trigger_engine_url: String,
+    ) -> Self {
+        Self { client, config_admin_service_url, trigger_engine_url }
     }
 }
 
@@ -104,6 +125,27 @@ impl TriggersClient for HttpTriggersClient {
             .header("x-tenant-id", trigger.tenant_id.to_string())
             .header("x-role", role.to_string())
             .json(&trigger)
+            .send()
+            .await
+            .map_err(|e| TriggersClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(TriggersClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| TriggersClientError::Unreachable(e.to_string()))
+    }
+
+    async fn test_trigger(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        group_key: &str,
+    ) -> Result<TriggerTestResult, TriggersClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/triggers/{id}/test", self.trigger_engine_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .json(&serde_json::json!({"group_key": group_key}))
             .send()
             .await
             .map_err(|e| TriggersClientError::Unreachable(e.to_string()))?;

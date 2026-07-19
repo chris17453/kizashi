@@ -1,7 +1,7 @@
 use super::*;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Json};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use common::TriggerDefinition;
 use std::sync::Mutex;
@@ -11,6 +11,7 @@ pub struct InMemoryTriggersClient {
     pub triggers: Mutex<Vec<TriggerSummary>>,
     pub has_more: Mutex<bool>,
     pub created: Mutex<Vec<TriggerDefinition>>,
+    pub test_result: Mutex<Option<TriggerTestResult>>,
 }
 
 #[async_trait]
@@ -38,6 +39,20 @@ impl TriggersClient for InMemoryTriggersClient {
         self.created.lock().unwrap().push(trigger.clone());
         Ok(trigger)
     }
+
+    async fn test_trigger(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+        _group_key: &str,
+    ) -> Result<TriggerTestResult, TriggersClientError> {
+        Ok(self
+            .test_result
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or(TriggerTestResult { would_fire: false, contributing_record_count: 0 }))
+    }
 }
 
 pub struct FailingTriggersClient;
@@ -58,6 +73,15 @@ impl TriggersClient for FailingTriggersClient {
         _role: Role,
         _trigger: TriggerDefinition,
     ) -> Result<TriggerDefinition, TriggersClientError> {
+        Err(TriggersClientError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn test_trigger(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+        _group_key: &str,
+    ) -> Result<TriggerTestResult, TriggersClientError> {
         Err(TriggersClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -100,10 +124,27 @@ async fn spawn_stub_server() -> String {
     format!("http://{addr}")
 }
 
+async fn spawn_test_trigger_engine_stub() -> String {
+    async fn test_handler(headers: HeaderMap) -> axum::response::Response {
+        if headers.get("x-tenant-id").is_none() {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
+        Json(serde_json::json!({"would_fire": true, "contributing_record_count": 3}))
+            .into_response()
+    }
+    let app = Router::new().route("/v1/triggers/:id/test", post(test_handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    format!("http://{addr}")
+}
+
 #[tokio::test]
 async fn http_client_lists_triggers_against_a_real_server() {
     let url = spawn_stub_server().await;
-    let client = HttpTriggersClient::new(reqwest::Client::new(), url);
+    let client = HttpTriggersClient::new(reqwest::Client::new(), url, String::new());
 
     let page = client.list_triggers(Uuid::new_v4(), 25, 0).await.unwrap();
 
@@ -115,7 +156,11 @@ async fn http_client_lists_triggers_against_a_real_server() {
 
 #[tokio::test]
 async fn http_client_returns_unreachable_when_server_is_down() {
-    let client = HttpTriggersClient::new(reqwest::Client::new(), "http://127.0.0.1:1".to_string());
+    let client = HttpTriggersClient::new(
+        reqwest::Client::new(),
+        "http://127.0.0.1:1".to_string(),
+        String::new(),
+    );
     let err = client.list_triggers(Uuid::new_v4(), 25, 0).await.unwrap_err();
     assert!(matches!(err, TriggersClientError::Unreachable(_)));
 }
@@ -140,7 +185,7 @@ fn sample_trigger() -> TriggerDefinition {
 #[tokio::test]
 async fn http_client_creates_a_trigger_against_a_real_server() {
     let url = spawn_stub_server().await;
-    let client = HttpTriggersClient::new(reqwest::Client::new(), url);
+    let client = HttpTriggersClient::new(reqwest::Client::new(), url, String::new());
 
     let created = client.create_trigger(Role::Operator, sample_trigger()).await.unwrap();
     assert_eq!(created.name, "urgent-spike");
@@ -149,8 +194,30 @@ async fn http_client_creates_a_trigger_against_a_real_server() {
 #[tokio::test]
 async fn http_client_create_is_rejected_for_insufficient_role() {
     let url = spawn_stub_server().await;
-    let client = HttpTriggersClient::new(reqwest::Client::new(), url);
+    let client = HttpTriggersClient::new(reqwest::Client::new(), url, String::new());
 
     let err = client.create_trigger(Role::Viewer, sample_trigger()).await.unwrap_err();
     assert!(matches!(err, TriggersClientError::Rejected(403)));
+}
+
+#[tokio::test]
+async fn http_client_tests_a_trigger_against_a_real_trigger_engine_server() {
+    let trigger_engine_url = spawn_test_trigger_engine_stub().await;
+    let client = HttpTriggersClient::new(reqwest::Client::new(), String::new(), trigger_engine_url);
+
+    let result = client.test_trigger(Uuid::new_v4(), Uuid::new_v4(), "cust-1").await.unwrap();
+
+    assert!(result.would_fire);
+    assert_eq!(result.contributing_record_count, 3);
+}
+
+#[tokio::test]
+async fn http_client_test_trigger_returns_unreachable_when_trigger_engine_is_down() {
+    let client = HttpTriggersClient::new(
+        reqwest::Client::new(),
+        String::new(),
+        "http://127.0.0.1:1".to_string(),
+    );
+    let err = client.test_trigger(Uuid::new_v4(), Uuid::new_v4(), "cust-1").await.unwrap_err();
+    assert!(matches!(err, TriggersClientError::Unreachable(_)));
 }

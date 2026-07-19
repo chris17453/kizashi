@@ -10,6 +10,7 @@ use axum::extract::{Form, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use common::{ThresholdDirection, TriggerCondition, TriggerDefinition};
+use uuid::Uuid;
 
 fn default_page() -> i64 {
     0
@@ -19,6 +20,18 @@ fn default_page() -> i64 {
 pub struct TriggersQuery {
     #[serde(default = "default_page")]
     pub page: i64,
+    // ADR-0030: set together after a "Test" form submission (GET, not POST — a dry run has no
+    // side effects, so it's shareable/bookmarkable/back-button-safe like any other read).
+    #[serde(default)]
+    pub test_trigger_id: Option<Uuid>,
+    #[serde(default)]
+    pub test_group_key: Option<String>,
+}
+
+struct TestResultView {
+    group_key: String,
+    would_fire: bool,
+    contributing_record_count: usize,
 }
 
 #[derive(Template)]
@@ -31,6 +44,7 @@ struct TriggersTemplate {
     can_write: bool,
     error: Option<String>,
     form_error: Option<String>,
+    test_result: Option<TestResultView>,
 }
 
 pub async fn get_triggers(
@@ -43,6 +57,20 @@ pub async fn get_triggers(
         Err(response) => return response,
     };
     let can_write = session.role.at_least(common::Role::Operator);
+
+    let test_result = match (query.test_trigger_id, &query.test_group_key) {
+        (Some(trigger_id), Some(group_key)) if !group_key.is_empty() => state
+            .triggers_client
+            .test_trigger(session.tenant_id, trigger_id, group_key)
+            .await
+            .ok()
+            .map(|r| TestResultView {
+                group_key: group_key.clone(),
+                would_fire: r.would_fire,
+                contributing_record_count: r.contributing_record_count,
+            }),
+        _ => None,
+    };
 
     let page = query.page.max(0);
     match state
@@ -59,6 +87,7 @@ pub async fn get_triggers(
                 can_write,
                 error: None,
                 form_error: None,
+                test_result,
             }
             .render()
             .unwrap(),
@@ -73,6 +102,7 @@ pub async fn get_triggers(
                 can_write,
                 error: Some(e.to_string()),
                 form_error: None,
+                test_result,
             }
             .render()
             .unwrap(),
@@ -212,6 +242,7 @@ pub async fn post_trigger(
                     can_write,
                     error: None,
                     form_error: Some(msg.to_string()),
+                    test_result: None,
                 }
                 .render()
                 .unwrap(),
@@ -264,6 +295,7 @@ pub async fn post_trigger(
                     can_write,
                     error: None,
                     form_error: Some(e.to_string()),
+                    test_result: None,
                 }
                 .render()
                 .unwrap(),

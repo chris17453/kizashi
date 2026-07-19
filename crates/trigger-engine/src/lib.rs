@@ -18,7 +18,9 @@ pub use common::{EVENT_CREATED_EXCHANGE, RECORD_ANALYZED_EXCHANGE, TRIGGER_CHANG
 pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
 pub use event_store::{ClickHouseEventStore, EventStore, EventStoreError};
 pub use health::build_router as health_router;
-pub use process_analyzed_record::{process_analyzed_record, ProcessError, TriggerDeps};
+pub use process_analyzed_record::{
+    evaluate_trigger, process_analyzed_record, ProcessError, TriggerDeps,
+};
 pub use signal_repository::{
     AnalyzedSignal, PostgresSignalRepository, SignalRepository, SignalRepositoryError,
 };

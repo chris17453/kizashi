@@ -70,9 +70,14 @@ pub async fn process_analyzed_record(
             .map_err(|e| ProcessError::TriggerLookup(e.to_string()))?;
 
         for trigger in triggers {
-            let (fired, window_record_ids) =
-                evaluate_trigger(deps, &trigger, tenant_id, &candidate.event_type, &group_key)
-                    .await?;
+            let (fired, window_record_ids) = evaluate_trigger(
+                &deps.signal_repository,
+                &trigger,
+                tenant_id,
+                &candidate.event_type,
+                &group_key,
+            )
+            .await?;
             if !fired {
                 continue;
             }
@@ -102,14 +107,17 @@ pub async fn process_analyzed_record(
     Ok(events_created)
 }
 
-/// Evaluates one trigger against the signal that was just recorded. For the two single-event-
-/// type shapes this is exactly the pre-ADR-0027 behavior: one `window_stats` call for the
-/// candidate's own event type. For `CorrelatedOverWindow` (ADR-0027), `window_stats` is called
-/// once per listed event type — not just the newly-arrived candidate's — since every leg must
+/// Evaluates one trigger against a group_key's real, already-recorded signal history — the
+/// core logic shared by the live `record.analyzed` path above and the `/v1/triggers/:id/test`
+/// dry-run endpoint (ADR-0030), so a dry run can never drift from what production actually
+/// does. For the two single-event-type shapes this is one `window_stats` call for
+/// `candidate_event_type` (the live path's newly-arrived candidate, or the dry-run's
+/// `trigger.event_type_match`). For `CorrelatedOverWindow` (ADR-0027), `window_stats` is
+/// called once per listed event type — not just the candidate's — since every leg must
 /// independently meet its own `min_count`; the returned record ids are the union across all
 /// legs, so a fired Event's lineage covers every signal that contributed to satisfying it.
-async fn evaluate_trigger(
-    deps: &TriggerDeps,
+pub async fn evaluate_trigger(
+    signal_repository: &Arc<dyn SignalRepository>,
     trigger: &TriggerDefinition,
     tenant_id: Uuid,
     candidate_event_type: &str,
@@ -120,8 +128,7 @@ async fn evaluate_trigger(
             let mut counts = HashMap::new();
             let mut record_ids = Vec::new();
             for leg in conditions {
-                let (count, _values, leg_record_ids) = deps
-                    .signal_repository
+                let (count, _values, leg_record_ids) = signal_repository
                     .window_stats(tenant_id, &leg.event_type, group_key, trigger.window_seconds)
                     .await
                     .map_err(|e| ProcessError::WindowStats(e.to_string()))?;
@@ -131,8 +138,7 @@ async fn evaluate_trigger(
             Ok((trigger.evaluate_correlated(&counts), record_ids))
         }
         _ => {
-            let (count, values, record_ids) = deps
-                .signal_repository
+            let (count, values, record_ids) = signal_repository
                 .window_stats(tenant_id, candidate_event_type, group_key, trigger.window_seconds)
                 .await
                 .map_err(|e| ProcessError::WindowStats(e.to_string()))?;
