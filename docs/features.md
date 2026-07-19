@@ -2860,3 +2860,41 @@ architectural decision.
   history) before the re-scan problem was noticed and the Agent disabled pending this fix.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0033](../docs/adr/0033-imap-since-date-narrowing-on-later-polls.md)
+
+## [2026-07-19] feature/0042-imap-uid-cursor — Real IMAP UID cursor with chunked backfill
+- **Type:** feature
+- **Summary:** ADR-0033's day-overlap approach (merged minutes earlier) was correctly flagged
+  as insufficient before it ran unattended: re-scanning (then dedup-discarding) a full day of
+  mail on every poll interval is still real avoidable load for anything but a low-volume
+  mailbox, and the *initial* backfill was still one unbounded burst — which is exactly what hit
+  `ingestion-gateway`'s rate limit at 600 records in a single call during live testing. Replaced
+  it with a real IMAP UID cursor: `common::connector::Connector` gains a `checkpoint()` method
+  (default `None`); `ImapConnector` returns the highest `uid` among a poll's records. IMAP UIDs
+  are monotonically increasing and never reused within a mailbox, so `UID {n+1}:*` gives an
+  *exact* incremental fetch, unlike date-only `SINCE` search. The connector prints its
+  checkpoint to stdout as `KIZASHI_CHECKPOINT=<value>`; `DockerInvoker` (agent-scheduler)
+  captures it from the `docker run` process's stdout and persists it as a new
+  `agents.last_checkpoint` column, replaying it as `IMAP_SINCE_UID` on the next poll. Added
+  `IMAP_MAX_RECORDS_PER_POLL` (default 200): matched UIDs are sorted oldest-first and capped
+  per poll, so a large backfill is consumed in bounded chunks across successive poll cycles
+  using the *same code path* as ordinary incremental polling — no separate "backfill mode",
+  the system just naturally transitions from many chunks to near-zero as it catches up.
+- **Tests:** `cargo test -p common --lib connector` — 4 passed (1 new: `checkpoint` defaults to
+  `None`). `cargo test -p connector-runtime --lib poll_runner` — 6 passed (2 new: a connector's
+  checkpoint is carried into `PollSummary`, a connector with no checkpoint leaves it `None`).
+  `cargo test -p connector-imap --lib connector` — 9 passed (6 new: checkpoint is the highest
+  uid seen, checkpoint is `None` for an empty poll, `UID` search query when `since_uid` is set,
+  `SINCE` fallback otherwise, `select_uids` sorts ascending and caps to the oldest N).
+  `cargo test -p agent-scheduler --lib` — 17 passed (7 new: `IMAP_SINCE_UID` injected from a
+  checkpoint on a later poll, unmodified `IMAP_SINCE_DATE` on a first poll, non-IMAP connectors
+  unaffected, stdout marker extraction with/without the line present, `mark_polled` with and
+  without a checkpoint). `cargo test --workspace --all-features` (full real-infra stack) —
+  every test binary passed, 0 failed. `cargo clippy --workspace --all-targets --all-features
+  -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny check` / `cargo
+  audit` — clean, same 3 pre-existing allow-listed advisories.
+- **Live verification:** (to be completed against the real `mail-watkinslabs-com` Agent after
+  redeploying `agent-scheduler` and `connector-imap` with this fix — the Agent stays disabled
+  until that verification confirms bounded, checkpoint-advancing polls.)
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0034](../docs/adr/0034-imap-uid-cursor-chunked-backfill.md) — supersedes
+  ADR-0033

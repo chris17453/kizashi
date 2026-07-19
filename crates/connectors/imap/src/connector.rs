@@ -77,9 +77,13 @@ impl AsyncWrite for ImapStream {
 /// `LOGIN` command) — XOAUTH2 is deferred to a follow-up since it needs a per-provider token
 /// refresh flow this v1 doesn't have infrastructure for yet (see ADR-0022).
 ///
-/// Follows the same stateless-cursor design as `zendesk` (ADR-0013): `since_date` is passed in
-/// per invocation (e.g. computed by the scheduler as "now - poll interval") rather than the
-/// connector persisting a cursor itself, since each CronJob run is a fresh process.
+/// The connector process itself stays stateless per invocation (ADR-0013) — `since_date` and
+/// `since_uid` are both passed in, not persisted here. `since_uid` (ADR-0034), when present,
+/// takes priority: IMAP UIDs are monotonically increasing and never reused within a mailbox,
+/// so `UID {n+1}:*` gives an exact incremental fetch, unlike `since_date`'s day-granularity
+/// `SINCE` search. The orchestrator (agent-scheduler) is the one that persists `checkpoint()`'s
+/// return value between polls and feeds it back in as `since_uid` — this connector only ever
+/// reports what it saw.
 pub struct ImapConnector {
     connector_id: String,
     host: String,
@@ -88,7 +92,23 @@ pub struct ImapConnector {
     password: String,
     mailbox: String,
     since_date: chrono::NaiveDate,
+    since_uid: Option<u32>,
+    max_records_per_poll: Option<usize>,
     use_tls: bool,
+}
+
+/// Sorts matched UIDs ascending (oldest first) and caps how many one poll actually fetches.
+/// This is what turns a large backfill into automatic chunks rather than one giant fetch: each
+/// poll only pulls up to `max`, reports the highest UID it fetched as its checkpoint
+/// (`Connector::checkpoint`), and the next poll resumes from there — the same mechanism used
+/// for ordinary incremental "what's new" polling, so backfill and steady-state streaming are
+/// one code path, not two (ADR-0034).
+fn select_uids(mut uids: Vec<u32>, max: Option<usize>) -> Vec<u32> {
+    uids.sort_unstable();
+    if let Some(max) = max {
+        uids.truncate(max);
+    }
+    uids
 }
 
 impl ImapConnector {
@@ -106,12 +126,31 @@ impl ImapConnector {
         Self {
             connector_id: connector_id.into(),
             host: host.into(),
+            since_uid: None,
+            max_records_per_poll: None,
             port,
             username: username.into(),
             password: password.into(),
             mailbox: mailbox.into(),
             since_date,
             use_tls,
+        }
+    }
+
+    pub fn with_since_uid(mut self, since_uid: Option<u32>) -> Self {
+        self.since_uid = since_uid;
+        self
+    }
+
+    pub fn with_max_records_per_poll(mut self, max: Option<usize>) -> Self {
+        self.max_records_per_poll = max;
+        self
+    }
+
+    pub(crate) fn search_query(&self) -> String {
+        match self.since_uid {
+            Some(uid) => format!("UID {}:*", uid + 1),
+            None => format!("SINCE {}", self.since_date.format("%d-%b-%Y")),
         }
     }
 }
@@ -124,6 +163,16 @@ impl Connector for ImapConnector {
 
     fn source_type(&self) -> SourceType {
         SourceType::Message
+    }
+
+    /// The highest `uid` among the polled records, as a string — the next poll's
+    /// `since_uid` (ADR-0034).
+    fn checkpoint(&self, records: &[RawRecord]) -> Option<String> {
+        records
+            .iter()
+            .filter_map(|r| r.raw_payload["uid"].as_u64())
+            .max()
+            .map(|uid| uid.to_string())
     }
 
     async fn poll(&self, tenant_id: uuid::Uuid) -> Result<Vec<RawRecord>, ConnectorError> {
@@ -152,11 +201,12 @@ impl Connector for ImapConnector {
             .await
             .map_err(|e| ConnectorError::SourceUnavailable(format!("SELECT failed: {e}")))?;
 
-        let search_query = format!("SINCE {}", self.since_date.format("%d-%b-%Y"));
-        let uids = session
+        let search_query = self.search_query();
+        let matched_uids = session
             .uid_search(&search_query)
             .await
             .map_err(|e| ConnectorError::SourceUnavailable(format!("SEARCH failed: {e}")))?;
+        let uids = select_uids(matched_uids.into_iter().collect(), self.max_records_per_poll);
 
         if uids.is_empty() {
             let _ = session.logout().await;

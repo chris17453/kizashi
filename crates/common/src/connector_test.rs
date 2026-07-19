@@ -33,6 +33,12 @@ async fn poll_returns_configured_records() {
     assert_eq!(connector.source_type(), SourceType::Generic);
 }
 
+#[tokio::test]
+async fn checkpoint_defaults_to_none_when_not_overridden() {
+    let connector = StubConnector { id: "stub".to_string(), records: vec![] };
+    assert_eq!(connector.checkpoint(&[]), None);
+}
+
 #[test]
 fn connector_error_messages_are_descriptive() {
     let err = ConnectorError::RateLimited { retry_after_secs: 30 };

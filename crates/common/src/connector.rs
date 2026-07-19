@@ -15,6 +15,17 @@ pub trait Connector: Send + Sync {
     fn connector_id(&self) -> &str;
     fn source_type(&self) -> SourceType;
     async fn poll(&self, tenant_id: Uuid) -> Result<Vec<RawRecord>, ConnectorError>;
+
+    /// A high-water mark this connector's *next* poll can resume from, derived from the
+    /// records this poll actually found — e.g. the highest IMAP UID seen. `None` by default:
+    /// most connectors have no such concept and keep re-polling whatever window their static
+    /// config describes (their orchestrator is responsible for narrowing that window some
+    /// other way, if at all). A connector that returns `Some` here is opting in to the
+    /// orchestrator persisting and replaying this value on the next invocation, instead of
+    /// re-scanning from scratch every time.
+    fn checkpoint(&self, _records: &[RawRecord]) -> Option<String> {
+        None
+    }
 }
 
 #[derive(Debug, Error)]

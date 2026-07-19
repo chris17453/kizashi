@@ -18,6 +18,10 @@ pub struct PollSummary {
     pub polled: usize,
     pub ingested: usize,
     pub failed: usize,
+    /// This connector's `Connector::checkpoint` for the just-polled records, if it supports
+    /// one — the orchestrator persists this and passes it back on the next invocation so the
+    /// connector can resume precisely instead of re-scanning its whole configured window.
+    pub checkpoint: Option<String>,
 }
 
 /// One CronJob-scheduled poll cycle (spec §3, ADR-0013): poll the source, post every record to
@@ -29,8 +33,9 @@ pub async fn run_poll_cycle(
     ingestion_client: &dyn IngestionClient,
 ) -> Result<PollSummary, PollRunError> {
     let records = connector.poll(tenant_id).await.map_err(|e| PollRunError::Poll(e.to_string()))?;
+    let checkpoint = connector.checkpoint(&records);
 
-    let mut summary = PollSummary { polled: records.len(), ..Default::default() };
+    let mut summary = PollSummary { polled: records.len(), checkpoint, ..Default::default() };
     for record in &records {
         match ingestion_client.ingest(record).await {
             Ok(()) => summary.ingested += 1,
