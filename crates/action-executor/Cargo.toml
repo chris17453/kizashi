@@ -23,6 +23,7 @@ lapin = { workspace = true }
 reqwest = { workspace = true }
 futures-util = { workspace = true }
 lettre = { workspace = true }
+connector-runtime = { path = "../connectors/connector-runtime" }
 
 [dev-dependencies]
 tower = { workspace = true }

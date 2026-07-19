@@ -5,6 +5,7 @@
 mod action_dispatcher;
 mod execution_handlers;
 mod execution_repository;
+mod graph_send_mail_action_dispatcher;
 mod health;
 mod process_event;
 mod routing_action_dispatcher;
@@ -17,6 +18,7 @@ pub use execution_handlers::{build_router as execution_router, list_executions, 
 pub use execution_repository::{
     ExecutionRepository, ExecutionRepositoryError, PostgresExecutionRepository,
 };
+pub use graph_send_mail_action_dispatcher::GraphSendMailActionDispatcher;
 pub use health::build_router as health_router;
 pub use process_event::{process_event, ActionDeps, ProcessError};
 pub use routing_action_dispatcher::RoutingActionDispatcher;
