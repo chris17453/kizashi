@@ -99,6 +99,28 @@ async fn http_client_is_rejected_with_the_wrong_api_key() {
 }
 
 #[tokio::test]
+async fn http_client_sends_the_records_external_id_in_the_request_body() {
+    async fn handler(axum::Json(body): axum::Json<serde_json::Value>) -> axum::http::StatusCode {
+        assert_eq!(body["external_id"], serde_json::json!("message-id-123"));
+        axum::http::StatusCode::CREATED
+    }
+    let app = Router::new().route("/v1/ingest", post(handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let client = HttpIngestionClient::new(
+        reqwest::Client::new(),
+        format!("http://{addr}"),
+        "key".to_string(),
+    );
+
+    let record = sample_record().with_external_id("message-id-123");
+    client.ingest(&record).await.unwrap();
+}
+
+#[tokio::test]
 async fn http_client_returns_unreachable_when_server_is_down() {
     let client = HttpIngestionClient::new(
         reqwest::Client::new(),

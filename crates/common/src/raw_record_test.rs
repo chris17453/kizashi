@@ -18,6 +18,7 @@ fn new_sets_defaults_and_generates_id() {
     assert!(record.occurred_at.is_none());
     assert!(record.normalized_payload.is_none());
     assert!(!record.is_normalized());
+    assert!(record.external_id.is_none());
 }
 
 #[test]

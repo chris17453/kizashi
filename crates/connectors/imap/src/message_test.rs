@@ -28,6 +28,22 @@ fn parses_headers_and_body_into_a_raw_record() {
 }
 
 #[test]
+fn external_id_is_the_message_id_header_when_present() {
+    let with_message_id: &[u8] = b"From: alice@example.com\r\n\
+Message-Id: <abc123@mail.example.com>\r\n\
+\r\n\
+Hi\r\n";
+    let record = parse_message(9, with_message_id, "imap-inbox", Uuid::new_v4()).unwrap();
+    assert_eq!(record.external_id, Some("<abc123@mail.example.com>".to_string()));
+}
+
+#[test]
+fn external_id_falls_back_to_connector_and_uid_when_no_message_id_header_is_present() {
+    let record = parse_message(9, SAMPLE_MESSAGE, "imap-inbox", Uuid::new_v4()).unwrap();
+    assert_eq!(record.external_id, Some("imap-inbox:9".to_string()));
+}
+
+#[test]
 fn returns_a_malformed_record_error_for_garbage_bytes_that_mail_parser_still_produces_something_from(
 ) {
     // mail-parser is deliberately lenient (real-world mail is often malformed), so a byte

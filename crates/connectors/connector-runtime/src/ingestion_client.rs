@@ -49,6 +49,7 @@ impl IngestionClient for HttpIngestionClient {
                 "source_type": record.source_type,
                 "raw_payload": record.raw_payload,
                 "occurred_at": record.occurred_at,
+                "external_id": record.external_id,
             }))
             .send()
             .await

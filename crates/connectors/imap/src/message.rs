@@ -43,6 +43,16 @@ pub fn parse_message(
         chrono::DateTime::from_timestamp(d.to_timestamp(), 0).unwrap_or_else(chrono::Utc::now)
     });
 
+    // Message-Id is globally stable across re-polls of the same message (RFC 5322 §3.6.4),
+    // which is what makes idempotent re-ingestion possible when IMAP's date-only `SINCE`
+    // search re-scans an overlapping window on every poll. Falling back to
+    // "{connector_id}:{uid}" when a message has no Message-Id header still dedupes correctly
+    // within one mailbox, since IMAP UIDs are unique and non-reused within a mailbox.
+    let external_id = message
+        .message_id()
+        .map(|id| format!("<{id}>"))
+        .unwrap_or_else(|| format!("{connector_id}:{uid}"));
+
     let payload = serde_json::json!({
         "uid": uid,
         "subject": subject,
@@ -51,7 +61,8 @@ pub fn parse_message(
         "body": body,
     });
 
-    let mut record = RawRecord::new(connector_id, SourceType::Message, tenant_id, payload);
+    let mut record = RawRecord::new(connector_id, SourceType::Message, tenant_id, payload)
+        .with_external_id(external_id);
     record.occurred_at = occurred_at;
     Ok(record)
 }
