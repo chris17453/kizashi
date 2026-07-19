@@ -2135,3 +2135,43 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — closes a gap against an already-established pattern (ADR-0016), no new
   architectural decision
+
+## [2026-07-19] fix/0003-egress-allowlist-rbac — Enforce Operator-minimum role on egress-gateway's allowlist write endpoint
+- **Type:** fix
+- **Branch:** fix/0003-egress-allowlist-rbac
+- **Summary:** A follow-up RBAC-completeness sweep, triggered by the agent-write RBAC gap just
+  found, systematically checked every write-capable HTTP handler across the platform for
+  missing role enforcement. Found one more of the same class: `PUT /v1/allowlist` in
+  `crates/egress-gateway/src/health.rs` had zero server-side RBAC — any caller supplying only
+  `X-Tenant-Id` could wholesale-replace a tenant's egress domain allowlist. Arguably higher
+  severity than the agent-write gap: Egress Gateway's entire purpose (ADR-0021) is SSRF/
+  exfiltration containment, so an attacker able to loosen a tenant's allowlist gains a direct
+  lever for data exfiltration through the gateway itself. Every other write-capable service
+  audited (config-admin-service's trigger/mapping/agent/analysis-config writes,
+  retention-service's policy writes, ingestion-gateway's API key writes) already enforces
+  `require_operator`; `dashboard-api` and `auth-service` have no admin-write endpoints at all.
+  Added a `require_operator` check to `health.rs`, matching `config_admin_service`'s existing
+  pattern exactly. `GET /v1/allowlist` deliberately keeps its existing no-role-check behavior —
+  only the write path changes, matching how `get_agent`/`list_agents` remained unchanged in the
+  prior fix.
+- **Cross-check confirmed no UI-side gap exists here** (unlike the agent-write fix, which also
+  needed a Console UI client update): no Console UI page exists for the egress allowlist yet,
+  so there is no client that could have been silently omitting `X-Role`.
+- **Tests:** TDD — added 2 failing tests first (`put_allowlist_requires_role_header`,
+  `put_allowlist_rejects_a_viewer_role`), confirmed both failed for the expected reason (200
+  instead of 401/403) against the real handler, then implemented the fix and confirmed all 9
+  `health` tests (5 pre-existing + 4 new, including one proving the operator-role happy path
+  and one proving GET intentionally stays unrestricted) pass. `cargo test -p egress-gateway
+  --lib` — 33 tests, all passed. `cargo test --workspace --all-features` (full real-infra
+  stack) — all passed, 0 failed. `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo
+  audit` — same 3 pre-existing allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `egress-gateway` container via
+  `docker compose build`/`up --force-recreate`, then hit it directly: `PUT /v1/allowlist` with
+  no `X-Role` → `401`; with `X-Role: viewer` → `403`; with `X-Role: operator` → `200` (the
+  allowlist was actually set — confirmed in the response body). Cleaned up the test allowlist
+  row afterward (deletable, unlike the append-only `egress_audit_log` verified in earlier
+  phases).
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — closes a gap against an already-established pattern (ADR-0016), no new
+  architectural decision
