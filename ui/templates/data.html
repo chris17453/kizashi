@@ -2,6 +2,18 @@
 {% block content %}
 <h1>Data Viewer</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if let Some(n) = reprocessed %}
+<p class="status-up">Republished {{ n }} unnormalized record(s) for reprocessing — they'll flow
+  through normalization/analysis/triggers again shortly.</p>
+{% endif %}
+
+{% if can_write %}
+<form method="post" action="/data/reprocess" style="margin-bottom: 1rem;">
+  <button type="submit" class="btn">Reprocess unnormalized records</button>
+  <span class="muted">Re-runs normalization/analysis for records ingested before a mapping
+    existed for their source type (up to 500 per click).</span>
+</form>
+{% endif %}
 
 <div class="form-row">
   <div class="panel">

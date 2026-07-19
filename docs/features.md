@@ -3002,3 +3002,24 @@ architectural decision.
   service is rebuilt/redeployed with the fix.)
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0035](../docs/adr/0035-bounded-concurrency-for-openai-compatible-analysis.md)
+
+## [2026-07-19] feature/0046-reprocess-ui-button — Console UI button for the reprocess endpoint
+- **Type:** feature
+- **Summary:** Closes the known gap flagged in feature/0044: the reprocess endpoint
+  (`POST /v1/records/reprocess`) was API-only. Added `IngestionStatsClient::reprocess` (Console
+  UI's existing direct client to Ingestion Service), a `POST /data/reprocess` handler
+  (operator-gated, matching the rest of this platform's write-path convention), and a button on
+  the Data Viewer page showing a confirmation with the republished count after use.
+- **Tests:** `cargo test -p kizashi-ui --lib ingestion_stats_client` — 6 passed (1 new: HTTP
+  client reprocess call against a real stub server). `cargo test -p kizashi-ui --lib
+  data_handler` — 15 passed (5 new: redirects with the count, rejects a viewer role, requires a
+  session, shows the button + confirmation for an operator, hides the button for a viewer).
+  `cargo test --workspace --all-features` (full real-infra stack) — every test binary passed,
+  0 failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo deny check` / `cargo audit` — clean, same 3
+  pre-existing allow-listed advisories.
+- **Live verification:** (to be run against the real Console UI once this merges and
+  `kizashi-ui` is rebuilt/redeployed.)
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — a thin UI wrapper around an already-designed, already-ADR'd backend capability
+  (feature/0044), no new architectural decision

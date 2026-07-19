@@ -33,6 +33,11 @@ pub struct DataSearchQuery {
     pub attachment_filename: String,
     #[serde(default = "default_page")]
     pub page: i64,
+    /// Set by the redirect after `POST /data/reprocess` so the page can show a confirmation —
+    /// not a real search filter, never serialized back into `to_saved_search_row`'s bookmark.
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    pub reprocessed: Option<usize>,
 }
 
 /// A saved query's filter, plus a pre-built `/data?...` query string so the template can link
@@ -59,6 +64,8 @@ struct DataTemplate {
     page: i64,
     has_more: bool,
     saved_searches: Vec<SavedSearchRow>,
+    can_write: bool,
+    reprocessed: Option<usize>,
     error: Option<String>,
 }
 
@@ -100,6 +107,9 @@ pub async fn get_data(
         .map(to_saved_search_row)
         .collect();
 
+    let can_write = session.role.at_least(common::Role::Operator);
+    let reprocessed = query.reprocessed;
+
     match state.stats_client.search_records(session.tenant_id, &filter).await {
         Ok(result) => Html(
             DataTemplate {
@@ -109,6 +119,8 @@ pub async fn get_data(
                 page,
                 has_more: result.has_more,
                 saved_searches,
+                can_write,
+                reprocessed,
                 error: None,
             }
             .render()
@@ -123,6 +135,8 @@ pub async fn get_data(
                 page,
                 has_more: false,
                 saved_searches,
+                can_write,
+                reprocessed,
                 error: Some(e.to_string()),
             }
             .render()
@@ -130,6 +144,23 @@ pub async fn get_data(
         )
         .into_response(),
     }
+}
+
+/// POST /data/reprocess — operator-gated: republishes `record.ingested` for every one of this
+/// tenant's unnormalized records (the recovery path for records ingested before a
+/// `NormalizationMapping` existed for their source type). A UI wrapper around the API-only
+/// `POST /v1/records/reprocess` capability shipped without one initially.
+pub async fn post_reprocess(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Operator) {
+        return axum::http::StatusCode::FORBIDDEN.into_response();
+    }
+
+    let republished = state.stats_client.reprocess(session.tenant_id).await.unwrap_or(0);
+    Redirect::to(&format!("/data?reprocessed={republished}")).into_response()
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -169,6 +200,7 @@ pub async fn post_save_search(
         email_from: form.email_from,
         attachment_filename: form.attachment_filename,
         page: 0,
+        reprocessed: None,
     };
     let _ = state
         .saved_search_queries_client

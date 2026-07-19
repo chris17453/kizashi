@@ -21,19 +21,24 @@ use uuid::Uuid;
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/data", get(get_data))
+        .route("/data/reprocess", axum::routing::post(post_reprocess))
         .route("/data/saved-searches", axum::routing::post(post_save_search))
         .route("/data/saved-searches/:id/delete", axum::routing::post(post_delete_saved_search))
         .with_state(state)
 }
 
 async fn state_with_session() -> (AppState, String) {
+    state_with_session_role(common::Role::Admin).await
+}
+
+async fn state_with_session_role(role: common::Role) -> (AppState, String) {
     let session_store = InMemorySessionStore::default();
     let session_id = session_store
         .create(Session {
             bearer_token: "tok".to_string(),
             tenant_id: Uuid::new_v4(),
             username: "alice".to_string(),
-            role: common::Role::Admin,
+            role,
         })
         .await;
     let state = AppState {
@@ -308,4 +313,103 @@ async fn post_delete_saved_search_removes_it_and_redirects() {
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert!(saved_client.list(tenant_id).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn reprocess_redirects_with_the_count_and_calls_the_client() {
+    let (mut state, session_id) = state_with_session().await;
+    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
+    *stats_client.reprocessed.lock().unwrap() = 42;
+    state.stats_client = stats_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/data/reprocess")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers().get("location").unwrap(), "/data?reprocessed=42");
+}
+
+#[tokio::test]
+async fn reprocess_rejects_a_viewer_role() {
+    let (state, session_id) = state_with_session_role(common::Role::Viewer).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/data/reprocess")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn reprocess_requires_a_session() {
+    let (state, _session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder().method("POST").uri("/data/reprocess").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers().get("location").unwrap(), "/login");
+}
+
+#[tokio::test]
+async fn data_page_shows_the_reprocess_button_for_an_operator_and_confirmation_when_present() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data?reprocessed=5")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Reprocess unnormalized records"));
+    assert!(body.contains("Republished 5 unnormalized record"));
+}
+
+#[tokio::test]
+async fn data_page_hides_the_reprocess_button_for_a_viewer() {
+    let (state, session_id) = state_with_session_role(common::Role::Viewer).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("Reprocess unnormalized records"));
 }
