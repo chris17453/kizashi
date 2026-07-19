@@ -229,3 +229,48 @@ async fn post_toggle_agent_redirects_to_login_when_not_signed_in() {
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert_eq!(response.headers().get("location").unwrap(), "/login");
 }
+
+#[tokio::test]
+async fn shows_a_next_link_when_there_are_more_agents_but_no_previous_link_on_page_zero() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let agents_client = Arc::new(InMemoryAgentsClient::default());
+    *agents_client.has_more.lock().unwrap() = true;
+    state.agents_client = agents_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/agents")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Next"));
+    assert!(!body.contains("Previous"));
+}
+
+#[tokio::test]
+async fn shows_a_previous_link_on_page_two() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/agents?page=1")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Previous"));
+    assert!(body.contains("Page 2"));
+}

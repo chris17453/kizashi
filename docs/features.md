@@ -988,3 +988,38 @@ Entry format:
   no new advisories.
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a (additive query/response-shape change, not a new architectural decision)
+
+## [2026-07-18] feature/0014-docker-images — Agents pagination, and a real correctness fix it forced
+- **Type:** fix
+- **Branch:** feature/0014-docker-images
+- **Summary:** Closes the last of the three flagged list pages (Data Viewer and Events already
+  had real pagination). `AgentRepository::list` gains `limit`/`offset`, `GET /v1/agents` now
+  returns `{agents, has_more}` (fetch-one-extra pattern, same as Events/Data Viewer), and
+  `/agents` gets the same Previous/Next controls. Doing this properly surfaced a real
+  correctness bug in the process: `agent_detail_handler` and the enable/disable toggle both
+  found "the agent" by calling `list_agents` and searching the result for a matching id — which
+  only worked because `list_agents` used to return every agent unpaginated. Once it's
+  paginated, that lookup silently breaks the moment an agent isn't on the first page (toggling
+  an agent on page 2 would appear to succeed — 303 redirect, no error — while doing nothing).
+  Fixed by adding `AgentsClient::get_agent`/`GET /v1/agents/:id` (config-admin-service already
+  had this route; the UI just wasn't using it) and switching both call sites to fetch by id
+  directly instead of paging through a list. Triggers pagination remains open — still lower
+  priority, operator-configured data that doesn't grow with traffic the way agents/events/raw
+  records do.
+- **Tests:** `cargo test -p config-admin-service --lib` — 42 passed (3 new: `list` respects
+  limit/offset at the repository level, the handler's `has_more` computation, the existing
+  scoped-list test updated for the new response shape). `cargo test -p kizashi-ui --lib` — 88
+  passed (`AgentsClient` trait signature change threaded through every call site, 2 new
+  pagination-control-rendering tests, `get_agent` tested against a real stub server). Beyond
+  unit tests: rebuilt and redeployed `config-admin-service`/`kizashi-ui`, registered 30 real
+  agents through the live UI, confirmed page 1 shows Next-only and page 2 shows Previous-only,
+  then — the test that actually matters — found an agent that only exists on page 2, toggled
+  it, and confirmed on a fresh page load that it actually flipped from enabled to disabled
+  (proving the `get_agent` fix holds against live data, not just the bug's absence in a unit
+  test), then cleaned up all 30 test agents. Full local CI gate: `cargo fmt --all --check`
+  clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean, `cargo
+  test --workspace --all-features` all green, `cargo llvm-cov` 94.44% line coverage (85%
+  floor), `cargo audit` / `cargo deny check` clean, no new advisories.
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a (additive query/response-shape change plus a bugfix, not a new architectural
+  decision)

@@ -4,7 +4,7 @@ mod agent_handlers_test;
 
 use crate::agent_repository::{AgentRepository, AgentRepositoryError};
 use crate::handlers::{tenant_id_from_headers, tenant_mismatch};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use common::Agent;
@@ -104,13 +104,39 @@ pub async fn get_agent_by_name(
     }
 }
 
-pub async fn list_agents(State(state): State<AgentState>, headers: HeaderMap) -> Response {
+#[derive(Debug, serde::Deserialize)]
+pub struct ListAgentsQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+}
+
+fn default_limit() -> i64 {
+    25
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct ListAgentsResponse {
+    pub agents: Vec<Agent>,
+    pub has_more: bool,
+}
+
+pub async fn list_agents(
+    State(state): State<AgentState>,
+    headers: HeaderMap,
+    Query(query): Query<ListAgentsQuery>,
+) -> Response {
     let tenant_id = match tenant_id_from_headers(&headers) {
         Ok(id) => id,
         Err((status, msg)) => return error_response(status, msg),
     };
-    match state.agent_repository.list(tenant_id).await {
-        Ok(agents) => Json(agents).into_response(),
+    match state.agent_repository.list(tenant_id, query.limit + 1, query.offset).await {
+        Ok(mut agents) => {
+            let has_more = agents.len() as i64 > query.limit;
+            agents.truncate(query.limit as usize);
+            Json(ListAgentsResponse { agents, has_more }).into_response()
+        }
         Err(e) => agent_error_response(e),
     }
 }

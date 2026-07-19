@@ -15,6 +15,12 @@ pub enum AgentsClientError {
     Rejected(u16),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentsPage {
+    pub agents: Vec<Agent>,
+    pub has_more: bool,
+}
+
 /// Registers/lists/deletes Agents (a tenant's registered connector instances) via Config/Admin
 /// Service, same direct-call trust boundary as `TriggersClient` (no gateway sits in front of
 /// Config/Admin Service, ADR-0010). The operational convention this establishes: the agent's
@@ -23,7 +29,22 @@ pub enum AgentsClientError {
 /// status/drill-down — see `IngestionStatsClient`.
 #[async_trait]
 pub trait AgentsClient: Send + Sync {
-    async fn list_agents(&self, tenant_id: Uuid) -> Result<Vec<Agent>, AgentsClientError>;
+    async fn list_agents(
+        &self,
+        tenant_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<AgentsPage, AgentsClientError>;
+
+    /// Fetches a single agent by id — used wherever a specific agent is needed (detail view,
+    /// toggle), rather than paging through `list_agents` and hoping the id is on the current
+    /// page.
+    async fn get_agent(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<Option<Agent>, AgentsClientError>;
+
     async fn register_agent(
         &self,
         tenant_id: Uuid,
@@ -51,10 +72,16 @@ impl HttpAgentsClient {
 
 #[async_trait]
 impl AgentsClient for HttpAgentsClient {
-    async fn list_agents(&self, tenant_id: Uuid) -> Result<Vec<Agent>, AgentsClientError> {
+    async fn list_agents(
+        &self,
+        tenant_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<AgentsPage, AgentsClientError> {
         let response = self
             .client
             .get(format!("{}/v1/agents", self.config_admin_service_url))
+            .query(&[("limit", limit.to_string()), ("offset", offset.to_string())])
             .header("x-tenant-id", tenant_id.to_string())
             .send()
             .await
@@ -63,7 +90,37 @@ impl AgentsClient for HttpAgentsClient {
         if !response.status().is_success() {
             return Err(AgentsClientError::Rejected(response.status().as_u16()));
         }
-        response.json().await.map_err(|e| AgentsClientError::Unreachable(e.to_string()))
+
+        #[derive(serde::Deserialize)]
+        struct ListAgentsResponse {
+            agents: Vec<Agent>,
+            has_more: bool,
+        }
+        let body: ListAgentsResponse =
+            response.json().await.map_err(|e| AgentsClientError::Unreachable(e.to_string()))?;
+        Ok(AgentsPage { agents: body.agents, has_more: body.has_more })
+    }
+
+    async fn get_agent(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<Option<Agent>, AgentsClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/agents/{id}", self.config_admin_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .send()
+            .await
+            .map_err(|e| AgentsClientError::Unreachable(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !response.status().is_success() {
+            return Err(AgentsClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map(Some).map_err(|e| AgentsClientError::Unreachable(e.to_string()))
     }
 
     async fn register_agent(

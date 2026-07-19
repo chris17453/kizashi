@@ -33,8 +33,21 @@ pub async fn get_agent_detail(
         Err(response) => return response,
     };
 
-    let agents = match state.agents_client.list_agents(session.tenant_id).await {
-        Ok(agents) => agents,
+    let agent = match state.agents_client.get_agent(session.tenant_id, id).await {
+        Ok(Some(agent)) => agent,
+        Ok(None) => {
+            return Html(
+                AgentDetailTemplate {
+                    show_nav: true,
+                    agent: None,
+                    records: vec![],
+                    error: Some("no agent with that id".to_string()),
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response();
+        }
         Err(e) => {
             return Html(
                 AgentDetailTemplate {
@@ -48,20 +61,6 @@ pub async fn get_agent_detail(
             )
             .into_response();
         }
-    };
-
-    let Some(agent) = agents.into_iter().find(|a| a.id == id) else {
-        return Html(
-            AgentDetailTemplate {
-                show_nav: true,
-                agent: None,
-                records: vec![],
-                error: Some("no agent with that id".to_string()),
-            }
-            .render()
-            .unwrap(),
-        )
-        .into_response();
     };
 
     let records = state

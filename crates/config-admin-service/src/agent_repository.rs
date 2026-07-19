@@ -24,7 +24,12 @@ pub trait AgentRepository: Send + Sync {
     async fn create(&self, agent: Agent) -> Result<Agent, AgentRepositoryError>;
     async fn update(&self, agent: Agent) -> Result<Agent, AgentRepositoryError>;
     async fn get(&self, tenant_id: Uuid, id: Uuid) -> Result<Option<Agent>, AgentRepositoryError>;
-    async fn list(&self, tenant_id: Uuid) -> Result<Vec<Agent>, AgentRepositoryError>;
+    async fn list(
+        &self,
+        tenant_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Agent>, AgentRepositoryError>;
     async fn delete(&self, tenant_id: Uuid, id: Uuid) -> Result<(), AgentRepositoryError>;
 
     /// Looks up an agent by its registered `name` — the join key Ingestion Gateway uses to
@@ -158,11 +163,18 @@ impl AgentRepository for PostgresAgentRepository {
         Ok(row.map(row_to_agent))
     }
 
-    async fn list(&self, tenant_id: Uuid) -> Result<Vec<Agent>, AgentRepositoryError> {
+    async fn list(
+        &self,
+        tenant_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Agent>, AgentRepositoryError> {
         let rows: Vec<AgentRow> = sqlx::query_as(
-            "SELECT id, tenant_id, connector_type, name, config, enabled FROM agents WHERE tenant_id = $1 ORDER BY name",
+            "SELECT id, tenant_id, connector_type, name, config, enabled FROM agents WHERE tenant_id = $1 ORDER BY name LIMIT $2 OFFSET $3",
         )
         .bind(tenant_id)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| AgentRepositoryError::Backend(e.to_string()))?;

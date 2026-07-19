@@ -2,10 +2,11 @@
 #[cfg(test)]
 mod agents_handler_test;
 
+use crate::ingestion_stats_client::DEFAULT_PAGE_SIZE;
 use crate::session_guard::require_session;
 use crate::{AppState, ConnectorStatSummary};
 use askama::Template;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use chrono::{DateTime, Utc};
@@ -43,27 +44,54 @@ fn join_agent_stats(agents: Vec<Agent>, stats: Vec<ConnectorStatSummary>) -> Vec
         .collect()
 }
 
+fn default_page() -> i64 {
+    0
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct AgentsQuery {
+    #[serde(default = "default_page")]
+    pub page: i64,
+}
+
 #[derive(Template)]
 #[template(path = "agents.html")]
 struct AgentsTemplate {
     show_nav: bool,
     agents: Vec<AgentRow>,
+    page: i64,
+    has_more: bool,
     error: Option<String>,
 }
 
-pub async fn get_agents(State(state): State<AppState>, headers: HeaderMap) -> Response {
+pub async fn get_agents(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AgentsQuery>,
+) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(session) => session,
         Err(response) => return response,
     };
 
-    let agents = match state.agents_client.list_agents(session.tenant_id).await {
-        Ok(agents) => agents,
+    let page = query.page.max(0);
+    let result = state
+        .agents_client
+        .list_agents(session.tenant_id, DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE)
+        .await;
+    let (agents, has_more) = match result {
+        Ok(page_result) => (page_result.agents, page_result.has_more),
         Err(e) => {
             return Html(
-                AgentsTemplate { show_nav: true, agents: vec![], error: Some(e.to_string()) }
-                    .render()
-                    .unwrap(),
+                AgentsTemplate {
+                    show_nav: true,
+                    agents: vec![],
+                    page,
+                    has_more: false,
+                    error: Some(e.to_string()),
+                }
+                .render()
+                .unwrap(),
             )
             .into_response();
         }
@@ -72,9 +100,15 @@ pub async fn get_agents(State(state): State<AppState>, headers: HeaderMap) -> Re
     let stats = state.stats_client.connector_stats(session.tenant_id).await.unwrap_or_default();
 
     Html(
-        AgentsTemplate { show_nav: true, agents: join_agent_stats(agents, stats), error: None }
-            .render()
-            .unwrap(),
+        AgentsTemplate {
+            show_nav: true,
+            agents: join_agent_stats(agents, stats),
+            page,
+            has_more,
+            error: None,
+        }
+        .render()
+        .unwrap(),
     )
     .into_response()
 }
@@ -85,6 +119,28 @@ pub struct RegisterAgentForm {
     name: String,
     #[serde(default)]
     config: String,
+}
+
+async fn rerender_with_error(state: &AppState, tenant_id: Uuid, error: String) -> Response {
+    let agents = state
+        .agents_client
+        .list_agents(tenant_id, DEFAULT_PAGE_SIZE, 0)
+        .await
+        .map(|p| p.agents)
+        .unwrap_or_default();
+    let stats = state.stats_client.connector_stats(tenant_id).await.unwrap_or_default();
+    Html(
+        AgentsTemplate {
+            show_nav: true,
+            agents: join_agent_stats(agents, stats),
+            page: 0,
+            has_more: false,
+            error: Some(error),
+        }
+        .render()
+        .unwrap(),
+    )
+    .into_response()
 }
 
 pub async fn post_agents(
@@ -103,20 +159,12 @@ pub async fn post_agents(
         match serde_json::from_str(&form.config) {
             Ok(value) => value,
             Err(_) => {
-                let agents =
-                    state.agents_client.list_agents(session.tenant_id).await.unwrap_or_default();
-                let stats =
-                    state.stats_client.connector_stats(session.tenant_id).await.unwrap_or_default();
-                return Html(
-                    AgentsTemplate {
-                        show_nav: true,
-                        agents: join_agent_stats(agents, stats),
-                        error: Some("config must be valid JSON".to_string()),
-                    }
-                    .render()
-                    .unwrap(),
+                return rerender_with_error(
+                    &state,
+                    session.tenant_id,
+                    "config must be valid JSON".to_string(),
                 )
-                .into_response();
+                .await;
             }
         }
     };
@@ -126,18 +174,7 @@ pub async fn post_agents(
         .register_agent(session.tenant_id, &form.connector_type, &form.name, config)
         .await
     {
-        let agents = state.agents_client.list_agents(session.tenant_id).await.unwrap_or_default();
-        let stats = state.stats_client.connector_stats(session.tenant_id).await.unwrap_or_default();
-        return Html(
-            AgentsTemplate {
-                show_nav: true,
-                agents: join_agent_stats(agents, stats),
-                error: Some(e.to_string()),
-            }
-            .render()
-            .unwrap(),
-        )
-        .into_response();
+        return rerender_with_error(&state, session.tenant_id, e.to_string()).await;
     }
 
     Redirect::to("/agents").into_response()
@@ -170,11 +207,9 @@ pub async fn post_toggle_agent(
         Err(response) => return response,
     };
 
-    if let Ok(agents) = state.agents_client.list_agents(session.tenant_id).await {
-        if let Some(mut agent) = agents.into_iter().find(|a| a.id == id) {
-            agent.enabled = !agent.enabled;
-            let _ = state.agents_client.update_agent(&agent).await;
-        }
+    if let Ok(Some(mut agent)) = state.agents_client.get_agent(session.tenant_id, id).await {
+        agent.enabled = !agent.enabled;
+        let _ = state.agents_client.update_agent(&agent).await;
     }
     Redirect::to("/agents").into_response()
 }

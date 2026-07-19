@@ -87,8 +87,29 @@ async fn list_agents_is_scoped_to_the_header_tenant() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let agents: Vec<Agent> = serde_json::from_slice(&bytes).unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let agents: Vec<Agent> = serde_json::from_value(body["agents"].clone()).unwrap();
     assert_eq!(agents.len(), 1);
+    assert_eq!(body["has_more"], serde_json::json!(false));
+}
+
+#[tokio::test]
+async fn list_agents_reports_has_more_when_results_exceed_the_page_size() {
+    let tenant_id = Uuid::new_v4();
+    let repo = InMemoryAgentRepository::default();
+    for name in ["a", "b", "c"] {
+        repo.create(Agent::new(tenant_id, "zendesk", name, serde_json::json!({}))).await.unwrap();
+    }
+    let state = AgentState { agent_repository: Arc::new(repo) };
+
+    let response =
+        send(router(state), "GET", "/v1/agents?limit=2".to_string(), Some(tenant_id), None).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["agents"].as_array().unwrap().len(), 2);
+    assert_eq!(body["has_more"], serde_json::json!(true));
 }
 
 #[tokio::test]

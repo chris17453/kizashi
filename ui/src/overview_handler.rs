@@ -31,7 +31,14 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
         Err(response) => return response,
     };
 
-    let agents = state.agents_client.list_agents(session.tenant_id).await.unwrap_or_default();
+    // Capped at 1000, same tradeoff as the events count below — a KPI tile approximates at
+    // very high agent counts rather than needing an exact total.
+    let agents = state
+        .agents_client
+        .list_agents(session.tenant_id, 1000, 0)
+        .await
+        .map(|page| page.agents)
+        .unwrap_or_default();
     let connector_stats =
         state.stats_client.connector_stats(session.tenant_id).await.unwrap_or_default();
     // Capped at 1000 (the same ceiling the backend itself clamps to) — a KPI tile approximates

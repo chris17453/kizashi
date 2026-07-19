@@ -40,15 +40,22 @@ impl AgentRepository for InMemoryAgentRepository {
             .cloned())
     }
 
-    async fn list(&self, tenant_id: Uuid) -> Result<Vec<Agent>, AgentRepositoryError> {
-        Ok(self
+    async fn list(
+        &self,
+        tenant_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Agent>, AgentRepositoryError> {
+        let mut agents: Vec<Agent> = self
             .agents
             .lock()
             .unwrap()
             .iter()
             .filter(|a| a.tenant_id == tenant_id)
             .cloned()
-            .collect())
+            .collect();
+        agents.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(agents.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
 
     async fn delete(&self, tenant_id: Uuid, id: Uuid) -> Result<(), AgentRepositoryError> {
@@ -96,7 +103,12 @@ impl AgentRepository for FailingAgentRepository {
         Err(AgentRepositoryError::Backend("simulated failure".to_string()))
     }
 
-    async fn list(&self, _tenant_id: Uuid) -> Result<Vec<Agent>, AgentRepositoryError> {
+    async fn list(
+        &self,
+        _tenant_id: Uuid,
+        _limit: i64,
+        _offset: i64,
+    ) -> Result<Vec<Agent>, AgentRepositoryError> {
         Err(AgentRepositoryError::Backend("simulated failure".to_string()))
     }
 
@@ -148,8 +160,21 @@ async fn list_is_scoped_to_tenant() {
     let repo = InMemoryAgentRepository::with_agent(sample_agent(tenant_id));
     repo.create(sample_agent(Uuid::new_v4())).await.unwrap();
 
-    let found = repo.list(tenant_id).await.unwrap();
+    let found = repo.list(tenant_id, 25, 0).await.unwrap();
     assert_eq!(found.len(), 1);
+}
+
+#[tokio::test]
+async fn list_respects_limit_and_offset() {
+    let tenant_id = Uuid::new_v4();
+    let repo = InMemoryAgentRepository::default();
+    for name in ["a", "b", "c"] {
+        repo.create(Agent::new(tenant_id, "zendesk", name, serde_json::json!({}))).await.unwrap();
+    }
+
+    let found = repo.list(tenant_id, 1, 1).await.unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].name, "b");
 }
 
 #[tokio::test]
