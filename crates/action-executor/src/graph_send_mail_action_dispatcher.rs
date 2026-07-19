@@ -77,9 +77,15 @@ impl ActionDispatcher for GraphSendMailActionDispatcher {
             .map(str::to_string)
             .unwrap_or_else(|| format!("Kizashi alert: {}", event.event_type));
 
-        let access_token = fetch_access_token(token_url, client_id, client_secret, GRAPH_SCOPE)
-            .await
-            .map_err(|e| DispatchError::Unreachable(format!("Entra token fetch failed: {e}")))?;
+        let access_token = fetch_access_token(
+            token_url,
+            client_id,
+            client_secret,
+            GRAPH_SCOPE,
+            self.client.clone(),
+        )
+        .await
+        .map_err(|e| DispatchError::Unreachable(format!("Entra token fetch failed: {e}")))?;
 
         let body = serde_json::to_string_pretty(event)
             .map_err(|e| DispatchError::InvalidConfig(format!("failed to render event: {e}")))?;

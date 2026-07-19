@@ -56,6 +56,7 @@ async fn an_aad_token_rejected_by_a_real_tds_server_is_reported_as_auth_failed()
         "client-secret",
         "SELECT 1 AS id",
         true,
+        reqwest::Client::new(),
     );
 
     let err = connector.poll(uuid::Uuid::new_v4()).await.unwrap_err();
@@ -76,6 +77,7 @@ async fn unreachable_tds_server_is_reported_as_source_unavailable() {
         "client-secret",
         "SELECT 1",
         true,
+        reqwest::Client::new(),
     );
 
     let err = connector.poll(uuid::Uuid::new_v4()).await.unwrap_err();
@@ -96,6 +98,7 @@ async fn unreachable_token_endpoint_is_reported_as_auth_failed() {
         "client-secret",
         "SELECT 1",
         true,
+        reqwest::Client::new(),
     );
 
     let err = connector.poll(uuid::Uuid::new_v4()).await.unwrap_err();

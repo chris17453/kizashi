@@ -64,10 +64,15 @@ impl Connector for GraphMailConnector {
     }
 
     async fn poll(&self, tenant_id: uuid::Uuid) -> Result<Vec<RawRecord>, ConnectorError> {
-        let access_token =
-            fetch_access_token(&self.token_url, &self.client_id, &self.client_secret, GRAPH_SCOPE)
-                .await
-                .map_err(|e| ConnectorError::AuthFailed(e.to_string()))?;
+        let access_token = fetch_access_token(
+            &self.token_url,
+            &self.client_id,
+            &self.client_secret,
+            GRAPH_SCOPE,
+            self.client.clone(),
+        )
+        .await
+        .map_err(|e| ConnectorError::AuthFailed(e.to_string()))?;
 
         let response = self
             .client
