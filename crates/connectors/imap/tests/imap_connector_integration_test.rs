@@ -3,6 +3,10 @@
 //! real IMAP server (a greenmail container in CI/local dev — see docs/features.md for the exact
 //! `docker run` invocation used to verify this connector) with a mailbox seeded with at least
 //! one message, plus IMAP_TEST_USERNAME/IMAP_TEST_PASSWORD credentials for it.
+//!
+//! CI shares this same greenmail mailbox with action-executor's SMTP integration test, which
+//! seeds its own message under a different subject — so this test searches for its expected
+//! message by subject rather than assuming it's the only (or first) one present.
 
 use common::connector::Connector;
 use connector_imap::ImapConnector;
@@ -46,11 +50,14 @@ async fn polls_a_real_imap_server_and_returns_the_seeded_message_as_a_raw_record
 
     let records = connector.poll(tenant_id).await.expect("poll against a real IMAP server failed");
 
-    assert!(!records.is_empty(), "expected at least one seeded message in the mailbox");
-    let record = &records[0];
+    let record = records
+        .iter()
+        .find(|r| r.raw_payload["subject"] == "Live IMAP connector test")
+        .unwrap_or_else(|| {
+            panic!("expected the seeded 'Live IMAP connector test' message, got: {records:?}")
+        });
     assert_eq!(record.connector_id, "imap-live-test");
     assert_eq!(record.tenant_id, tenant_id);
-    assert_eq!(record.raw_payload["subject"], "Live IMAP connector test");
     assert_eq!(record.raw_payload["from"], "sender@example.com");
 }
 
