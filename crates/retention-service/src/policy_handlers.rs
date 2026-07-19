@@ -7,6 +7,7 @@ use crate::AppState;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
+use common::Role;
 #[cfg(test)]
 use std::sync::Arc;
 use uuid::Uuid;
@@ -40,6 +41,27 @@ fn tenant_mismatch(headers: &HeaderMap, entity_tenant_id: Uuid) -> Option<Respon
     }
 }
 
+/// RBAC v1 follow-up (ADR-0016): same `X-Role` trust boundary and `Operator`-minimum check as
+/// config-admin-service's write handlers.
+fn role_from_headers(headers: &HeaderMap) -> Result<Role, (StatusCode, &'static str)> {
+    let raw = headers
+        .get("x-role")
+        .and_then(|v| v.to_str().ok())
+        .ok_or((StatusCode::UNAUTHORIZED, "missing X-Role header"))?;
+    raw.parse().map_err(|_| (StatusCode::BAD_REQUEST, "X-Role is not a recognized role"))
+}
+
+fn require_operator(headers: &HeaderMap) -> Option<Response> {
+    match role_from_headers(headers) {
+        Ok(role) if role.at_least(Role::Operator) => None,
+        Ok(_) => Some(error_response(
+            StatusCode::FORBIDDEN,
+            "role does not have permission to perform this action",
+        )),
+        Err((status, msg)) => Some(error_response(status, msg)),
+    }
+}
+
 fn policy_error_response(e: RetentionPolicyRepositoryError) -> Response {
     match e {
         RetentionPolicyRepositoryError::NotFound(id) => {
@@ -59,6 +81,9 @@ pub async fn create_policy(
     if let Some(response) = tenant_mismatch(&headers, policy.tenant_id) {
         return response;
     }
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
     match state.policy_repository.create(policy).await {
         Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
         Err(e) => policy_error_response(e),
@@ -72,6 +97,9 @@ pub async fn update_policy(
     Json(mut policy): Json<RetentionPolicy>,
 ) -> Response {
     if let Some(response) = tenant_mismatch(&headers, policy.tenant_id) {
+        return response;
+    }
+    if let Some(response) = require_operator(&headers) {
         return response;
     }
     policy.id = id;

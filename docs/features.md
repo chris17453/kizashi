@@ -1197,3 +1197,28 @@ Entry format:
   advisories).
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** [0016-rbac-v1-scope-role-on-local-user-x-role-header-trust-config-admin-write-path-enforcement.md](../adr/0016-rbac-v1-scope-role-on-local-user-x-role-header-trust-config-admin-write-path-enforcement.md)
+
+## [2026-07-19] feature/0014-docker-images — RBAC enforcement extended to retention-service
+- **Type:** feature
+- **Summary:** First of ADR-0016's explicitly-deferred follow-ups: `retention-service`'s
+  `create_policy`/`update_policy` now require `X-Role` at least `Operator`, mirroring
+  `config-admin-service`'s enforcement exactly (`role_from_headers`/`require_operator` helpers,
+  same 401-missing/403-insufficient/pass-through-Operator-or-above contract). No new migration
+  needed — `retention-service` doesn't mint its own sessions; it trusts the same `X-Role` header
+  Console UI/callers already forward. `action-executor`'s trigger CRUD and
+  `ingestion-gateway`'s API-key create/revoke remain unenforced, still tracked in ADR-0016 as
+  the next follow-ups.
+- **Tests:** `cargo test -p retention-service --lib` — 43 passed (3 new: missing-role 401,
+  viewer-rejected 403, operator-allowed 201 on `create_policy`, mirroring
+  config-admin-service's role tests exactly). Beyond unit tests: rebuilt and redeployed
+  `retention-service`, sent a real policy-create request three ways against the live service —
+  no `X-Role` (401), `X-Role: viewer` (403), `X-Role: operator` (201) — against real running
+  Postgres. Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` clean, `cargo test --workspace --all-features`
+  all green (0 failures across every crate, verified against a throwaway local `mssql`
+  container standing in for CI's Fabric TDS dependency), `cargo llvm-cov` 93.84% line coverage
+  (85% floor), `cargo audit` / `cargo deny check` clean (same two pre-existing allow-listed
+  `unmaintained` advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — implements a follow-up explicitly scoped out of ADR-0016's v1, not a new
+  architectural decision.
