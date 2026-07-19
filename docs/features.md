@@ -2254,3 +2254,34 @@ architectural decision.
 - **ADR:** n/a — adds a `DELETE` endpoint following the identical pattern
   `agent_repository::delete` already established, and a UI surface for the resulting full CRUD
   API; no new architectural decision
+
+## [2026-07-19] feature/0027-egress-allowlist-console-ui — Egress Allowlist Console UI page
+- **Type:** feature
+- **Branch:** feature/0027-egress-allowlist-console-ui
+- **Summary:** Closes the third and final "full backend, zero UI" gap found in the Console UI
+  completeness audit. `egress-gateway` has had a full `GET`/`PUT /v1/allowlist` API since
+  ADR-0021, RBAC-enforced (fix/0003) — but no Console UI page ever existed for it, meaning an
+  operator had to hand-craft `curl` to manage a tenant's SSRF/exfiltration containment
+  boundary. Added a `/egress-allowlist` page: `egress_allowlist_client.rs`
+  (`EgressAllowlistClient` trait + `HttpEgressAllowlistClient`, threading `role: Role` through
+  the `PUT` write), `egress_allowlist_handler.rs` (get + replace-the-whole-list post, mirroring
+  `AnalysisConfigClient`'s singleton-config pattern since that's this backend's own shape — one
+  resource per tenant, not row-based CRUD like Agents/Retention Policies), and a new
+  `egress_allowlist.html` template with a one-domain-per-line textarea. Also added
+  `.env.example`/`docker-compose.yml` entries for `EGRESS_GATEWAY_URL`.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 184 tests, all passed (10 new: client tests
+  against a real stub HTTP server for get/put/role-rejection, handler tests covering
+  empty-default, save-and-display, blank-textarea-means-empty-list, viewer-role rejection, and
+  backend-failure handling). `cargo test --workspace --all-features` (full real-infra stack)
+  — all passed, 0 failed. `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo
+  audit` — same 3 pre-existing allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `kizashi-ui` container, logged in
+  with the seeded demo user, and posted a real 3-domain allowlist through the actual page —
+  confirmed via a direct Postgres query against `egress_gateway.tenant_allowlists` that all
+  three domains landed correctly. A headless-Chrome screenshot of the real rendered page
+  confirmed the textarea correctly displays the saved domains (one per line) and matches the
+  platform's existing visual design language. Cleaned up the test allowlist row afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — implements a UI surface for an already-existing, already-decided backend API
+  (ADR-0021), no new architectural decision

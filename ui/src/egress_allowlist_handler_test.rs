@@ -2,14 +2,16 @@ use super::*;
 use crate::agents_client::agents_client_test::InMemoryAgentsClient;
 use crate::analysis_config_client::analysis_config_client_test::InMemoryAnalysisConfigClient;
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
+use crate::egress_allowlist_client::egress_allowlist_client_test::{
+    FailingEgressAllowlistClient, InMemoryEgressAllowlistClient,
+};
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::execution_client::execution_client_test::InMemoryExecutionClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
-use crate::normalization_mappings_client::normalization_mappings_client_test::{
-    FailingNormalizationMappingsClient, InMemoryNormalizationMappingsClient,
-};
+use crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient;
+use crate::retention_policies_client::retention_policies_client_test::InMemoryRetentionPoliciesClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
@@ -22,10 +24,7 @@ use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
     Router::new()
-        .route(
-            "/normalization-mappings",
-            get(get_normalization_mappings).post(post_normalization_mapping),
-        )
+        .route("/egress-allowlist", get(get_egress_allowlist).post(post_egress_allowlist))
         .with_state(state)
 }
 
@@ -59,25 +58,21 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
         analysis_config_client: Arc::new(InMemoryAnalysisConfigClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         normalization_mappings_client: Arc::new(InMemoryNormalizationMappingsClient::default()),
-        retention_policies_client: Arc::new(
-            crate::retention_policies_client::retention_policies_client_test::InMemoryRetentionPoliciesClient::default(),
-        ),
-        egress_allowlist_client: Arc::new(
-            crate::egress_allowlist_client::egress_allowlist_client_test::InMemoryEgressAllowlistClient::default(),
-        ),
+        retention_policies_client: Arc::new(InMemoryRetentionPoliciesClient::default()),
+        egress_allowlist_client: Arc::new(InMemoryEgressAllowlistClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id, tenant_id)
 }
 
 #[tokio::test]
-async fn shows_an_empty_state_with_no_mappings_configured() {
+async fn shows_an_empty_allowlist_by_default() {
     let (state, session_id, _tenant_id) = state_with_session(common::Role::Admin).await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/normalization-mappings")
+                .uri("/egress-allowlist")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -88,52 +83,23 @@ async fn shows_an_empty_state_with_no_mappings_configured() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("No normalization mappings"));
+    assert!(body.contains("no restriction") || body.contains("Egress"));
 }
 
 #[tokio::test]
-async fn post_creates_a_mapping_and_redirects() {
-    let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
-    let mappings_client = Arc::new(
-        crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient::default(),
-    );
+async fn post_saves_the_allowlist_and_shows_it() {
+    let (state, session_id, tenant_id) = state_with_session(common::Role::Operator).await;
+    let allowlist_client = Arc::new(InMemoryEgressAllowlistClient::default());
     let mut state = state;
-    state.normalization_mappings_client = mappings_client.clone();
+    state.egress_allowlist_client = allowlist_client.clone();
 
-    let body = "source_type=ticket&field_map=text+%3D+%24.description%0Aurgency+%3D+%24.priority";
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/normalization-mappings")
-                .header("cookie", format!("kizashi_session={session_id}"))
-                .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from(body))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let created = mappings_client.created.lock().unwrap();
-    assert_eq!(created.len(), 1);
-    assert_eq!(created[0].source_type, "ticket");
-    assert_eq!(created[0].field_map.get("text"), Some(&"$.description".to_string()));
-    assert_eq!(created[0].field_map.get("urgency"), Some(&"$.priority".to_string()));
-}
-
-#[tokio::test]
-async fn post_rerenders_with_an_error_when_field_map_has_no_valid_lines() {
-    let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
-
-    let body = "source_type=ticket&field_map=not+a+valid+line";
+    let body = "domains=zendesk.com%0Aapi.github.com";
 
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/normalization-mappings")
+                .uri("/egress-allowlist")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .header("content-type", "application/x-www-form-urlencoded")
                 .body(Body::from(body))
@@ -143,25 +109,55 @@ async fn post_rerenders_with_an_error_when_field_map_has_no_valid_lines() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
+    {
+        let saved = allowlist_client.domains.lock().unwrap();
+        assert_eq!(
+            saved.get(&tenant_id),
+            Some(&vec!["zendesk.com".to_string(), "api.github.com".to_string()])
+        );
+    }
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("at least one"));
+    let body_text = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body_text.contains("zendesk.com"));
+}
+
+#[tokio::test]
+async fn post_with_a_blank_textarea_saves_an_empty_allowlist() {
+    let (state, session_id, tenant_id) = state_with_session(common::Role::Operator).await;
+    let allowlist_client = Arc::new(InMemoryEgressAllowlistClient::default());
+    let mut state = state;
+    state.egress_allowlist_client = allowlist_client.clone();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/egress-allowlist")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("domains="))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let saved = allowlist_client.domains.lock().unwrap();
+    assert_eq!(saved.get(&tenant_id), Some(&vec![]));
 }
 
 #[tokio::test]
 async fn post_rejects_a_viewer_role() {
     let (state, session_id, _tenant_id) = state_with_session(common::Role::Viewer).await;
 
-    let body = "source_type=ticket&field_map=text+%3D+%24.description";
-
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/normalization-mappings")
+                .uri("/egress-allowlist")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from(body))
+                .body(Body::from("domains=zendesk.com"))
                 .unwrap(),
         )
         .await
@@ -173,12 +169,12 @@ async fn post_rejects_a_viewer_role() {
 #[tokio::test]
 async fn shows_an_error_when_the_backend_fails() {
     let (mut state, session_id, _tenant_id) = state_with_session(common::Role::Admin).await;
-    state.normalization_mappings_client = Arc::new(FailingNormalizationMappingsClient);
+    state.egress_allowlist_client = Arc::new(FailingEgressAllowlistClient);
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/normalization-mappings")
+                .uri("/egress-allowlist")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -197,7 +193,7 @@ async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session(common::Role::Admin).await;
 
     let response = router(state)
-        .oneshot(Request::builder().uri("/normalization-mappings").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/egress-allowlist").body(Body::empty()).unwrap())
         .await
         .unwrap();
 

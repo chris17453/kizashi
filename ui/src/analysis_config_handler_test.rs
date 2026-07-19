@@ -54,6 +54,7 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
         execution_client: Arc::new(InMemoryExecutionClient::default()),
         normalization_mappings_client: std::sync::Arc::new(crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient::default()),
         retention_policies_client: std::sync::Arc::new(crate::retention_policies_client::retention_policies_client_test::InMemoryRetentionPoliciesClient::default()),
+        egress_allowlist_client: std::sync::Arc::new(crate::egress_allowlist_client::egress_allowlist_client_test::InMemoryEgressAllowlistClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         analysis_config_client: Arc::new(InMemoryAnalysisConfigClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
