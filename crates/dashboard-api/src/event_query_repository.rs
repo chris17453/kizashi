@@ -25,6 +25,10 @@ pub struct EventFilter {
     pub status: Option<common::EventStatus>,
     pub since: Option<DateTime<Utc>>,
     pub until: Option<DateTime<Utc>>,
+    /// Matches Events whose `record_ids` contains this `RawRecord` id — the record→event
+    /// lineage lookup (ADR-0017) a record-journey view uses to find what a record contributed
+    /// to.
+    pub record_id: Option<Uuid>,
     pub limit: u32,
     pub offset: u32,
 }
@@ -165,6 +169,10 @@ impl EventQueryRepository for ClickHouseEventQueryRepository {
         if let Some(until) = filter.until {
             conditions.push("occurred_at <= {until:DateTime64}".to_string());
             params.push(("until".to_string(), until.format("%Y-%m-%d %H:%M:%S%.3f").to_string()));
+        }
+        if let Some(record_id) = filter.record_id {
+            conditions.push("has(record_ids, {record_id:UUID})".to_string());
+            params.push(("record_id".to_string(), record_id.to_string()));
         }
 
         let limit = filter.limit.clamp(1, 1000);

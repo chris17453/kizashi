@@ -42,6 +42,7 @@ pub struct ListEventsQuery {
     pub status: Option<String>,
     pub since: Option<DateTime<Utc>>,
     pub until: Option<DateTime<Utc>>,
+    pub record_id: Option<Uuid>,
     #[serde(default = "default_limit")]
     pub limit: u32,
     #[serde(default)]
@@ -89,6 +90,7 @@ pub async fn list_events(
         status,
         since: query.since,
         until: query.until,
+        record_id: query.record_id,
         limit: query.limit + 1,
         offset: query.offset,
     };

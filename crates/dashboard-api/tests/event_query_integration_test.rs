@@ -104,6 +104,34 @@ async fn list_and_get_events_round_trip_against_real_clickhouse_including_record
 }
 
 #[tokio::test]
+async fn list_events_filters_by_record_id_against_real_clickhouse() {
+    let clickhouse_url =
+        std::env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set to run this test");
+    let base_url = format!("{clickhouse_url}/");
+    let client = reqwest::Client::new();
+    ensure_schema(&client, &base_url).await;
+
+    let tenant_id = Uuid::new_v4();
+    let target_record_id = Uuid::new_v4();
+    let matching_event = Uuid::new_v4();
+    let other_event = Uuid::new_v4();
+    insert_event_row(&client, &base_url, matching_event, tenant_id, &[target_record_id]).await;
+    insert_event_row(&client, &base_url, other_event, tenant_id, &[Uuid::new_v4()]).await;
+
+    let repo = ClickHouseEventQueryRepository::new(client, base_url);
+    let found = repo
+        .list_events(
+            tenant_id,
+            &EventFilter { record_id: Some(target_record_id), limit: 10, ..Default::default() },
+        )
+        .await
+        .expect("list_events failed");
+
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id, matching_event);
+}
+
+#[tokio::test]
 async fn get_event_returns_none_for_an_unknown_id_against_real_clickhouse() {
     let clickhouse_url =
         std::env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set to run this test");

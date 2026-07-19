@@ -1425,3 +1425,42 @@ Entry format:
   advisories).
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** [0017-event-record-lineage-record-ids-field-on-event.md](../adr/0017-event-record-lineage-record-ids-field-on-event.md)
+
+## [2026-07-19] feature/0014-docker-images — ActionExecution gains tenant_id; action-executor's first query endpoint; dashboard-api record_id filter
+- **Type:** fix
+- **Summary:** Building the record→event lineage (ADR-0017) surfaced a real compliance gap
+  while wiring up the event→action hop for a UI journey view: `ActionExecution` had **no
+  `tenant_id` at all**, on the type or the table — a genuine violation of CLAUDE.md §5's
+  "every row is tenant-scoped" rule, only latent until now because `action-executor` had zero
+  HTTP query surface (pure RabbitMQ consumer, insert-only repository). Fixed properly rather
+  than worked around: `ActionExecution` gains `tenant_id: Uuid` (from `Event.tenant_id`, always
+  available at write time); `action_executions` gets a migration adding the column (existing
+  126 rows in this build's dev database were synthetic test/demo data with no way to backfill
+  a real tenant, so they're dropped as part of the migration, documented inline in the SQL
+  comment, not silently). `ExecutionRepository` gains `list_by_event(tenant_id, event_id)`, and
+  action-executor gets its first real HTTP endpoint — `GET /v1/action-executions?event_id=X` —
+  trusting `X-Tenant-Id` the same way every other gateway-less service in this codebase does.
+  Separately, `dashboard-api`'s `EventFilter` gains `record_id: Option<Uuid>`
+  (`GET /v1/events?record_id=X`), using ClickHouse's `has(record_ids, ...)` against the
+  `record_ids` column from the previous PR — completing the query-side plumbing for a
+  record-journey view: `GET /data/:id` → `GET /v1/events?record_id=:id` →
+  `GET /v1/action-executions?event_id=:id` now traces a record all the way to what happened
+  because of it.
+- **Tests:** `cargo test -p common --lib action_execution` — 3 passed (tenant_id threading
+  through `new`/`retry`). `cargo test -p action-executor --lib` — 22 passed (3 new:
+  `list_by_event` scoped to tenant+event in the in-memory double; the new HTTP handler tested
+  for success, missing-tenant-header 401, and backend-failure 500). `cargo test -p
+  action-executor --test execution_repository_integration_test` — 2 passed against real
+  Postgres (1 new: `list_by_event` against the real table, confirming both the tenant and
+  event scoping hold). `cargo test -p dashboard-api --lib` — 19 passed (1 new: `record_id`
+  filter). `cargo test -p dashboard-api --test event_query_integration_test` — 3 passed
+  against real ClickHouse (1 new: `has(record_ids, ...)` filter proven against a real insert,
+  not just the in-memory double). Full local CI gate: `cargo fmt --all --check` clean, `cargo
+  clippy --workspace --all-targets --all-features -- -D warnings` clean, `cargo test
+  --workspace --all-features` all green (0 failures across every crate, verified against a
+  throwaway local `mssql` container standing in for CI's Fabric TDS dependency), `cargo
+  llvm-cov` 94.16% line coverage (85% floor), `cargo audit` / `cargo deny check` clean (same
+  two pre-existing allow-listed `unmaintained` advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — a compliance bugfix (missing tenant scoping) and additive query capability
+  surfaced while implementing ADR-0017, not a new architectural decision itself.

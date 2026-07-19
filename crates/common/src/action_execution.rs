@@ -13,6 +13,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionExecution {
     pub id: Uuid,
+    pub tenant_id: Uuid,
     pub trigger_id: Uuid,
     pub event_id: Uuid,
     pub action_type: ActionType,
@@ -32,6 +33,7 @@ pub enum ActionExecutionStatus {
 
 impl ActionExecution {
     pub fn new(
+        tenant_id: Uuid,
         trigger_id: Uuid,
         event_id: Uuid,
         action_type: ActionType,
@@ -39,6 +41,7 @@ impl ActionExecution {
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
+            tenant_id,
             trigger_id,
             event_id,
             action_type,
@@ -53,6 +56,7 @@ impl ActionExecution {
     pub fn retry(&self, detail: serde_json::Value) -> Self {
         Self {
             id: Uuid::new_v4(),
+            tenant_id: self.tenant_id,
             trigger_id: self.trigger_id,
             event_id: self.event_id,
             action_type: self.action_type,

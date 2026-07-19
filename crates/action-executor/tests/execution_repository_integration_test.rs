@@ -28,6 +28,7 @@ async fn insert_persists_an_action_execution_row() {
     let execution = ActionExecution::new(
         Uuid::new_v4(),
         Uuid::new_v4(),
+        Uuid::new_v4(),
         ActionType::Webhook,
         serde_json::json!({"http_status": 200}),
     );
@@ -45,11 +46,49 @@ async fn insert_persists_an_action_execution_row() {
 }
 
 #[tokio::test]
+async fn list_by_event_returns_only_the_matching_tenant_and_event() {
+    let pool = test_pool().await;
+    let repo = PostgresExecutionRepository::new(pool.clone());
+    let tenant_id = Uuid::new_v4();
+    let event_id = Uuid::new_v4();
+
+    let matching = ActionExecution::new(
+        tenant_id,
+        Uuid::new_v4(),
+        event_id,
+        ActionType::Webhook,
+        serde_json::json!({}),
+    );
+    repo.insert(&matching).await.unwrap();
+    let other_event = ActionExecution::new(
+        tenant_id,
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        ActionType::Webhook,
+        serde_json::json!({}),
+    );
+    repo.insert(&other_event).await.unwrap();
+    let other_tenant = ActionExecution::new(
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        event_id,
+        ActionType::Webhook,
+        serde_json::json!({}),
+    );
+    repo.insert(&other_tenant).await.unwrap();
+
+    let found = repo.list_by_event(tenant_id, event_id).await.unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].id, matching.id);
+}
+
+#[tokio::test]
 async fn retried_executions_are_separate_append_only_rows() {
     let pool = test_pool().await;
     let repo = PostgresExecutionRepository::new(pool.clone());
 
     let original = ActionExecution::new(
+        Uuid::new_v4(),
         Uuid::new_v4(),
         Uuid::new_v4(),
         ActionType::Email,
