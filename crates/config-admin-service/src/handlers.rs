@@ -3,6 +3,7 @@
 mod handlers_test;
 
 use crate::audit_log::AuditLogReader;
+use crate::mapping_publisher::MappingPublisher;
 use crate::normalization_mapping_repository::{
     NormalizationMappingRepository, NormalizationMappingRepositoryError,
 };
@@ -23,6 +24,7 @@ pub struct AdminState {
     pub mapping_repository: Arc<dyn NormalizationMappingRepository>,
     pub audit_reader: Arc<dyn AuditLogReader>,
     pub trigger_publisher: Arc<dyn TriggerPublisher>,
+    pub mapping_publisher: Arc<dyn MappingPublisher>,
 }
 
 #[derive(serde::Serialize)]
@@ -217,7 +219,12 @@ pub async fn create_mapping(
         return response;
     }
     match state.mapping_repository.create(mapping).await {
-        Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
+        Ok(created) => {
+            if let Err(e) = state.mapping_publisher.publish_mapping_changed(&created).await {
+                tracing::error!(mapping_id = %created.id, error = %e, "failed to publish mapping.changed");
+            }
+            (StatusCode::CREATED, Json(created)).into_response()
+        }
         Err(e) => mapping_error_response(e),
     }
 }
@@ -236,7 +243,12 @@ pub async fn update_mapping(
     }
     mapping.id = id;
     match state.mapping_repository.update(mapping).await {
-        Ok(updated) => Json(updated).into_response(),
+        Ok(updated) => {
+            if let Err(e) = state.mapping_publisher.publish_mapping_changed(&updated).await {
+                tracing::error!(mapping_id = %updated.id, error = %e, "failed to publish mapping.changed");
+            }
+            Json(updated).into_response()
+        }
         Err(e) => mapping_error_response(e),
     }
 }

@@ -11,6 +11,7 @@ mod analysis_config_repository;
 mod audit_log;
 mod handlers;
 mod health;
+mod mapping_publisher;
 mod normalization_mapping_repository;
 mod trigger_definition_repository;
 mod trigger_publisher;
@@ -36,6 +37,7 @@ pub use handlers::{
     list_triggers, update_mapping, update_trigger, AdminState,
 };
 pub use health::healthz;
+pub use mapping_publisher::{MappingPublishError, MappingPublisher, RabbitMqMappingPublisher};
 pub use normalization_mapping_repository::{
     NormalizationMappingRepository, NormalizationMappingRepositoryError,
     PostgresNormalizationMappingRepository,

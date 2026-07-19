@@ -2320,3 +2320,42 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — implements a UI surface for already-existing, already-decided backend APIs
   (the audit-log write path itself predates this session), no new architectural decision
+
+## [2026-07-19] feature/0029-normalization-mapping-sync — Sync NormalizationMapping config-admin to normalization-service
+- **Type:** feature
+- **Branch:** feature/0029-normalization-mapping-sync
+- **Summary:** Closes a real functional bug surfaced by this session's ADR-follow-up audit:
+  editing a Field Mapping through the Console UI (built earlier this session) had zero effect
+  on the running normalization pipeline, because `normalization-service` only ever read its own
+  local Postgres table and was never wired to receive change notifications from
+  `config-admin-service`, the actual owner of the config. Fixed by extending ADR-0018's
+  already-proven `trigger.changed` sync pattern to mappings: `config-admin-service` now
+  publishes a `mapping.changed` fanout message (new `MAPPING_CHANGED_EXCHANGE` constant in
+  `common`, `mapping_publisher.rs`'s `MappingPublisher` trait + `RabbitMqMappingPublisher`,
+  called from `create_mapping`/`update_mapping`) whenever a mapping is created or updated;
+  `normalization-service` now consumes it (new `upsert()` on `MappingRepository`'s trait/
+  Postgres impl using `ON CONFLICT (id) DO UPDATE`, plus a `tokio::spawn`'d consumer loop in
+  `main.rs` that acks on success and nacks-with-requeue on repository failure) and mirrors the
+  change into its own local table.
+- **Tests:** `cargo test -p config-admin-service --lib` — 75 passed (2 new:
+  `in_memory_publisher_records_published_mappings`, `failing_publisher_returns_bus_error`).
+  `cargo test -p config-admin-service --test mapping_publisher_integration_test` — 1 passed,
+  real RabbitMQ round trip. `cargo test -p normalization-service --lib` — 18 passed (2 new:
+  `upsert_inserts_a_new_mapping`, `upsert_replaces_an_existing_mapping_with_the_same_id`).
+  `cargo test -p normalization-service --test mapping_repository_integration_test` — 2 passed,
+  real Postgres (1 new: `upsert_inserts_then_replaces_a_mapping_by_id_against_real_postgres`).
+  `cargo test --workspace --all-features` (full real-infra stack: Postgres, RabbitMQ,
+  ClickHouse, greenmail, throwaway MSSQL) — 108 test binaries, all passed, 0 failed. `cargo
+  clippy --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all
+  --check` — clean. `cargo deny check` — clean (advisories ok, bans ok, licenses ok, sources
+  ok). `cargo audit` — same 3 pre-existing allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `config-admin-service` and
+  `normalization-service` containers, logged in as the seeded demo user, then created and
+  updated a real `NormalizationMapping` via `config-admin-service`'s actual HTTP API. Confirmed
+  via direct Postgres queries against `normalization_service.normalization_mappings` that both
+  the create and the update propagated live over real RabbitMQ into the service's local mirror
+  table — the exact end-to-end path a Console UI edit now actually takes effect through.
+  Cleaned up the test mapping row from both services' tables afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — extends ADR-0018's already-decided config-sync pattern to a sibling entity, no
+  new architectural decision
