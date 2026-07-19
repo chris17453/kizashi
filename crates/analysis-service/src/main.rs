@@ -29,6 +29,10 @@ fn batch_max_wait() -> Duration {
     Duration::from_millis(ms)
 }
 
+fn openai_compatible_concurrency() -> usize {
+    std::env::var("ANALYSIS_OPENAI_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(4)
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -73,6 +77,7 @@ async fn main() {
         ),
         analysis_config_repository: analysis_config_repository.clone(),
         http_client: reqwest::Client::new(),
+        openai_compatible_concurrency: openai_compatible_concurrency(),
     };
 
     consume_channel

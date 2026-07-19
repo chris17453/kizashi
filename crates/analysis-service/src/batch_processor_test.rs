@@ -38,6 +38,7 @@ async fn process_batch_calls_analysis_once_and_publishes_one_message_per_record(
         publisher: publisher.clone(),
         analysis_config_repository: Arc::new(InMemoryAnalysisConfigRepository::default()),
         http_client: reqwest::Client::new(),
+        openai_compatible_concurrency: 4,
     };
     let tenant_id = Uuid::new_v4();
     let records = vec![record_for(tenant_id), record_for(tenant_id)];
@@ -64,6 +65,7 @@ async fn process_batch_passes_the_tenants_configured_prompt_to_the_analysis_clie
         publisher: Arc::new(InMemoryEventPublisher::default()),
         analysis_config_repository: config_repository,
         http_client: reqwest::Client::new(),
+        openai_compatible_concurrency: 4,
     };
 
     process_batch(&deps, tenant_id, vec![record_for(tenant_id)]).await.unwrap();
@@ -83,6 +85,7 @@ async fn process_batch_on_empty_records_is_a_no_op() {
         publisher,
         analysis_config_repository: Arc::new(InMemoryAnalysisConfigRepository::default()),
         http_client: reqwest::Client::new(),
+        openai_compatible_concurrency: 4,
     };
 
     let published = process_batch(&deps, Uuid::new_v4(), vec![]).await.unwrap();
@@ -98,6 +101,7 @@ async fn process_batch_propagates_analysis_failure() {
         publisher: Arc::new(InMemoryEventPublisher::default()),
         analysis_config_repository: Arc::new(InMemoryAnalysisConfigRepository::default()),
         http_client: reqwest::Client::new(),
+        openai_compatible_concurrency: 4,
     };
     let tenant_id = Uuid::new_v4();
 
@@ -113,6 +117,7 @@ async fn process_batch_continues_past_individual_publish_failures() {
         publisher: Arc::new(FailingEventPublisher),
         analysis_config_repository: Arc::new(InMemoryAnalysisConfigRepository::default()),
         http_client: reqwest::Client::new(),
+        openai_compatible_concurrency: 4,
     };
     let tenant_id = Uuid::new_v4();
 
@@ -145,6 +150,7 @@ async fn process_batch_routes_to_the_openai_compatible_client_when_a_tenant_is_c
         publisher: publisher.clone(),
         analysis_config_repository: config_repository,
         http_client: reqwest::Client::new(),
+        openai_compatible_concurrency: 4,
     };
 
     let published = process_batch(&deps, tenant_id, vec![record_for(tenant_id)]).await.unwrap();

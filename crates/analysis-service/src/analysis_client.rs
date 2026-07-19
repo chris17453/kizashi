@@ -4,6 +4,7 @@ pub(crate) mod analysis_client_test;
 
 use async_trait::async_trait;
 use common::RawRecord;
+use futures_util::StreamExt;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -96,14 +97,19 @@ impl AnalysisClient for FoundryAnalysisClient {
 /// Azure OpenAI in "compatible mode" all fit, so one client covers all three (ADR-0031). Unlike
 /// `FoundryAnalysisClient`'s single batched call, chat-completions isn't a batch API: asking a
 /// chat model to return N JSON results reliably in one response is unreliable, so this client
-/// makes one sequential request per record instead. `api_key` is optional since a local Ollama
-/// instance needs no credential at all.
+/// makes one request per record instead — up to `concurrency` of them in flight at once
+/// (ADR-0035), not strictly one-at-a-time: a slow reasoning model turns a real multi-hundred-
+/// record backlog into a multi-hour serial queue otherwise (observed live). `api_key` is
+/// optional since a local Ollama instance needs no credential at all.
 pub struct OpenAiCompatibleAnalysisClient {
     client: reqwest::Client,
     endpoint: String,
     api_key: Option<String>,
     model: String,
+    concurrency: usize,
 }
+
+const DEFAULT_CONCURRENCY: usize = 4;
 
 impl OpenAiCompatibleAnalysisClient {
     pub fn new(
@@ -112,7 +118,12 @@ impl OpenAiCompatibleAnalysisClient {
         api_key: Option<String>,
         model: String,
     ) -> Self {
-        Self { client, endpoint, api_key, model }
+        Self { client, endpoint, api_key, model, concurrency: DEFAULT_CONCURRENCY }
+    }
+
+    pub fn with_concurrency(mut self, concurrency: usize) -> Self {
+        self.concurrency = concurrency.max(1);
+        self
     }
 
     async fn analyze_one(
@@ -172,11 +183,25 @@ impl AnalysisClient for OpenAiCompatibleAnalysisClient {
         records: &[RawRecord],
         prompt: Option<&str>,
     ) -> Result<Vec<serde_json::Value>, AnalysisError> {
-        let mut results = Vec::with_capacity(records.len());
-        for record in records {
-            let payload = record.normalized_payload.as_ref().unwrap_or(&record.raw_payload);
-            results.push(self.analyze_one(payload, prompt).await?);
-        }
-        Ok(results)
+        // Payloads are cloned up front so each future owns its input (avoids a higher-ranked
+        // lifetime the compiler otherwise can't unify across the closure boundary). `buffered`
+        // (not `buffer_unordered`) runs up to `concurrency` requests in flight at once while
+        // yielding results in the same order the futures were created — the ordering callers
+        // depend on (results[i] corresponds to records[i]) comes for free, no re-sort needed.
+        let payloads: Vec<serde_json::Value> = records
+            .iter()
+            .map(|r| r.normalized_payload.clone().unwrap_or_else(|| r.raw_payload.clone()))
+            .collect();
+        let prompt_owned = prompt.map(str::to_string);
+
+        futures_util::stream::iter(payloads.into_iter().map(|payload| {
+            let prompt_ref = prompt_owned.as_deref();
+            async move { self.analyze_one(&payload, prompt_ref).await }
+        }))
+        .buffered(self.concurrency)
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .collect()
     }
 }
