@@ -2,7 +2,8 @@ use config_admin_service::{
     build_router, AdminState, AgentState, AnalysisConfigState, PostgresAgentRepository,
     PostgresAnalysisConfigRepository, PostgresAuditLogReader,
     PostgresNormalizationMappingRepository, PostgresTriggerDefinitionRepository,
-    RabbitMqAgentPublisher, RabbitMqAnalysisConfigPublisher, RabbitMqTriggerPublisher,
+    RabbitMqAgentPublisher, RabbitMqAnalysisConfigPublisher, RabbitMqMappingPublisher,
+    RabbitMqTriggerPublisher,
 };
 use std::sync::Arc;
 
@@ -43,12 +44,18 @@ async fn main() {
     let agent_publisher = RabbitMqAgentPublisher::new(agent_publish_channel)
         .await
         .expect("failed to declare agent.changed exchange");
+    let mapping_publish_channel =
+        connection.create_channel().await.expect("failed to open channel");
+    let mapping_publisher = RabbitMqMappingPublisher::new(mapping_publish_channel)
+        .await
+        .expect("failed to declare mapping.changed exchange");
 
     let state = AdminState {
         trigger_repository: Arc::new(PostgresTriggerDefinitionRepository::new(pool.clone())),
         mapping_repository: Arc::new(PostgresNormalizationMappingRepository::new(pool.clone())),
         audit_reader: Arc::new(PostgresAuditLogReader::new(pool.clone())),
         trigger_publisher: Arc::new(trigger_publisher),
+        mapping_publisher: Arc::new(mapping_publisher),
     };
     let agent_state = AgentState {
         agent_repository: Arc::new(PostgresAgentRepository::new(pool.clone())),

@@ -8,7 +8,7 @@ mod mapping_repository;
 mod process_normalization;
 mod record_client;
 
-pub use common::{RECORD_INGESTED_EXCHANGE, RECORD_NORMALIZED_EXCHANGE};
+pub use common::{MAPPING_CHANGED_EXCHANGE, RECORD_INGESTED_EXCHANGE, RECORD_NORMALIZED_EXCHANGE};
 pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
 pub use health::build_router as health_router;
 pub use mapping_repository::{

@@ -1,5 +1,6 @@
 use super::*;
 use crate::audit_log::audit_log_test::{FailingAuditLogReader, InMemoryAuditLogReader};
+use crate::mapping_publisher::mapping_publisher_test::InMemoryMappingPublisher;
 use crate::normalization_mapping_repository::normalization_mapping_repository_test::{
     FailingNormalizationMappingRepository, InMemoryNormalizationMappingRepository,
 };
@@ -51,6 +52,7 @@ fn default_state() -> AdminState {
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
+        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
     }
 }
 
@@ -245,6 +247,7 @@ async fn list_triggers_returns_backend_error_as_500() {
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
+        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
     };
     let response = send(
         router(state),
@@ -375,6 +378,7 @@ async fn list_mappings_returns_backend_error_as_500() {
         mapping_repository: Arc::new(FailingNormalizationMappingRepository),
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
+        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
     };
     let response = send(
         router(state),
@@ -447,6 +451,7 @@ async fn get_audit_log_returns_entries_scoped_to_tenant_and_entity() {
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(reader),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
+        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
     };
 
     let response =
@@ -465,6 +470,7 @@ async fn get_audit_log_returns_500_on_backend_failure() {
         mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
         audit_reader: Arc::new(FailingAuditLogReader),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
+        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
     };
 
     let response = send(

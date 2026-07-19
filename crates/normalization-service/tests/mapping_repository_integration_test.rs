@@ -1,6 +1,8 @@
 //! Integration test against real Postgres (CLAUDE.md §2). Requires DATABASE_URL.
 
+use common::NormalizationMapping;
 use normalization_service::{MappingRepository, PostgresMappingRepository};
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 async fn test_pool() -> sqlx::PgPool {
@@ -56,4 +58,26 @@ async fn returns_the_highest_version_mapping_for_a_tenant_and_source_type() {
 
     let missing = repo.active_mapping(tenant_id, "message").await.unwrap();
     assert!(missing.is_none());
+}
+
+#[tokio::test]
+async fn upsert_inserts_then_replaces_a_mapping_by_id_against_real_postgres() {
+    let pool = test_pool().await;
+    let repo = PostgresMappingRepository::new(pool);
+    let tenant_id = Uuid::new_v4();
+
+    let mut field_map = BTreeMap::new();
+    field_map.insert("text".to_string(), "$.description".to_string());
+    let mapping = NormalizationMapping::new(tenant_id, "sync-test", field_map);
+
+    repo.upsert(mapping.clone()).await.expect("insert should succeed");
+    let found = repo.active_mapping(tenant_id, "sync-test").await.unwrap();
+    assert_eq!(found, Some(mapping.clone()));
+
+    let mut updated = mapping.clone();
+    updated.field_map.insert("urgency".to_string(), "$.priority".to_string());
+    repo.upsert(updated.clone()).await.expect("update should succeed");
+
+    let found = repo.active_mapping(tenant_id, "sync-test").await.unwrap();
+    assert_eq!(found, Some(updated));
 }

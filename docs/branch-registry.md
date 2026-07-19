@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0029         |
+| feature       | `feature/` | 0030         |
 | fix           | `fix/`     | 0004         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -57,3 +57,4 @@ manually created branches.
 | 0026 | `feature/0026-retention-policy-console-ui` | feature | 2026-07-19 | open | pending | |
 | 0027 | `feature/0027-egress-allowlist-console-ui` | feature | 2026-07-19 | open | pending | |
 | 0028 | `feature/0028-audit-log-console-ui` | feature | 2026-07-19 | open | pending | |
+| 0029 | `feature/0029-normalization-mapping-sync` | feature | 2026-07-19 | open | pending | |

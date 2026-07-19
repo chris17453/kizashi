@@ -26,6 +26,11 @@ pub trait MappingRepository: Send + Sync {
         tenant_id: Uuid,
         source_type: &str,
     ) -> Result<Option<NormalizationMapping>, MappingRepositoryError>;
+
+    /// Mirrors a `NormalizationMapping` from `config-admin-service`'s `mapping.changed` bus
+    /// message into this service's own local table — the sync mechanism ADR-0010 originally
+    /// called for and ADR-0018 built for triggers, extended here to mappings.
+    async fn upsert(&self, mapping: NormalizationMapping) -> Result<(), MappingRepositoryError>;
 }
 
 pub struct PostgresMappingRepository {
@@ -73,5 +78,28 @@ impl MappingRepository for PostgresMappingRepository {
             field_map: field_map.0,
             version,
         }))
+    }
+
+    async fn upsert(&self, mapping: NormalizationMapping) -> Result<(), MappingRepositoryError> {
+        sqlx::query(
+            r#"
+            INSERT INTO normalization_mappings (id, tenant_id, source_type, field_map, version)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (id) DO UPDATE SET
+                tenant_id = EXCLUDED.tenant_id,
+                source_type = EXCLUDED.source_type,
+                field_map = EXCLUDED.field_map,
+                version = EXCLUDED.version
+            "#,
+        )
+        .bind(mapping.id)
+        .bind(mapping.tenant_id)
+        .bind(&mapping.source_type)
+        .bind(sqlx::types::Json(&mapping.field_map))
+        .bind(mapping.version)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| MappingRepositoryError::Backend(e.to_string()))?;
+        Ok(())
     }
 }

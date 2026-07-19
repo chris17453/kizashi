@@ -29,6 +29,15 @@ impl MappingRepository for InMemoryMappingRepository {
             .max_by_key(|m| m.version)
             .cloned())
     }
+
+    async fn upsert(&self, mapping: NormalizationMapping) -> Result<(), MappingRepositoryError> {
+        let mut mappings = self.mappings.lock().unwrap();
+        match mappings.iter_mut().find(|m| m.id == mapping.id) {
+            Some(existing) => *existing = mapping,
+            None => mappings.push(mapping),
+        }
+        Ok(())
+    }
 }
 
 fn sample_mapping(tenant_id: Uuid) -> NormalizationMapping {
@@ -63,4 +72,29 @@ async fn returns_highest_version_when_multiple_exist() {
 
     let found = repo.active_mapping(tenant_id, "ticket").await.unwrap().unwrap();
     assert_eq!(found.version, v2.version);
+}
+
+#[tokio::test]
+async fn upsert_inserts_a_new_mapping() {
+    let repo = InMemoryMappingRepository::default();
+    let mapping = sample_mapping(Uuid::new_v4());
+
+    repo.upsert(mapping.clone()).await.unwrap();
+
+    let found = repo.active_mapping(mapping.tenant_id, &mapping.source_type).await.unwrap();
+    assert_eq!(found, Some(mapping));
+}
+
+#[tokio::test]
+async fn upsert_replaces_an_existing_mapping_with_the_same_id() {
+    let tenant_id = Uuid::new_v4();
+    let mapping = sample_mapping(tenant_id);
+    let repo = InMemoryMappingRepository::with_mapping(mapping.clone());
+
+    let mut updated = mapping.clone();
+    updated.field_map.insert("urgency".to_string(), "$.priority".to_string());
+    repo.upsert(updated.clone()).await.unwrap();
+
+    let found = repo.active_mapping(tenant_id, "ticket").await.unwrap();
+    assert_eq!(found, Some(updated));
 }
