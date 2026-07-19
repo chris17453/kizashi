@@ -12,6 +12,7 @@ pub struct InMemoryIngestionStatsClient {
     pub stats: Mutex<Vec<ConnectorStatSummary>>,
     pub records: Mutex<Vec<RecordSummary>>,
     pub has_more: Mutex<bool>,
+    pub reprocessed: Mutex<usize>,
 }
 
 #[async_trait]
@@ -49,6 +50,10 @@ impl IngestionStatsClient for InMemoryIngestionStatsClient {
     ) -> Result<Option<RecordSummary>, IngestionStatsClientError> {
         Ok(self.records.lock().unwrap().iter().find(|r| r.id == id).cloned())
     }
+
+    async fn reprocess(&self, _tenant_id: Uuid) -> Result<usize, IngestionStatsClientError> {
+        Ok(*self.reprocessed.lock().unwrap())
+    }
 }
 
 pub struct FailingIngestionStatsClient;
@@ -83,6 +88,10 @@ impl IngestionStatsClient for FailingIngestionStatsClient {
         _tenant_id: Uuid,
         _id: Uuid,
     ) -> Result<Option<RecordSummary>, IngestionStatsClientError> {
+        Err(IngestionStatsClientError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn reprocess(&self, _tenant_id: Uuid) -> Result<usize, IngestionStatsClientError> {
         Err(IngestionStatsClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -136,10 +145,14 @@ async fn spawn_stub_server() -> String {
         }))
         .into_response()
     }
+    async fn reprocess_handler() -> axum::response::Response {
+        Json(serde_json::json!({"republished": 7})).into_response()
+    }
     let app = Router::new()
         .route("/v1/records/stats", get(stats_handler))
         .route("/v1/records/by-connector", get(by_connector_handler))
         .route("/v1/records/search", get(search_handler))
+        .route("/v1/records/reprocess", axum::routing::post(reprocess_handler))
         .route("/v1/records/:id", get(get_record_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -202,4 +215,14 @@ async fn http_client_returns_unreachable_when_server_is_down() {
         HttpIngestionStatsClient::new(reqwest::Client::new(), "http://127.0.0.1:1".to_string());
     let err = client.connector_stats(Uuid::new_v4()).await.unwrap_err();
     assert!(matches!(err, IngestionStatsClientError::Unreachable(_)));
+}
+
+#[tokio::test]
+async fn http_client_reprocesses_against_a_real_server() {
+    let url = spawn_stub_server().await;
+    let client = HttpIngestionStatsClient::new(reqwest::Client::new(), url);
+
+    let republished = client.reprocess(Uuid::new_v4()).await.unwrap();
+
+    assert_eq!(republished, 7);
 }

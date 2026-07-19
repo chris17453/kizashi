@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0046         |
+| feature       | `feature/` | 0047         |
 | fix           | `fix/`     | 0005         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -75,4 +75,5 @@ manually created branches.
 | 0042 | `feature/0042-imap-uid-cursor` | feature | 2026-07-19 | merged | #51 | |
 | 0043 | `feature/0043-events-over-time-chart` | feature | 2026-07-19 | merged | #52 | |
 | 0044 | `feature/0044-reprocess-unnormalized-records` | feature | 2026-07-19 | merged | #53 | |
-| 0045 | `feature/0045-analysis-concurrency` | feature | 2026-07-19 | open | pending | |
+| 0045 | `feature/0045-analysis-concurrency` | feature | 2026-07-19 | merged | #54 | |
+| 0046 | `feature/0046-reprocess-ui-button` | feature | 2026-07-19 | open | pending | |

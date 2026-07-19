@@ -104,6 +104,12 @@ pub trait IngestionStatsClient: Send + Sync {
         tenant_id: Uuid,
         id: Uuid,
     ) -> Result<Option<RecordSummary>, IngestionStatsClientError>;
+
+    /// Republishes `record.ingested` for every one of this tenant's records with no
+    /// `normalized_payload` yet — the recovery path for records ingested before a
+    /// `NormalizationMapping` existed for their source type. Returns how many were
+    /// republished (bounded to Ingestion Service's own per-call cap).
+    async fn reprocess(&self, tenant_id: Uuid) -> Result<usize, IngestionStatsClientError>;
 }
 
 pub struct HttpIngestionStatsClient {
@@ -244,5 +250,29 @@ impl IngestionStatsClient for HttpIngestionStatsClient {
             .await
             .map(Some)
             .map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))
+    }
+
+    async fn reprocess(&self, tenant_id: Uuid) -> Result<usize, IngestionStatsClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/records/reprocess", self.ingestion_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .send()
+            .await
+            .map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(IngestionStatsClientError::Rejected(response.status().as_u16()));
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ReprocessResponse {
+            republished: usize,
+        }
+        let body: ReprocessResponse = response
+            .json()
+            .await
+            .map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))?;
+        Ok(body.republished)
     }
 }
