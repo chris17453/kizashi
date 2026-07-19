@@ -1,0 +1,51 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Egress Allowlist</h1>
+<p class="muted">Which external domains this tenant's connectors and actions are allowed to
+reach through Egress Gateway — every outbound call made on this tenant's behalf is tunneled
+through the gateway and checked against this list, then audit-logged regardless of outcome. An
+empty list means no restriction is configured (every destination is allowed and audited).</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if saved %}<p class="status-up">Saved — takes effect on the next outbound call.</p>{% endif %}
+
+<div class="form-row">
+  <div class="panel">
+    <h2>Allowed domains</h2>
+    {% if can_write %}
+    <form class="inline" method="post" action="/egress-allowlist">
+      <label for="domains">One domain per line</label>
+      <textarea id="domains" name="domains" rows="8" placeholder="zendesk.com&#10;graph.microsoft.com&#10;login.microsoftonline.com">{% for domain in domains %}{{ domain }}
+{% endfor %}</textarea>
+      <button type="submit">Save allowlist</button>
+    </form>
+    {% else %}
+    <p class="muted">Your role can't edit the egress allowlist.</p>
+    {% if domains.is_empty() %}
+    <p class="muted">No restriction configured — every destination is currently allowed.</p>
+    {% else %}
+    <ul>
+      {% for domain in domains %}
+      <li><code>{{ domain }}</code></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% endif %}
+  </div>
+  <div class="info-panel">
+    <h2>How this works</h2>
+    <ul>
+      <li>This is a replace-the-whole-list save, not a per-domain add/remove — the list is
+        small and operator-managed.</li>
+      <li>Egress Gateway tunnels HTTPS traffic byte-for-byte after the initial CONNECT — it
+        never decrypts or inspects request paths or bodies, only the destination host is
+        checked and logged.</li>
+      <li>Denied destinations still show up in the audit log (<code>allowed=false</code>),
+        which is useful for spotting a connector that's misconfigured or reaching somewhere
+        unexpected.</li>
+      <li>Connector/action adoption of the proxy is opt-in per process
+        (<code>EGRESS_PROXY_URL</code>) — this allowlist only has an effect on traffic that's
+        actually routed through the gateway.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

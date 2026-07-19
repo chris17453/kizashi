@@ -1,8 +1,9 @@
 use kizashi_ui::{
     build_router, AppState, HttpAgentsClient, HttpAnalysisConfigClient, HttpApiKeysClient,
-    HttpAuthClient, HttpBacklogClient, HttpEventsClient, HttpExecutionClient, HttpHealthClient,
-    HttpIngestionStatsClient, HttpNormalizationMappingsClient, HttpRetentionPoliciesClient,
-    HttpTriggersClient, InMemorySessionStore,
+    HttpAuthClient, HttpBacklogClient, HttpEgressAllowlistClient, HttpEventsClient,
+    HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
+    HttpNormalizationMappingsClient, HttpRetentionPoliciesClient, HttpTriggersClient,
+    InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -28,6 +29,8 @@ async fn main() {
         std::env::var("ACTION_EXECUTOR_URL").expect("ACTION_EXECUTOR_URL must be set");
     let retention_service_url =
         std::env::var("RETENTION_SERVICE_URL").expect("RETENTION_SERVICE_URL must be set");
+    let egress_gateway_url =
+        std::env::var("EGRESS_GATEWAY_URL").expect("EGRESS_GATEWAY_URL must be set");
 
     let client = reqwest::Client::new();
     let state = AppState {
@@ -59,8 +62,12 @@ async fn main() {
             config_admin_service_url,
         )),
         retention_policies_client: Arc::new(HttpRetentionPoliciesClient::new(
-            client,
+            client.clone(),
             retention_service_url,
+        )),
+        egress_allowlist_client: Arc::new(HttpEgressAllowlistClient::new(
+            client,
+            egress_gateway_url,
         )),
         ingestion_gateway_public_url,
     };

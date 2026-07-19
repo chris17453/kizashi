@@ -10,6 +10,7 @@ mod api_keys_client;
 mod auth_client;
 mod backlog_client;
 mod connector_field_catalog;
+mod egress_allowlist_client;
 mod events_client;
 mod execution_client;
 mod health_client;
@@ -28,6 +29,7 @@ mod analysis_config_handler;
 mod api_keys_handler;
 mod data_detail_handler;
 mod data_handler;
+mod egress_allowlist_handler;
 mod events_handler;
 mod health_handler;
 mod healthz;
@@ -50,6 +52,9 @@ pub use analysis_config_client::{
 pub use api_keys_client::{ApiKeySummary, ApiKeysClient, ApiKeysClientError, HttpApiKeysClient};
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient};
 pub use backlog_client::{BacklogClient, BacklogClientError, HttpBacklogClient, QueueDepthSummary};
+pub use egress_allowlist_client::{
+    EgressAllowlistClient, EgressAllowlistClientError, HttpEgressAllowlistClient,
+};
 pub use events_client::{EventSummary, EventsClient, EventsClientError, HttpEventsClient};
 pub use execution_client::{
     ActionExecutionSummary, ExecutionClient, ExecutionClientError, HttpExecutionClient,
@@ -80,6 +85,7 @@ pub use analysis_config_handler::{get_analysis_config_page, post_analysis_config
 pub use api_keys_handler::{get_api_keys, post_api_keys, post_revoke_api_key};
 pub use data_detail_handler::get_data_detail;
 pub use data_handler::get_data;
+pub use egress_allowlist_handler::{get_egress_allowlist, post_egress_allowlist};
 pub use events_handler::get_events;
 pub use health_handler::get_health;
 pub use healthz::healthz;
@@ -119,6 +125,7 @@ pub struct AppState {
     pub analysis_config_client: Arc<dyn AnalysisConfigClient>,
     pub normalization_mappings_client: Arc<dyn NormalizationMappingsClient>,
     pub retention_policies_client: Arc<dyn RetentionPoliciesClient>,
+    pub egress_allowlist_client: Arc<dyn EgressAllowlistClient>,
     /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
     /// reachable from inside this container (e.g. a customer-hosted connector polling in from
     /// outside the platform's own network), so it's a separate, operator-configurable value
@@ -155,6 +162,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/retention-policies/:id/toggle", axum::routing::post(post_toggle_retention_policy))
         .route("/retention-policies/:id/edit", axum::routing::post(post_edit_retention_policy))
         .route("/retention-policies/:id/delete", axum::routing::post(post_delete_retention_policy))
+        .route("/egress-allowlist", get(get_egress_allowlist).post(post_egress_allowlist))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
         .route("/data/:id", get(get_data_detail))
