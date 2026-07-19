@@ -87,6 +87,20 @@ async fn create_policy_rejects_a_tenant_mismatch() {
 }
 
 #[tokio::test]
+async fn update_policy_rejects_a_tenant_mismatch() {
+    let policy = sample_policy(Uuid::new_v4());
+    let response = send(
+        router(default_state()),
+        "PUT",
+        format!("/v1/retention-policies/{}", policy.id),
+        Some(Uuid::new_v4()),
+        Some(serde_json::to_value(&policy).unwrap()),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn create_policy_requires_tenant_header() {
     let policy = sample_policy(Uuid::new_v4());
     let response = send(

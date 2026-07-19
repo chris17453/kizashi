@@ -101,6 +101,22 @@ async fn create_trigger_rejects_a_tenant_mismatch() {
 }
 
 #[tokio::test]
+async fn update_trigger_rejects_a_tenant_mismatch() {
+    // tenant_mismatch runs before the repository lookup, so no pre-existing trigger is needed
+    // to prove the header/body tenant check itself rejects the request.
+    let trigger = sample_trigger(Uuid::new_v4());
+    let response = send(
+        router(default_state()),
+        "PUT",
+        format!("/v1/trigger-definitions/{}", trigger.id),
+        Some(Uuid::new_v4()),
+        Some(serde_json::to_value(&trigger).unwrap()),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn create_trigger_requires_tenant_header() {
     let trigger = sample_trigger(Uuid::new_v4());
     let response = send(
@@ -318,6 +334,20 @@ async fn create_mapping_rejects_a_tenant_mismatch() {
         router(default_state()),
         "POST",
         "/v1/normalization-mappings".to_string(),
+        Some(Uuid::new_v4()),
+        Some(serde_json::to_value(&mapping).unwrap()),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn update_mapping_rejects_a_tenant_mismatch() {
+    let mapping = sample_mapping(Uuid::new_v4());
+    let response = send(
+        router(default_state()),
+        "PUT",
+        format!("/v1/normalization-mappings/{}", mapping.id),
         Some(Uuid::new_v4()),
         Some(serde_json::to_value(&mapping).unwrap()),
     )

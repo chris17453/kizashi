@@ -96,6 +96,21 @@ async fn create_agent_is_rejected_when_tenant_does_not_match() {
 }
 
 #[tokio::test]
+async fn update_agent_is_rejected_when_tenant_does_not_match() {
+    let agent = sample_agent(Uuid::new_v4());
+    let response = send(
+        router(default_state()),
+        "PUT",
+        format!("/v1/agents/{}", agent.id),
+        Some(Uuid::new_v4()),
+        Some(serde_json::to_value(&agent).unwrap()),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn list_agents_is_scoped_to_the_header_tenant() {
     let tenant_id = Uuid::new_v4();
     let state = AgentState {

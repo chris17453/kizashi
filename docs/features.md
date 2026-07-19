@@ -1323,7 +1323,7 @@ Entry format:
   new architectural decision.
 
 ## [2026-07-19] feature/0014-docker-images — normalization-service live-RabbitMQ integration test
-- **Type:** test
+- **Type:** chore
 - **Summary:** Closes one of the three testing gaps from the gap-closing roadmap's Phase 3:
   `normalization-service` had Postgres-repository and schema-contract tests but nothing
   exercising its actual `record.ingested` → `record.normalized` processing path against real
@@ -2039,7 +2039,7 @@ architectural decision.
 - **ADR:** [0025](adr/0025-entra-token-fetch-egress-gateway-routing.md)
 
 ## [2026-07-19] feature/0024-config-admin-tenant-isolation-tests — Tenant-isolation tests for config-admin-service repositories
-- **Type:** test
+- **Type:** chore
 - **Branch:** feature/0024-config-admin-tenant-isolation-tests
 - **Summary:** Closes a real CLAUDE.md §5 compliance gap: "every query path must be tested for
   tenant isolation, not just implemented correctly by inspection." An audit of
@@ -2072,7 +2072,7 @@ architectural decision.
   behavior rather than changing it
 
 ## [2026-07-19] feature/0025-query-gateway-tenant-isolation-e2e — End-to-end tenant-isolation test for Query Gateway
-- **Type:** test
+- **Type:** chore
 - **Branch:** feature/0025-query-gateway-tenant-isolation-e2e
 - **Summary:** Closes the more load-bearing of the two tenant-isolation gaps flagged in the
   prior audit (feature/0024). Query Gateway is spec §6's designated single tenant-enforcement
@@ -2175,3 +2175,30 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — closes a gap against an already-established pattern (ADR-0016), no new
   architectural decision
+
+## [2026-07-19] chore/0003-update-handler-tenant-mismatch-tests — Add tenant-mismatch tests for UPDATE handlers
+- **Type:** chore
+- **Branch:** chore/0003-update-handler-tenant-mismatch-tests
+- **Summary:** A follow-up sweep after the two RBAC fixes checked a different dimension —
+  "tenant confusion" (does every write handler validate a request body's `tenant_id` against
+  `X-Tenant-Id` before writing) — across every write-capable service. Found no security bug:
+  every entity type that carries `tenant_id` in its body (trigger, mapping, agent, retention
+  policy) already calls `tenant_mismatch` correctly on both create and update paths; entities
+  whose body structurally can't carry a divergent `tenant_id` (analysis-config, API keys,
+  egress allowlist) are `n/a` by design. But it found the exact CLAUDE.md §5 gap one layer up
+  from feature/0024 (which closed this at the repository/SQL layer): only the CREATE-path
+  tenant-mismatch case had a test per entity — `update_trigger`, `update_mapping`,
+  `update_agent`, and retention-service's `update_policy` were correct by inspection but
+  untested. Added the 4 missing tests, mirroring each entity's existing create-path test.
+- **Fact, not expectation:** all 4 new tests passed against the existing, unmodified
+  production code — this closes a test-coverage gap, not a bug. No production code changed in
+  this PR.
+- **Tests:** `cargo test -p config-admin-service --lib` (the 3 new config-admin tests) and
+  `cargo test -p retention-service --lib update_policy_rejects_a_tenant_mismatch` — all 4
+  passed. `cargo test --workspace --all-features` (full real-infra stack) — all passed, 0
+  failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo audit` — same 3
+  pre-existing allow-listed advisories, no new ones.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — test-coverage addition, no architectural decision, confirms existing
+  behavior rather than changing it
