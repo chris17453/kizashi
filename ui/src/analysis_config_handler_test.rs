@@ -1,7 +1,11 @@
 use super::*;
 use crate::agents_client::agents_client_test::InMemoryAgentsClient;
+use crate::analysis_config_client::analysis_config_client_test::{
+    FailingAnalysisConfigClient, InMemoryAnalysisConfigClient,
+};
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
+use crate::execution_client::execution_client_test::InMemoryExecutionClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
@@ -13,12 +17,15 @@ use axum::routing::get;
 use axum::Router;
 use std::sync::Arc;
 use tower::ServiceExt;
+use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/agents/:id", get(get_agent_detail)).with_state(state)
+    Router::new()
+        .route("/analysis-config", get(get_analysis_config_page).post(post_analysis_config))
+        .with_state(state)
 }
 
-async fn state_with_session() -> (AppState, String, Uuid) {
+async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
     let session_store = InMemorySessionStore::default();
     let tenant_id = Uuid::new_v4();
     let session_id = session_store
@@ -26,7 +33,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
             bearer_token: "tok".to_string(),
             tenant_id,
             username: "alice".to_string(),
-            role: common::Role::Admin,
+            role,
         })
         .await;
     let state = AppState {
@@ -44,39 +51,22 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         backlog_client: Arc::new(
             crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default(),
         ),
-        execution_client: std::sync::Arc::new(
-            crate::execution_client::execution_client_test::InMemoryExecutionClient::default(),
-        ),
-        analysis_config_client: std::sync::Arc::new(crate::analysis_config_client::analysis_config_client_test::InMemoryAnalysisConfigClient::default()),
+        execution_client: Arc::new(InMemoryExecutionClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
+        analysis_config_client: Arc::new(InMemoryAnalysisConfigClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id, tenant_id)
 }
 
 #[tokio::test]
-async fn renders_the_agent_and_its_records_when_found() {
-    let (mut state, session_id, tenant_id) = state_with_session().await;
-    let agent = state
-        .agents_client
-        .register_agent(tenant_id, "zendesk", "support-poller", serde_json::json!({}))
-        .await
-        .unwrap();
-    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
-    stats_client.records.lock().unwrap().push(RecordSummary {
-        id: Uuid::new_v4(),
-        connector_id: "support-poller".to_string(),
-        source_type: "ticket".to_string(),
-        ingested_at: chrono::Utc::now(),
-        raw_payload: serde_json::json!({}),
-        normalized_payload: None,
-    });
-    state.stats_client = stats_client;
+async fn renders_an_empty_prompt_when_none_configured() {
+    let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/agents/{}", agent.id))
+                .uri("/analysis-config")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -87,18 +77,62 @@ async fn renders_the_agent_and_its_records_when_found() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("support-poller"));
-    assert!(body.contains("ticket"));
+    assert!(body.contains("AI Analysis"));
 }
 
 #[tokio::test]
-async fn renders_not_found_for_an_unknown_agent_id() {
-    let (state, session_id, _tenant_id) = state_with_session().await;
+async fn post_saves_the_prompt_and_rerenders_it() {
+    let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/agents/{}", Uuid::new_v4()))
+                .method("POST")
+                .uri("/analysis-config")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("prompt=look+for+urgent+tickets"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("look for urgent tickets"));
+    assert!(body.contains("Saved"));
+}
+
+#[tokio::test]
+async fn post_rejects_a_viewer_role() {
+    let (state, session_id, _tenant_id) = state_with_session(common::Role::Viewer).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/analysis-config")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("prompt=x"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn get_shows_an_error_when_the_backend_fails() {
+    let (mut state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
+    state.analysis_config_client = Arc::new(FailingAnalysisConfigClient);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/analysis-config")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -109,20 +143,15 @@ async fn renders_not_found_for_an_unknown_agent_id() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Agent not found"));
+    assert!(body.contains("simulated failure") || body.contains("error"));
 }
 
 #[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
-    let (state, _session_id, _tenant_id) = state_with_session().await;
+    let (state, _session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
 
     let response = router(state)
-        .oneshot(
-            Request::builder()
-                .uri(format!("/agents/{}", Uuid::new_v4()))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/analysis-config").body(Body::empty()).unwrap())
         .await
         .unwrap();
 

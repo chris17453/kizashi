@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0015         |
+| feature       | `feature/` | 0016         |
 | fix           | `fix/`     | 0002        |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0002         |
@@ -40,3 +40,4 @@ manually created branches.
 | 0013 | `feature/0013-console-ui` | feature | 2026-07-18 | open | pending | |
 | 0002 | `chore/0002-local-dev-launcher` | chore | 2026-07-18 | open | pending | |
 | 0014 | `feature/0014-docker-images` | feature | 2026-07-18 | open | pending | |
+| 0015 | `feature/0015-ai-analysis-config` | feature | 2026-07-19 | open | pending | |

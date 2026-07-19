@@ -89,7 +89,8 @@ start normalization-service normalization-service \
 wait_healthy normalization-service "http://localhost:$NORMALIZATION_SERVICE_PORT/healthz"
 
 start analysis-service analysis-service \
-  BIND_ADDR="0.0.0.0:$ANALYSIS_SERVICE_PORT" RABBITMQ_URL="$RABBITMQ_URL" \
+  BIND_ADDR="0.0.0.0:$ANALYSIS_SERVICE_PORT" DATABASE_URL="$DATABASE_URL" \
+  RABBITMQ_URL="$RABBITMQ_URL" \
   AZURE_AI_FOUNDRY_ENDPOINT="${AZURE_AI_FOUNDRY_ENDPOINT:-}" \
   AZURE_AI_FOUNDRY_API_KEY="${AZURE_AI_FOUNDRY_API_KEY:-}"
 wait_healthy analysis-service "http://localhost:$ANALYSIS_SERVICE_PORT/healthz"

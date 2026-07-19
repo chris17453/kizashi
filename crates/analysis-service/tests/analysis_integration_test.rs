@@ -2,19 +2,38 @@
 //! standing in for Azure AI Foundry. Requires RABBITMQ_URL.
 
 use analysis_service::{
-    process_batch, AnalysisDeps, FoundryAnalysisClient, RabbitMqEventPublisher,
-    RECORD_ANALYZED_EXCHANGE,
+    process_batch, AnalysisConfigRepository, AnalysisConfigRepositoryError, AnalysisDeps,
+    FoundryAnalysisClient, RabbitMqEventPublisher, RECORD_ANALYZED_EXCHANGE,
 };
+use async_trait::async_trait;
 use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Json, Router};
-use common::{RawRecord, SourceType};
+use common::{AnalysisConfig, RawRecord, SourceType};
 use futures_util::StreamExt;
 use lapin::options::{BasicAckOptions, BasicConsumeOptions, QueueBindOptions, QueueDeclareOptions};
 use lapin::types::FieldTable;
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
+
+/// No config ever configured — this integration test only proves the RabbitMQ publish path,
+/// not analysis-config sync (see `analysis_config_repository_test.rs` for that).
+struct NoAnalysisConfig;
+
+#[async_trait]
+impl AnalysisConfigRepository for NoAnalysisConfig {
+    async fn get(
+        &self,
+        _tenant_id: Uuid,
+    ) -> Result<Option<AnalysisConfig>, AnalysisConfigRepositoryError> {
+        Ok(None)
+    }
+
+    async fn upsert(&self, _config: AnalysisConfig) -> Result<(), AnalysisConfigRepositoryError> {
+        Ok(())
+    }
+}
 
 async fn spawn_stub_foundry() -> String {
     async fn handler(Json(body): Json<serde_json::Value>) -> axum::response::Response {
@@ -57,6 +76,7 @@ async fn processing_a_batch_publishes_record_analyzed_over_real_rabbitmq() {
             "test-key".to_string(),
         )),
         publisher: Arc::new(publisher),
+        analysis_config_repository: Arc::new(NoAnalysisConfig),
     };
 
     let queue = consume_channel

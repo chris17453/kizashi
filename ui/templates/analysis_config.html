@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>AI Analysis</h1>
+<p class="muted">What the AI/ML backend looks for when it analyzes this tenant's records —
+every record ingested is run through this prompt before Trigger Engine evaluates it against
+your Triggers. Leave blank to keep the platform's default analysis behavior.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if saved %}<p class="status-up">Saved — new records will use this prompt.</p>{% endif %}
+
+<div class="form-row">
+  <div class="panel">
+    <h2>Analysis prompt</h2>
+    {% if can_write %}
+    <form class="inline" method="post" action="/analysis-config">
+      <label for="prompt">Describe what to look for</label>
+      <textarea id="prompt" name="prompt" rows="6" placeholder="e.g. Flag any ticket that mentions a security incident, outage, or legal threat. Score urgency from 0 (routine) to 10 (drop everything).">{{ prompt }}</textarea>
+      <button type="submit">Save prompt</button>
+    </form>
+    {% else %}
+    <p class="muted">Your role can't edit the analysis prompt.</p>
+    {% if !prompt.is_empty() %}
+    <pre class="panel" style="max-width:none; overflow-x:auto;">{{ prompt }}</pre>
+    {% endif %}
+    {% endif %}
+  </div>
+  <div class="info-panel">
+    <h2>How this works</h2>
+    <ul>
+      <li>Analysis Service includes this prompt in every batched call to Azure AI Foundry/ML
+        for this tenant, alongside the records being analyzed.</li>
+      <li>Changes take effect within seconds — Config/Admin Service publishes the change over
+        the message bus and Analysis Service picks it up automatically, no restart needed.</li>
+      <li>Trigger Engine still decides when to actually create an Event: it evaluates your
+        Triggers against whatever numeric fields the AI returns, so a prompt that changes what
+        the AI reports may also change which Triggers fire.</li>
+      <li>Every save is written to an immutable audit log for compliance review.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

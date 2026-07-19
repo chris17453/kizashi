@@ -11,7 +11,19 @@
     <label for="gateway_url">Ingestion Gateway URL</label>
     <input type="text" id="gateway_url" name="gateway_url" value="{{ gateway_url }}" required>
     <label for="api_key">Ingestion Gateway API key</label>
-    <input type="text" id="api_key" name="api_key" placeholder="your existing API key" required>
+    {% if api_key_auto_generated %}
+    <input type="text" id="api_key" name="api_key" value="{{ api_key }}" required>
+    <p class="muted" style="margin: 0.3rem 0 0.6rem; font-size: 0.8rem;">
+      A one-time deploy key was generated automatically for this agent — it won't be shown
+      again after you leave this page. <a href="/api-keys">Manage API keys &rarr;</a>
+    </p>
+    {% else %}
+    <input type="text" id="api_key" name="api_key" placeholder="paste an API key" required>
+    <p class="muted" style="margin: 0.3rem 0 0.6rem; font-size: 0.8rem;">
+      Your role can't create API keys — ask an operator, or
+      <a href="/api-keys">view existing keys &rarr;</a>
+    </p>
+    {% endif %}
     {% for field in fields %}
     <label for="{{ field.env_var }}">{{ field.label }}{% if field.optional %} (optional){% endif %}</label>
     <input type="{% if field.secret %}password{% else %}text{% endif %}" id="{{ field.env_var }}" name="{{ field.env_var }}" {% if !field.optional %}required{% endif %}>

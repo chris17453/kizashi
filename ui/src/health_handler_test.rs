@@ -38,6 +38,7 @@ async fn state_with_session(health_client: Arc<dyn crate::HealthClient>) -> (App
         api_keys_client: Arc::new(crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default()),
         backlog_client: Arc::new(crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default()),
         execution_client: std::sync::Arc::new(crate::execution_client::execution_client_test::InMemoryExecutionClient::default()),
+        analysis_config_client: std::sync::Arc::new(crate::analysis_config_client::analysis_config_client_test::InMemoryAnalysisConfigClient::default()),
         stats_client: Arc::new(
             crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
         ),

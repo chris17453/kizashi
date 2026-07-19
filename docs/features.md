@@ -1556,3 +1556,58 @@ architectural decision.
   `false`) propagated the same way.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [0018](adr/0018-trigger-definition-sync-config-admin-to-trigger-engine.md)
+
+## [2026-07-19] feature/0015-ai-analysis-config — Per-tenant AI analysis prompt + deploy-form auto-fill fix (ADR-0019)
+- **Type:** feature
+- **Branch:** feature/0015-ai-analysis-config
+- **Summary:** Closes the backlog item "AI prompt generation for agent actions": every tenant
+  previously got identical, uncontrollable AI/ML analysis behavior from Analysis Service's
+  fixed call to Azure AI Foundry — no operator control over what the model looks for. Adds
+  `AnalysisConfig { tenant_id, prompt, updated_at }` (`crates/common/src/analysis_config.rs`),
+  a new Console UI "AI Analysis" page (`GET/POST /analysis-config`) where an operator writes a
+  plain-English prompt, `config-admin-service` CRUD (`GET/PUT /v1/analysis-config`,
+  operator-only write, audit-logged) that publishes `analysis_config.changed` on every write,
+  and a new consumer in `analysis-service` (its first-ever Postgres schema — previously
+  stateless) that upserts the synced prompt and includes it in every Foundry/ML batch call
+  when present. Reuses ADR-0018's event-driven sync pattern exactly, for the same reason:
+  Analysis Service's batch call runs on every `record.normalized` batch, the hottest path in
+  the system, so a local Postgres read stays fast at scale where a synchronous
+  config-admin-service HTTP call per batch would not. Also fixes a real UX gap flagged
+  directly: the Agent deploy-script wizard (`/agents/generate/form`) required operators to
+  manually create an API key on a separate page and paste it in blind — now a fresh,
+  single-use deploy key is minted automatically via the existing `ApiKeysClient` and
+  pre-filled (a Viewer-role session, which can't create keys, gets a blank field with a link
+  to the API Keys page instead of a silent failure).
+- **Tests:** `cargo test -p common --lib analysis_config` — 2 passed. `cargo test -p
+  config-admin-service` — 63 passed (14 new: `analysis_config_repository_test`,
+  `analysis_config_publisher_test`, `analysis_config_handlers_test` unit tests) + 1 new
+  Postgres integration test (`upsert_analysis_config_writes_created_then_updated_audit_rows_
+  against_real_postgres`, proving the `ON CONFLICT` upsert and its audit trail against a real
+  table) + 1 new RabbitMQ integration test
+  (`publishing_an_analysis_config_change_round_trips_over_real_rabbitmq`). `cargo test -p
+  analysis-service` — 20 passed (9 new: `analysis_config_repository_test` unit tests, two new
+  `foundry_client_includes_the_prompt_.../foundry_client_omits_the_prompt_field_when_none`
+  request-body-capture tests, `process_batch_passes_the_tenants_configured_prompt_...`) + 3
+  new Postgres integration tests
+  (`analysis_config_repository_integration_test.rs`, against analysis-service's brand-new
+  schema). `cargo test -p kizashi-ui` — 139 passed (9 new: `analysis_config_client_test`
+  HTTP-client tests against a real stub server, `analysis_config_handler_test` handler tests,
+  two new `agent_script_handler_test` tests proving the API key auto-fill for an operator and
+  the blank-with-link fallback for a viewer; every other `*_handler_test.rs`'s `AppState`
+  construction swept to add the new `analysis_config_client` field). Full local CI gate:
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features --
+  -D warnings` clean, `cargo test --workspace --all-features` all green (0 failures across
+  every crate, verified against a throwaway local `mssql` container for Fabric), `cargo
+  audit` clean (same two pre-existing allow-listed `unmaintained` advisories, no new ones).
+  Live-verified against the running docker-compose stack: rebuilt/redeployed
+  `config-admin-service`, `analysis-service`, and `kizashi-ui`, wired the new `DATABASE_URL`
+  requirement for `analysis-service` into `docker-compose.yml`/`scripts/run-local.sh` (needed
+  now that it owns a schema for the first time), logged in, saved a real prompt through the
+  `/analysis-config` form, and confirmed via
+  direct Postgres queries that the exact same prompt text landed in both
+  `config_admin_service.analysis_configs` and `analysis_service.analysis_configs` within
+  seconds — proving the full UI-to-bus-to-consumer sync chain, not just the individual pieces.
+  Also fetched `/agents/generate/form?connector_type=zendesk` live and confirmed a real
+  `kzsh_...` API key was minted and pre-filled in the rendered HTML, screenshotted both pages.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0019](adr/0019-per-tenant-analysis-configuration-ai-prompt.md)
