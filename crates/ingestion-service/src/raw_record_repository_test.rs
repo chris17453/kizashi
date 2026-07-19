@@ -173,6 +173,7 @@ impl RawRecordRepository for InMemoryRawRecordRepository {
                     )
                 })
             })
+            .filter(|r| filter.normalized.is_none_or(|n| r.normalized_payload.is_some() == n))
             .cloned()
             .collect();
         matching.sort_by_key(|r| std::cmp::Reverse(r.ingested_at));
@@ -713,6 +714,24 @@ async fn search_filters_by_attachment_filename() {
     };
     let found = repo.search(tenant_id, &filter).await.unwrap();
     assert_eq!(found, vec![matching]);
+}
+
+#[tokio::test]
+async fn search_normalized_false_finds_only_records_with_no_normalized_payload() {
+    let repo = InMemoryRawRecordRepository::default();
+    let tenant_id = uuid::Uuid::new_v4();
+    let unnormalized =
+        RawRecord::new("imap", common::SourceType::Message, tenant_id, serde_json::json!({}));
+    let mut normalized =
+        RawRecord::new("imap", common::SourceType::Message, tenant_id, serde_json::json!({}));
+    normalized.normalized_payload = Some(serde_json::json!({"subject": "hi"}));
+    repo.insert(&unnormalized).await.unwrap();
+    repo.insert(&normalized).await.unwrap();
+
+    let filter = RecordSearchFilter { normalized: Some(false), limit: 10, ..Default::default() };
+    let found = repo.search(tenant_id, &filter).await.unwrap();
+
+    assert_eq!(found, vec![unnormalized]);
 }
 
 #[tokio::test]

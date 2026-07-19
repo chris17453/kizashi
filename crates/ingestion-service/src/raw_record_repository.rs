@@ -120,6 +120,11 @@ pub struct RecordSearchFilter {
     pub email_from: Option<String>,
     /// Substring match against any attachment's `filename` in `raw_payload.attachments`.
     pub attachment_filename: Option<String>,
+    /// `Some(false)` finds records with no `normalized_payload` yet — the reprocess endpoint's
+    /// "what still needs normalizing" query (e.g. records ingested before a
+    /// NormalizationMapping existed for their source type). `Some(true)` finds the opposite.
+    /// `None` doesn't filter on it at all.
+    pub normalized: Option<bool>,
     pub limit: i64,
     pub offset: i64,
 }
@@ -309,6 +314,7 @@ impl RawRecordRepository for PostgresRawRecordRepository {
                     SELECT 1 FROM jsonb_array_elements(COALESCE(raw_payload->'attachments', '[]'::jsonb)) AS a
                     WHERE a->>'filename' ILIKE '%' || $9 || '%'
               ))
+              AND ($12::bool IS NULL OR (normalized_payload IS NOT NULL) = $12)
             ORDER BY ingested_at DESC
             LIMIT $10
             OFFSET $11
@@ -325,6 +331,7 @@ impl RawRecordRepository for PostgresRawRecordRepository {
         .bind(&filter.attachment_filename)
         .bind(filter.limit)
         .bind(filter.offset)
+        .bind(filter.normalized)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| RepositoryError::Backend(e.to_string()))?;

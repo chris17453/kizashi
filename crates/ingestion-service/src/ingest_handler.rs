@@ -3,9 +3,10 @@
 mod ingest_handler_test;
 
 use crate::event_publisher::EventPublisher;
-use crate::raw_record_repository::RawRecordRepository;
-use axum::extract::State;
-use axum::http::StatusCode;
+use crate::list_records_handler::tenant_id_from_headers;
+use crate::raw_record_repository::{RawRecordRepository, RecordSearchFilter};
+use axum::extract::{Query, State};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use chrono::{DateTime, Utc};
 use common::{RawRecord, SourceType};
@@ -103,4 +104,57 @@ pub async fn ingest_record(
     }
 
     Ok((StatusCode::CREATED, Json(IngestResponse { id: record.id })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReprocessQuery {
+    pub connector_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReprocessResponse {
+    pub republished: usize,
+}
+
+/// POST /v1/records/reprocess — republishes `record.ingested` for every one of the caller's
+/// tenant's records that has no `normalized_payload` yet (optionally scoped to one connector).
+/// Closes a real gap: a record ingested before a `NormalizationMapping` existed for its source
+/// type is silently skipped by Normalization Service (`ProcessOutcome::NoMappingConfigured`,
+/// by design — not an error) and never gets a second chance without this. Re-publishing
+/// (rather than calling normalization logic directly here) means this handler needs no
+/// knowledge of mappings/normalization at all — the existing `record.ingested` consumer
+/// (Normalization Service) picks these up exactly like a fresh poll would, so the rest of the
+/// pipeline (analysis, triggers) is exercised unchanged. Bounded to `BATCH_LIMIT` records per
+/// call so a huge backlog is swept in successive calls, not one unbounded request.
+const REPROCESS_BATCH_LIMIT: i64 = 500;
+
+pub async fn reprocess_records(
+    State(state): State<IngestState>,
+    headers: HeaderMap,
+    Query(query): Query<ReprocessQuery>,
+) -> Result<Json<ReprocessResponse>, IngestError> {
+    let tenant_id = tenant_id_from_headers(&headers)?;
+    let filter = RecordSearchFilter {
+        connector_id: query.connector_id,
+        normalized: Some(false),
+        limit: REPROCESS_BATCH_LIMIT,
+        ..Default::default()
+    };
+    let records = state
+        .repository
+        .search(tenant_id, &filter)
+        .await
+        .map_err(|e| IngestError::Storage(e.to_string()))?;
+
+    let mut republished = 0;
+    for record in &records {
+        match state.publisher.publish_record_ingested(record).await {
+            Ok(()) => republished += 1,
+            Err(e) => {
+                tracing::error!(record_id = %record.id, error = %e, "failed to republish record.ingested during reprocess");
+            }
+        }
+    }
+
+    Ok(Json(ReprocessResponse { republished }))
 }

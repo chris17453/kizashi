@@ -26,6 +26,9 @@ pub struct SearchRecordsQuery {
     pub email_from: Option<String>,
     /// Substring match against any attachment's filename.
     pub attachment_filename: Option<String>,
+    /// `false` finds records with no `normalized_payload` yet — the reprocess endpoint's
+    /// "what's left to normalize" query.
+    pub normalized: Option<bool>,
     #[serde(default = "default_limit")]
     pub limit: i64,
     #[serde(default)]
@@ -64,6 +67,7 @@ pub async fn search_records(
         subject: query.subject,
         email_from: query.email_from,
         attachment_filename: query.attachment_filename,
+        normalized: query.normalized,
         limit: query.limit + 1,
         offset: query.offset,
     };
