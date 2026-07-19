@@ -49,6 +49,8 @@ pub trait RetentionPolicyRepository: Send + Sync {
         &self,
         policy: RetentionPolicy,
     ) -> Result<RetentionPolicy, RetentionPolicyRepositoryError>;
+    async fn delete(&self, tenant_id: Uuid, id: Uuid)
+        -> Result<(), RetentionPolicyRepositoryError>;
     async fn get(
         &self,
         tenant_id: Uuid,
@@ -181,6 +183,59 @@ impl RetentionPolicyRepository for PostgresRetentionPolicyRepository {
 
         tx.commit().await.map_err(|e| RetentionPolicyRepositoryError::Backend(e.to_string()))?;
         Ok(policy)
+    }
+
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<(), RetentionPolicyRepositoryError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| RetentionPolicyRepositoryError::Backend(e.to_string()))?;
+
+        let existing: Option<PolicyRow> = sqlx::query_as(
+            "SELECT id, tenant_id, data_class, ttl_days, enabled FROM retention_policies WHERE id = $1 AND tenant_id = $2",
+        )
+        .bind(id)
+        .bind(tenant_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| RetentionPolicyRepositoryError::Backend(e.to_string()))?;
+
+        let Some(existing) = existing else {
+            return Err(RetentionPolicyRepositoryError::NotFound(id));
+        };
+        let before = row_to_policy(existing);
+
+        sqlx::query("DELETE FROM retention_policies WHERE id = $1 AND tenant_id = $2")
+            .bind(id)
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| RetentionPolicyRepositoryError::Backend(e.to_string()))?;
+
+        record_audit_entry(
+            &mut tx,
+            &AuditLogEntry {
+                id: Uuid::new_v4(),
+                tenant_id,
+                entity_type: "retention_policy".to_string(),
+                entity_id: id,
+                change_type: ChangeType::Deleted,
+                actor: tenant_id.to_string(),
+                before: Some(serde_json::to_value(&before).unwrap_or_default()),
+                after: serde_json::Value::Null,
+                changed_at: chrono::Utc::now(),
+            },
+        )
+        .await
+        .map_err(|e| RetentionPolicyRepositoryError::Backend(e.to_string()))?;
+
+        tx.commit().await.map_err(|e| RetentionPolicyRepositoryError::Backend(e.to_string()))?;
+        Ok(())
     }
 
     async fn get(

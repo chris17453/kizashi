@@ -109,6 +109,24 @@ pub async fn update_policy(
     }
 }
 
+pub async fn delete_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
+    match state.policy_repository.delete(tenant_id, id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => policy_error_response(e),
+    }
+}
+
 pub async fn get_policy(
     State(state): State<AppState>,
     headers: HeaderMap,

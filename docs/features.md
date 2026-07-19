@@ -2202,3 +2202,55 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — test-coverage addition, no architectural decision, confirms existing
   behavior rather than changing it
+
+## [2026-07-19] feature/0026-retention-policy-console-ui — Retention policy Console UI page (full CRUD)
+- **Type:** feature
+- **Branch:** feature/0026-retention-policy-console-ui
+- **Summary:** Closes spec §7's "data lifecycle UI" gap — retention-service had a full
+  create/read/update API since ADR-0011 but zero Console UI presence until now (an operator
+  had to hand-craft `curl`/direct-SQL to manage retention). Added a `/retention-policies` page
+  with genuinely full CRUD, following the pattern established by the Field Mappings and Agents
+  pages: `retention_policies_client.rs` (`RetentionPoliciesClient` trait +
+  `HttpRetentionPoliciesClient`, threading `role: Role` through every write), a
+  `retention_policies_handler.rs` (list, create, an inline TTL-edit form
+  (`POST /:id/edit`), enable/disable toggle, and delete (`POST /:id/delete`)), and a new
+  `retention_policies.html` template with a per-row edit-TTL field, toggle button, and Remove
+  button. **`retention-service` itself only had create/update/get/list — no delete endpoint at
+  all — so this PR adds `DELETE /v1/retention-policies/:id` to the backend first** (repository
+  `delete` method + Postgres impl writing a `Deleted` audit entry in the same transaction,
+  matching `agent_repository::delete`'s pattern exactly; a new `ChangeType::Deleted` variant;
+  RBAC-enforced handler; router wiring), rather than scoping the UI down to match a backend
+  gap — CRUD means all four operations, not three. Also added `.env.example`/
+  `docker-compose.yml` entries for `RETENTION_SERVICE_URL`, which the Console UI never
+  previously needed to know about.
+- **Note:** `RetentionPolicy`/`DataClass` are defined locally in the UI crate rather than
+  imported from `common`, since — unlike `Agent`/`TriggerDefinition`/`NormalizationMapping` —
+  `RetentionPolicy` currently lives only in `retention-service`'s own crate, not `common`.
+  Duplicating the JSON-compatible shape (matching the existing `TriggerSummary`-style pattern
+  of UI-local view types) avoided adding a new cross-crate dependency on `retention-service`
+  itself; moving `RetentionPolicy` into `common` to be reused directly is a reasonable
+  follow-up but out of scope here.
+- **Tests:** `cargo test -p retention-service --lib` — 51 tests, all passed (7 new: repository
+  `delete` unit tests including cross-tenant isolation, 5 new handler tests covering RBAC/
+  tenant-scoping/404 on the new `DELETE` endpoint). `cargo test -p retention-service --test
+  retention_policy_integration_test` — 8 tests against real Postgres, all passed, including a
+  new test proving `delete` writes a `Deleted` audit row with `before` populated and actually
+  removes the row. `cargo test -p kizashi-ui --lib` — 174 tests, all passed (19 covering
+  retention policies specifically: list/create/edit/toggle/delete against both a real stub
+  HTTP server and the in-process router, viewer-role rejection on every write action, and
+  backend-failure handling). `cargo test --workspace --all-features` (full real-infra stack)
+  — all passed, 0 failed. `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny check` — clean. `cargo
+  audit` — same 3 pre-existing allow-listed advisories, no new ones.
+- **Live verification:** rebuilt and redeployed the real `kizashi-ui` and `retention-service`
+  containers, seeded the local demo tenant/user (`scripts/seed-local-demo.sh`), logged in for
+  a real session cookie, and drove the full CRUD lifecycle through the actual pages: created a
+  policy (confirmed via Postgres), edited its TTL from 90 to 200 days via the real inline form
+  (confirmed via Postgres), and deleted it via the real Remove button (confirmed via Postgres
+  — row count 0). A headless-Chrome screenshot of the real rendered page confirmed the edit
+  field, toggle button, and Remove button all render correctly and match the platform's
+  existing visual design language — not a guess from reading the template.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — adds a `DELETE` endpoint following the identical pattern
+  `agent_repository::delete` already established, and a UI surface for the resulting full CRUD
+  API; no new architectural decision

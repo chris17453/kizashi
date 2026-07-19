@@ -286,6 +286,7 @@ services:
       INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
       INGESTION_GATEWAY_PUBLIC_URL: "${INGESTION_GATEWAY_PUBLIC_URL:-http://localhost:8081}"
       ACTION_EXECUTOR_URL: http://action-executor:8080
+      RETENTION_SERVICE_URL: http://retention-service:8080
     ports: ["8093:8080"]
     depends_on:
       auth-service: { condition: service_healthy }
@@ -295,6 +296,7 @@ services:
       ingestion-service: { condition: service_healthy }
       ingestion-gateway: { condition: service_healthy }
       action-executor: { condition: service_healthy }
+      retention-service: { condition: service_healthy }
     healthcheck: *healthz
 
   # --- Connectors --------------------------------------------------------------------------

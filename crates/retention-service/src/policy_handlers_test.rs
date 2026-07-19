@@ -16,7 +16,10 @@ use tower::ServiceExt;
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/retention-policies", post(create_policy).get(list_policies))
-        .route("/v1/retention-policies/:id", get(get_policy).put(update_policy))
+        .route(
+            "/v1/retention-policies/:id",
+            get(get_policy).put(update_policy).delete(delete_policy),
+        )
         .route("/v1/audit-log/:entity_id", get(get_audit_log))
         .with_state(state)
 }
@@ -323,4 +326,82 @@ async fn get_audit_log_requires_tenant_header() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn delete_policy_succeeds_then_get_returns_404() {
+    let tenant_id = Uuid::new_v4();
+    let policy = sample_policy(tenant_id);
+    let state = AppState {
+        policy_repository: Arc::new(InMemoryRetentionPolicyRepository::with_policy(policy.clone())),
+        audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        record_client: Arc::new(InMemoryRawRecordClient::default()),
+        archive_store: Arc::new(InMemoryArchiveStore::default()),
+    };
+    let app = router(state);
+
+    let delete_response = send(
+        app.clone(),
+        "DELETE",
+        format!("/v1/retention-policies/{}", policy.id),
+        Some(tenant_id),
+        None,
+    )
+    .await;
+    assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+
+    let get_response =
+        send(app, "GET", format!("/v1/retention-policies/{}", policy.id), Some(tenant_id), None)
+            .await;
+    assert_eq!(get_response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn delete_policy_requires_role_header() {
+    let tenant_id = Uuid::new_v4();
+    let policy_id = Uuid::new_v4();
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/retention-policies/{policy_id}"))
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn delete_policy_rejects_a_viewer_role() {
+    let tenant_id = Uuid::new_v4();
+    let policy_id = Uuid::new_v4();
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/retention-policies/{policy_id}"))
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "viewer")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn delete_policy_returns_404_for_unknown_id() {
+    let response = send(
+        router(default_state()),
+        "DELETE",
+        format!("/v1/retention-policies/{}", Uuid::new_v4()),
+        Some(Uuid::new_v4()),
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

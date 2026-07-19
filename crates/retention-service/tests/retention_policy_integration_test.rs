@@ -141,3 +141,32 @@ async fn list_all_enabled_only_returns_enabled_policies() {
     assert!(found.iter().any(|p| p.id == enabled.id));
     assert!(found.iter().all(|p| p.enabled));
 }
+
+#[tokio::test]
+async fn delete_policy_writes_a_deleted_audit_row_and_removes_the_row() {
+    let pool = test_pool().await;
+    let repo = PostgresRetentionPolicyRepository::new(pool.clone());
+    let audit_reader = PostgresAuditLogReader::new(pool.clone());
+
+    let tenant_id = Uuid::new_v4();
+    let policy = sample_policy(tenant_id);
+    repo.create(policy.clone()).await.unwrap();
+
+    repo.delete(tenant_id, policy.id).await.expect("delete should succeed");
+
+    assert_eq!(repo.get(tenant_id, policy.id).await.unwrap(), None);
+
+    let entries = audit_reader.list_for_entity(tenant_id, policy.id).await.unwrap();
+    assert_eq!(entries.len(), 2);
+    let delete_entry = entries.iter().find(|e| e.change_type == ChangeType::Deleted).unwrap();
+    assert!(delete_entry.before.is_some());
+}
+
+#[tokio::test]
+async fn delete_of_unknown_policy_against_real_postgres_returns_not_found() {
+    let pool = test_pool().await;
+    let repo = PostgresRetentionPolicyRepository::new(pool.clone());
+
+    let err = repo.delete(Uuid::new_v4(), Uuid::new_v4()).await.unwrap_err();
+    assert!(matches!(err, RetentionPolicyRepositoryError::NotFound(_)));
+}

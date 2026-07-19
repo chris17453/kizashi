@@ -59,6 +59,9 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
         analysis_config_client: Arc::new(InMemoryAnalysisConfigClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         normalization_mappings_client: Arc::new(InMemoryNormalizationMappingsClient::default()),
+        retention_policies_client: Arc::new(
+            crate::retention_policies_client::retention_policies_client_test::InMemoryRetentionPoliciesClient::default(),
+        ),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id, tenant_id)

@@ -15,6 +15,7 @@ mod execution_client;
 mod health_client;
 mod ingestion_stats_client;
 mod normalization_mappings_client;
+mod retention_policies_client;
 mod session;
 mod session_guard;
 mod topology;
@@ -37,6 +38,7 @@ mod overview_handler;
 mod pipeline_handler;
 mod record_journey_handler;
 mod reports_handler;
+mod retention_policies_handler;
 mod root_handler;
 mod static_assets;
 mod triggers_handler;
@@ -62,6 +64,10 @@ pub use ingestion_stats_client::{
 pub use normalization_mappings_client::{
     HttpNormalizationMappingsClient, NormalizationMappingsClient, NormalizationMappingsClientError,
 };
+pub use retention_policies_client::{
+    DataClass, HttpRetentionPoliciesClient, RetentionPoliciesClient, RetentionPoliciesClientError,
+    RetentionPolicy,
+};
 pub use session::{InMemorySessionStore, Session, SessionStore};
 pub use triggers_client::{
     HttpTriggersClient, TriggerSummary, TriggersClient, TriggersClientError, TriggersPage,
@@ -84,6 +90,10 @@ pub use overview_handler::get_overview;
 pub use pipeline_handler::get_pipeline;
 pub use record_journey_handler::get_record_journey;
 pub use reports_handler::get_reports;
+pub use retention_policies_handler::{
+    get_retention_policies, post_delete_retention_policy, post_edit_retention_policy,
+    post_retention_policies, post_toggle_retention_policy,
+};
 pub use root_handler::get_root;
 pub use static_assets::get_charts_js;
 pub use triggers_handler::{get_triggers, post_trigger};
@@ -108,6 +118,7 @@ pub struct AppState {
     pub stats_client: Arc<dyn IngestionStatsClient>,
     pub analysis_config_client: Arc<dyn AnalysisConfigClient>,
     pub normalization_mappings_client: Arc<dyn NormalizationMappingsClient>,
+    pub retention_policies_client: Arc<dyn RetentionPoliciesClient>,
     /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
     /// reachable from inside this container (e.g. a customer-hosted connector polling in from
     /// outside the platform's own network), so it's a separate, operator-configurable value
@@ -140,6 +151,10 @@ pub fn build_router(state: AppState) -> Router {
             "/normalization-mappings",
             get(get_normalization_mappings).post(post_normalization_mapping),
         )
+        .route("/retention-policies", get(get_retention_policies).post(post_retention_policies))
+        .route("/retention-policies/:id/toggle", axum::routing::post(post_toggle_retention_policy))
+        .route("/retention-policies/:id/edit", axum::routing::post(post_edit_retention_policy))
+        .route("/retention-policies/:id/delete", axum::routing::post(post_delete_retention_policy))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
         .route("/data/:id", get(get_data_detail))
