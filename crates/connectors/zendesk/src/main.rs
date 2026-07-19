@@ -1,5 +1,5 @@
 use common::connector::Connector;
-use connector_runtime::{run_poll_cycle, HttpIngestionClient};
+use connector_runtime::{build_outbound_client, run_poll_cycle, HttpIngestionClient};
 use connector_zendesk::ZendeskConnector;
 use uuid::Uuid;
 
@@ -24,10 +24,18 @@ async fn main() {
     let api_key =
         std::env::var("INGESTION_GATEWAY_API_KEY").expect("INGESTION_GATEWAY_API_KEY must be set");
 
+    // ADR-0021: opt-in — set EGRESS_PROXY_URL to route this connector's outbound calls to
+    // Zendesk through Egress Gateway's audit log/allowlist; unset means today's exact
+    // behavior (a plain client, no proxy).
+    let egress_proxy_url = std::env::var("EGRESS_PROXY_URL").ok();
+    let outbound_client =
+        build_outbound_client(egress_proxy_url.as_deref(), tenant_id, &connector_id)
+            .expect("failed to configure outbound HTTP client");
+
     let base_url = format!("https://{subdomain}.zendesk.com");
     let connector = ZendeskConnector::new(
         connector_id,
-        reqwest::Client::new(),
+        outbound_client,
         base_url,
         email,
         api_token,

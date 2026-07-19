@@ -7,6 +7,7 @@ mod entra_client_credentials;
 mod ingestion_client;
 mod poll_runner;
 
+pub use common::{build_outbound_client, EgressClientError};
 pub use entra_client_credentials::{fetch_access_token, EntraAuthError};
 pub use ingestion_client::{HttpIngestionClient, IngestionClient, IngestionClientError};
 pub use poll_runner::{run_poll_cycle, PollRunError, PollSummary};

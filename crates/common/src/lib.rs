@@ -11,6 +11,7 @@ pub mod analyzed_record;
 pub mod bus;
 pub mod connector;
 pub mod db;
+pub mod egress_client;
 pub mod email_payload;
 pub mod event;
 pub mod event_type_definition;
@@ -31,6 +32,7 @@ pub use bus::{
 };
 pub use connector::{Connector, ConnectorError};
 pub use db::{connect_with_schema, ConnectError};
+pub use egress_client::{build_outbound_client, EgressClientError};
 pub use email_payload::{EmailAttachment, EmailPayload};
 pub use event::{Event, EventStatus};
 pub use event_type_definition::EventTypeDefinition;

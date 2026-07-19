@@ -1862,3 +1862,43 @@ architectural decision.
   tracked as a separate follow-up rather than scope-creeping this PR further.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [0021](adr/0021-egress-gateway-http-connect-forward-proxy.md)
+
+## [2026-07-19] feature/0019-egress-proxy-connector-wiring — Wire EGRESS_PROXY_URL opt-in into connectors and action-executor
+- **Type:** feature
+- **Branch:** feature/0019-egress-proxy-connector-wiring
+- **Summary:** Closes the follow-up gap explicitly left open in the Egress Gateway PR (ADR-0021):
+  `build_outbound_client`/`EgressClientError` moved from `connector-runtime` into `common` (so
+  both connectors and `action-executor` can share it without an odd cross-domain dependency).
+  Wired the `EGRESS_PROXY_URL` opt-in into the `zendesk`, `graph-mail`, `graph-teams`, and
+  `generic` connectors — each now builds its outbound `reqwest::Client` via
+  `build_outbound_client(egress_proxy_url, tenant_id, connector_id)` instead of a bare
+  `reqwest::Client::new()`. `action-executor`'s `HttpActionDispatcher` now builds a fresh
+  proxied client per dispatch call, keyed on `(event.tenant_id, "action-executor")`, since
+  Action Executor is multi-tenant within one process (unlike a connector, which is one tenant
+  for its whole process lifetime) — this changed its constructor from taking a `reqwest::Client`
+  to taking `Option<String>` (the proxy URL), resolved once from `EGRESS_PROXY_URL` in `main.rs`.
+- **Known gaps, explicitly not done here:** `fabric` (raw TDS/SQL Server via `tiberius`) and
+  `sql` (Postgres wire protocol via `sqlx::PgPool`) connectors have no outbound `reqwest::Client`
+  in their data-fetch path, so there is nothing to proxy for either. The internal
+  `fetch_access_token` OAuth2 token-fetch call used by `graph-mail`/`graph-teams`/`fabric`
+  constructs its own client internally and is not yet wired to the proxy — tracked as a
+  follow-up.
+- **Tests:** `cargo test --workspace --all-features` (real Postgres/RabbitMQ/ClickHouse/MinIO
+  via docker-compose, plus a throwaway `kizashi-mssql-ci` container for Fabric) — all passed, 0
+  failed, across every crate including the 2 moved `egress_client` tests and a new
+  `action_dispatcher_test::dispatch_returns_unreachable_for_a_malformed_egress_proxy_url` proving
+  the proxy config actually plumbs through per-dispatch rather than being accepted and ignored.
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt
+  --all --check` — clean. `cargo audit` — same 3 pre-existing allow-listed advisories
+  (`instant`, `rustls-pemfile` x2, all `unmaintained`), no new advisories introduced.
+- **Live verification:** built `connector-generic` and ran it directly against the live,
+  already-deployed `egress-gateway` container with `EGRESS_PROXY_URL=http://localhost:3128`,
+  a real `tenant_id`, and `CONNECTOR_ID=egress-live-test-connector` pointed at
+  `https://api.github.com/zen`. The connector itself hit an unrelated auth error parsing
+  GitHub's response, but a direct query against `egress_gateway.egress_audit_log` confirmed the
+  outbound call was correctly tunneled and audit-logged with the connector's real tenant_id and
+  connector_id — proving the "zero code changes beyond one env var" claim from ADR-0021 holds
+  for a real connector process.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — implements the wiring already decided in ADR-0021, no new architectural
+  decision

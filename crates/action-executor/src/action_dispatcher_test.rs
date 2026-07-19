@@ -75,7 +75,7 @@ async fn spawn_stub_webhook(status: axum::http::StatusCode) -> String {
 #[tokio::test]
 async fn dispatch_posts_to_the_configured_url_and_succeeds() {
     let url = spawn_stub_webhook(axum::http::StatusCode::OK).await;
-    let dispatcher = HttpActionDispatcher::new(reqwest::Client::new());
+    let dispatcher = HttpActionDispatcher::new(None);
     let action = ActionRef { action_type: ActionType::Webhook, config: json!({"url": url}) };
 
     let result = dispatcher.dispatch(&action, &sample_event()).await.unwrap();
@@ -84,7 +84,7 @@ async fn dispatch_posts_to_the_configured_url_and_succeeds() {
 
 #[tokio::test]
 async fn dispatch_without_url_in_config_fails_fast() {
-    let dispatcher = HttpActionDispatcher::new(reqwest::Client::new());
+    let dispatcher = HttpActionDispatcher::new(None);
     let action = ActionRef { action_type: ActionType::Email, config: json!({}) };
 
     let err = dispatcher.dispatch(&action, &sample_event()).await.unwrap_err();
@@ -94,7 +94,7 @@ async fn dispatch_without_url_in_config_fails_fast() {
 #[tokio::test]
 async fn dispatch_returns_rejected_on_target_error() {
     let url = spawn_stub_webhook(axum::http::StatusCode::INTERNAL_SERVER_ERROR).await;
-    let dispatcher = HttpActionDispatcher::new(reqwest::Client::new());
+    let dispatcher = HttpActionDispatcher::new(None);
     let action = ActionRef { action_type: ActionType::TeamsAlert, config: json!({"url": url}) };
 
     let err = dispatcher.dispatch(&action, &sample_event()).await.unwrap_err();
@@ -103,10 +103,24 @@ async fn dispatch_returns_rejected_on_target_error() {
 
 #[tokio::test]
 async fn dispatch_returns_unreachable_when_target_is_down() {
-    let dispatcher = HttpActionDispatcher::new(reqwest::Client::new());
+    let dispatcher = HttpActionDispatcher::new(None);
     let action = ActionRef {
         action_type: ActionType::CreateTicket,
         config: json!({"url": "http://127.0.0.1:1/hook"}),
+    };
+
+    let err = dispatcher.dispatch(&action, &sample_event()).await.unwrap_err();
+    assert!(matches!(err, DispatchError::Unreachable(_)));
+}
+
+#[tokio::test]
+async fn dispatch_returns_unreachable_for_a_malformed_egress_proxy_url() {
+    // Proves the proxy configuration actually plumbs through per-dispatch, not just accepted
+    // and ignored: an invalid EGRESS_PROXY_URL surfaces as a real dispatch failure.
+    let dispatcher = HttpActionDispatcher::new(Some("not a valid url".to_string()));
+    let action = ActionRef {
+        action_type: ActionType::Webhook,
+        config: json!({"url": "http://example.com"}),
     };
 
     let err = dispatcher.dispatch(&action, &sample_event()).await.unwrap_err();
