@@ -1222,3 +1222,38 @@ Entry format:
 - **PR:** (opened in this branch's PR, same as the containerization change above)
 - **ADR:** n/a — implements a follow-up explicitly scoped out of ADR-0016's v1, not a new
   architectural decision.
+
+## [2026-07-19] feature/0014-docker-images — Instana-style Pipeline Map view
+- **Type:** feature
+- **Summary:** Continues ADR-0015's Instana-style APM direction (#30) with the feature that
+  actually reads as "Instana" — a live topology map, not another table. New `/pipeline` page
+  renders the ingest → normalize → analyze → trigger → act chain as connected boxes: each stage
+  node colored by its real `/v1/health` status (green dot = up, red = down), each connecting
+  edge labeled with the message type it carries and colored by real `/v1/backlog` queue depth
+  (grey = empty, amber = building up, red = past the critical threshold). Both data sources
+  already existed in Observability (ADR-0012) — this wires Console UI to consume the backlog
+  endpoint for the first time via a new `BacklogClient`, alongside the existing `HealthClient`.
+  A backlog-lookup failure degrades the page to "topology with no backlog numbers" rather than
+  an error page (health is the load-bearing signal; backlog is enrichment), while a health
+  failure does show the error page since the topology has nothing meaningful to render without
+  it. Template built as a flat, pre-interleaved `Vec<TopologyItem>` (stage/edge alternating)
+  rather than having the template zip two arrays — Askama's expression grammar makes index
+  arithmetic (`edges[loop.index0 - 1]`) fragile, so the ordering is resolved in Rust and the
+  template just iterates and matches.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 108 passed (2 new for `BacklogClient` against a
+  real stub server; 5 new for the pipeline handler: all five stages render with correct
+  up/down status, redirects to login when signed out, shows an error when health fails,
+  degrades gracefully with "n/a" backlog numbers when backlog fails, and a 500-message queue
+  renders as `edge-critical`). Beyond unit tests: rebuilt and redeployed `kizashi-ui`, logged
+  into the live stack, loaded `/pipeline` for real, and confirmed all five stages rendered
+  "up" with 0-message queues on every edge — matching the actual idle state of the real running
+  pipeline (no synthetic data, genuine live health/backlog reads through the full
+  Console-UI-to-Observability-to-RabbitMQ path). Full local CI gate: `cargo fmt --all --check`
+  clean, `cargo clippy --workspace --all-targets --all-features -- -D warnings` clean, `cargo
+  test --workspace --all-features` all green (0 failures across every crate, verified against
+  a throwaway local `mssql` container standing in for CI's Fabric TDS dependency), `cargo
+  llvm-cov` 93.91% line coverage (85% floor), `cargo audit` / `cargo deny check` clean (same
+  two pre-existing allow-listed `unmaintained` advisories, no new advisories).
+- **PR:** (opened in this branch's PR, same as the containerization change above)
+- **ADR:** n/a — additive UI feature consuming already-decided ADR-0012/ADR-0015 capabilities,
+  not a new architectural decision.

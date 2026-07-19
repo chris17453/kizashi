@@ -7,6 +7,7 @@
 mod agents_client;
 mod api_keys_client;
 mod auth_client;
+mod backlog_client;
 mod connector_field_catalog;
 mod events_client;
 mod health_client;
@@ -27,6 +28,7 @@ mod healthz;
 mod login_handler;
 mod logout_handler;
 mod overview_handler;
+mod pipeline_handler;
 mod reports_handler;
 mod root_handler;
 mod static_assets;
@@ -35,6 +37,7 @@ mod triggers_handler;
 pub use agents_client::{AgentsClient, AgentsClientError, HttpAgentsClient};
 pub use api_keys_client::{ApiKeySummary, ApiKeysClient, ApiKeysClientError, HttpApiKeysClient};
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient};
+pub use backlog_client::{BacklogClient, BacklogClientError, HttpBacklogClient, QueueDepthSummary};
 pub use events_client::{EventSummary, EventsClient, EventsClientError, HttpEventsClient};
 pub use health_client::{
     HealthClient, HealthClientError, HttpHealthClient, PlatformHealthSummary, ServiceHealthSummary,
@@ -60,6 +63,7 @@ pub use healthz::healthz;
 pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
 pub use overview_handler::get_overview;
+pub use pipeline_handler::get_pipeline;
 pub use reports_handler::get_reports;
 pub use root_handler::get_root;
 pub use static_assets::get_charts_js;
@@ -80,6 +84,7 @@ pub struct AppState {
     pub health_client: Arc<dyn HealthClient>,
     pub agents_client: Arc<dyn AgentsClient>,
     pub api_keys_client: Arc<dyn ApiKeysClient>,
+    pub backlog_client: Arc<dyn BacklogClient>,
     pub stats_client: Arc<dyn IngestionStatsClient>,
     /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
     /// reachable from inside this container (e.g. a customer-hosted connector polling in from
@@ -97,6 +102,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/events", get(get_events))
         .route("/triggers", get(get_triggers))
         .route("/health", get(get_health))
+        .route("/pipeline", get(get_pipeline))
         .route("/overview", get(get_overview))
         .route("/agents", get(get_agents).post(post_agents))
         .route("/agents/generate", get(get_generate_select))

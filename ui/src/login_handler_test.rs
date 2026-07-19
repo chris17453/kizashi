@@ -28,6 +28,7 @@ fn default_state() -> AppState {
         }),
         agents_client: Arc::new(crate::agents_client::agents_client_test::InMemoryAgentsClient::default()),
         api_keys_client: Arc::new(crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default()),
+        backlog_client: Arc::new(crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default()),
         stats_client: Arc::new(
             crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
         ),

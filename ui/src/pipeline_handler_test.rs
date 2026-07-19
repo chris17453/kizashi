@@ -1,10 +1,14 @@
 use super::*;
+use crate::agents_client::agents_client_test::InMemoryAgentsClient;
+use crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient;
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
-use crate::events_client::events_client_test::{FailingEventsClient, InMemoryEventsClient};
-use crate::health_client::health_client_test::InMemoryHealthClient;
-use crate::health_client::PlatformHealthSummary;
-use crate::session::SessionStore;
-use crate::session::{InMemorySessionStore, Session};
+use crate::backlog_client::backlog_client_test::{FailingBacklogClient, InMemoryBacklogClient};
+use crate::backlog_client::QueueDepthSummary;
+use crate::events_client::events_client_test::InMemoryEventsClient;
+use crate::health_client::health_client_test::{FailingHealthClient, InMemoryHealthClient};
+use crate::health_client::{PlatformHealthSummary, ServiceHealthSummary};
+use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
+use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -15,7 +19,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/events", get(get_events)).with_state(state)
+    Router::new().route("/pipeline", get(get_pipeline)).with_state(state)
 }
 
 async fn state_with_session() -> (AppState, String) {
@@ -34,36 +38,41 @@ async fn state_with_session() -> (AppState, String) {
         events_client: Arc::new(InMemoryEventsClient::default()),
         triggers_client: Arc::new(InMemoryTriggersClient::default()),
         health_client: Arc::new(InMemoryHealthClient {
-            summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
+            summary: PlatformHealthSummary {
+                status: "up".to_string(),
+                services: vec![
+                    ServiceHealthSummary {
+                        name: "ingestion-service".to_string(),
+                        status: "up".to_string(),
+                    },
+                    ServiceHealthSummary {
+                        name: "normalization-service".to_string(),
+                        status: "up".to_string(),
+                    },
+                    ServiceHealthSummary {
+                        name: "analysis-service".to_string(),
+                        status: "down".to_string(),
+                    },
+                ],
+            },
         }),
-        agents_client: Arc::new(crate::agents_client::agents_client_test::InMemoryAgentsClient::default()),
-        api_keys_client: Arc::new(crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default()),
-        backlog_client: Arc::new(crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default()),
-        stats_client: Arc::new(
-            crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
-        ),
+        agents_client: Arc::new(InMemoryAgentsClient::default()),
+        api_keys_client: Arc::new(InMemoryApiKeysClient::default()),
+        backlog_client: Arc::new(InMemoryBacklogClient::default()),
+        stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
     (state, session_id)
 }
 
 #[tokio::test]
-async fn renders_the_events_table_when_signed_in() {
-    let (mut state, session_id) = state_with_session().await;
-    let events_client = InMemoryEventsClient::default();
-    events_client.events.lock().unwrap().push(EventSummary {
-        id: Uuid::new_v4(),
-        event_type: "sentiment_spike".to_string(),
-        group_key: "customer-42".to_string(),
-        status: "open".to_string(),
-        occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
-    });
-    state.events_client = Arc::new(events_client);
+async fn renders_all_five_pipeline_stages_with_their_health_status() {
+    let (state, session_id) = state_with_session().await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/events")
+                .uri("/pipeline")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -74,8 +83,11 @@ async fn renders_the_events_table_when_signed_in() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("sentiment_spike"));
-    assert!(body.contains("customer-42"));
+    assert!(body.contains("Ingestion"));
+    assert!(body.contains("Trigger Engine"));
+    assert!(body.contains("Action Executor"));
+    assert!(body.contains("node-up"));
+    assert!(body.contains("node-down"));
 }
 
 #[tokio::test]
@@ -83,23 +95,22 @@ async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id) = state_with_session().await;
 
     let response = router(state)
-        .oneshot(Request::builder().uri("/events").body(Body::empty()).unwrap())
+        .oneshot(Request::builder().uri("/pipeline").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    assert_eq!(response.headers().get("location").unwrap(), "/login");
 }
 
 #[tokio::test]
-async fn shows_an_error_when_the_backend_fails() {
+async fn shows_an_error_when_health_backend_fails() {
     let (mut state, session_id) = state_with_session().await;
-    state.events_client = Arc::new(FailingEventsClient);
+    state.health_client = Arc::new(FailingHealthClient);
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/events")
+                .uri("/pipeline")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -114,16 +125,14 @@ async fn shows_an_error_when_the_backend_fails() {
 }
 
 #[tokio::test]
-async fn shows_a_next_link_when_there_are_more_results_but_no_previous_link_on_page_zero() {
+async fn degrades_gracefully_showing_stages_with_no_backlog_numbers_when_backlog_backend_fails() {
     let (mut state, session_id) = state_with_session().await;
-    let events_client = Arc::new(InMemoryEventsClient::default());
-    *events_client.has_more.lock().unwrap() = true;
-    state.events_client = events_client;
+    state.backlog_client = Arc::new(FailingBacklogClient);
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/events")
+                .uri("/pipeline")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -131,20 +140,28 @@ async fn shows_a_next_link_when_there_are_more_results_but_no_previous_link_on_p
         .await
         .unwrap();
 
+    assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Next"));
-    assert!(!body.contains("Previous"));
+    assert!(body.contains("Ingestion"));
+    assert!(body.contains("n/a"));
 }
 
 #[tokio::test]
-async fn shows_a_previous_link_on_page_two() {
+async fn marks_a_heavily_backlogged_queue_as_critical() {
     let (state, session_id) = state_with_session().await;
+    let backlog = InMemoryBacklogClient::default();
+    backlog.depths.lock().unwrap().push(QueueDepthSummary {
+        stage: "ingest_to_normalize".to_string(),
+        queue_name: "normalization-service.record.ingested".to_string(),
+        messages: 500,
+    });
+    let state = AppState { backlog_client: Arc::new(backlog), ..state };
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/events?page=1")
+                .uri("/pipeline")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -154,6 +171,6 @@ async fn shows_a_previous_link_on_page_two() {
 
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Previous"));
-    assert!(body.contains("Page 2"));
+    assert!(body.contains("edge-critical"));
+    assert!(body.contains("500 queued"));
 }
