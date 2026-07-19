@@ -55,6 +55,8 @@ struct GenerateFormTemplate {
     connector_type_label: &'static str,
     fields: Vec<FieldView>,
     gateway_url: String,
+    api_key: String,
+    api_key_auto_generated: bool,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -63,14 +65,22 @@ pub struct SelectConnectorTypeQuery {
 }
 
 /// GET /agents/generate/form?connector_type=X — step 2: the connector-specific field form.
+/// The gateway URL and (for operators) the API key are pre-filled from the platform's own
+/// admin configuration rather than left for the operator to hunt down and paste in — the
+/// gateway URL comes from `AppState` (already the case), and a fresh, single-use deploy key
+/// is minted automatically via `ApiKeysClient::create_api_key` so there's no separate trip to
+/// the API Keys page and back. A Viewer-role session can't create keys (RBAC v1, ADR-0016);
+/// for that case the field is left blank with a link to the API Keys page instead of silently
+/// failing.
 pub async fn get_generate_form(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<SelectConnectorTypeQuery>,
 ) -> Response {
-    if let Err(response) = require_session(state.session_store.as_ref(), &headers).await {
-        return response;
-    }
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
     let Some(label) = display_name(&query.connector_type) else {
         return Html(
             SelectConnectorTypeTemplate { show_nav: true, connector_types: CONNECTOR_TYPES }
@@ -81,6 +91,20 @@ pub async fn get_generate_form(
     };
     let fields: Vec<FieldView> =
         fields_for(&query.connector_type).iter().map(FieldView::from).collect();
+
+    let (api_key, api_key_auto_generated) = if session.role.at_least(common::Role::Operator) {
+        let label = format!("{}-deploy-key", query.connector_type);
+        match state.api_keys_client.create_api_key(session.tenant_id, session.role, &label).await {
+            Ok(plaintext) => (plaintext, true),
+            Err(e) => {
+                tracing::error!(error = %e, "failed to auto-generate a deploy API key");
+                (String::new(), false)
+            }
+        }
+    } else {
+        (String::new(), false)
+    };
+
     Html(
         GenerateFormTemplate {
             show_nav: true,
@@ -88,6 +112,8 @@ pub async fn get_generate_form(
             connector_type_label: label,
             fields,
             gateway_url: state.ingestion_gateway_public_url.clone(),
+            api_key,
+            api_key_auto_generated,
         }
         .render()
         .unwrap(),

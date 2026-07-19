@@ -93,7 +93,7 @@ fn role_from_headers(headers: &HeaderMap) -> Result<Role, (StatusCode, &'static 
 /// Rejects the request unless the caller's role is at least `Operator` — the check every
 /// create/update write-path handler runs before touching a repository (ADR-0016 v1 scope:
 /// trigger-definition and normalization-mapping writes only).
-fn require_operator(headers: &HeaderMap) -> Option<Response> {
+pub(crate) fn require_operator(headers: &HeaderMap) -> Option<Response> {
     match role_from_headers(headers) {
         Ok(role) if role.at_least(Role::Operator) => None,
         Ok(_) => Some(error_response(

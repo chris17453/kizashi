@@ -1,7 +1,8 @@
 use kizashi_ui::{
-    build_router, AppState, HttpAgentsClient, HttpApiKeysClient, HttpAuthClient, HttpBacklogClient,
-    HttpEventsClient, HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
-    HttpTriggersClient, InMemorySessionStore,
+    build_router, AppState, HttpAgentsClient, HttpAnalysisConfigClient, HttpApiKeysClient,
+    HttpAuthClient, HttpBacklogClient, HttpEventsClient, HttpExecutionClient, HttpHealthClient,
+    HttpIngestionStatsClient, HttpNormalizationMappingsClient, HttpTriggersClient,
+    InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -36,14 +37,25 @@ async fn main() {
             config_admin_service_url.clone(),
         )),
         health_client: Arc::new(HttpHealthClient::new(client.clone(), observability_url.clone())),
-        agents_client: Arc::new(HttpAgentsClient::new(client.clone(), config_admin_service_url)),
+        agents_client: Arc::new(HttpAgentsClient::new(
+            client.clone(),
+            config_admin_service_url.clone(),
+        )),
         api_keys_client: Arc::new(HttpApiKeysClient::new(client.clone(), ingestion_gateway_url)),
         backlog_client: Arc::new(HttpBacklogClient::new(client.clone(), observability_url)),
         stats_client: Arc::new(HttpIngestionStatsClient::new(
             client.clone(),
             ingestion_service_url,
         )),
-        execution_client: Arc::new(HttpExecutionClient::new(client, action_executor_url)),
+        execution_client: Arc::new(HttpExecutionClient::new(client.clone(), action_executor_url)),
+        analysis_config_client: Arc::new(HttpAnalysisConfigClient::new(
+            client.clone(),
+            config_admin_service_url.clone(),
+        )),
+        normalization_mappings_client: Arc::new(HttpNormalizationMappingsClient::new(
+            client,
+            config_admin_service_url,
+        )),
         ingestion_gateway_public_url,
     };
 

@@ -3,6 +3,7 @@
 mod batch_processor_test;
 
 use crate::analysis_client::AnalysisClient;
+use crate::analysis_config_repository::AnalysisConfigRepository;
 use crate::event_publisher::EventPublisher;
 use common::{AnalyzedRecord, RawRecord};
 use std::collections::BTreeMap;
@@ -14,12 +15,15 @@ use uuid::Uuid;
 pub enum BatchError {
     #[error("analysis call failed: {0}")]
     Analysis(String),
+    #[error("failed to read analysis config: {0}")]
+    ConfigLookup(String),
 }
 
 #[derive(Clone)]
 pub struct AnalysisDeps {
     pub analysis_client: Arc<dyn AnalysisClient>,
     pub publisher: Arc<dyn EventPublisher>,
+    pub analysis_config_repository: Arc<dyn AnalysisConfigRepository>,
 }
 
 /// Splits a mixed-tenant batch of consumed messages into per-tenant groups, preserving
@@ -46,9 +50,16 @@ pub async fn process_batch(
         return Ok(0);
     }
 
+    let prompt = deps
+        .analysis_config_repository
+        .get(tenant_id)
+        .await
+        .map_err(|e| BatchError::ConfigLookup(e.to_string()))?
+        .map(|c| c.prompt);
+
     let results = deps
         .analysis_client
-        .analyze_batch(tenant_id, &records)
+        .analyze_batch(tenant_id, &records, prompt.as_deref())
         .await
         .map_err(|e| BatchError::Analysis(e.to_string()))?;
 

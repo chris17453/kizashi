@@ -20,13 +20,15 @@ pub enum AnalysisError {
 /// Calls Azure AI Foundry/ML for a tenant-homogeneous batch of records (ADR-0004: analysis is
 /// invoked in micro-batches, never mixing tenants in one call). Returns exactly one analysis
 /// result per input record, in the same order, so callers can zip results back onto records
-/// without needing a correlation id round-trip.
+/// without needing a correlation id round-trip. `prompt` is the tenant's optional AI analysis
+/// prompt (ADR-0019) — `None` means today's existing global-analysis behavior, unchanged.
 #[async_trait]
 pub trait AnalysisClient: Send + Sync {
     async fn analyze_batch(
         &self,
         tenant_id: Uuid,
         records: &[RawRecord],
+        prompt: Option<&str>,
     ) -> Result<Vec<serde_json::Value>, AnalysisError>;
 }
 
@@ -48,17 +50,23 @@ impl AnalysisClient for FoundryAnalysisClient {
         &self,
         tenant_id: Uuid,
         records: &[RawRecord],
+        prompt: Option<&str>,
     ) -> Result<Vec<serde_json::Value>, AnalysisError> {
         let payloads: Vec<&serde_json::Value> = records
             .iter()
             .map(|r| r.normalized_payload.as_ref().unwrap_or(&r.raw_payload))
             .collect();
 
+        let mut body = serde_json::json!({"tenant_id": tenant_id, "inputs": payloads});
+        if let Some(prompt) = prompt {
+            body["prompt"] = serde_json::Value::String(prompt.to_string());
+        }
+
         let response = self
             .client
             .post(&self.endpoint)
             .header("api-key", &self.api_key)
-            .json(&serde_json::json!({"tenant_id": tenant_id, "inputs": payloads}))
+            .json(&body)
             .send()
             .await
             .map_err(|e| AnalysisError::Unreachable(e.to_string()))?;

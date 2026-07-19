@@ -1556,3 +1556,165 @@ architectural decision.
   `false`) propagated the same way.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [0018](adr/0018-trigger-definition-sync-config-admin-to-trigger-engine.md)
+
+## [2026-07-19] feature/0015-ai-analysis-config — Per-tenant AI analysis prompt + deploy-form auto-fill fix (ADR-0019)
+- **Type:** feature
+- **Branch:** feature/0015-ai-analysis-config
+- **Summary:** Closes the backlog item "AI prompt generation for agent actions": every tenant
+  previously got identical, uncontrollable AI/ML analysis behavior from Analysis Service's
+  fixed call to Azure AI Foundry — no operator control over what the model looks for. Adds
+  `AnalysisConfig { tenant_id, prompt, updated_at }` (`crates/common/src/analysis_config.rs`),
+  a new Console UI "AI Analysis" page (`GET/POST /analysis-config`) where an operator writes a
+  plain-English prompt, `config-admin-service` CRUD (`GET/PUT /v1/analysis-config`,
+  operator-only write, audit-logged) that publishes `analysis_config.changed` on every write,
+  and a new consumer in `analysis-service` (its first-ever Postgres schema — previously
+  stateless) that upserts the synced prompt and includes it in every Foundry/ML batch call
+  when present. Reuses ADR-0018's event-driven sync pattern exactly, for the same reason:
+  Analysis Service's batch call runs on every `record.normalized` batch, the hottest path in
+  the system, so a local Postgres read stays fast at scale where a synchronous
+  config-admin-service HTTP call per batch would not. Also fixes a real UX gap flagged
+  directly: the Agent deploy-script wizard (`/agents/generate/form`) required operators to
+  manually create an API key on a separate page and paste it in blind — now a fresh,
+  single-use deploy key is minted automatically via the existing `ApiKeysClient` and
+  pre-filled (a Viewer-role session, which can't create keys, gets a blank field with a link
+  to the API Keys page instead of a silent failure).
+- **Tests:** `cargo test -p common --lib analysis_config` — 2 passed. `cargo test -p
+  config-admin-service` — 63 passed (14 new: `analysis_config_repository_test`,
+  `analysis_config_publisher_test`, `analysis_config_handlers_test` unit tests) + 1 new
+  Postgres integration test (`upsert_analysis_config_writes_created_then_updated_audit_rows_
+  against_real_postgres`, proving the `ON CONFLICT` upsert and its audit trail against a real
+  table) + 1 new RabbitMQ integration test
+  (`publishing_an_analysis_config_change_round_trips_over_real_rabbitmq`). `cargo test -p
+  analysis-service` — 20 passed (9 new: `analysis_config_repository_test` unit tests, two new
+  `foundry_client_includes_the_prompt_.../foundry_client_omits_the_prompt_field_when_none`
+  request-body-capture tests, `process_batch_passes_the_tenants_configured_prompt_...`) + 3
+  new Postgres integration tests
+  (`analysis_config_repository_integration_test.rs`, against analysis-service's brand-new
+  schema). `cargo test -p kizashi-ui` — 139 passed (9 new: `analysis_config_client_test`
+  HTTP-client tests against a real stub server, `analysis_config_handler_test` handler tests,
+  two new `agent_script_handler_test` tests proving the API key auto-fill for an operator and
+  the blank-with-link fallback for a viewer; every other `*_handler_test.rs`'s `AppState`
+  construction swept to add the new `analysis_config_client` field). Full local CI gate:
+  `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets --all-features --
+  -D warnings` clean, `cargo test --workspace --all-features` all green (0 failures across
+  every crate, verified against a throwaway local `mssql` container for Fabric), `cargo
+  audit` clean (same two pre-existing allow-listed `unmaintained` advisories, no new ones).
+  Live-verified against the running docker-compose stack: rebuilt/redeployed
+  `config-admin-service`, `analysis-service`, and `kizashi-ui`, wired the new `DATABASE_URL`
+  requirement for `analysis-service` into `docker-compose.yml`/`scripts/run-local.sh` (needed
+  now that it owns a schema for the first time), logged in, saved a real prompt through the
+  `/analysis-config` form, and confirmed via
+  direct Postgres queries that the exact same prompt text landed in both
+  `config_admin_service.analysis_configs` and `analysis_service.analysis_configs` within
+  seconds — proving the full UI-to-bus-to-consumer sync chain, not just the individual pieces.
+  Also fetched `/agents/generate/form?connector_type=zendesk` live and confirmed a real
+  `kzsh_...` API key was minted and pre-filled in the rendered HTML, screenshotted both pages.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [0019](adr/0019-per-tenant-analysis-configuration-ai-prompt.md)
+
+## [2026-07-19] feature/0015-ai-analysis-config — Add Trigger creation to the Console UI
+- **Type:** feature
+- **Branch:** feature/0015-ai-analysis-config
+- **Summary:** Closes task "Support dynamic event-type creation with configurable logic/
+  flags": `/triggers` was read-only in the Console UI — the entire mechanism that decides
+  what counts as an Event and what action fires (the core of the whole platform) was only
+  reachable by hand-crafting a `POST /v1/trigger-definitions` request, which the old
+  empty-state literally instructed operators to do. Adds `TriggersClient::create_trigger`
+  (`ui/src/triggers_client.rs`) and `POST /triggers` (`ui/src/triggers_handler.rs`) backing a
+  new create form on the Triggers page: name, event type to match (with a direct link to the
+  new AI Analysis page so operators can see what keys the AI actually returns), window,
+  either-or condition fields for `CountOverWindow`/`ThresholdOverWindow` (both shown at once,
+  server-side parsing picks the right one based on a `condition_shape` select — no JS,
+  ADR-0014), and an optional webhook URL for the one functional action type
+  (`HttpActionDispatcher`, ADR-0007, only ever reads `config.url` regardless of
+  `action_type`). Gated behind `can_write` (RBAC v1, Operator+) with a server-side 403 on
+  `POST`, matching every other write surface in this UI.
+- **Tests:** `cargo test -p kizashi-ui` — 145 passed (10 new: 2 `triggers_client_test` HTTP
+  tests against a real stub server for create + role-rejection, 5 new `triggers_handler_test`
+  tests covering both condition shapes, a missing-required-field re-render with an inline
+  error, and a Viewer-role 403; every existing triggers test still passes unmodified since
+  the default test session role already satisfies `can_write`). This surfaced and fixed a
+  real bug during TDD: the form struct originally typed `count`/`threshold` as
+  `Option<u32>`/`Option<f64>`, which axum's `Form` extractor rejects with a 422 the moment a
+  real HTML form submits an empty string for an unused numeric field (as browsers always do
+  for a visible-but-blank `<input type="number">`) — not a missing key, which is what
+  `Option<T>` actually handles. Fixed by typing those fields as plain `String` and parsing by
+  hand in `build_condition`, trimming and treating empty/unparsable as the "this shape wasn't
+  selected" case. Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` clean, `cargo test --workspace
+  --all-features` all green (0 failures, verified against a throwaway local `mssql`
+  container for Fabric), `cargo audit` clean (same two pre-existing allow-listed
+  `unmaintained` advisories, no new ones). Live-verified against the running docker-compose
+  stack: rebuilt/redeployed `kizashi-ui`, submitted a real trigger through the actual HTML
+  form, and confirmed via direct Postgres queries that it landed in
+  `config_admin_service.trigger_definitions` *and* synced into
+  `trigger_engine.trigger_definitions` within about a second (ADR-0018's sync pipeline,
+  exercised end-to-end from the UI for the first time) — screenshotted the page showing the
+  form and the newly created row.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — reuses ADR-0007's action config shape and ADR-0018's sync pipeline; no new
+  architectural decision.
+
+## [2026-07-19] feature/0015-ai-analysis-config — Add Field Mappings (NormalizationMapping) to the Console UI
+- **Type:** feature
+- **Branch:** feature/0015-ai-analysis-config
+- **Summary:** `NormalizationMapping` has had a full CRUD API in `config-admin-service` since
+  ADR-0010 but zero presence anywhere in the Console UI — not even a read-only list, unlike
+  Triggers which at least had a (read-only, until the entry above) page. Discovered by
+  auditing for other instances of the same "operators can't practically use this" pattern
+  just fixed for Triggers. Adds `NormalizationMappingsClient` (list/create),
+  `GET/POST /normalization-mappings`, and a new "Field Mappings" nav page. `field_map` is a
+  dynamic `BTreeMap<String, String>` (arbitrary target-field-to-JSON-path pairs), so rather
+  than a JS-dependent dynamic add-row form, the create form uses one `target_field = $.path`
+  pair per line in a textarea, parsed server-side — consistent with the no-JS constraint
+  (ADR-0014) already governing every other form in this app.
+- **Tests:** `cargo test -p kizashi-ui` — 155 passed (10 new: 4
+  `normalization_mappings_client_test` HTTP-client tests against a real stub server, 6
+  `normalization_mappings_handler_test` tests covering the empty state, a successful
+  multi-line create, an all-invalid-lines error re-render, a Viewer-role 403, a backend
+  failure, and the login redirect; every other `*_handler_test.rs`'s `AppState` construction
+  swept to add the new `normalization_mappings_client` field). Full local CI gate: `cargo fmt
+  --all --check` clean, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings` clean, `cargo test --workspace --all-features` all green (0 failures, verified
+  against a throwaway local `mssql` container for Fabric), `cargo audit` clean (same two
+  pre-existing allow-listed `unmaintained` advisories, no new ones). Live-verified against the
+  running docker-compose stack: rebuilt/redeployed `kizashi-ui`, submitted a real
+  multi-line mapping (`text = $.description` / `urgency = $.priority`) through the actual
+  form, and confirmed via a direct Postgres query that both fields landed correctly in
+  `config_admin_service.normalization_mappings` — screenshotted the page showing the create
+  form and both fields rendered in the list table.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — reuses the existing NormalizationMapping CRUD API (ADR-0010); no new
+  architectural decision.
+
+## [2026-07-19] feature/0015-ai-analysis-config — Real search index for the Data Viewer (pg_trgm)
+- **Type:** fix
+- **Branch:** feature/0015-ai-analysis-config
+- **Summary:** Half of task "Scale-out: dynamic per-agent connector scheduling + real search
+  index" (the connector-scheduling half is a larger, separate piece of work needing its own
+  ADR, tracked separately — not attempted here). The Data Viewer's free-text search
+  (`RawRecordRepository::search`) ran a plain `raw_payload::text ILIKE '%x%'` — no index can
+  accelerate a leading-wildcard `ILIKE`, so this was always a full sequential scan, explicitly
+  documented as "not a dedicated search index" in the code comment. Adds a `pg_trgm` GIN
+  index (migration `0004_add_trigram_search_index.sql`) over `raw_payload::text`, `subject`,
+  and `from` — the standard Postgres mechanism for indexing `ILIKE '%x%'` substring matches.
+  Deliberately chose trigram indexing over `tsvector`/full-text search: `tsvector` changes
+  matching semantics (whole-lexeme/stemmed matching vs. substring matching), which would
+  silently change what "search" means to an operator already relying on today's behavior;
+  `pg_trgm` accelerates the exact same query with the exact same results, purely a scan-
+  strategy change the planner picks up once the table is large enough to prefer an index scan
+  over a seq scan (same "useless at demo scale, necessary at target scale" caveat as the
+  existing GIN index from migration 0003).
+- **Tests:** `cargo test -p ingestion-service` — 60 passed (2 new:
+  `pg_trgm_extension_and_indexes_exist_after_migration` and
+  `free_text_search_still_finds_a_substring_match_against_real_postgres`, both against real
+  Postgres — the first real Postgres test this repo's ever had for the `search()` query path
+  at all, since the existing `search_filters_by_free_text_query_against_the_raw_payload` unit
+  test only exercises the `InMemoryRawRecordRepository` double's `.contains()` semantics, not
+  the actual SQL). Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` clean, `cargo test --workspace
+  --all-features` all green (0 failures, verified against a throwaway local `mssql`
+  container for Fabric), `cargo audit` clean (same two pre-existing allow-listed
+  `unmaintained` advisories, no new ones).
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — a performance fix with no behavior change, not an architectural decision.

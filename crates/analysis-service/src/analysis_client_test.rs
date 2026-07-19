@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 #[derive(Default)]
 pub struct InMemoryAnalysisClient {
-    pub calls: Mutex<Vec<(Uuid, usize)>>,
+    pub calls: Mutex<Vec<(Uuid, usize, Option<String>)>>,
 }
 
 #[async_trait]
@@ -16,8 +16,9 @@ impl AnalysisClient for InMemoryAnalysisClient {
         &self,
         tenant_id: Uuid,
         records: &[RawRecord],
+        prompt: Option<&str>,
     ) -> Result<Vec<serde_json::Value>, AnalysisError> {
-        self.calls.lock().unwrap().push((tenant_id, records.len()));
+        self.calls.lock().unwrap().push((tenant_id, records.len(), prompt.map(str::to_string)));
         Ok(records.iter().map(|_| json!({"sentiment": -0.5})).collect())
     }
 }
@@ -30,6 +31,7 @@ impl AnalysisClient for FailingAnalysisClient {
         &self,
         _tenant_id: Uuid,
         _records: &[RawRecord],
+        _prompt: Option<&str>,
     ) -> Result<Vec<serde_json::Value>, AnalysisError> {
         Err(AnalysisError::Unreachable("simulated failure".to_string()))
     }
@@ -44,7 +46,7 @@ async fn in_memory_client_returns_one_result_per_record() {
     let client = InMemoryAnalysisClient::default();
     let records = vec![sample_record(), sample_record()];
 
-    let results = client.analyze_batch(Uuid::new_v4(), &records).await.unwrap();
+    let results = client.analyze_batch(Uuid::new_v4(), &records, None).await.unwrap();
     assert_eq!(results.len(), 2);
 }
 
@@ -78,7 +80,7 @@ async fn foundry_client_parses_a_successful_response() {
     let client =
         FoundryAnalysisClient::new(reqwest::Client::new(), endpoint, "test-key".to_string());
 
-    let results = client.analyze_batch(Uuid::new_v4(), &[sample_record()]).await.unwrap();
+    let results = client.analyze_batch(Uuid::new_v4(), &[sample_record()], None).await.unwrap();
     assert_eq!(results, vec![json!({"sentiment": -0.5})]);
 }
 
@@ -88,7 +90,7 @@ async fn foundry_client_returns_rejected_on_non_success_status() {
     let client =
         FoundryAnalysisClient::new(reqwest::Client::new(), endpoint, "test-key".to_string());
 
-    let err = client.analyze_batch(Uuid::new_v4(), &[sample_record()]).await.unwrap_err();
+    let err = client.analyze_batch(Uuid::new_v4(), &[sample_record()], None).await.unwrap_err();
     assert!(matches!(err, AnalysisError::Rejected(500)));
 }
 
@@ -98,8 +100,53 @@ async fn foundry_client_returns_mismatch_when_result_count_differs() {
     let client =
         FoundryAnalysisClient::new(reqwest::Client::new(), endpoint, "test-key".to_string());
 
-    let err = client.analyze_batch(Uuid::new_v4(), &[sample_record()]).await.unwrap_err();
+    let err = client.analyze_batch(Uuid::new_v4(), &[sample_record()], None).await.unwrap_err();
     assert!(matches!(err, AnalysisError::ResultCountMismatch { expected: 1, got: 2 }));
+}
+
+async fn spawn_prompt_capturing_stub() -> (String, std::sync::Arc<Mutex<Option<String>>>) {
+    let captured = std::sync::Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    async fn handler(
+        axum::extract::State(captured): axum::extract::State<std::sync::Arc<Mutex<Option<String>>>>,
+        Json(body): Json<serde_json::Value>,
+    ) -> axum::response::Response {
+        use axum::response::IntoResponse;
+        *captured.lock().unwrap() = body.get("prompt").and_then(|v| v.as_str()).map(str::to_string);
+        Json(json!({"results": [json!({"sentiment": -0.5})]})).into_response()
+    }
+    let app = Router::new().route("/analyze", post(handler)).with_state(captured_clone);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (format!("http://{addr}/analyze"), captured)
+}
+
+#[tokio::test]
+async fn foundry_client_includes_the_prompt_in_the_request_body_when_present() {
+    let (endpoint, captured) = spawn_prompt_capturing_stub().await;
+    let client =
+        FoundryAnalysisClient::new(reqwest::Client::new(), endpoint, "test-key".to_string());
+
+    client
+        .analyze_batch(Uuid::new_v4(), &[sample_record()], Some("look for urgent tickets"))
+        .await
+        .unwrap();
+
+    assert_eq!(*captured.lock().unwrap(), Some("look for urgent tickets".to_string()));
+}
+
+#[tokio::test]
+async fn foundry_client_omits_the_prompt_field_when_none() {
+    let (endpoint, captured) = spawn_prompt_capturing_stub().await;
+    let client =
+        FoundryAnalysisClient::new(reqwest::Client::new(), endpoint, "test-key".to_string());
+
+    client.analyze_batch(Uuid::new_v4(), &[sample_record()], None).await.unwrap();
+
+    assert_eq!(*captured.lock().unwrap(), None);
 }
 
 #[tokio::test]
@@ -109,6 +156,6 @@ async fn foundry_client_returns_unreachable_when_server_is_down() {
         "http://127.0.0.1:1/analyze".to_string(),
         "test-key".to_string(),
     );
-    let err = client.analyze_batch(Uuid::new_v4(), &[sample_record()]).await.unwrap_err();
+    let err = client.analyze_batch(Uuid::new_v4(), &[sample_record()], None).await.unwrap_err();
     assert!(matches!(err, AnalysisError::Unreachable(_)));
 }

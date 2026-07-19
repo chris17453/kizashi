@@ -108,12 +108,14 @@ services:
     build: { context: ., args: { BIN: analysis-service } }
     environment:
       BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
       RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
       AZURE_AI_FOUNDRY_ENDPOINT: "${AZURE_AI_FOUNDRY_ENDPOINT:-}"
       AZURE_AI_FOUNDRY_API_KEY: "${AZURE_AI_FOUNDRY_API_KEY:-}"
     ports: ["8086:8080"]
     depends_on:
       normalization-service: { condition: service_healthy }
+      postgres: { condition: service_healthy }
     healthcheck: *healthz
 
   trigger-engine:

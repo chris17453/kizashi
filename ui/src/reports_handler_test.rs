@@ -50,6 +50,8 @@ async fn state_with_session() -> (AppState, String) {
         execution_client: std::sync::Arc::new(
             crate::execution_client::execution_client_test::InMemoryExecutionClient::default(),
         ),
+        analysis_config_client: std::sync::Arc::new(crate::analysis_config_client::analysis_config_client_test::InMemoryAnalysisConfigClient::default()),
+        normalization_mappings_client: std::sync::Arc::new(crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };

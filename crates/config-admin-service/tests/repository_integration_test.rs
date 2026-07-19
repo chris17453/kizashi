@@ -4,9 +4,10 @@
 //! test doubles used for handler unit tests can't: `record_audit_entry` writing a real row in
 //! the same Postgres transaction as the entity change.
 
-use common::TriggerCondition;
+use common::{AnalysisConfig, TriggerCondition};
 use config_admin_service::{
-    AuditLogReader, ChangeType, NormalizationMappingRepository, PostgresAuditLogReader,
+    AnalysisConfigRepository, AuditLogReader, ChangeType, NormalizationMappingRepository,
+    PostgresAnalysisConfigRepository, PostgresAuditLogReader,
     PostgresNormalizationMappingRepository, PostgresTriggerDefinitionRepository,
     TriggerDefinitionRepository,
 };
@@ -158,4 +159,26 @@ async fn create_mapping_writes_a_created_audit_row_in_the_same_transaction() {
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].change_type, ChangeType::Created);
     assert_eq!(entries[0].entity_type, "normalization_mapping");
+}
+
+#[tokio::test]
+async fn upsert_analysis_config_writes_created_then_updated_audit_rows_against_real_postgres() {
+    let pool = test_pool().await;
+    let repo = PostgresAnalysisConfigRepository::new(pool.clone());
+    let audit_reader = PostgresAuditLogReader::new(pool.clone());
+    let tenant_id = Uuid::new_v4();
+
+    repo.upsert(AnalysisConfig::new(tenant_id, "look for urgent tickets")).await.unwrap();
+    let found = repo.get(tenant_id).await.unwrap();
+    assert_eq!(found.map(|c| c.prompt), Some("look for urgent tickets".to_string()));
+
+    repo.upsert(AnalysisConfig::new(tenant_id, "flag policy violations")).await.unwrap();
+    let found = repo.get(tenant_id).await.unwrap();
+    assert_eq!(found.map(|c| c.prompt), Some("flag policy violations".to_string()));
+
+    let entries = audit_reader.list_for_entity(tenant_id, tenant_id).await.unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].change_type, ChangeType::Created);
+    assert_eq!(entries[1].change_type, ChangeType::Updated);
+    assert_eq!(entries[0].entity_type, "analysis_config");
 }

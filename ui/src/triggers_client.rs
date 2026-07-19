@@ -3,6 +3,7 @@
 pub(crate) mod triggers_client_test;
 
 use async_trait::async_trait;
+use common::{Role, TriggerDefinition};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -40,6 +41,14 @@ pub trait TriggersClient: Send + Sync {
         limit: i64,
         offset: i64,
     ) -> Result<TriggersPage, TriggersClientError>;
+
+    /// Creates a trigger — operator-only (RBAC v1, ADR-0016); `trigger.tenant_id` must already
+    /// be set to the calling session's tenant (config-admin-service rejects a mismatch).
+    async fn create_trigger(
+        &self,
+        role: Role,
+        trigger: TriggerDefinition,
+    ) -> Result<TriggerDefinition, TriggersClientError>;
 }
 
 pub struct HttpTriggersClient {
@@ -82,5 +91,26 @@ impl TriggersClient for HttpTriggersClient {
         let body: ListTriggersResponse =
             response.json().await.map_err(|e| TriggersClientError::Unreachable(e.to_string()))?;
         Ok(TriggersPage { triggers: body.triggers, has_more: body.has_more })
+    }
+
+    async fn create_trigger(
+        &self,
+        role: Role,
+        trigger: TriggerDefinition,
+    ) -> Result<TriggerDefinition, TriggersClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/trigger-definitions", self.config_admin_service_url))
+            .header("x-tenant-id", trigger.tenant_id.to_string())
+            .header("x-role", role.to_string())
+            .json(&trigger)
+            .send()
+            .await
+            .map_err(|e| TriggersClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(TriggersClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| TriggersClientError::Unreachable(e.to_string()))
     }
 }

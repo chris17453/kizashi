@@ -52,6 +52,8 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         execution_client: std::sync::Arc::new(
             crate::execution_client::execution_client_test::InMemoryExecutionClient::default(),
         ),
+        analysis_config_client: std::sync::Arc::new(crate::analysis_config_client::analysis_config_client_test::InMemoryAnalysisConfigClient::default()),
+        normalization_mappings_client: std::sync::Arc::new(crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
     };
@@ -112,6 +114,61 @@ async fn get_generate_form_shows_the_zendesk_specific_fields() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("ZENDESK_SUBDOMAIN"));
     assert!(body.contains("ZENDESK_API_TOKEN"));
+}
+
+#[tokio::test]
+async fn get_generate_form_auto_fills_a_freshly_generated_api_key_for_an_operator() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/agents/generate/form?connector_type=zendesk")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("kzsh_"), "should pre-fill an auto-generated key, not a blank field");
+    assert!(body.contains("generated automatically"));
+}
+
+#[tokio::test]
+async fn get_generate_form_leaves_the_api_key_blank_for_a_viewer() {
+    let session_store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "viewer".to_string(),
+            role: common::Role::Viewer,
+        })
+        .await;
+    let (mut state, _session_id, _tenant_id) = state_with_session().await;
+    state.session_store = Arc::new(session_store);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/agents/generate/form?connector_type=zendesk")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("kzsh_"));
+    assert!(body.contains("can't create API keys"));
 }
 
 #[tokio::test]

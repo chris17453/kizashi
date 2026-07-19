@@ -2,12 +2,68 @@
 {% block content %}
 <h1>Triggers</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if let Some(e) = form_error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if can_write %}
+<div class="form-row">
+  <div class="panel">
+    <h2>Create a trigger</h2>
+    <form class="inline" method="post" action="/triggers">
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" placeholder="urgent-ticket-spike" required>
+
+      <label for="event_type_match">Event type to match</label>
+      <input type="text" id="event_type_match" name="event_type_match" placeholder="e.g. priority_score" required>
+
+      <label for="window_seconds">Window (seconds)</label>
+      <input type="number" id="window_seconds" name="window_seconds" value="3600" min="1" required>
+
+      <label for="condition_shape">Condition</label>
+      <select id="condition_shape" name="condition_shape">
+        <option value="threshold_over_window">Field crosses a threshold</option>
+        <option value="count_over_window">At least N matching events in the window</option>
+      </select>
+
+      <label for="field">Field name (for "crosses a threshold")</label>
+      <input type="text" id="field" name="field" placeholder="same as event type to match, usually">
+      <label for="threshold">Threshold value</label>
+      <input type="number" step="any" id="threshold" name="threshold" placeholder="5">
+      <label for="direction">Direction</label>
+      <select id="direction" name="direction">
+        <option value="above">Above</option>
+        <option value="below">Below</option>
+      </select>
+
+      <label for="count">Count (for "at least N matching events")</label>
+      <input type="number" id="count" name="count" min="1" placeholder="3">
+
+      <label for="action_url">Webhook URL to call when this fires (optional)</label>
+      <input type="text" id="action_url" name="action_url" placeholder="https://...">
+
+      <button type="submit">Create trigger</button>
+    </form>
+  </div>
+  <div class="info-panel">
+    <h2>How triggers work</h2>
+    <ul>
+      <li>"Event type to match" must be a key the AI/ML backend actually returns — see
+        <a href="/analysis-config">AI Analysis</a> to see or change what it looks for.</li>
+      <li>Fill in either the threshold fields or the count field, matching whichever
+        Condition you selected above — the other set is ignored.</li>
+      <li>A firing trigger creates an Event, visible on the <a href="/events">Events</a> page
+        and traceable back to its source records via <a href="/data">Data &rarr; record
+        journey</a>.</li>
+      <li>Every create is written to an immutable audit log for compliance review.</li>
+    </ul>
+  </div>
+</div>
+{% endif %}
+
 {% if triggers.is_empty() && page == 0 && !has_more %}
 <div class="empty-state">
   <div class="empty-icon">&#9881;</div>
   <p>No triggers configured yet for this tenant.</p>
-  <p>Triggers are created via the Config Admin API — see the platform docs for the
-  <code>POST /v1/trigger-definitions</code> endpoint.</p>
+  {% if can_write %}<p>Use the form above to create your first one.</p>{% endif %}
 </div>
 {% else %}
 <table>

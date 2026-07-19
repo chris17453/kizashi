@@ -4,6 +4,9 @@
 
 mod agent_handlers;
 mod agent_repository;
+mod analysis_config_handlers;
+mod analysis_config_publisher;
+mod analysis_config_repository;
 mod audit_log;
 mod handlers;
 mod health;
@@ -15,6 +18,13 @@ pub use agent_handlers::{
     create_agent, delete_agent, get_agent, get_agent_by_name, list_agents, update_agent, AgentState,
 };
 pub use agent_repository::{AgentRepository, AgentRepositoryError, PostgresAgentRepository};
+pub use analysis_config_handlers::{get_analysis_config, put_analysis_config, AnalysisConfigState};
+pub use analysis_config_publisher::{
+    AnalysisConfigPublishError, AnalysisConfigPublisher, RabbitMqAnalysisConfigPublisher,
+};
+pub use analysis_config_repository::{
+    AnalysisConfigRepository, AnalysisConfigRepositoryError, PostgresAnalysisConfigRepository,
+};
 pub use audit_log::{
     record_audit_entry, AuditLogEntry, AuditLogError, AuditLogReader, ChangeType,
     PostgresAuditLogReader,
@@ -37,7 +47,11 @@ pub use trigger_publisher::{RabbitMqTriggerPublisher, TriggerPublishError, Trigg
 use axum::routing::{get, post};
 use axum::Router;
 
-pub fn build_router(state: AdminState, agent_state: AgentState) -> Router {
+pub fn build_router(
+    state: AdminState,
+    agent_state: AgentState,
+    analysis_config_state: AnalysisConfigState,
+) -> Router {
     let admin_routes = Router::new()
         .route("/healthz", get(healthz))
         .route("/v1/trigger-definitions", post(create_trigger).get(list_triggers))
@@ -53,5 +67,9 @@ pub fn build_router(state: AdminState, agent_state: AgentState) -> Router {
         .route("/v1/agents/:id", get(get_agent).put(update_agent).delete(delete_agent))
         .with_state(agent_state);
 
-    admin_routes.merge(agent_routes)
+    let analysis_config_routes = Router::new()
+        .route("/v1/analysis-config", get(get_analysis_config).put(put_analysis_config))
+        .with_state(analysis_config_state);
+
+    admin_routes.merge(agent_routes).merge(analysis_config_routes)
 }
