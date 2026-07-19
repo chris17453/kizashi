@@ -88,9 +88,11 @@ pub trait RawRecordRepository: Send + Sync {
 
     /// The Data Viewer's search: every filter is optional and AND-ed together — connector,
     /// source type, an ingested-at range, and a substring match against the raw payload's
-    /// text representation. Deliberately a plain `ILIKE` scan rather than a dedicated search
-    /// index (Elasticsearch, pg_trgm, tsvector): v1 scope is "find records that mention X,"
-    /// not sub-second full-text relevance ranking over a large corpus.
+    /// text representation. Still an `ILIKE '%x%'` substring match, not full-text relevance
+    /// ranking (v1 scope is "find records that mention X," not ranked search over a large
+    /// corpus) — but migration 0004 adds a `pg_trgm` GIN index so this scan strategy scales:
+    /// same exact matching semantics, index-accelerated instead of a full sequential scan once
+    /// the table is large enough for the planner to prefer it.
     async fn search(
         &self,
         tenant_id: uuid::Uuid,

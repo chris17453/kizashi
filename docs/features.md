@@ -1686,3 +1686,35 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — reuses the existing NormalizationMapping CRUD API (ADR-0010); no new
   architectural decision.
+
+## [2026-07-19] feature/0015-ai-analysis-config — Real search index for the Data Viewer (pg_trgm)
+- **Type:** fix
+- **Branch:** feature/0015-ai-analysis-config
+- **Summary:** Half of task "Scale-out: dynamic per-agent connector scheduling + real search
+  index" (the connector-scheduling half is a larger, separate piece of work needing its own
+  ADR, tracked separately — not attempted here). The Data Viewer's free-text search
+  (`RawRecordRepository::search`) ran a plain `raw_payload::text ILIKE '%x%'` — no index can
+  accelerate a leading-wildcard `ILIKE`, so this was always a full sequential scan, explicitly
+  documented as "not a dedicated search index" in the code comment. Adds a `pg_trgm` GIN
+  index (migration `0004_add_trigram_search_index.sql`) over `raw_payload::text`, `subject`,
+  and `from` — the standard Postgres mechanism for indexing `ILIKE '%x%'` substring matches.
+  Deliberately chose trigram indexing over `tsvector`/full-text search: `tsvector` changes
+  matching semantics (whole-lexeme/stemmed matching vs. substring matching), which would
+  silently change what "search" means to an operator already relying on today's behavior;
+  `pg_trgm` accelerates the exact same query with the exact same results, purely a scan-
+  strategy change the planner picks up once the table is large enough to prefer an index scan
+  over a seq scan (same "useless at demo scale, necessary at target scale" caveat as the
+  existing GIN index from migration 0003).
+- **Tests:** `cargo test -p ingestion-service` — 60 passed (2 new:
+  `pg_trgm_extension_and_indexes_exist_after_migration` and
+  `free_text_search_still_finds_a_substring_match_against_real_postgres`, both against real
+  Postgres — the first real Postgres test this repo's ever had for the `search()` query path
+  at all, since the existing `search_filters_by_free_text_query_against_the_raw_payload` unit
+  test only exercises the `InMemoryRawRecordRepository` double's `.contains()` semantics, not
+  the actual SQL). Full local CI gate: `cargo fmt --all --check` clean, `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` clean, `cargo test --workspace
+  --all-features` all green (0 failures, verified against a throwaway local `mssql`
+  container for Fabric), `cargo audit` clean (same two pre-existing allow-listed
+  `unmaintained` advisories, no new ones).
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — a performance fix with no behavior change, not an architectural decision.
