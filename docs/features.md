@@ -4584,3 +4584,22 @@ architectural decision.
   --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0086-events-page-date-range-filtering.md
+
+## [2026-07-20] chore/0005-action-executor-rabbitmq-integration-test — Action Executor live-RabbitMQ integration test
+- **Type:** chore
+- **Branch:** chore/0005-action-executor-rabbitmq-integration-test
+- **Summary:** Closes a CLAUDE.md §2 testing gap: `action-executor` consumes `event.created` in
+  `main.rs`'s own RabbitMQ consumer loop but had no integration test proving that path against
+  real infra, unlike `normalization-service`/`trigger-engine`. Added
+  `tests/rabbitmq_integration_test.rs`: publishes a real `event.created` message to the exchange
+  `main.rs` consumes from, consumes it with a test consumer, then calls `process_event` (the same
+  function `main.rs` calls for every acked delivery) against a real Postgres-backed execution
+  repository, a stub Trigger Engine, and a stub webhook target — asserting both the dispatch and
+  the resulting `ActionExecution` row.
+- **Tests:** `cargo test -p action-executor` — 56 passed (1 new integration test, against real
+  RabbitMQ + Postgres via `RABBITMQ_URL`/`DATABASE_URL`); pre-existing
+  `smtp_action_dispatcher_integration_test.rs` failure is unrelated (requires `SMTP_TEST_HOST`,
+  not set in this environment). `cargo build --workspace` clean. `cargo clippy -p action-executor
+  --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0087-action-executor-rabbitmq-integration-test.md
