@@ -129,6 +129,21 @@ async fn marks_the_callers_own_revoke_button_with_an_accessible_label() {
 }
 
 #[tokio::test]
+async fn revoke_button_for_another_users_session_asks_for_confirmation_before_submitting() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    store.create(sample_session(tenant_id, Role::Operator, "bob")).await;
+    let state = state_with_store(store).await;
+
+    let response = get_page(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("onsubmit=\"return confirm("));
+}
+
+#[tokio::test]
 async fn sorts_by_username_ascending_when_sort_param_is_set() {
     let store = InMemorySessionStore::default();
     let tenant_id = Uuid::new_v4();

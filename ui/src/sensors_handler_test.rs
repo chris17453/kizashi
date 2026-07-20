@@ -121,6 +121,8 @@ async fn viewer_role_does_not_see_register_form_or_write_buttons() {
     assert!(!body.contains(">Remove<"));
     assert!(!body.contains(">Disable<"));
     assert!(!body.contains(">Enable<"));
+    assert!(!body.contains("Remove selected"));
+    assert!(!body.contains(r#"id="bulk-delete-form""#));
 }
 
 #[tokio::test]
@@ -228,6 +230,8 @@ async fn operator_role_sees_register_form_and_write_buttons() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("Register an already-deployed sensor"));
     assert!(body.contains(">Disable<"));
+    assert!(body.contains("Remove selected"));
+    assert!(body.contains(r#"id="bulk-delete-form""#));
 }
 
 #[tokio::test]
@@ -451,49 +455,4 @@ async fn get_sensors_redirects_to_login_when_not_signed_in() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-}
-
-#[tokio::test]
-async fn shows_a_next_link_when_there_are_more_sensors_but_no_previous_link_on_page_zero() {
-    let (mut state, session_id, _tenant_id) = state_with_session().await;
-    let sensors_client = Arc::new(InMemorySensorsClient::default());
-    *sensors_client.has_more.lock().unwrap() = true;
-    state.sensors_client = sensors_client;
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .uri("/sensors")
-                .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Next"));
-    assert!(!body.contains("Previous"));
-}
-
-#[tokio::test]
-async fn shows_a_previous_link_on_page_two() {
-    let (state, session_id, _tenant_id) = state_with_session().await;
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .uri("/sensors?page=1")
-                .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Previous"));
-    assert!(body.contains("Page 2"));
 }

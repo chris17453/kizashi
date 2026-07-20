@@ -4739,3 +4739,23 @@ architectural decision.
   audit-log page (200 OK).
 - **PR:** pending
 - **ADR:** docs/adr/0094-api-key-audit-history-link.md
+
+## [2026-07-20] feature/0095-sensors-bulk-delete-and-sessions-confirm — Sensors bulk-delete and Sessions revoke confirmation
+- **Type:** feature
+- **Branch:** feature/0095-sensors-bulk-delete-and-sessions-confirm
+- **Summary:** Closes two seventh-audit-pass gaps: (1) API Keys was the only list page with a
+  bulk-select-and-act capability — Sensors gains an equivalent bulk-delete (checkboxes +
+  "Remove selected" + `POST /sensors/bulk-delete`), same shape as `post_bulk_revoke_api_keys`
+  (ADR-0065); Users and Retention Policies remain a follow-up. (2) Sessions' "Revoke" button was
+  the only destructive action anywhere in the UI missing a confirmation prompt (ADR-0093 missed
+  it) — now has `onsubmit="return confirm(...)"` like every peer.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 457 passed (7 new: 3 bulk-delete-sensors tests
+  mirroring the API Keys bulk-revoke test shape, 1 bulk-UI-visibility assertion on the existing
+  operator/viewer tests, 1 Sessions confirmation test). `cargo build --workspace` clean. `cargo
+  clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
+  --check` clean. `sensors_handler_test.rs` split a second time (into `_test.rs`/
+  `_mutations_test.rs`/`_pagination_test.rs`) to stay under 500 lines. Live-verified against the
+  real `watkinslabs` tenant: Sensors renders the bulk-delete UI, Sessions renders the
+  confirmation attribute.
+- **PR:** pending
+- **ADR:** docs/adr/0095-sensors-bulk-delete-and-sessions-confirm.md

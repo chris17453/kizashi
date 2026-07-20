@@ -164,7 +164,9 @@ pub use root_handler::get_root;
 pub use security_overview_handler::get_security_overview;
 pub use sensor_detail_handler::get_sensor_detail;
 pub use sensor_script_handler::{get_generate_form, get_generate_select, post_generate_script};
-pub use sensors_handler::{get_sensors, post_delete_sensor, post_sensors, post_toggle_sensor};
+pub use sensors_handler::{
+    get_sensors, post_bulk_delete_sensors, post_delete_sensor, post_sensors, post_toggle_sensor,
+};
 pub use sessions_handler::{get_sessions, post_revoke_session};
 pub use sso_login_handler::{get_sso_callback, get_sso_login};
 pub use static_assets::{get_charts_js, get_confirm_danger_js};
@@ -244,6 +246,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/sensors/:id", get(get_sensor_detail))
         .route("/sensors/:id/delete", axum::routing::post(post_delete_sensor))
         .route("/sensors/:id/toggle", axum::routing::post(post_toggle_sensor))
+        .route("/sensors/bulk-delete", axum::routing::post(post_bulk_delete_sensors))
         .route("/api-keys", get(get_api_keys).post(post_api_keys))
         .route("/api-keys/:id/revoke", axum::routing::post(post_revoke_api_key))
         .route("/api-keys/bulk-revoke", axum::routing::post(post_bulk_revoke_api_keys))

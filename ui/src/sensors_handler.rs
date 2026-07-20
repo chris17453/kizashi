@@ -1,6 +1,9 @@
 #[path = "sensors_handler_mutations_test.rs"]
 #[cfg(test)]
 mod sensors_handler_mutations_test;
+#[path = "sensors_handler_pagination_test.rs"]
+#[cfg(test)]
+mod sensors_handler_pagination_test;
 #[path = "sensors_handler_test.rs"]
 #[cfg(test)]
 mod sensors_handler_test;
@@ -263,6 +266,49 @@ pub async fn post_sensors(
         .await;
     }
 
+    Redirect::to("/sensors").into_response()
+}
+
+/// `axum::extract::Form` deserializes via `serde_urlencoded`, which -- unlike some other form
+/// crates -- does NOT collect repeated same-named fields (one checkbox per row, all named
+/// `ids`) into a `Vec`; it only supports flat scalar struct fields. Parsing the raw body as a
+/// flat list of `(key, value)` pairs instead and filtering for `"ids"` sidesteps that limitation
+/// without adding a new dependency (`serde_urlencoded` is already a direct dependency). Same
+/// pattern as API Keys' `post_bulk_revoke_api_keys` (ADR-0065).
+fn parse_ids(raw_body: &[u8]) -> Vec<Uuid> {
+    let Ok(pairs) = serde_urlencoded::from_bytes::<Vec<(String, String)>>(raw_body) else {
+        return Vec::new();
+    };
+    pairs
+        .into_iter()
+        .filter(|(key, _)| key == "ids")
+        .filter_map(|(_, value)| value.parse::<Uuid>().ok())
+        .collect()
+}
+
+/// POST /sensors/bulk-delete — removes every selected sensor (same bulk-action pattern API
+/// Keys already has, ADR-0065: loop over the existing single-item `SensorsClient::delete_sensor`
+/// rather than a new bulk backend endpoint). Best-effort per sensor, same as the single-delete
+/// handler above. Empty (nothing selected) is a legitimate no-op, not an error.
+pub async fn post_bulk_delete_sensors(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Operator) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    for id in parse_ids(&body) {
+        let _ = state
+            .sensors_client
+            .delete_sensor(session.role, &session.username, session.tenant_id, id)
+            .await;
+    }
     Redirect::to("/sensors").into_response()
 }
 

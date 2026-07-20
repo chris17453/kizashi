@@ -21,6 +21,7 @@ fn router(state: AppState) -> Router {
         .route("/sensors", get(get_sensors).post(post_sensors))
         .route("/sensors/:id/delete", post(post_delete_sensor))
         .route("/sensors/:id/toggle", post(post_toggle_sensor))
+        .route("/sensors/bulk-delete", post(post_bulk_delete_sensors))
         .with_state(state)
 }
 
@@ -350,4 +351,149 @@ async fn post_toggle_sensor_redirects_to_login_when_not_signed_in() {
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert_eq!(response.headers().get("location").unwrap(), "/login");
+}
+
+#[tokio::test]
+async fn post_bulk_delete_sensors_removes_every_selected_sensor() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "zendesk",
+            "first",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "sql",
+            "second",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "generic",
+            "untouched",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    let sensors = state.sensors_client.list_sensors(tenant_id, 100, 0).await.unwrap().sensors;
+    let first_id = sensors.iter().find(|s| s.name == "first").unwrap().id;
+    let second_id = sensors.iter().find(|s| s.name == "second").unwrap().id;
+
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/sensors/bulk-delete")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={first_id}&ids={second_id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let remaining = state.sensors_client.list_sensors(tenant_id, 100, 0).await.unwrap().sensors;
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].name, "untouched");
+}
+
+#[tokio::test]
+async fn post_bulk_delete_sensors_with_no_selection_is_a_no_op() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "zendesk",
+            "untouched",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/sensors/bulk-delete")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(""))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let remaining = state.sensors_client.list_sensors(tenant_id, 100, 0).await.unwrap().sensors;
+    assert_eq!(remaining.len(), 1);
+}
+
+#[tokio::test]
+async fn post_bulk_delete_sensors_is_rejected_for_a_viewer() {
+    let (state, _session_id, tenant_id) = state_with_session().await;
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "zendesk",
+            "first",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    let sensors = state.sensors_client.list_sensors(tenant_id, 100, 0).await.unwrap().sensors;
+    let id = sensors[0].id;
+
+    let session_store = InMemorySessionStore::default();
+    let viewer_session_id = session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "viewer-user".to_string(),
+            role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
+        })
+        .await;
+    let mut viewer_state = state.clone();
+    viewer_state.session_store = Arc::new(session_store);
+
+    let response = router(viewer_state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/sensors/bulk-delete")
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let remaining = state.sensors_client.list_sensors(tenant_id, 100, 0).await.unwrap().sensors;
+    assert_eq!(remaining.len(), 1);
 }
