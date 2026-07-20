@@ -3211,7 +3211,7 @@ architectural decision.
   concurrency=4; if `ANALYSIS_BATCH_SIZE` or per-request latency grow significantly, this
   threshold should be revisited. `docs/adr/0037-analysis-service-consumer-liveness-healthcheck.md`
   updated to reflect these numbers is a candidate follow-up, not done in this PR.
-- **PR:** (opened in this branch's PR)
+- **PR:** [#60](https://github.com/chris17453/kizashi/pull/60)
 - **ADR:** n/a — direct correction to ADR-0037's stated thresholds/assumptions, not a new
   architectural decision.
 
@@ -3247,5 +3247,39 @@ architectural decision.
   dropdown. Test sensor cleaned up afterward.
 - **Follow-up:** this audit was not exhaustive — see ADR-0038's Consequences section for what's
   still open (SSO/auth-provider config UI, further per-page polish).
-- **PR:** (opened in this branch's PR)
+- **PR:** [#61](https://github.com/chris17453/kizashi/pull/61)
 - **ADR:** [ADR-0038](../docs/adr/0038-console-ui-availability-and-usability-fixes.md)
+
+## [2026-07-19] fix/0006-auth-service-audit-actor — auth-service audit log now records the real actor, not the tenant_id
+- **Type:** fix
+- **Branch:** fix/0006-auth-service-audit-actor
+- **Summary:** Every `AuditLogEntry.actor` written by `LocalUserRepository` (create/update_role/
+  delete) was set to the tenant_id — a value already present as its own column on every audit
+  row — making the audit trail useless for answering "who did this" (CLAUDE.md §5). Added a
+  `username_from_headers` helper (`crates/auth-service/src/user_handlers.rs`) that reads a new
+  `X-Username` header, mirroring the existing `tenant_id_from_headers`/`role_from_headers`
+  pattern (401 `"missing X-Username header"` when absent). `create_user`, `update_user_role`,
+  and `delete_user` now extract the real username and thread it through as `actor` instead of
+  `&tenant_id.to_string()`. `LocalUserRepository::create` gained an `actor: &str` parameter
+  (previously missing entirely — the Postgres impl hardcoded `user.tenant_id.to_string()`) on
+  the trait, the Postgres impl, and the in-memory test double. The UI's outgoing requests are
+  not touched here — that's a separate follow-up PR to add the `X-Username` header on the
+  sending side.
+- **Tests:** TDD per CLAUDE.md §2 — failing tests written first for the new header behavior and
+  actor threading, then made to pass. `cargo test -p auth-service --all-features` (real
+  Postgres at `postgres://kizashi:kizashi@localhost:55432/kizashi`) — 65 lib tests + 2
+  `hash_password` bin tests + 6 Postgres integration tests (including new
+  `create_writes_an_audit_row_with_the_real_actor_not_the_tenant_id` and
+  `create_records_the_real_actor_not_the_tenant_id`) all passed, 0 failed. New handler tests in
+  `user_handlers_audit_actor_test.rs` (split out to stay under the 500-line file limit):
+  `create_user_requires_a_username_header`, `update_user_role_requires_a_username_header`,
+  `delete_user_requires_a_username_header` (assert 401), and
+  `create_user_threads_the_real_username_through_as_the_audit_actor`,
+  `update_user_role_threads_the_real_username_through_as_the_audit_actor`,
+  `delete_user_threads_the_real_username_through_as_the_audit_actor` (assert the repository
+  receives the real actor). `cargo clippy -p auth-service --all-targets --all-features -- -D
+  warnings` — clean. `cargo fmt --all --check` — clean. `cargo build --workspace --all-targets`
+  — clean, confirms the trait signature change didn't break other crates.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — this is a bugfix restoring intended audit-log behavior (CLAUDE.md §5), not a
+  new architectural decision; no spec §11 open item touched.

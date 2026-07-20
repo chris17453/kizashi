@@ -8,7 +8,7 @@ use axum::Router;
 use std::sync::Arc;
 use tower::ServiceExt;
 
-fn router(state: AuthState) -> Router {
+pub(crate) fn router(state: AuthState) -> Router {
     Router::new()
         .route("/v1/users", post(create_user).get(list_users))
         .route("/v1/users/:id", put(update_user_role).delete(delete_user))
@@ -16,7 +16,7 @@ fn router(state: AuthState) -> Router {
         .with_state(state)
 }
 
-fn default_state() -> AuthState {
+pub(crate) fn default_state() -> AuthState {
     AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::default()),
         tenant_repository: Arc::new(
@@ -38,6 +38,19 @@ async fn send(
     role: Option<&str>,
     body: Option<serde_json::Value>,
 ) -> axum::http::Response<Body> {
+    send_as(app, method, uri, tenant_id, role, Some("test-actor"), body).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn send_as(
+    app: Router,
+    method: &str,
+    uri: String,
+    tenant_id: Option<Uuid>,
+    role: Option<&str>,
+    username: Option<&str>,
+    body: Option<serde_json::Value>,
+) -> axum::http::Response<Body> {
     let mut req =
         Request::builder().method(method).uri(uri).header("content-type", "application/json");
     if let Some(tenant_id) = tenant_id {
@@ -45,6 +58,9 @@ async fn send(
     }
     if let Some(role) = role {
         req = req.header("x-role", role);
+    }
+    if let Some(username) = username {
+        req = req.header("x-username", username);
     }
     let body = body.map(|b| Body::from(b.to_string())).unwrap_or(Body::empty());
     app.oneshot(req.body(body).unwrap()).await.unwrap()
@@ -133,24 +149,30 @@ async fn list_users_returns_only_the_callers_tenant() {
     let state = default_state();
     state
         .local_user_repository
-        .create(LocalUser {
-            id: Uuid::new_v4(),
-            tenant_id,
-            username: "alice".to_string(),
-            password_hash: "hash".to_string(),
-            role: Role::Admin,
-        })
+        .create(
+            LocalUser {
+                id: Uuid::new_v4(),
+                tenant_id,
+                username: "alice".to_string(),
+                password_hash: "hash".to_string(),
+                role: Role::Admin,
+            },
+            "test-actor",
+        )
         .await
         .unwrap();
     state
         .local_user_repository
-        .create(LocalUser {
-            id: Uuid::new_v4(),
-            tenant_id: Uuid::new_v4(),
-            username: "eve".to_string(),
-            password_hash: "hash".to_string(),
-            role: Role::Admin,
-        })
+        .create(
+            LocalUser {
+                id: Uuid::new_v4(),
+                tenant_id: Uuid::new_v4(),
+                username: "eve".to_string(),
+                password_hash: "hash".to_string(),
+                role: Role::Admin,
+            },
+            "test-actor",
+        )
         .await
         .unwrap();
 
@@ -175,7 +197,7 @@ async fn update_user_role_changes_the_role() {
         password_hash: "hash".to_string(),
         role: Role::Operator,
     };
-    state.local_user_repository.create(user.clone()).await.unwrap();
+    state.local_user_repository.create(user.clone(), "test-actor").await.unwrap();
 
     let response = send(
         router(state),
@@ -218,7 +240,7 @@ async fn delete_user_removes_the_user() {
         password_hash: "hash".to_string(),
         role: Role::Operator,
     };
-    state.local_user_repository.create(user.clone()).await.unwrap();
+    state.local_user_repository.create(user.clone(), "test-actor").await.unwrap();
 
     let response = send(
         router(state),
@@ -243,7 +265,7 @@ async fn delete_user_rejects_deleting_the_last_admin() {
         password_hash: "hash".to_string(),
         role: Role::Admin,
     };
-    state.local_user_repository.create(admin.clone()).await.unwrap();
+    state.local_user_repository.create(admin.clone(), "test-actor").await.unwrap();
 
     let response = send(
         router(state),
@@ -275,8 +297,8 @@ async fn delete_user_allows_deleting_an_admin_when_another_admin_remains() {
         password_hash: "hash".to_string(),
         role: Role::Admin,
     };
-    state.local_user_repository.create(admin_one.clone()).await.unwrap();
-    state.local_user_repository.create(admin_two).await.unwrap();
+    state.local_user_repository.create(admin_one.clone(), "test-actor").await.unwrap();
+    state.local_user_repository.create(admin_two, "test-actor").await.unwrap();
 
     let response = send(
         router(state),
@@ -301,7 +323,7 @@ async fn update_user_role_rejects_demoting_the_last_admin() {
         password_hash: "hash".to_string(),
         role: Role::Admin,
     };
-    state.local_user_repository.create(admin.clone()).await.unwrap();
+    state.local_user_repository.create(admin.clone(), "test-actor").await.unwrap();
 
     let response = send(
         router(state),
@@ -326,7 +348,7 @@ async fn update_user_role_allows_reassigning_the_sole_admin_to_admin() {
         password_hash: "hash".to_string(),
         role: Role::Admin,
     };
-    state.local_user_repository.create(admin.clone()).await.unwrap();
+    state.local_user_repository.create(admin.clone(), "test-actor").await.unwrap();
 
     let response = send(
         router(state),
@@ -358,8 +380,8 @@ async fn update_user_role_allows_demoting_an_admin_when_another_admin_remains() 
         password_hash: "hash".to_string(),
         role: Role::Admin,
     };
-    state.local_user_repository.create(admin_one.clone()).await.unwrap();
-    state.local_user_repository.create(admin_two).await.unwrap();
+    state.local_user_repository.create(admin_one.clone(), "test-actor").await.unwrap();
+    state.local_user_repository.create(admin_two, "test-actor").await.unwrap();
 
     let response = send(
         router(state),

@@ -39,7 +39,11 @@ pub trait LocalUserRepository: Send + Sync {
 
     async fn list(&self, tenant_id: Uuid) -> Result<Vec<LocalUser>, LocalUserRepositoryError>;
 
-    async fn create(&self, user: LocalUser) -> Result<LocalUser, LocalUserRepositoryError>;
+    async fn create(
+        &self,
+        user: LocalUser,
+        actor: &str,
+    ) -> Result<LocalUser, LocalUserRepositoryError>;
 
     async fn update_role(
         &self,
@@ -111,7 +115,11 @@ impl LocalUserRepository for PostgresLocalUserRepository {
             .collect()
     }
 
-    async fn create(&self, user: LocalUser) -> Result<LocalUser, LocalUserRepositoryError> {
+    async fn create(
+        &self,
+        user: LocalUser,
+        actor: &str,
+    ) -> Result<LocalUser, LocalUserRepositoryError> {
         let mut tx = self
             .pool
             .begin()
@@ -138,7 +146,7 @@ impl LocalUserRepository for PostgresLocalUserRepository {
                 entity_type: "local_user".to_string(),
                 entity_id: user.id,
                 change_type: ChangeType::Created,
-                actor: user.tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: None,
                 after: serde_json::to_value(&user).unwrap_or_default(),
                 changed_at: chrono::Utc::now(),
