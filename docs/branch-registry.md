@@ -16,7 +16,7 @@ manually created branches.
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
-| chore         | `chore/`   | 0006         |
+| chore         | `chore/`   | 0007         |
 
 ## Branch log (append-only, newest last)
 
@@ -138,4 +138,5 @@ manually created branches.
 | 0086 | `feature/0086-events-page-links-to-record-journey` | feature | 2026-07-20 | open | pending | |
 | 0087 | `feature/0087-data-viewer-csv-export` | feature | 2026-07-20 | open | pending | |
 | 0088 | `feature/0088-events-page-date-range-filtering` | feature | 2026-07-20 | merged | pending | |
-| 0005 | `chore/0005-action-executor-rabbitmq-integration-test` | chore | 2026-07-20 | open | pending | |
+| 0005 | `chore/0005-action-executor-rabbitmq-integration-test` | chore | 2026-07-20 | merged | pending | |
+| 0006 | `chore/0006-full-pipeline-e2e-test` | chore | 2026-07-20 | open | pending | renamed from chore/0005 before push to avoid colliding with the still-open chore/0005-action-executor-rabbitmq-integration-test (PR #117) |

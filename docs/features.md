@@ -4603,3 +4603,22 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0087-action-executor-rabbitmq-integration-test.md
+
+## [2026-07-20] chore/0006-full-pipeline-e2e-test — Full-pipeline e2e test
+- **Type:** chore
+- **Branch:** chore/0006-full-pipeline-e2e-test
+- **Summary:** Closes the CLAUDE.md §2 gap that's existed since day one: an end-to-end test
+  proving a single `RawRecord` survives the whole ingestion → normalization → analysis →
+  trigger → action chain, not just each hop in isolation. New crate `crates/e2e-tests` chains
+  each stage's own real processing function via real message-bus round trips against real
+  Postgres/RabbitMQ/ClickHouse, stubbing only the two external seams no test environment has a
+  real endpoint for (Azure AI Foundry, and Action Executor's Trigger Engine HTTP lookup — the
+  latter using the exact same stub pattern as `action-executor/tests/rabbitmq_integration_test.rs`).
+- **Tests:** `cargo test -p e2e-tests` — 1 new end-to-end test, run 3 consecutive times to confirm
+  stability before merging (all green). `cargo test --workspace --all-features` — every other
+  crate unaffected; the only failures are 3 pre-existing environment-gated integration tests
+  (SMTP/Fabric-SQL/IMAP live servers not present in this sandbox), unrelated to this change.
+  `cargo build --workspace`, `cargo clippy --workspace --all-targets --all-features -- -D
+  warnings`, `cargo fmt --all --check` — all clean.
+- **PR:** pending
+- **ADR:** docs/adr/0088-full-pipeline-e2e-test.md

@@ -17,6 +17,7 @@ members = [
   "crates/connectors/sql",
   "crates/connectors/zendesk",
   "crates/dashboard-api",
+  "crates/e2e-tests",
   "crates/egress-gateway",
   "crates/ingestion-gateway",
   "crates/ingestion-service",
