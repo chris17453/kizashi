@@ -27,10 +27,21 @@
   </form>
 </div>
 
+<form class="inline" method="get" action="/users" style="margin-bottom:1rem;">
+  <label for="q">Search</label>
+  <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by username&hellip;">
+  <button type="submit">Search</button>
+  {% if !q.is_empty() %}<a href="/users" class="btn-link">Clear</a>{% endif %}
+</form>
+
 {% if users.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#128100;</div>
+  {% if q.is_empty() %}
   <p>No users configured yet for this tenant.</p>
+  {% else %}
+  <p>No users match &ldquo;{{ q }}&rdquo;.</p>
+  {% endif %}
 </div>
 {% else %}
 <table>

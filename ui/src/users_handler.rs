@@ -6,7 +6,7 @@ use crate::session_guard::require_session;
 use crate::users_client::UiUser;
 use crate::AppState;
 use askama::Template;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use common::Role;
@@ -37,6 +37,21 @@ struct UsersTemplate {
     show_nav: bool,
     users: Vec<UserRow>,
     error: Option<String>,
+    q: String,
+}
+
+#[derive(serde::Deserialize, Default)]
+pub struct UsersQuery {
+    #[serde(default)]
+    q: String,
+}
+
+/// Case-insensitive substring match on username -- `UsersClient::list_users` has no search
+/// parameter of its own (it's a full-tenant list, same shape since ADR-0016), so this filters
+/// the already-fetched list in-handler rather than adding a new backend query param for what a
+/// tenant's user list realistically stays small enough to filter client-side-of-the-fetch.
+fn matches_query(row: &UserRow, q: &str) -> bool {
+    q.is_empty() || row.username.to_lowercase().contains(&q.to_lowercase())
 }
 
 /// Full-page access to `/users` is `Admin`-only, matching Auth Service's own enforcement
@@ -55,7 +70,11 @@ async fn require_admin_session(
     Ok(session)
 }
 
-pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Response {
+pub async fn get_users(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<UsersQuery>,
+) -> Response {
     let session = match require_admin_session(&state, &headers).await {
         Ok(session) => session,
         Err(response) => return response,
@@ -65,15 +84,20 @@ pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Res
         Ok(users) => Html(
             UsersTemplate {
                 show_nav: true,
-                users: users.into_iter().map(|u| to_row(u, &session.username)).collect(),
+                users: users
+                    .into_iter()
+                    .map(|u| to_row(u, &session.username))
+                    .filter(|row| matches_query(row, &query.q))
+                    .collect(),
                 error: None,
+                q: query.q,
             }
             .render()
             .unwrap(),
         )
         .into_response(),
         Err(e) => Html(
-            UsersTemplate { show_nav: true, users: vec![], error: Some(e.to_string()) }
+            UsersTemplate { show_nav: true, users: vec![], error: Some(e.to_string()), q: query.q }
                 .render()
                 .unwrap(),
         )
@@ -100,6 +124,7 @@ async fn rerender_with_error(
             show_nav: true,
             users: users.into_iter().map(|u| to_row(u, &session.username)).collect(),
             error: Some(error),
+            q: String::new(),
         }
         .render()
         .unwrap(),

@@ -4043,3 +4043,22 @@ architectural decision.
   pre-existing allow-listed warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0061-destructive-action-confirmation.md
+
+## [2026-07-20] feature/0070-users-page-search — Users page search
+- **Type:** feature
+- **Branch:** feature/0070-users-page-search
+- **Summary:** Closes part of a UI/UX audit finding: every list page except Data renders its
+  full table with no filter controls. `GET /users` now accepts `?q=` and filters the fetched
+  user list by a case-insensitive username substring match, in-handler (not a new backend query
+  param — a tenant's user list is realistically small, unlike Data's potentially-huge ingested-
+  record volume). Bookmarkable `GET` search form, "Clear" link when active, distinct "no
+  results" vs "no users at all" empty states. Scoped to Users only; the same pattern is a direct
+  template for the other list pages the audit flagged (Sensors, API Keys, Sessions, etc.) as
+  follow-ups.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 382 passed (2 new: case-insensitive filter match,
+  "no users match" empty state for an unmatched query). `cargo build --workspace` clean. `cargo
+  clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
+  --check` clean. `cargo deny check`/`cargo audit` — same pre-existing allow-listed warnings as
+  prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0062-users-page-search.md

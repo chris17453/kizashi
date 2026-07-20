@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0070         |
+| feature       | `feature/` | 0071         |
 | fix           | `fix/`     | 0012         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -107,3 +107,4 @@ manually created branches.
 | 0067 | `feature/0067-nav-wide-tenant-branding` | feature | 2026-07-20 | open | pending | |
 | 0068 | `feature/0068-audit-log-csv-export-pagination` | feature | 2026-07-20 | open | pending | |
 | 0069 | `feature/0069-destructive-action-confirmation` | feature | 2026-07-20 | open | pending | |
+| 0070 | `feature/0070-users-page-search` | feature | 2026-07-20 | open | pending | |
