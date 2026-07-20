@@ -3426,3 +3426,32 @@ architectural decision.
 - **PR:** (opened in the integration branch's PR — see above)
 - **ADR:** n/a — implements existing audit-log requirement (CLAUDE.md §5), not a new
   architectural decision.
+
+## [2026-07-20] fix/0006-audit-log-real-actor — audit log actor identity fixed platform-wide (integration of 6 parallel branches)
+- **Type:** fix
+- **Branch:** fix/0006-audit-log-real-actor
+- **Summary:** Integrates six coordinated branches (one per backend service — auth-service,
+  config-admin-service, retention-service, ingestion-gateway — plus two UI-client batches) that
+  together fix a systemic compliance defect discovered during a live Console UI audit: every
+  audit-log write across the entire platform recorded `tenant_id` as the "actor," never the
+  real user who performed the action. Landed as one integration since the wire contract
+  (`X-Username` header, `username_from_headers` helper, `401` on missing) only works if backend
+  reads and UI sends land together — merging either half alone would either 401 every admin
+  write or silently keep the audit log wrong. See ADR-0039 for the full design and rationale,
+  and the six individual feature-log entries above for per-service detail.
+- **Tests:** `cargo build --workspace --all-targets` — clean. `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean.
+  `cargo test --workspace --all-features` (full real-infra stack: Postgres, RabbitMQ,
+  ClickHouse, greenmail, mssql-CI) — every test binary passed, 0 failed, including 248 kizashi-ui
+  tests (up from 241 at the start of this session). `cargo deny check` / `cargo audit` — clean,
+  same 3 pre-existing allow-listed advisories.
+- **Live verification:** rebuilt and redeployed all five affected services
+  (auth-service, config-admin-service, retention-service, ingestion-gateway, kizashi-ui)
+  together against the real running stack. Registered a real sensor through the Console UI and
+  confirmed via direct Postgres query that the fresh audit row's `actor` column is the real
+  username (`demo`), not the tenant UUID. Toggled a real user's role through the Users page and
+  confirmed via the Audit History page's screenshot that the newest row shows `demo` as the
+  actor while older, pre-fix rows correctly still show their original (UUID) actor value,
+  proving the immutable audit trail wasn't rewritten, only new writes changed.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0039](../docs/adr/0039-audit-log-actor-identity.md)
