@@ -4321,3 +4321,21 @@ architectural decision.
   kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0071-session-idle-timeout.md
+
+## [2026-07-20] feature/0082-events-page-search-and-sort — Events page search and sortable columns
+- **Type:** feature
+- **Branch:** feature/0081-events-page-search-and-sort (numbering race, see branch-registry.md)
+- **Summary:** Closes another gap from a fresh audit: the Events page had pagination only, no
+  search or sort, unlike every comparable list page. `GET /events` now accepts `?q=` (matches
+  across event_type/group_key/status) and `?sort=event_type|group_key|status|occurred_at` with
+  `?dir=asc|desc`, same pattern as Triggers (ADR-0066/0070). Since `list_events` is
+  server-paginated, both only apply to the current fetched page — same accepted limitation as
+  every other paginated-list search/sort on this platform. `q`/`sort`/`dir` carry through the
+  search form and pagination links. The events-over-time chart is unaffected (independent
+  30-day summary).
+- **Tests:** `cargo test -p kizashi-ui --lib` — 413 passed (3 new: case-insensitive filter
+  match, "no events on this page match" empty state, ascending event_type sort). `cargo build
+  --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
+  clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0072-events-page-search-and-sort.md

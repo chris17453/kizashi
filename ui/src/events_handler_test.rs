@@ -118,6 +118,111 @@ async fn renders_the_events_table_when_signed_in() {
 }
 
 #[tokio::test]
+async fn filters_by_the_q_query_param_case_insensitively() {
+    let (mut state, session_id) = state_with_session().await;
+    let events_client = InMemoryEventsClient::default();
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "sentiment_spike".to_string(),
+        group_key: "customer-42".to_string(),
+        status: "open".to_string(),
+        occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+    });
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "urgent_ticket".to_string(),
+        group_key: "customer-99".to_string(),
+        status: "resolved".to_string(),
+        occurred_at: "2026-07-19T00:00:00Z".parse().unwrap(),
+    });
+    state.events_client = Arc::new(events_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events?q=URGENT")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("urgent_ticket"));
+    assert!(!body.contains("sentiment_spike"));
+}
+
+#[tokio::test]
+async fn shows_a_no_match_empty_state_for_an_unmatched_query() {
+    let (mut state, session_id) = state_with_session().await;
+    let events_client = InMemoryEventsClient::default();
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "sentiment_spike".to_string(),
+        group_key: "customer-42".to_string(),
+        status: "open".to_string(),
+        occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+    });
+    state.events_client = Arc::new(events_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events?q=nonexistent")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No events on this page match"));
+}
+
+#[tokio::test]
+async fn sorts_by_event_type_ascending_when_sort_param_is_set() {
+    let (mut state, session_id) = state_with_session().await;
+    let events_client = InMemoryEventsClient::default();
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "zeta_event".to_string(),
+        group_key: "g1".to_string(),
+        status: "open".to_string(),
+        occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+    });
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "alpha_event".to_string(),
+        group_key: "g2".to_string(),
+        status: "open".to_string(),
+        occurred_at: "2026-07-19T00:00:00Z".parse().unwrap(),
+    });
+    state.events_client = Arc::new(events_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events?sort=event_type")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    let alpha_pos = body.find("alpha_event").unwrap();
+    let zeta_pos = body.find("zeta_event").unwrap();
+    assert!(alpha_pos < zeta_pos);
+}
+
+#[tokio::test]
 async fn renders_a_bar_for_each_day_with_events() {
     let (mut state, session_id) = state_with_session().await;
     let events_client = InMemoryEventsClient::default();
