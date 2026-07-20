@@ -23,9 +23,14 @@ Console UI instance (ADR-0046).</p>
   {% endif %}
 </div>
 {% else %}
+<!-- Declared empty and referenced by `form="bulk-revoke-form"` on each checkbox/button below,
+     since HTML forms can't nest inside the per-row revoke forms further down. Same pattern as
+     Users'/API Keys'/Sensors' bulk-action forms (ADR-0065/ADR-0095/ADR-0096). -->
+<form id="bulk-revoke-form" method="post" action="/security/sessions/bulk-revoke" onsubmit="return confirm('Revoke the selected sessions? The affected users will be signed out immediately.');"></form>
 <table>
   <thead>
     <tr>
+      <th scope="col"></th>
       <th scope="col">
         <a href="/security/sessions?q={{ q|urlencode }}&sort=username&dir={% if sort == "username" && dir != "desc" %}desc{% else %}asc{% endif %}">
           User{% if sort == "username" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
@@ -47,6 +52,11 @@ Console UI instance (ADR-0046).</p>
   <tbody>
     {% for s in sessions %}
     <tr>
+      <td>
+        {% if !s.is_current %}
+        <input type="checkbox" name="ids" value="{{ s.id }}" form="bulk-revoke-form" aria-label="Select {{ s.username }}'s session for bulk revoke">
+        {% endif %}
+      </td>
       <td>{{ s.username }}{% if s.is_current %} <span class="muted">(this session)</span>{% endif %}</td>
       <td>{{ s.role_str }}</td>
       <td>{{ s.created_at }}</td>
@@ -59,5 +69,6 @@ Console UI instance (ADR-0046).</p>
     {% endfor %}
   </tbody>
 </table>
+<p><button type="submit" form="bulk-revoke-form" class="btn-danger">Revoke selected</button></p>
 {% endif %}
 {% endblock %}

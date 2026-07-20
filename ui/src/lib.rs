@@ -168,7 +168,7 @@ pub use sensor_script_handler::{get_generate_form, get_generate_select, post_gen
 pub use sensors_handler::{
     get_sensors, post_bulk_delete_sensors, post_delete_sensor, post_sensors, post_toggle_sensor,
 };
-pub use sessions_handler::{get_sessions, post_revoke_session};
+pub use sessions_handler::{get_sessions, post_bulk_revoke_sessions, post_revoke_session};
 pub use sso_login_handler::{get_sso_callback, get_sso_login};
 pub use static_assets::{get_charts_js, get_confirm_danger_js};
 pub use triggers_handler::{get_triggers, post_trigger};
@@ -291,6 +291,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/security/backups", get(get_backups))
         .route("/security/compliance-report", get(get_compliance_report))
         .route("/security/sessions/:id/revoke", axum::routing::post(post_revoke_session))
+        .route("/security/sessions/bulk-revoke", axum::routing::post(post_bulk_revoke_sessions))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
         .route("/data/export.csv", get(get_data_export_csv))

@@ -153,3 +153,49 @@ pub async fn post_revoke_session(
 
     Redirect::to("/security/sessions").into_response()
 }
+
+/// `axum::extract::Form` deserializes via `serde_urlencoded`, which -- unlike some other form
+/// crates -- does NOT collect repeated same-named fields (one checkbox per row, all named
+/// `ids`) into a `Vec`; it only supports flat scalar struct fields. Parsing the raw body as a
+/// flat list of `(key, value)` pairs instead and filtering for `"ids"` sidesteps that
+/// limitation. Same pattern as API Keys' `post_bulk_revoke_api_keys` and Users'
+/// `post_bulk_delete_users` (ADR-0065/ADR-0096) -- session ids are opaque strings, not `Uuid`s,
+/// so unlike those this doesn't parse each value further.
+fn parse_ids(raw_body: &[u8]) -> Vec<String> {
+    let Ok(pairs) = serde_urlencoded::from_bytes::<Vec<(String, String)>>(raw_body) else {
+        return Vec::new();
+    };
+    pairs.into_iter().filter(|(key, _)| key == "ids").map(|(_, value)| value).collect()
+}
+
+/// POST /security/sessions/bulk-revoke — force-terminates every selected session (same
+/// bulk-action pattern API Keys, Sensors, Users, and Retention Policies already have,
+/// ADR-0065/ADR-0095/ADR-0096: loop over the existing single-item revoke rather than a new bulk
+/// backend endpoint). Same tenant-membership check as `post_revoke_session` applied per id, so
+/// an admin can't blind-guess another tenant's session id into the bulk form.
+pub async fn post_bulk_revoke_sessions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let session = match require_admin_session(&state, &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+
+    let tenant_session_ids: std::collections::HashSet<String> = state
+        .session_store
+        .list_for_tenant(session.tenant_id)
+        .await
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+
+    for id in parse_ids(&body) {
+        if tenant_session_ids.contains(&id) {
+            state.session_store.delete(&id).await;
+        }
+    }
+
+    Redirect::to("/security/sessions").into_response()
+}
