@@ -29,7 +29,14 @@ your Triggers. Leave blank to keep the platform's default analysis behavior.</p>
         <input id="endpoint" name="endpoint" type="text" value="{{ endpoint }}" placeholder="http://localhost:11434/v1">
 
         <label for="api_key">API key (leave blank for a local Ollama instance)</label>
-        <input id="api_key" name="api_key" type="password" value="{{ api_key }}">
+        {% if api_key_configured %}
+        <p class="muted">An API key is already configured. Leave blank to keep it, or enter a
+        new value to replace it.</p>
+        {% endif %}
+        <input id="api_key" name="api_key" type="password" value="{{ api_key }}" placeholder="{% if api_key_configured %}Already configured — leave blank to keep{% endif %}">
+        {% if api_key_configured %}
+        <label><input type="checkbox" name="clear_api_key" value="true"> Clear the configured API key</label>
+        {% endif %}
       </div>
 
       <button type="submit">Save</button>

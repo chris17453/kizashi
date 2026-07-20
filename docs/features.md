@@ -3722,3 +3722,28 @@ architectural decision.
   via headless-Chrome screenshot of the rendered `/security/sessions` page before and after.
 - **PR:** pending
 - **ADR:** n/a
+
+## [2026-07-20] feature/0058-permissions-reference-and-csv-export — Permissions reference, audit CSV export, and an API key redaction fix
+- **Type:** feature
+- **Branch:** feature/0058-permissions-reference-and-csv-export
+- **Summary:** Three related additions from an RBAC accuracy audit: (1) `GET /security/permissions`,
+  a written Viewer/Operator/Admin capability matrix transcribed directly from every backend's
+  actual role-check code, not an aspirational description; (2) `GET /audit-log/export.csv`, a
+  compliance-report export of the merged audit feed (up to 2000 rows/service via internal
+  pagination), reusing the same merge logic the HTML page already uses; (3) a real bug the audit
+  found and fixed: `GET /v1/analysis-config` returned the AI provider's plaintext API key to any
+  authenticated role including Viewer — now redacted (`api_key: None`, `api_key_configured: bool`
+  instead), with a tri-state PUT field so "leave unchanged" is still expressible without the read
+  side leaking the value.
+- **Tests:** `cargo test -p kizashi-ui --lib` (319 passed, incl. 3 permissions-reference tests, 5
+  new CSV export tests, and analysis-config-client tri-state coverage); `cargo test -p
+  config-admin-service --lib` (105 passed, incl. `get_never_returns_the_real_api_key_regardless_of_caller_role`,
+  `get_reports_api_key_not_configured_when_none_was_ever_set`,
+  `put_without_api_key_field_preserves_the_existing_key`, `put_with_explicit_null_api_key_clears_it`).
+  Full workspace gate green: `cargo build --workspace`, `cargo test --workspace --all-features`
+  against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures),
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all
+  --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
+- **PR:** pending
+- **ADR:** docs/adr/0048-permissions-reference-page.md, docs/adr/0049-audit-log-csv-export.md,
+  docs/adr/0050-analysis-config-api-key-redaction.md

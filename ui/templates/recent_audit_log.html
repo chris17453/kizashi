@@ -8,6 +8,8 @@ never editable or deletable, even by an admin. Drill into a specific record's ow
 full before/after diff.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
+<p><a href="/audit-log/export.csv" class="btn-link">Download CSV &#8595;</a></p>
+
 {% if entries.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#9776;</div>

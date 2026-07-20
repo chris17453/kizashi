@@ -36,6 +36,34 @@ struct RecentAuditLogTemplate {
     error: Option<String>,
 }
 
+/// Fetches one page (up to `limit` per source, `PAGE_SIZE`-capped by the caller) from all three
+/// audit sources, merged and sorted most-recent-first -- the shared core of both the HTML page
+/// and the CSV export (ADR-0049), so the two can never silently diverge in what counts as "the
+/// tenant's recent activity."
+async fn fetch_merged_page(
+    state: &AppState,
+    tenant_id: uuid::Uuid,
+    before: Option<DateTime<Utc>>,
+    limit: u32,
+) -> (Vec<(&'static str, AuditLogEntry)>, Vec<String>) {
+    let sources: [(&'static str, &Arc<dyn AuditLogClient>); 3] = [
+        ("config-admin-service", &state.config_audit_log_client),
+        ("retention-service", &state.retention_audit_log_client),
+        ("auth-service", &state.auth_audit_log_client),
+    ];
+
+    let mut merged: Vec<(&'static str, AuditLogEntry)> = Vec::new();
+    let mut errors = Vec::new();
+    for (label, client) in sources {
+        match client.list_recent(tenant_id, limit, before).await {
+            Ok(entries) => merged.extend(entries.into_iter().map(|e| (label, e))),
+            Err(e) => errors.push(format!("{label}: {e}")),
+        }
+    }
+    merged.sort_by_key(|(_, e)| std::cmp::Reverse(e.changed_at));
+    (merged, errors)
+}
+
 /// GET /audit-log — a single, browsable, filterable-by-nothing-required activity feed merging
 /// every tenant-scoped audit trail (config-admin-service's triggers/mappings/agents/analysis
 /// config, retention-service's retention policies, auth-service's users/branding), most-recent
@@ -52,21 +80,8 @@ pub async fn get_recent_audit_log(
         Err(response) => return response,
     };
 
-    let sources: [(&'static str, &Arc<dyn AuditLogClient>); 3] = [
-        ("config-admin-service", &state.config_audit_log_client),
-        ("retention-service", &state.retention_audit_log_client),
-        ("auth-service", &state.auth_audit_log_client),
-    ];
-
-    let mut merged: Vec<(&'static str, AuditLogEntry)> = Vec::new();
-    let mut errors = Vec::new();
-    for (label, client) in sources {
-        match client.list_recent(session.tenant_id, PAGE_SIZE, query.before).await {
-            Ok(entries) => merged.extend(entries.into_iter().map(|e| (label, e))),
-            Err(e) => errors.push(format!("{label}: {e}")),
-        }
-    }
-    merged.sort_by_key(|(_, e)| std::cmp::Reverse(e.changed_at));
+    let (mut merged, errors) =
+        fetch_merged_page(&state, session.tenant_id, query.before, PAGE_SIZE).await;
     merged.truncate(PAGE_SIZE as usize);
 
     let next_before = merged.last().map(|(_, e)| e.changed_at);
@@ -83,5 +98,72 @@ pub async fn get_recent_audit_log(
     let error = if errors.is_empty() { None } else { Some(errors.join("; ")) };
 
     Html(RecentAuditLogTemplate { show_nav: true, entries, next_before, error }.render().unwrap())
+        .into_response()
+}
+
+/// Successive pages fetched per audit source when building the CSV export, each page requesting
+/// the backend's own maximum (200, config-admin-service/auth-service/retention-service all cap
+/// `list_recent` there) -- bounds the export to `CSV_MAX_PAGES * 200 * 3` rows worst case
+/// (6000) rather than looping until each source is exhausted, since an unbounded export against
+/// a very long-lived tenant could otherwise take an unreasonable time/response size.
+const CSV_MAX_PAGES: usize = 10;
+const CSV_PAGE_LIMIT: u32 = 200;
+
+fn csv_escape(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+/// GET /audit-log/export.csv — a compliance-report export of the same merged feed
+/// `get_recent_audit_log` shows, paginated internally (not by the caller) up to
+/// `CSV_MAX_PAGES` pages per source so a single request can produce a genuinely useful export
+/// instead of just the one page the HTML view shows (ADR-0049).
+pub async fn get_recent_audit_log_csv(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+
+    let mut all_rows: Vec<(&'static str, AuditLogEntry)> = Vec::new();
+    let mut before = None;
+    for _ in 0..CSV_MAX_PAGES {
+        let (page, _errors) =
+            fetch_merged_page(&state, session.tenant_id, before, CSV_PAGE_LIMIT).await;
+        if page.is_empty() {
+            break;
+        }
+        before = page.last().map(|(_, e)| e.changed_at);
+        all_rows.extend(page);
+    }
+    all_rows.sort_by_key(|(_, e)| std::cmp::Reverse(e.changed_at));
+
+    let mut csv = String::from("changed_at,service,entity_type,change_type,actor\n");
+    for (service, entry) in &all_rows {
+        csv.push_str(&format!(
+            "{},{},{},{},{}\n",
+            entry.changed_at.to_rfc3339(),
+            csv_escape(service),
+            csv_escape(&entry.entity_type),
+            csv_escape(&entry.change_type),
+            csv_escape(&entry.actor),
+        ));
+    }
+
+    (
+        [
+            (axum::http::header::CONTENT_TYPE, "text/csv".to_string()),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"audit-log-{}.csv\"", session.tenant_id),
+            ),
+        ],
+        csv,
+    )
         .into_response()
 }

@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Permissions Reference</h1>
+<p class="muted">What each role can actually do, area by area — transcribed directly from what
+every backend service enforces in code (ADR-0048), not a design aspiration. If this table and
+the running system ever disagree, the running system is right; file that as a bug against this
+page.</p>
+
+<table>
+  <thead>
+    <tr><th>Area</th><th>Viewer</th><th>Operator</th><th>Admin</th></tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>
+        {{ r.area }}
+        {% if let Some(note) = r.note %}<br><span class="muted" style="font-size:0.8em;">{{ note }}</span>{% endif %}
+      </td>
+      <td>{{ r.viewer }}</td>
+      <td>{{ r.operator }}</td>
+      <td>{{ r.admin }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -43,6 +43,7 @@ mod login_handler;
 mod logout_handler;
 mod normalization_mappings_handler;
 mod overview_handler;
+mod permissions_reference_handler;
 mod pipeline_handler;
 mod recent_audit_log_handler;
 mod record_journey_handler;
@@ -118,8 +119,9 @@ pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
 pub use normalization_mappings_handler::{get_normalization_mappings, post_normalization_mapping};
 pub use overview_handler::get_overview;
+pub use permissions_reference_handler::get_permissions_reference;
 pub use pipeline_handler::get_pipeline;
-pub use recent_audit_log_handler::get_recent_audit_log;
+pub use recent_audit_log_handler::{get_recent_audit_log, get_recent_audit_log_csv};
 pub use record_journey_handler::get_record_journey;
 pub use reports_handler::get_reports;
 pub use retention_policies_handler::{
@@ -215,8 +217,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/users/:id/role", axum::routing::post(post_update_user_role))
         .route("/users/:id/delete", axum::routing::post(post_delete_user))
         .route("/audit-log", get(get_recent_audit_log))
+        .route("/audit-log/export.csv", get(get_recent_audit_log_csv))
         .route("/audit-log/:service/:entity_id", get(get_entity_audit_log))
         .route("/security", get(get_security_overview))
+        .route("/security/permissions", get(get_permissions_reference))
         .route("/security/sessions", get(get_sessions))
         .route("/security/sessions/:id/revoke", axum::routing::post(post_revoke_session))
         .route("/reports", get(get_reports))

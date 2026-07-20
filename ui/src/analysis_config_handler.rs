@@ -20,6 +20,7 @@ struct AnalysisConfigTemplate {
     model: String,
     endpoint: String,
     api_key: String,
+    api_key_configured: bool,
     can_write: bool,
     saved: bool,
     error: Option<String>,
@@ -37,12 +38,18 @@ fn empty_template(
         model: String::new(),
         endpoint: String::new(),
         api_key: String::new(),
+        api_key_configured: false,
         can_write,
         saved: false,
         error,
     }
 }
 
+/// Note `view.api_key` is *not* used to populate the form's API key field: on a GET this is
+/// always `None` (config-admin-service never returns the real secret, see the RBAC audit fix
+/// there), and on the response to a fresh PUT it's whatever the operator just typed — echoing
+/// either back into the field is either a no-op or pointless. `api_key_configured` drives the
+/// "already configured" messaging instead; the field itself always starts blank.
 fn template_from_view(
     view: AnalysisConfigView,
     can_write: bool,
@@ -54,7 +61,8 @@ fn template_from_view(
         is_openai_compatible: view.provider == AnalysisProvider::OpenAiCompatible,
         model: view.model.unwrap_or_default(),
         endpoint: view.endpoint.unwrap_or_default(),
-        api_key: view.api_key.unwrap_or_default(),
+        api_key: String::new(),
+        api_key_configured: view.api_key_configured,
         can_write,
         saved,
         error: None,
@@ -96,6 +104,11 @@ pub struct PutAnalysisConfigForm {
     endpoint: String,
     #[serde(default)]
     api_key: String,
+    /// Checkbox, only present in the submitted form data when checked. Needed because a blank
+    /// `api_key` field is now ambiguous — "leave the existing key alone" (the normal case, since
+    /// the form is never shown the real key to leave in place) vs. "actually remove it".
+    #[serde(default)]
+    clear_api_key: bool,
 }
 
 pub async fn post_analysis_config(
@@ -113,7 +126,17 @@ pub async fn post_analysis_config(
 
     let model = (!form.model.is_empty()).then_some(form.model.as_str());
     let endpoint = (!form.endpoint.is_empty()).then_some(form.endpoint.as_str());
-    let api_key = (!form.api_key.is_empty()).then_some(form.api_key.as_str());
+    // Tri-state: checking "clear" always wins and clears the key; otherwise a non-empty field
+    // sets a new key; otherwise the field says nothing, so the existing key (if any) is left
+    // alone — see `AnalysisConfigInput::api_key`'s doc comment for why blank can't just mean
+    // "clear" anymore.
+    let api_key = if form.clear_api_key {
+        Some(None)
+    } else if form.api_key.is_empty() {
+        None
+    } else {
+        Some(Some(form.api_key.as_str()))
+    };
     let input = AnalysisConfigInput {
         prompt: &form.prompt,
         provider: form.provider,
@@ -137,7 +160,10 @@ pub async fn post_analysis_config(
                 is_openai_compatible: form.provider == AnalysisProvider::OpenAiCompatible,
                 model: form.model,
                 endpoint: form.endpoint,
-                api_key: form.api_key,
+                api_key: String::new(),
+                // Best-effort on this error-re-render path: we don't know whether a key was
+                // already configured before this failed submission, so don't claim one is.
+                api_key_configured: false,
                 can_write: true,
                 saved: false,
                 error: Some(e.to_string()),

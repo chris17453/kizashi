@@ -24,7 +24,10 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/audit-log", get(get_recent_audit_log)).with_state(state)
+    Router::new()
+        .route("/audit-log", get(get_recent_audit_log))
+        .route("/audit-log/export.csv", get(get_recent_audit_log_csv))
+        .with_state(state)
 }
 
 async fn state_with_session() -> (AppState, String, Uuid) {
@@ -185,6 +188,79 @@ async fn redirects_to_login_when_not_signed_in() {
 
     let response = router(state)
         .oneshot(Request::builder().uri("/audit-log").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+async fn get_csv(state: AppState, session_id: &str) -> axum::http::Response<Body> {
+    router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/audit-log/export.csv")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn csv_export_has_the_right_content_type_and_filename() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
+
+    let response = get_csv(state, &session_id).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers().get("content-type").unwrap(), "text/csv");
+    assert!(response
+        .headers()
+        .get("content-disposition")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .contains("attachment"));
+}
+
+#[tokio::test]
+async fn csv_export_includes_the_header_row_and_merged_entries() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let config_client = Arc::new(InMemoryAuditLogClient::default());
+    *config_client.recent.lock().unwrap() = vec![entry("config-actor", "2026-07-18T00:00:00Z")];
+    state.config_audit_log_client = config_client;
+
+    let response = get_csv(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.starts_with("changed_at,service,entity_type,change_type,actor\n"));
+    assert!(body.contains("config-actor"));
+    assert!(body.contains("config-admin-service"));
+}
+
+#[tokio::test]
+async fn csv_export_escapes_a_comma_in_a_field() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let config_client = Arc::new(InMemoryAuditLogClient::default());
+    *config_client.recent.lock().unwrap() =
+        vec![entry("actor, with a comma", "2026-07-18T00:00:00Z")];
+    state.config_audit_log_client = config_client;
+
+    let response = get_csv(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("\"actor, with a comma\""));
+}
+
+#[tokio::test]
+async fn csv_export_redirects_to_login_when_not_signed_in() {
+    let (state, _session_id, _tenant_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(Request::builder().uri("/audit-log/export.csv").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
