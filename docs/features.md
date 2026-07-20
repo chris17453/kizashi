@@ -3606,7 +3606,7 @@ architectural decision.
   `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
   `cargo test --workspace --all-features` against real Postgres/RabbitMQ/ClickHouse/MinIO,
   `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0043-tenant-isolation-audit-and-cookie-hardening.md
 
 ## [2026-07-20] fix/0009-internal-secret-header-trust-gap — Close the X-Role/X-Tenant-Id/X-Username unauthenticated trust gap
@@ -3636,7 +3636,7 @@ architectural decision.
   Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures), `cargo clippy
   --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all --check`, `cargo deny
   check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0044-internal-service-secret-for-header-trusted-endpoints.md
 
 ## [2026-07-20] feature/0055-global-audit-log-page — Global, browsable audit log page
@@ -3661,7 +3661,7 @@ architectural decision.
   against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures),
   `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all
   --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0045-global-audit-log-page.md
 
 ## [2026-07-20] feature/0056-active-sessions-management — Active sessions management page
@@ -3683,7 +3683,7 @@ architectural decision.
   failures), `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt
   --all --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories,
   unchanged).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0046-active-sessions-management-page.md
 
 ## [2026-07-20] feature/0057-security-overview-dashboard — Security overview dashboard and nav grouping
@@ -3703,7 +3703,7 @@ architectural decision.
   Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures), `cargo clippy
   --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all --check`, `cargo deny
   check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0047-security-overview-dashboard-and-nav-grouping.md
 
 ## [2026-07-20] fix/0010-disabled-button-visual-state — Disabled buttons now look disabled
@@ -3720,7 +3720,7 @@ architectural decision.
   behavioral test coverage needed/added); `cargo clippy --workspace --all-targets --all-features
   -- -D warnings`, `cargo fmt --all --check`, `cargo build --workspace` all green. Live-verified
   via headless-Chrome screenshot of the rendered `/security/sessions` page before and after.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** n/a
 
 ## [2026-07-20] feature/0058-permissions-reference-and-csv-export — Permissions reference, audit CSV export, and an API key redaction fix
@@ -3744,7 +3744,7 @@ architectural decision.
   against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures),
   `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all
   --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0048-permissions-reference-page.md, docs/adr/0049-audit-log-csv-export.md,
   docs/adr/0050-analysis-config-api-key-redaction.md
 
@@ -3772,7 +3772,7 @@ architectural decision.
   failures), `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt
   --all --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories,
   unchanged -- no new advisories from the new dependency).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0051-totp-multi-factor-authentication.md
 
 ## [2026-07-20] feature/0060-password-policy-enforcement — Password policy enforcement
@@ -3793,7 +3793,7 @@ architectural decision.
   against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (111 test binaries, 0 failures),
   `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all
   --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0052-password-policy-enforcement.md
 
 ## [2026-07-20] feature/0061-login-attempt-anomaly-alerting — Login-attempt anomaly alerting
@@ -3823,7 +3823,7 @@ architectural decision.
   external test fixtures (`SMTP_TEST_HOST`, `FABRIC_TEST_HOST`, `IMAP_TEST_HOST`) not present in
   this local environment — a pre-existing local-env gap unconnected to this change; the two
   crates this feature actually touches were fully verified.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0053-login-attempt-anomaly-alerting.md
 
 ## [2026-07-20] feature/0062-data-subject-rights-export-and-delete — Data subject rights (export/delete)
@@ -3853,7 +3853,7 @@ architectural decision.
   and `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` both clean. `cargo
   fmt --all --check` clean. `cargo deny check` and `cargo audit` — same pre-existing allow-listed
   warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0054-data-subject-rights-export-and-delete.md
 
 ## [2026-07-20] feature/0063-backup-service-and-dr-visibility — Backup service and DR visibility
@@ -3884,7 +3884,7 @@ architectural decision.
   --all-targets --all-features -- -D warnings` and `cargo clippy -p kizashi-ui --all-targets
   --all-features -- -D warnings` both clean. `cargo fmt --all --check` clean. `cargo deny check`
   and `cargo audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0055-backup-service-and-dr-visibility.md
 
 ## [2026-07-20] fix/0011-pg-dump-version-mismatch — Fix pg_dump/server major-version mismatch in backup-service
@@ -3907,7 +3907,7 @@ architectural decision.
   verification that matters here is the live one performed and recorded above). `cargo build
   --workspace`, `cargo clippy -p backup-service --all-targets --all-features -- -D warnings`,
   `cargo fmt --all --check` all still clean (Dockerfile-only change, no Rust source touched).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** n/a (implementation detail of ADR-0055, not a new architectural decision)
 
 ## [2026-07-20] feature/0064-compliance-report-generation — Compliance report generation
@@ -3933,7 +3933,7 @@ architectural decision.
   warnings` and `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` both
   clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
   allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0056-compliance-report-generation.md
 
 ## [2026-07-20] feature/0065-self-service-password-change — Self-service password change
@@ -3957,7 +3957,7 @@ architectural decision.
   -D warnings` and `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` both
   clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
   allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0057-self-service-password-change.md
 
 ## [2026-07-20] feature/0066-analysis-config-api-key-encryption — Analysis config API key encryption at rest
@@ -3982,7 +3982,7 @@ architectural decision.
   `cargo build --workspace` clean. `cargo clippy -p config-admin-service --all-targets
   --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. `cargo deny check`/
   `cargo audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0058-analysis-config-api-key-encryption-at-rest.md
 
 ## [2026-07-20] feature/0067-nav-wide-tenant-branding — Nav-wide tenant branding
@@ -4003,7 +4003,7 @@ architectural decision.
   build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
   warnings` clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same
   pre-existing allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0059-nav-wide-tenant-branding.md
 
 ## [2026-07-20] feature/0068-audit-log-csv-export-pagination — Audit log CSV export pagination
@@ -4021,7 +4021,7 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. `cargo
   deny check`/`cargo audit` — same pre-existing allow-listed warnings as prior entries, no new
   issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0060-audit-log-csv-export-pagination.md
 
 ## [2026-07-20] feature/0069-destructive-action-confirmation — Destructive action confirmation
@@ -4041,7 +4041,7 @@ architectural decision.
   `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features --
   -D warnings` clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same
   pre-existing allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0061-destructive-action-confirmation.md
 
 ## [2026-07-20] feature/0070-users-page-search — Users page search
@@ -4060,7 +4060,7 @@ architectural decision.
   clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
   --check` clean. `cargo deny check`/`cargo audit` — same pre-existing allow-listed warnings as
   prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0062-users-page-search.md
 
 ## [2026-07-20] chore/0004-docker-build-cache-mounts — Add BuildKit cache mounts to the shared Dockerfile
@@ -4081,7 +4081,7 @@ architectural decision.
   recompiling, all dependencies served from cache. Repeated with a different binary
   (`auth-service`, a different dependency mix) touched and rebuilt — **53 seconds**, confirming
   the cache is genuinely shared across different `BIN` builds, not a fluke of one image.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** n/a (build-tooling fix, not an architectural decision)
 
 ## [2026-07-20] feature/0071-api-keys-page-search — API Keys page search
@@ -4097,7 +4097,7 @@ architectural decision.
   `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt
   --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing allow-listed
   warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
 
 ## [2026-07-20] feature/0072-sessions-page-search — Active Sessions page search
@@ -4112,7 +4112,7 @@ architectural decision.
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
   allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
 
 ## [2026-07-20] feature/0073-login-attempts-pagination-and-search — Login attempts pagination and search
@@ -4133,7 +4133,7 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. `cargo
   deny check`/`cargo audit` — same pre-existing allow-listed warnings as prior entries, no new
   issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0063-login-attempts-pagination-and-search.md
 
 ## [2026-07-20] feature/0074-normalization-mappings-search — Field Mappings page search
@@ -4151,7 +4151,7 @@ architectural decision.
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
   allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
 
 ## [2026-07-20] feature/0075-users-page-sortable-columns — Users page sortable columns
@@ -4168,7 +4168,7 @@ architectural decision.
   -p kizashi-ui --all-targets --all-features -- -D warnings` clean (one `unnecessary_sort_by`
   finding fixed with `sort_by_key`). `cargo fmt --all --check` clean. `cargo deny check`/`cargo
   audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0064-users-page-sortable-columns.md
 
 ## [2026-07-20] feature/0076-api-keys-bulk-revoke — API Keys bulk revoke
@@ -4186,7 +4186,7 @@ architectural decision.
   kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check`
   clean. `cargo deny check`/`cargo audit` — same pre-existing allow-listed warnings as prior
   entries, no new issues.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0065-api-keys-bulk-revoke.md
 
 ## [2026-07-20] fix/0012-disable-toggle-confirm-danger — Sensors/Retention Policies disable button uses confirm-danger styling
@@ -4202,7 +4202,7 @@ architectural decision.
   toggle tests unaffected, no test asserted on the button's CSS class so none needed updating).
   `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
   warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0061-destructive-action-confirmation.md (same pattern, no new decision to record)
 
 ## [2026-07-20] feature/0077-triggers-page-search — Triggers page search
@@ -4218,7 +4218,7 @@ architectural decision.
   match, "no triggers on this page match" empty state for an unmatched query). `cargo build
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0066-triggers-page-search.md
 
 ## [2026-07-20] fix/0013-disabled-button-accessible-labels — Accessible labels on disabled self-action buttons
@@ -4234,7 +4234,7 @@ architectural decision.
   current user's disabled Remove button, aria-label present on the caller's disabled Revoke
   button). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets
   --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0067-disabled-button-accessible-labels.md
 
 ## [2026-07-20] feature/0078-sessions-page-sortable-columns — Active Sessions page sortable columns
@@ -4250,7 +4250,7 @@ architectural decision.
   sort, default-unset-sort newest-first ordering). `cargo build --workspace` clean. `cargo
   clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
   --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0068-sessions-page-sortable-columns.md
 
 ## [2026-07-20] docs/0003-normalization-mappings-pagination-evaluated-and-skipped — Normalization Mappings pagination evaluated and skipped
@@ -4266,7 +4266,7 @@ architectural decision.
   matter" reasoning already used to skip Retention Policies pagination/search. Recording this
   explicitly so the item isn't silently dropped or re-flagged as an oversight in a future audit.
 - **Tests:** N/A — no code change, decision-only.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** none — not an architectural decision, a scope call recorded here per CLAUDE.md's
   "no silent omission" principle.
 
@@ -4284,7 +4284,7 @@ architectural decision.
   match, "no audit activity on this page matches" empty state for an unmatched query; 1 existing
   test updated for the new link shape). `cargo build --workspace` clean. `cargo clippy -p
   kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0069-audit-log-search.md
 
 ## [2026-07-20] feature/0080-triggers-page-sortable-columns — Triggers page sortable columns
@@ -4301,7 +4301,7 @@ architectural decision.
 - **Tests:** `cargo test -p kizashi-ui --lib` — 410 passed (2 new: descending name sort, enabled-
   status grouping). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets
   --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0070-triggers-page-sortable-columns.md
 
 ## [2026-07-20] feature/0081-session-idle-timeout — Console UI session idle timeout
@@ -4319,7 +4319,7 @@ architectural decision.
   session within the window still works, activity slides the timeout forward, expired sessions
   are pruned from `list_for_tenant`). `cargo build --workspace` clean. `cargo clippy -p
   kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0071-session-idle-timeout.md
 
 ## [2026-07-20] feature/0082-events-page-search-and-sort — Events page search and sortable columns
@@ -4337,7 +4337,7 @@ architectural decision.
   match, "no events on this page match" empty state, ascending event_type sort). `cargo build
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0072-events-page-search-and-sort.md
 
 ## [2026-07-20] fix/0014-table-header-scope-attributes — Table header scope="col" attributes sitewide
@@ -4354,7 +4354,7 @@ architectural decision.
   one new test per template for a single sitewide convention). `cargo build --workspace` clean.
   `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt
   --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0073-table-header-scope-attributes.md
 
 ## [2026-07-20] fix/0015-pipeline-map-severity-text-label — Pipeline Map edge severity gets a visible text label
@@ -4369,7 +4369,7 @@ architectural decision.
 - **Tests:** `cargo test -p kizashi-ui --lib` — 418 passed (1 new: `severity_label` maps every
   severity to its visible word). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0074-pipeline-map-severity-text-label.md
 
 ## [2026-07-20] fix/0016-inline-edit-input-accessible-names — Accessible names on per-row inline-edit inputs
@@ -4384,7 +4384,7 @@ architectural decision.
   1 existing test extended with the role-select aria-label assertion). `cargo build
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0075-inline-edit-input-accessible-names.md
 
 ## [2026-07-20] feature/0083-backups-pagination-and-cursor-urlencoding-fix — Backups page pagination, and a cursor URL-encoding bug fix
@@ -4404,7 +4404,7 @@ architectural decision.
   rendered "Load older" link contains no raw `+`, proving the encoding fix, not just its
   presence. `cargo build --workspace` clean. `cargo clippy -p kizashi-ui -p backup-service
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0076-backups-pagination-and-cursor-urlencoding-fix.md
 
 ## [2026-07-20] fix/0017-local-test-database-isolation — Local test runs use a separate database from the live stack
@@ -4424,7 +4424,7 @@ architectural decision.
   stayed at its real value (1) throughout, while `kizashi_test` picked up the 9 rows those tests
   created. `cargo build --workspace` clean (no Rust source changed, only `scripts/bootstrap.sh`
   and `.env.example`).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0077-local-test-database-isolation.md
 
 ## [2026-07-20] fix/0018-permissions-reference-stale-rows — Permissions Reference page had drifted stale
@@ -4441,7 +4441,7 @@ architectural decision.
   test extended to assert all 4 new rows render). `cargo build --workspace` clean. `cargo
   clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
   --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0078-permissions-reference-stale-rows.md
 
 ## [2026-07-20] fix/0019-search-term-url-encoding-fix — Fix unencoded search-term URL-encoding in sort/pagination links
@@ -4458,7 +4458,7 @@ architectural decision.
   containing `&` in the search term is actually percent-encoded, not just present). `cargo
   build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
   warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0079-search-term-url-encoding-fix.md
 
 ## [2026-07-20] feature/0084-sensors-page-search-and-sort — Sensors page search and sortable columns
@@ -4474,7 +4474,7 @@ architectural decision.
   "no sensors on this page match" empty state, descending name sort). `cargo build --workspace`
   clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo
   fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0080-sensors-page-search-and-sort.md
 
 ## [2026-07-20] fix/0020-overview-dashboard-surfaces-backend-errors — Overview dashboard surfaces backend errors instead of silently showing zero
@@ -4492,7 +4492,7 @@ architectural decision.
   failure renders visibly with labeled error text, not silently as zero). `cargo build
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0081-overview-dashboard-surfaces-backend-errors.md
 
 ## [2026-07-20] feature/0085-data-viewer-date-range-and-normalization-filters — Data Viewer date-range and normalization-status filters
@@ -4510,7 +4510,7 @@ architectural decision.
   `normalized` as query params, and the handler prefilling both from the query string). `cargo
   build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
   warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0082-data-viewer-date-range-and-normalization-filters.md
 
 ## [2026-07-20] fix/0021-auth-service-error-message-leak-fix — Auth Service stops leaking raw backend errors on user create/update failures
@@ -4527,7 +4527,7 @@ architectural decision.
   error string never appears in the response body). `cargo build --workspace` clean. `cargo
   clippy -p auth-service --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
   --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0083-auth-service-error-message-leak-fix.md
 
 ## [2026-07-20] feature/0086-events-page-links-to-record-journey — Events page links directly to each event's contributing record journey
@@ -4545,7 +4545,7 @@ architectural decision.
   record numbered links, empty-record-ids dash, and the HTTP client deserializing `record_ids`
   from the wire response). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0084-events-page-links-to-record-journey.md
 
 ## [2026-07-20] feature/0087-data-viewer-csv-export — Data Viewer CSV export of the current filtered search
@@ -4565,7 +4565,7 @@ architectural decision.
   confirmed the Events page's real events (25 of them) each render a working "View journey" link
   that loads real analysis results. `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0085-data-viewer-csv-export.md
 
 ## [2026-07-20] feature/0088-events-page-date-range-filtering — Events page date-range filtering
@@ -4582,7 +4582,7 @@ architectural decision.
   `since`/`until` as query params against a real stub server). `cargo build --workspace` clean.
   `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
   --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0086-events-page-date-range-filtering.md
 
 ## [2026-07-20] chore/0005-action-executor-rabbitmq-integration-test — Action Executor live-RabbitMQ integration test
@@ -4601,7 +4601,7 @@ architectural decision.
   `smtp_action_dispatcher_integration_test.rs` failure is unrelated (requires `SMTP_TEST_HOST`,
   not set in this environment). `cargo build --workspace` clean. `cargo clippy -p action-executor
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0087-action-executor-rabbitmq-integration-test.md
 
 ## [2026-07-20] chore/0006-full-pipeline-e2e-test — Full-pipeline e2e test
@@ -4620,7 +4620,7 @@ architectural decision.
   (SMTP/Fabric-SQL/IMAP live servers not present in this sandbox), unrelated to this change.
   `cargo build --workspace`, `cargo clippy --workspace --all-targets --all-features -- -D
   warnings`, `cargo fmt --all --check` — all clean.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0088-full-pipeline-e2e-test.md
 
 ## [2026-07-20] feature/0089-kubernetes-helm-chart — Kubernetes Helm chart
@@ -4639,7 +4639,7 @@ architectural decision.
   43 objects render cleanly (18 Deployments, 16 Services, 7 CronJobs, 1 ConfigMap, 1 Secret).
   `kubeconform` against the Kubernetes 1.29 schema — 43 valid, 0 invalid, 0 errors. All three
   re-verified independently after the drafting agent's own run.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0089-kubernetes-helm-chart.md
 
 ## [2026-07-20] feature/0090-nav-hides-admin-only-links-per-role — Console UI nav hides admin-only links per role
@@ -4660,7 +4660,7 @@ architectural decision.
   existing tests re-verified passing after the `is_admin` field addition. `cargo build
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean. No file in the diff exceeds 500 lines.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0090-nav-hides-admin-only-links-per-role.md
 
 ## [2026-07-20] feature/0091-api-keys-and-mappings-sortable-headers — Sortable headers for API Keys and Field Mappings
@@ -4677,7 +4677,7 @@ architectural decision.
   --check` clean. `api_keys_handler_test.rs` split into GET/mutation files (same as ADR-0090) to
   stay under the 500-line limit. Live-verified against the real `watkinslabs` tenant: both pages
   render working sort-header links reflecting the query string.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0091-api-keys-and-mappings-sortable-headers.md
 
 ## [2026-07-20] feature/0092-branding-and-analysis-config-audit-history-links — Audit-history links on Branding and AI Analysis pages
@@ -4693,7 +4693,7 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. No file
   exceeds 500 lines. Live-verified against the real `watkinslabs` tenant: both links render with
   the real tenant id and both resolve to a working audit-log page (200 OK).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0092-branding-and-analysis-config-audit-history-links.md
 
 ## [2026-07-20] feature/0093-confirm-destructive-actions — Confirmation prompt on destructive actions
@@ -4712,7 +4712,7 @@ architectural decision.
   clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo
   fmt --all --check` clean. No file exceeds 500 lines. Live-verified against the real
   `watkinslabs` tenant: Users/API Keys/Sensors pages all render the confirmation attribute.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0093-confirm-destructive-actions.md
 
 ## [2026-07-20] feature/0094-api-key-audit-history-link — API Key per-key audit history link
@@ -4737,7 +4737,7 @@ architectural decision.
   warnings` clean. `cargo fmt --all --check` clean. Live-verified against the real `watkinslabs`
   tenant: the per-key History link renders with the real key id and resolves to a working
   audit-log page (200 OK).
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0094-api-key-audit-history-link.md
 
 ## [2026-07-20] feature/0095-sensors-bulk-delete-and-sessions-confirm — Sensors bulk-delete and Sessions revoke confirmation
@@ -4757,7 +4757,7 @@ architectural decision.
   `_mutations_test.rs`/`_pagination_test.rs`) to stay under 500 lines. Live-verified against the
   real `watkinslabs` tenant: Sensors renders the bulk-delete UI, Sessions renders the
   confirmation attribute.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0095-sensors-bulk-delete-and-sessions-confirm.md
 
 ## [2026-07-20] feature/0096-users-and-retention-policies-bulk-delete — Users and Retention Policies bulk-delete
@@ -4774,7 +4774,7 @@ architectural decision.
   clean. `cargo fmt --all --check` clean. No file exceeds 500 lines (split
   `retention_policies_handler_mutations_test.rs` a second time). Live-verified against the real
   `watkinslabs` tenant: Users renders the bulk-delete UI.
-- **PR:** pending
+- **PR:** #128
 - **ADR:** docs/adr/0096-users-and-retention-policies-bulk-delete.md
 
 ## [2026-07-20] feature/0097-egress-allowlist-audit-log — Egress Allowlist audit log
