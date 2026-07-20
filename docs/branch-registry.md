@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0091         |
+| feature       | `feature/` | 0092         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
@@ -142,3 +142,4 @@ manually created branches.
 | 0006 | `chore/0006-full-pipeline-e2e-test` | chore | 2026-07-20 | open | pending | renamed from chore/0005 before push to avoid colliding with the still-open chore/0005-action-executor-rabbitmq-integration-test (PR #117) |
 | 0089 | `feature/0089-kubernetes-helm-chart` | feature | 2026-07-20 | open | pending | |
 | 0090 | `feature/0090-nav-hides-admin-only-links-per-role` | feature | 2026-07-20 | open | pending | |
+| 0091 | `feature/0091-api-keys-and-mappings-sortable-headers` | feature | 2026-07-20 | open | pending | |

@@ -150,6 +150,42 @@ async fn filters_by_the_q_query_param_case_insensitively() {
 }
 
 #[tokio::test]
+async fn sorts_by_source_type_descending_when_dir_is_desc() {
+    let (mut state, session_id, tenant_id) = state_with_session(common::Role::Admin).await;
+    let mappings_client = Arc::new(InMemoryNormalizationMappingsClient::default());
+    let mut field_map = BTreeMap::new();
+    field_map.insert("text".to_string(), "$.description".to_string());
+    mappings_client.mappings.lock().unwrap().push(NormalizationMapping::new(
+        tenant_id,
+        "alpha-source",
+        field_map.clone(),
+    ));
+    mappings_client.mappings.lock().unwrap().push(NormalizationMapping::new(
+        tenant_id,
+        "zeta-source",
+        field_map,
+    ));
+    state.normalization_mappings_client = mappings_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/normalization-mappings?sort=source_type&dir=desc")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    let alpha_pos = body.find("alpha-source").unwrap();
+    let zeta_pos = body.find("zeta-source").unwrap();
+    assert!(zeta_pos < alpha_pos);
+}
+
+#[tokio::test]
 async fn shows_a_no_match_empty_state_for_an_unmatched_query() {
     let (mut state, session_id, tenant_id) = state_with_session(common::Role::Admin).await;
     let mappings_client = Arc::new(InMemoryNormalizationMappingsClient::default());

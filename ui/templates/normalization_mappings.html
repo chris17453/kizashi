@@ -39,6 +39,8 @@ analysis. One mapping per source type — the most specific one for a record's
 <form class="inline" method="get" action="/normalization-mappings" style="margin-bottom:1rem;">
   <label for="q">Search</label>
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by source type&hellip;">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="dir" value="{{ dir }}">
   <button type="submit">Search</button>
   {% if !q.is_empty() %}<a href="/normalization-mappings" class="btn-link">Clear</a>{% endif %}
 </form>
@@ -56,7 +58,20 @@ analysis. One mapping per source type — the most specific one for a record's
 {% else %}
 <table>
   <thead>
-    <tr><th scope="col">Source Type</th><th scope="col">Fields</th><th scope="col">Version</th><th scope="col"></th></tr>
+    <tr>
+      <th scope="col">
+        <a href="/normalization-mappings?q={{ q|urlencode }}&sort=source_type&dir={% if sort == "source_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Source Type{% if sort == "source_type" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th scope="col">Fields</th>
+      <th scope="col">
+        <a href="/normalization-mappings?q={{ q|urlencode }}&sort=version&dir={% if sort == "version" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Version{% if sort == "version" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th scope="col"></th>
+    </tr>
   </thead>
   <tbody>
     {% for mapping in mappings %}

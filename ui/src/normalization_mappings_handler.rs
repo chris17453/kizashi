@@ -15,12 +15,30 @@ use std::collections::BTreeMap;
 pub struct NormalizationMappingsQuery {
     #[serde(default)]
     q: String,
+    #[serde(default)]
+    sort: String,
+    #[serde(default)]
+    dir: String,
 }
 
 /// Case-insensitive substring match on source_type -- same in-handler-filter shape as the other
 /// list-page searches (ADR-0062).
 fn matches_query(mapping: &NormalizationMapping, q: &str) -> bool {
     q.is_empty() || mapping.source_type.to_lowercase().contains(&q.to_lowercase())
+}
+
+/// Same shape as Sensors' sortable columns (ADR-0070): applied after the search filter, on the
+/// already-fetched full list (this page has no server-side pagination to preserve ordering
+/// across). An unset `sort` keeps `list_mappings`' own default.
+fn sort_rows(rows: &mut [NormalizationMapping], sort: &str, dir: &str) {
+    match sort {
+        "version" => rows.sort_by_key(|m| m.version),
+        "source_type" => rows.sort_by_key(|m| m.source_type.to_lowercase()),
+        _ => return,
+    }
+    if dir == "desc" {
+        rows.reverse();
+    }
 }
 
 #[derive(Template)]
@@ -33,6 +51,8 @@ struct NormalizationMappingsTemplate {
     error: Option<String>,
     form_error: Option<String>,
     q: String,
+    sort: String,
+    dir: String,
 }
 
 /// GET /normalization-mappings — the Field Mappings page (this entity previously had zero UI
@@ -50,20 +70,27 @@ pub async fn get_normalization_mappings(
     let can_write = session.role.at_least(common::Role::Operator);
 
     match state.normalization_mappings_client.list_mappings(session.tenant_id).await {
-        Ok(mappings) => Html(
-            NormalizationMappingsTemplate {
-                show_nav: true,
-                is_admin,
-                mappings: mappings.into_iter().filter(|m| matches_query(m, &query.q)).collect(),
-                can_write,
-                error: None,
-                form_error: None,
-                q: query.q,
-            }
-            .render()
-            .unwrap(),
-        )
-        .into_response(),
+        Ok(mappings) => {
+            let mut mappings: Vec<NormalizationMapping> =
+                mappings.into_iter().filter(|m| matches_query(m, &query.q)).collect();
+            sort_rows(&mut mappings, &query.sort, &query.dir);
+            Html(
+                NormalizationMappingsTemplate {
+                    show_nav: true,
+                    is_admin,
+                    mappings,
+                    can_write,
+                    error: None,
+                    form_error: None,
+                    q: query.q,
+                    sort: query.sort,
+                    dir: query.dir,
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response()
+        }
         Err(e) => Html(
             NormalizationMappingsTemplate {
                 show_nav: true,
@@ -73,6 +100,8 @@ pub async fn get_normalization_mappings(
                 error: Some(e.to_string()),
                 form_error: None,
                 q: query.q,
+                sort: query.sort,
+                dir: query.dir,
             }
             .render()
             .unwrap(),
@@ -144,6 +173,8 @@ pub async fn post_normalization_mapping(
                     error: None,
                     form_error: Some(msg.to_string()),
                     q: String::new(),
+                    sort: String::new(),
+                    dir: String::new(),
                 }
                 .render()
                 .unwrap(),
@@ -175,6 +206,8 @@ pub async fn post_normalization_mapping(
                     error: None,
                     form_error: Some(e.to_string()),
                     q: String::new(),
+                    sort: String::new(),
+                    dir: String::new(),
                 }
                 .render()
                 .unwrap(),
