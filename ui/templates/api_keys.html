@@ -40,11 +40,22 @@
 </div>
 {% endif %}
 
+<form class="inline" method="get" action="/api-keys" style="margin-bottom:1rem;">
+  <label for="q">Search</label>
+  <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by label&hellip;">
+  <button type="submit">Search</button>
+  {% if !q.is_empty() %}<a href="/api-keys" class="btn-link">Clear</a>{% endif %}
+</form>
+
 {% if keys.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#9877;</div>
+  {% if q.is_empty() %}
   <p>No API keys issued yet for this tenant.</p>
   {% if can_write %}<p>Use the form above to create one for your first agent.</p>{% endif %}
+  {% else %}
+  <p>No API keys match &ldquo;{{ q }}&rdquo;.</p>
+  {% endif %}
 </div>
 {% else %}
 <table>

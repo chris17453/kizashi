@@ -4083,3 +4083,19 @@ architectural decision.
   the cache is genuinely shared across different `BIN` builds, not a fluke of one image.
 - **PR:** pending
 - **ADR:** n/a (build-tooling fix, not an architectural decision)
+
+## [2026-07-20] feature/0071-api-keys-page-search — API Keys page search
+- **Type:** feature
+- **Branch:** feature/0071-api-keys-page-search
+- **Summary:** Extends ADR-0062's search pattern to the API Keys page — the same UI/UX audit
+  finding, closed the same way: `GET /api-keys` now accepts `?q=` and filters the fetched key
+  list by a case-insensitive label substring match, in-handler (no backend change; a tenant's
+  key list is realistically small like the user list was). Bookmarkable `GET` search form,
+  "Clear" link when active, distinct "no results" vs "no keys at all" empty states.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 384 passed (2 new: case-insensitive label filter
+  match, "no keys match" empty state for an unmatched query). `cargo build --workspace` clean.
+  `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt
+  --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing allow-listed
+  warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)

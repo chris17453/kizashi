@@ -173,6 +173,63 @@ async fn get_api_keys_renders_the_table_when_signed_in() {
 }
 
 #[tokio::test]
+async fn get_api_keys_filters_by_the_q_query_param_case_insensitively() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
+        .await
+        .unwrap();
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "zzz-other-key", "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/api-keys?q=CI-AGENT")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("ci-agent"));
+    assert!(!body.contains("zzz-other-key"));
+}
+
+#[tokio::test]
+async fn get_api_keys_shows_a_no_match_empty_state_for_an_unmatched_query() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/api-keys?q=nobody-matches-this")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No API keys match"));
+}
+
+#[tokio::test]
 async fn get_api_keys_redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session().await;
 
