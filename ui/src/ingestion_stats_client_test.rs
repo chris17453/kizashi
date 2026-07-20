@@ -199,6 +199,33 @@ async fn http_client_searches_records_against_a_real_server() {
 }
 
 #[tokio::test]
+async fn http_client_sends_from_to_and_normalized_as_query_params() {
+    async fn handler(Query(params): Query<HashMap<String, String>>) -> axum::response::Response {
+        assert_eq!(params.get("from").map(String::as_str), Some("2026-07-01T00:00:00+00:00"));
+        assert_eq!(params.get("to").map(String::as_str), Some("2026-07-20T00:00:00+00:00"));
+        assert_eq!(params.get("normalized").map(String::as_str), Some("false"));
+        Json(serde_json::json!({"records": [], "has_more": false})).into_response()
+    }
+    let app = Router::new().route("/v1/records/search", get(handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let client = HttpIngestionStatsClient::new(reqwest::Client::new(), format!("http://{addr}"));
+
+    let filter = RecordSearchFilter {
+        from: Some("2026-07-01T00:00:00Z".parse().unwrap()),
+        to: Some("2026-07-20T00:00:00Z".parse().unwrap()),
+        normalized: Some(false),
+        ..Default::default()
+    };
+    let result = client.search_records(Uuid::new_v4(), &filter).await.unwrap();
+
+    assert!(result.records.is_empty());
+}
+
+#[tokio::test]
 async fn http_client_gets_a_record_against_a_real_server() {
     let url = spawn_stub_server().await;
     let client = HttpIngestionStatsClient::new(reqwest::Client::new(), url);

@@ -113,6 +113,35 @@ async fn renders_search_results_when_signed_in() {
 }
 
 #[tokio::test]
+async fn date_range_and_normalization_filters_are_prefilled_from_the_query_string() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data?from=2026-07-15&to=2026-07-20&normalized=false")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(r#"id="from" name="from" value="2026-07-15""#));
+    assert!(body.contains(r#"id="to" name="to" value="2026-07-20""#));
+    let option_start = body.find(r#"value="false""#).expect("normalized=false option missing");
+    let option_end = body[option_start..].find('>').unwrap() + option_start;
+    assert!(
+        body[option_start..option_end].contains("selected"),
+        "the \"Not yet normalized\" option should be selected: {}",
+        &body[option_start..option_end]
+    );
+}
+
+#[tokio::test]
 async fn offers_registered_sensor_names_as_a_datalist_for_the_connector_id_field() {
     let (mut state, session_id) = state_with_session().await;
     let sensors_client = Arc::new(InMemorySensorsClient::default());
@@ -450,4 +479,18 @@ async fn data_page_hides_the_reprocess_button_for_a_viewer() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(!body.contains("Reprocess unnormalized records"));
+}
+
+#[test]
+fn parse_date_range_treats_from_as_start_of_day_and_to_as_end_of_day() {
+    let (from, to) = parse_date_range("2026-07-15", "2026-07-20");
+    assert_eq!(from.unwrap().to_rfc3339(), "2026-07-15T00:00:00+00:00");
+    assert_eq!(to.unwrap().to_rfc3339(), "2026-07-20T23:59:59+00:00");
+}
+
+#[test]
+fn parse_date_range_leaves_an_empty_or_unparseable_side_as_none() {
+    let (from, to) = parse_date_range("", "not-a-date");
+    assert!(from.is_none());
+    assert!(to.is_none());
 }

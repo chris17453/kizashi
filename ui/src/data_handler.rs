@@ -9,12 +9,34 @@ use askama::Template;
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Redirect, Response};
+use chrono::{DateTime, Utc};
 use common::SavedSearchQuery;
 use serde::Serialize;
 use uuid::Uuid;
 
 fn default_page() -> i64 {
     0
+}
+
+/// Parses `YYYY-MM-DD` date-only strings from `<input type="date">` into a fully inclusive
+/// `DateTime<Utc>` range -- `from` at the start of that day, `to` at the end of it, so
+/// "2026-07-15 to 2026-07-20" covers all of both endpoint days. An unparseable/empty string
+/// (including the common case of only one end of the range being set) yields `None`, not an
+/// error -- the field is just omitted from the search filter.
+fn parse_date_range(from: &str, to: &str) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {
+    let parse_start = |s: &str| {
+        chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            .ok()
+            .and_then(|d| d.and_hms_opt(0, 0, 0))
+            .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc))
+    };
+    let parse_end = |s: &str| {
+        chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            .ok()
+            .and_then(|d| d.and_hms_opt(23, 59, 59))
+            .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc))
+    };
+    (parse_start(from), parse_end(to))
 }
 
 #[derive(Debug, serde::Deserialize, Serialize, Default, Clone)]
@@ -31,6 +53,18 @@ pub struct DataSearchQuery {
     pub email_from: String,
     #[serde(default)]
     pub attachment_filename: String,
+    /// Plain `YYYY-MM-DD` from an `<input type="date">`, not a full timestamp -- parsed by hand
+    /// rather than deserialized straight to `DateTime<Utc>` since query-string date inputs
+    /// arrive date-only. `from` is treated as the start of that day, `to` as the end of it, so
+    /// a range like "2026-07-15 to 2026-07-20" is fully inclusive of both endpoints.
+    #[serde(default)]
+    pub from: String,
+    #[serde(default)]
+    pub to: String,
+    /// "true"/"false"/empty from a `<select>` -- a plain `Option<bool>` field would reject the
+    /// empty "no filter" case as invalid, so this stays a string and gets parsed by hand too.
+    #[serde(default)]
+    pub normalized: String,
     #[serde(default = "default_page")]
     pub page: i64,
     /// Set by the redirect after `POST /data/reprocess` so the page can show a confirmation —
@@ -93,6 +127,12 @@ pub async fn get_data(
     };
 
     let page = query.page.max(0);
+    let (from, to) = parse_date_range(&query.from, &query.to);
+    let normalized = match query.normalized.as_str() {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    };
     let filter = RecordSearchFilter {
         connector_id: (!query.connector_id.is_empty()).then(|| query.connector_id.clone()),
         source_type: (!query.source_type.is_empty()).then(|| query.source_type.clone()),
@@ -101,6 +141,9 @@ pub async fn get_data(
         email_from: (!query.email_from.is_empty()).then(|| query.email_from.clone()),
         attachment_filename: (!query.attachment_filename.is_empty())
             .then(|| query.attachment_filename.clone()),
+        from,
+        to,
+        normalized,
         limit: DEFAULT_PAGE_SIZE,
         offset: page * DEFAULT_PAGE_SIZE,
     };
@@ -194,6 +237,12 @@ pub struct SaveSearchForm {
     email_from: String,
     #[serde(default)]
     attachment_filename: String,
+    #[serde(default)]
+    from: String,
+    #[serde(default)]
+    to: String,
+    #[serde(default)]
+    normalized: String,
 }
 
 /// POST /data/saved-searches — no `require_operator` gate (ADR-0029): any authenticated tenant
@@ -215,6 +264,9 @@ pub async fn post_save_search(
         subject: form.subject,
         email_from: form.email_from,
         attachment_filename: form.attachment_filename,
+        from: form.from,
+        to: form.to,
+        normalized: form.normalized,
         page: 0,
         reprocessed: None,
     };
