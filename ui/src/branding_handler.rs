@@ -9,12 +9,14 @@ use askama::Template;
 use axum::extract::{Form, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
+use uuid::Uuid;
 
 #[derive(Template)]
 #[template(path = "branding.html")]
 struct BrandingTemplate {
     show_nav: bool,
     is_admin: bool,
+    tenant_id: Uuid,
     product_name: String,
     logo_url: String,
     accent_color: String,
@@ -48,6 +50,7 @@ pub async fn get_branding_page(State(state): State<AppState>, headers: HeaderMap
         BrandingTemplate {
             show_nav: true,
             is_admin,
+            tenant_id: session.tenant_id,
             product_name: branding.product_name.unwrap_or_default(),
             logo_url: branding.logo_url.unwrap_or_default(),
             accent_color: branding.accent_color.unwrap_or_default(),
@@ -112,6 +115,7 @@ pub async fn post_branding(
         BrandingTemplate {
             show_nav: true,
             is_admin,
+            tenant_id: session.tenant_id,
             product_name: branding.product_name.unwrap_or_default(),
             logo_url: branding.logo_url.unwrap_or_default(),
             accent_color: branding.accent_color.unwrap_or_default(),

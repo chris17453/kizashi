@@ -4679,3 +4679,19 @@ architectural decision.
   render working sort-header links reflecting the query string.
 - **PR:** pending
 - **ADR:** docs/adr/0091-api-keys-and-mappings-sortable-headers.md
+
+## [2026-07-20] feature/0092-branding-and-analysis-config-audit-history-links — Audit-history links on Branding and AI Analysis pages
+- **Type:** feature
+- **Branch:** feature/0092-branding-and-analysis-config-audit-history-links
+- **Summary:** Closes another sixth-audit-pass gap: `branding.html`/`analysis_config.html` had
+  no link to their own change history, unlike every other mutable config page. Both writes were
+  already audited backend-side (auth-service for branding, config-admin-service for analysis
+  config); this adds the missing "View change history" link, threading `tenant_id` through both
+  templates the same way `is_admin` already is.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 449 passed (2 new: each page's audit-history link
+  renders with the real tenant id). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
+  --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. No file
+  exceeds 500 lines. Live-verified against the real `watkinslabs` tenant: both links render with
+  the real tenant id and both resolve to a working audit-log page (200 OK).
+- **PR:** pending
+- **ADR:** docs/adr/0092-branding-and-analysis-config-audit-history-links.md

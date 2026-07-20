@@ -6,6 +6,7 @@ color. Applies to the login page and takes effect immediately; existing signed-i
 it up on next page load.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 {% if saved %}<p class="status-up">Saved.</p>{% endif %}
+<p><a href="/audit-log/auth/{{ tenant_id }}">View change history</a></p>
 
 <div class="form-row">
   <div class="panel">

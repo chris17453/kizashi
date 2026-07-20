@@ -6,6 +6,7 @@ every record ingested is run through this prompt before Trigger Engine evaluates
 your Triggers. Leave blank to keep the platform's default analysis behavior.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 {% if saved %}<p class="status-up">Saved — new records will use this prompt.</p>{% endif %}
+<p><a href="/audit-log/config/{{ tenant_id }}">View change history</a></p>
 
 <div class="form-row">
   <div class="panel">
