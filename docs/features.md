@@ -3477,3 +3477,40 @@ architectural decision.
   moment any exist.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — straightforward UI content addition, no architectural decision.
+
+## [2026-07-20] feature/0053-console-ui-oidc-sso-login — Console UI completes enterprise SSO login (closes ADR-0009's deferred half)
+- **Type:** feature
+- **Branch:** feature/0053-console-ui-oidc-sso-login
+- **Summary:** ADR-0009 built a full, tested OAuth2/OIDC authorization-code-plus-PKCE client in
+  Auth Service (Entra ID and any OIDC-compliant provider) but explicitly deferred the
+  browser-facing half to "Console UI, once built" — it was built, but the OIDC wiring never
+  landed, leaving enterprise SSO completely unusable despite the backend being ready. Adds
+  `GET /login/sso` (starts the flow, stashes CSRF/PKCE state behind a short-lived single-use
+  `HttpOnly` cookie with `SameSite=Lax` — required, not `Strict`, since the flow crosses a
+  top-level redirect to the IdP and back) and `GET /login/sso/callback` (verifies CSRF `state`,
+  single-use-consumes the pending flow so a replayed callback URL can't mint a second session,
+  completes the exchange, mints a normal session). Also fixes `OidcCallbackRequest` to accept
+  `tenant_name` instead of an unusable bare `tenant_id` (Console UI never has a tenant_id before
+  auth completes), and adds a real `username` to the session-mint response so SSO users'
+  actions attribute correctly in the audit log fixed by ADR-0039 earlier this session, instead
+  of all SSO logins showing up as the workspace name.
+- **Tests:** `cargo test -p auth-service` — 66 passed (3 new: tenant_name resolution,
+  400-on-unknown-workspace). `cargo test -p kizashi-ui` — new `oidc_client` (8 tests),
+  `pending_oidc_flow` (3 tests), `sso_login_handler` (6 tests) modules, all passing; 21 existing
+  handler test files updated for the two new `AppState` fields. `cargo test --workspace
+  --all-features` (full real-infra stack) — every one of 109 test binaries passed, 0 failed.
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt
+  --all --check` — clean. `cargo deny check` / `cargo audit` — clean, same 3 pre-existing
+  allow-listed advisories.
+- **Live verification:** rebuilt/redeployed `auth-service` and `kizashi-ui` together (they share
+  the OIDC wire contract). Screenshotted the real login page — the new "Sign in with SSO" form
+  renders correctly. This environment has no real Entra tenant configured, so live-verified the
+  honest thing that's actually verifiable here: the graceful-degradation path — hitting
+  `/login/sso` with no OIDC provider configured shows a clear on-page error ("Single sign-on is
+  not available...") instead of crashing or hanging, confirmed via screenshot. The actual
+  successful IdP round-trip cannot be exercised without real Entra credentials, a limitation
+  ADR-0009 already named and ADR-0040 restates — what's covered by real tests is everything up
+  to and past that human-in-a-browser hop (redirect construction, cookie handling, CSRF/replay
+  defense, code-exchange-to-session-mint) against a stub IdP.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0040](../docs/adr/0040-console-ui-oidc-sso-wiring.md)

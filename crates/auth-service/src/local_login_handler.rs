@@ -35,6 +35,10 @@ pub struct LoginResponse {
     pub token: String,
     pub tenant_id: Uuid,
     pub role: common::Role,
+    /// Only populated by the OIDC callback path (the real identity the IdP asserted) — local
+    /// login omits it since the caller already knows the username it just typed in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -98,8 +102,13 @@ pub async fn local_login(
     let user = user.expect("authenticated implies user is Some");
 
     match state.session_client.mint_session(user.tenant_id, user.role, "local-login").await {
-        Ok(token) => Json(LoginResponse { token, tenant_id: user.tenant_id, role: user.role })
-            .into_response(),
+        Ok(token) => Json(LoginResponse {
+            token,
+            tenant_id: user.tenant_id,
+            role: user.role,
+            username: None,
+        })
+        .into_response(),
         Err(e) => {
             tracing::error!(error = %e, "session mint failed");
             error_response(StatusCode::BAD_GATEWAY, "failed to establish session")

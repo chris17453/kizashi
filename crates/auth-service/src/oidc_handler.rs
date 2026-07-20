@@ -8,7 +8,6 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use std::sync::Arc;
-use uuid::Uuid;
 
 #[derive(serde::Serialize)]
 struct ErrorBody {
@@ -55,7 +54,10 @@ pub async fn authorize(State(state): State<AuthState>, Path(provider): Path<Stri
 pub struct OidcCallbackRequest {
     pub code: String,
     pub code_verifier: String,
-    pub tenant_id: Uuid,
+    /// Not `tenant_id` — the browser-facing caller (Console UI) only ever has the workspace
+    /// name the user typed on the login page, same as local login's `tenant_name` field.
+    /// Resolved to a `tenant_id` server-side here, mirroring `local_login_handler`.
+    pub tenant_name: String,
 }
 
 /// POST /v1/auth/oidc/:provider/callback — completes the code-for-token exchange, fetches the
@@ -72,6 +74,17 @@ pub async fn callback(
                 StatusCode::NOT_FOUND,
                 format!("unknown OIDC provider `{provider}`"),
             )
+        }
+    };
+
+    let tenant_id = match state.tenant_repository.id_for_name(&req.tenant_name).await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            return error_response(StatusCode::BAD_REQUEST, "unknown workspace");
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "tenant lookup failed");
+            return error_response(StatusCode::INTERNAL_SERVER_ERROR, "tenant lookup failed");
         }
     };
 
@@ -97,10 +110,13 @@ pub async fn callback(
     let role = common::Role::Viewer;
     match state
         .session_client
-        .mint_session(req.tenant_id, role, &format!("oidc:{provider}:{}", userinfo.subject))
+        .mint_session(tenant_id, role, &format!("oidc:{provider}:{}", userinfo.subject))
         .await
     {
-        Ok(token) => Json(LoginResponse { token, tenant_id: req.tenant_id, role }).into_response(),
+        Ok(token) => {
+            let username = userinfo.email.unwrap_or(userinfo.subject);
+            Json(LoginResponse { token, tenant_id, role, username: Some(username) }).into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "session mint failed");
             error_response(StatusCode::BAD_GATEWAY, "failed to establish session")

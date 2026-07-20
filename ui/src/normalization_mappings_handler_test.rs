@@ -43,6 +43,8 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
     let state = AppState {
         session_store: Arc::new(session_store),
         auth_client: Arc::new(InMemoryAuthClient::default()),
+        oidc_client: Arc::new(crate::oidc_client::oidc_client_test::InMemoryOidcClient::default()),
+        pending_oidc_flow_store: Arc::new(crate::pending_oidc_flow::InMemoryPendingOidcFlowStore::default()),
         events_client: Arc::new(InMemoryEventsClient::default()),
         triggers_client: Arc::new(InMemoryTriggersClient::default()),
         health_client: Arc::new(InMemoryHealthClient {

@@ -33,6 +33,8 @@ async fn logout_deletes_the_session_and_expires_the_cookie() {
     let state = AppState {
         session_store: session_store.clone(),
         auth_client: Arc::new(InMemoryAuthClient::default()),
+        oidc_client: Arc::new(crate::oidc_client::oidc_client_test::InMemoryOidcClient::default()),
+        pending_oidc_flow_store: Arc::new(crate::pending_oidc_flow::InMemoryPendingOidcFlowStore::default()),
         events_client: Arc::new(InMemoryEventsClient::default()),
         triggers_client: Arc::new(InMemoryTriggersClient::default()),
         health_client: Arc::new(InMemoryHealthClient {
