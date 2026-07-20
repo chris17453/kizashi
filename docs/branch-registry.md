@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0060         |
+| feature       | `feature/` | 0061         |
 | fix           | `fix/`     | 0011         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -96,3 +96,4 @@ manually created branches.
 | 0010 | `fix/0010-disabled-button-visual-state` | fix | 2026-07-20 | open | pending | |
 | 0058 | `feature/0058-permissions-reference-and-csv-export` | feature | 2026-07-20 | open | pending | |
 | 0059 | `feature/0059-totp-multi-factor-authentication` | feature | 2026-07-20 | open | pending | |
+| 0060 | `feature/0060-password-policy-enforcement` | feature | 2026-07-20 | open | pending | |

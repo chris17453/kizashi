@@ -134,6 +134,11 @@ pub async fn create_user(
         return response;
     }
 
+    if let Err(e) = crate::password_policy::validate_password_strength(&req.password, &req.username)
+    {
+        return error_response(StatusCode::BAD_REQUEST, e.to_string());
+    }
+
     let password_hash = match hash_password(&req.password) {
         Ok(hash) => hash,
         Err(e) => {

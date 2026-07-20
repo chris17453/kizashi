@@ -81,7 +81,7 @@ async fn create_user_succeeds_for_an_admin() {
         "/v1/users".to_string(),
         Some(tenant_id),
         Some("admin"),
-        Some(serde_json::json!({"username": "bob", "password": "hunter2pass", "role": "operator"})),
+        Some(serde_json::json!({"username": "bob", "password": "hunter2pass-is-long-enough", "role": "operator"})),
     )
     .await;
     assert_eq!(response.status(), StatusCode::CREATED);
@@ -96,7 +96,7 @@ async fn create_user_is_rejected_for_an_operator() {
         "/v1/users".to_string(),
         Some(tenant_id),
         Some("operator"),
-        Some(serde_json::json!({"username": "bob", "password": "hunter2pass", "role": "operator"})),
+        Some(serde_json::json!({"username": "bob", "password": "hunter2pass-is-long-enough", "role": "operator"})),
     )
     .await;
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -111,7 +111,7 @@ async fn create_user_is_rejected_for_a_viewer() {
         "/v1/users".to_string(),
         Some(tenant_id),
         Some("viewer"),
-        Some(serde_json::json!({"username": "bob", "password": "hunter2pass", "role": "operator"})),
+        Some(serde_json::json!({"username": "bob", "password": "hunter2pass-is-long-enough", "role": "operator"})),
     )
     .await;
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -125,7 +125,7 @@ async fn create_user_requires_a_tenant_header() {
         "/v1/users".to_string(),
         None,
         Some("admin"),
-        Some(serde_json::json!({"username": "bob", "password": "hunter2pass", "role": "operator"})),
+        Some(serde_json::json!({"username": "bob", "password": "hunter2pass-is-long-enough", "role": "operator"})),
     )
     .await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -140,7 +140,7 @@ async fn create_user_never_returns_the_password_hash() {
         "/v1/users".to_string(),
         Some(tenant_id),
         Some("admin"),
-        Some(serde_json::json!({"username": "bob", "password": "hunter2pass", "role": "operator"})),
+        Some(serde_json::json!({"username": "bob", "password": "hunter2pass-is-long-enough", "role": "operator"})),
     )
     .await;
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -489,4 +489,49 @@ async fn get_user_audit_log_returns_500_on_backend_failure() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn create_user_rejects_a_password_below_the_minimum_length() {
+    let tenant_id = Uuid::new_v4();
+    let response = send(
+        router(default_state()),
+        "POST",
+        "/v1/users".to_string(),
+        Some(tenant_id),
+        Some("admin"),
+        Some(serde_json::json!({"username": "bob", "password": "short1", "role": "operator"})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn create_user_rejects_a_password_equal_to_the_username() {
+    let tenant_id = Uuid::new_v4();
+    let response = send(
+        router(default_state()),
+        "POST",
+        "/v1/users".to_string(),
+        Some(tenant_id),
+        Some("admin"),
+        Some(serde_json::json!({"username": "bob-bob-bob-bob", "password": "bob-bob-bob-bob", "role": "operator"})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn create_user_rejects_a_common_password() {
+    let tenant_id = Uuid::new_v4();
+    let response = send(
+        router(default_state()),
+        "POST",
+        "/v1/users".to_string(),
+        Some(tenant_id),
+        Some("admin"),
+        Some(serde_json::json!({"username": "bob", "password": "password123", "role": "operator"})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

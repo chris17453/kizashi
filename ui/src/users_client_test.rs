@@ -56,10 +56,9 @@ impl UsersClient for InMemoryUsersClient {
         _actor: &str,
     ) -> Result<UiUser, UsersClientError> {
         let mut users = self.users.lock().unwrap();
-        let user = users
-            .iter_mut()
-            .find(|u| u.id == id && u.tenant_id == tenant_id)
-            .ok_or(UsersClientError::Rejected(404))?;
+        let user = users.iter_mut().find(|u| u.id == id && u.tenant_id == tenant_id).ok_or(
+            UsersClientError::Rejected { status: 404, message: "no such user".to_string() },
+        )?;
         user.role = new_role;
         Ok(user.clone())
     }
@@ -201,6 +200,37 @@ async fn http_client_creates_a_user_against_a_real_server() {
 
     assert_eq!(user.username, "bob");
     assert_eq!(user.role, Role::Operator);
+}
+
+#[tokio::test]
+async fn http_client_create_user_surfaces_the_backends_error_message() {
+    async fn handler() -> axum::response::Response {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "password must be at least 12 characters"})),
+        )
+            .into_response()
+    }
+    let app = Router::new().route("/v1/users", axum::routing::post(handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let client = HttpUsersClient::new(reqwest::Client::new(), format!("http://{addr}"));
+
+    let err = client
+        .create_user(Uuid::new_v4(), Role::Admin, "bob", "short", Role::Operator, "alice")
+        .await
+        .unwrap_err();
+
+    match err {
+        UsersClientError::Rejected { status, message } => {
+            assert_eq!(status, 400);
+            assert_eq!(message, "password must be at least 12 characters");
+        }
+        other => panic!("expected Rejected, got {other:?}"),
+    }
 }
 
 #[tokio::test]
