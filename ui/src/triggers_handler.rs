@@ -297,7 +297,7 @@ pub async fn post_trigger(
         enabled: true,
     };
 
-    match state.triggers_client.create_trigger(session.role, trigger).await {
+    match state.triggers_client.create_trigger(session.role, &session.username, trigger).await {
         Ok(_) => Redirect::to("/triggers").into_response(),
         Err(e) => {
             let result = state

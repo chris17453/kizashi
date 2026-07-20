@@ -74,6 +74,7 @@ async fn renders_kpi_cards_reflecting_real_data_when_signed_in() {
     sensors_client
         .register_sensor(
             Role::Operator,
+            "test-actor",
             tenant_id,
             "zendesk",
             "support-poller",
@@ -84,6 +85,7 @@ async fn renders_kpi_cards_reflecting_real_data_when_signed_in() {
     sensors_client
         .register_sensor(
             Role::Operator,
+            "test-actor",
             tenant_id,
             "sql",
             "never-run-sensor",

@@ -124,7 +124,7 @@ pub async fn post_analysis_config(
 
     match state
         .analysis_config_client
-        .put_analysis_config(session.tenant_id, session.role, input)
+        .put_analysis_config(session.tenant_id, session.role, &session.username, input)
         .await
     {
         Ok(config) => {

@@ -3249,3 +3249,33 @@ architectural decision.
   still open (SSO/auth-provider config UI, further per-page polish).
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0038](../docs/adr/0038-console-ui-availability-and-usability-fixes.md)
+
+## [2026-07-19] fix/0007-ui-actor-header-batch1 — Console UI sends X-Username on sensor/trigger/mapping/analysis-config writes
+- **Type:** fix
+- **Branch:** fix/0007-ui-actor-header-batch1
+- **Summary:** Compliance defect (CLAUDE.md §5): every audit-log entry's "actor" was recorded as
+  the tenant_id, never the real signed-in user, because Console UI's HTTP clients never sent who
+  was making the request. Adds an `actor: &str` parameter (the signed-in `Session.username`) to
+  every mutating trait method on `SensorsClient` (`register_sensor`, `delete_sensor`,
+  `update_sensor`), `TriggersClient` (`create_trigger`), `NormalizationMappingsClient`
+  (`create_mapping`), and `AnalysisConfigClient` (`put_analysis_config`), sent as the
+  case-insensitive `X-Username` header alongside the existing `X-Tenant-Id`/`X-Role` headers, and
+  wires `&session.username` through from every handler call site
+  (`sensors_handler.rs`, `triggers_handler.rs`, `normalization_mappings_handler.rs`,
+  `analysis_config_handler.rs`). Backend-side reading of this header (config-admin-service et al.)
+  is out of scope for this branch — landing in parallel sibling branches
+  (`fix/0006-*-audit-actor`) that make each service actually use it as the audit-log actor and
+  401 a write missing it.
+- **Tests:** `cargo test -p kizashi-ui --all-features` — 245 passed, 0 failed. Added
+  `http_client_register_sensor_is_rejected_when_actor_header_missing_expected_value`,
+  `http_client_create_is_rejected_when_actor_header_missing_expected_value` (triggers and
+  normalization-mappings clients), and
+  `http_client_put_is_rejected_when_actor_header_missing_expected_value` (analysis-config
+  client), each asserting against a real spawned axum stub server that rejects the request with
+  401 unless `X-Username` carries the expected actor, mirroring the existing `x-role` assertion
+  pattern in those same `_client_test.rs` files. `cargo clippy -p kizashi-ui --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo build
+  --workspace --all-targets` — clean.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — implements existing audit-log requirement (CLAUDE.md §5), not a new
+  architectural decision.

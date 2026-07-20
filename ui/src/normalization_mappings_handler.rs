@@ -131,7 +131,11 @@ pub async fn post_normalization_mapping(
 
     let mapping = NormalizationMapping::new(session.tenant_id, form.source_type, field_map);
 
-    match state.normalization_mappings_client.create_mapping(session.role, mapping).await {
+    match state
+        .normalization_mappings_client
+        .create_mapping(session.role, &session.username, mapping)
+        .await
+    {
         Ok(_) => Redirect::to("/normalization-mappings").into_response(),
         Err(e) => {
             let mappings = state

@@ -75,6 +75,7 @@ async fn viewer_role_does_not_see_register_form_or_write_buttons() {
         .sensors_client
         .register_sensor(
             Role::Operator,
+            "test-actor",
             tenant_id,
             "zendesk",
             "support-poller",
@@ -121,6 +122,7 @@ async fn operator_role_sees_register_form_and_write_buttons() {
         .sensors_client
         .register_sensor(
             Role::Operator,
+            "test-actor",
             tenant_id,
             "zendesk",
             "support-poller",
@@ -163,6 +165,7 @@ async fn get_sensors_renders_the_sensors_table_when_signed_in() {
         .sensors_client
         .register_sensor(
             Role::Operator,
+            "test-actor",
             tenant_id,
             "zendesk",
             "support-poller",
@@ -300,6 +303,7 @@ async fn post_delete_sensor_removes_it_and_redirects() {
     let sensor = sensors_client
         .register_sensor(
             Role::Operator,
+            "test-actor",
             tenant_id,
             "zendesk",
             "support-poller",
@@ -332,6 +336,7 @@ async fn post_toggle_sensor_flips_enabled_and_redirects() {
     let sensor = sensors_client
         .register_sensor(
             Role::Operator,
+            "test-actor",
             tenant_id,
             "zendesk",
             "support-poller",

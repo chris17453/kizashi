@@ -37,6 +37,7 @@ impl SensorsClient for InMemorySensorsClient {
     async fn register_sensor(
         &self,
         _role: Role,
+        _actor: &str,
         tenant_id: Uuid,
         connector_type: &str,
         name: &str,
@@ -50,6 +51,7 @@ impl SensorsClient for InMemorySensorsClient {
     async fn delete_sensor(
         &self,
         _role: Role,
+        _actor: &str,
         _tenant_id: Uuid,
         id: Uuid,
     ) -> Result<(), SensorsClientError> {
@@ -60,6 +62,7 @@ impl SensorsClient for InMemorySensorsClient {
     async fn update_sensor(
         &self,
         _role: Role,
+        _actor: &str,
         sensor: &Sensor,
     ) -> Result<Sensor, SensorsClientError> {
         let mut sensors = self.sensors.lock().unwrap();
@@ -97,6 +100,7 @@ impl SensorsClient for FailingSensorsClient {
     async fn register_sensor(
         &self,
         _role: Role,
+        _actor: &str,
         _tenant_id: Uuid,
         _connector_type: &str,
         _name: &str,
@@ -108,6 +112,7 @@ impl SensorsClient for FailingSensorsClient {
     async fn delete_sensor(
         &self,
         _role: Role,
+        _actor: &str,
         _tenant_id: Uuid,
         _id: Uuid,
     ) -> Result<(), SensorsClientError> {
@@ -117,6 +122,7 @@ impl SensorsClient for FailingSensorsClient {
     async fn update_sensor(
         &self,
         _role: Role,
+        _actor: &str,
         _sensor: &Sensor,
     ) -> Result<Sensor, SensorsClientError> {
         Err(SensorsClientError::Unreachable("simulated failure".to_string()))
@@ -153,16 +159,27 @@ async fn spawn_stub_server() -> String {
         .into_response()
     }
     async fn create_handler(
+        headers: HeaderMap,
         JsonExtractor(sensor): JsonExtractor<Sensor>,
     ) -> axum::response::Response {
+        if headers.get("x-username").and_then(|v| v.to_str().ok()) != Some("alice") {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
         (axum::http::StatusCode::CREATED, Json(sensor)).into_response()
     }
-    async fn delete_handler() -> axum::http::StatusCode {
+    async fn delete_handler(headers: HeaderMap) -> axum::http::StatusCode {
+        if headers.get("x-username").and_then(|v| v.to_str().ok()) != Some("alice") {
+            return axum::http::StatusCode::UNAUTHORIZED;
+        }
         axum::http::StatusCode::NO_CONTENT
     }
     async fn update_handler(
+        headers: HeaderMap,
         JsonExtractor(sensor): JsonExtractor<Sensor>,
     ) -> axum::response::Response {
+        if headers.get("x-username").and_then(|v| v.to_str().ok()) != Some("alice") {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
         Json(sensor).into_response()
     }
     let app = Router::new()
@@ -208,6 +225,7 @@ async fn http_client_registers_a_sensor_against_a_real_server() {
     let sensor = client
         .register_sensor(
             Role::Operator,
+            "alice",
             tenant_id,
             "zendesk",
             "support-poller",
@@ -225,7 +243,7 @@ async fn http_client_deletes_a_sensor_against_a_real_server() {
     let url = spawn_stub_server().await;
     let client = HttpSensorsClient::new(reqwest::Client::new(), url);
 
-    client.delete_sensor(Role::Operator, Uuid::new_v4(), Uuid::new_v4()).await.unwrap();
+    client.delete_sensor(Role::Operator, "alice", Uuid::new_v4(), Uuid::new_v4()).await.unwrap();
 }
 
 #[tokio::test]
@@ -236,8 +254,28 @@ async fn http_client_updates_a_sensor_against_a_real_server() {
         Sensor::new(Uuid::new_v4(), "zendesk", "support-poller", serde_json::json!({}));
     sensor.enabled = false;
 
-    let updated = client.update_sensor(Role::Operator, &sensor).await.unwrap();
+    let updated = client.update_sensor(Role::Operator, "alice", &sensor).await.unwrap();
     assert!(!updated.enabled);
+}
+
+#[tokio::test]
+async fn http_client_register_sensor_is_rejected_when_actor_header_missing_expected_value() {
+    let url = spawn_stub_server().await;
+    let client = HttpSensorsClient::new(reqwest::Client::new(), url);
+
+    let err = client
+        .register_sensor(
+            Role::Operator,
+            "someone-else",
+            Uuid::new_v4(),
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, SensorsClientError::Rejected(401)));
 }
 
 #[tokio::test]

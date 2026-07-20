@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0052         |
-| fix           | `fix/`     | 0006         |
+| fix           | `fix/`     | 0008         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
 | chore         | `chore/`   | 0004         |
@@ -83,3 +83,8 @@ manually created branches.
 | 0050 | `feature/0049-sensor-naming-stage2-types-and-routes` | feature | 2026-07-19 | open | pending | branch predates renumbering; kept original branch name, registry # bumped to avoid collision |
 | 0005 | `fix/0005-analysis-service-timeout-and-heartbeat-window` | fix | 2026-07-19 | open | pending | |
 | 0051 | `feature/0051-ui-polish-sensor-picker-and-trigger-form` | feature | 2026-07-19 | open | pending | |
+| 0006 | `fix/0006-auth-service-audit-actor` | fix | 2026-07-19 | open | pending | parallel sibling batch (backend, audit actor header) |
+| 0006 | `fix/0006-config-admin-service-audit-actor` | fix | 2026-07-19 | open | pending | parallel sibling batch (backend, audit actor header); number collides with the row above, both created concurrently off main before this registry entry landed |
+| 0006 | `fix/0006-ingestion-gateway-audit-actor` | fix | 2026-07-19 | open | pending | parallel sibling batch (backend, audit actor header); see note above |
+| 0006 | `fix/0006-retention-service-audit-actor` | fix | 2026-07-19 | open | pending | parallel sibling batch (backend, audit actor header); see note above |
+| 0007 | `fix/0007-ui-actor-header-batch1` | fix | 2026-07-19 | open | pending | Console UI sends X-Username on sensors/triggers/normalization-mappings/analysis-config writes |

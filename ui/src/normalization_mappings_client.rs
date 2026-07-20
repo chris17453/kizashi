@@ -25,9 +25,12 @@ pub trait NormalizationMappingsClient: Send + Sync {
         tenant_id: Uuid,
     ) -> Result<Vec<NormalizationMapping>, NormalizationMappingsClientError>;
 
+    /// `actor` is the signed-in session's username, sent as `X-Username` so config-admin-service
+    /// can record the real actor on the audit-log entry instead of just the tenant.
     async fn create_mapping(
         &self,
         role: Role,
+        actor: &str,
         mapping: NormalizationMapping,
     ) -> Result<NormalizationMapping, NormalizationMappingsClientError>;
 }
@@ -69,6 +72,7 @@ impl NormalizationMappingsClient for HttpNormalizationMappingsClient {
     async fn create_mapping(
         &self,
         role: Role,
+        actor: &str,
         mapping: NormalizationMapping,
     ) -> Result<NormalizationMapping, NormalizationMappingsClientError> {
         let response = self
@@ -76,6 +80,7 @@ impl NormalizationMappingsClient for HttpNormalizationMappingsClient {
             .post(format!("{}/v1/normalization-mappings", self.config_admin_service_url))
             .header("x-tenant-id", mapping.tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(&mapping)
             .send()
             .await

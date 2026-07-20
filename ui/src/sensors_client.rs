@@ -45,10 +45,13 @@ pub trait SensorsClient: Send + Sync {
         id: Uuid,
     ) -> Result<Option<Sensor>, SensorsClientError>;
 
-    /// Registers a new sensor — operator-only (RBAC v1, ADR-0016 follow-up).
+    /// Registers a new sensor — operator-only (RBAC v1, ADR-0016 follow-up). `actor` is the
+    /// signed-in session's username, sent as `X-Username` so config-admin-service can record the
+    /// real actor on the audit-log entry instead of just the tenant.
     async fn register_sensor(
         &self,
         role: Role,
+        actor: &str,
         tenant_id: Uuid,
         connector_type: &str,
         name: &str,
@@ -59,6 +62,7 @@ pub trait SensorsClient: Send + Sync {
     async fn delete_sensor(
         &self,
         role: Role,
+        actor: &str,
         tenant_id: Uuid,
         id: Uuid,
     ) -> Result<(), SensorsClientError>;
@@ -69,6 +73,7 @@ pub trait SensorsClient: Send + Sync {
     async fn update_sensor(
         &self,
         role: Role,
+        actor: &str,
         sensor: &Sensor,
     ) -> Result<Sensor, SensorsClientError>;
 }
@@ -140,6 +145,7 @@ impl SensorsClient for HttpSensorsClient {
     async fn register_sensor(
         &self,
         role: Role,
+        actor: &str,
         tenant_id: Uuid,
         connector_type: &str,
         name: &str,
@@ -151,6 +157,7 @@ impl SensorsClient for HttpSensorsClient {
             .post(format!("{}/v1/sensors", self.config_admin_service_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(&sensor)
             .send()
             .await
@@ -165,6 +172,7 @@ impl SensorsClient for HttpSensorsClient {
     async fn delete_sensor(
         &self,
         role: Role,
+        actor: &str,
         tenant_id: Uuid,
         id: Uuid,
     ) -> Result<(), SensorsClientError> {
@@ -173,6 +181,7 @@ impl SensorsClient for HttpSensorsClient {
             .delete(format!("{}/v1/sensors/{id}", self.config_admin_service_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .send()
             .await
             .map_err(|e| SensorsClientError::Unreachable(e.to_string()))?;
@@ -186,6 +195,7 @@ impl SensorsClient for HttpSensorsClient {
     async fn update_sensor(
         &self,
         role: Role,
+        actor: &str,
         sensor: &Sensor,
     ) -> Result<Sensor, SensorsClientError> {
         let response = self
@@ -193,6 +203,7 @@ impl SensorsClient for HttpSensorsClient {
             .put(format!("{}/v1/sensors/{}", self.config_admin_service_url, sensor.id))
             .header("x-tenant-id", sensor.tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(sensor)
             .send()
             .await

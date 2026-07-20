@@ -186,7 +186,14 @@ pub async fn post_sensors(
 
     if let Err(e) = state
         .sensors_client
-        .register_sensor(session.role, session.tenant_id, &form.connector_type, &form.name, config)
+        .register_sensor(
+            session.role,
+            &session.username,
+            session.tenant_id,
+            &form.connector_type,
+            &form.name,
+            config,
+        )
         .await
     {
         return rerender_with_error(
@@ -211,7 +218,10 @@ pub async fn post_delete_sensor(
         Err(response) => return response,
     };
 
-    let _ = state.sensors_client.delete_sensor(session.role, session.tenant_id, id).await;
+    let _ = state
+        .sensors_client
+        .delete_sensor(session.role, &session.username, session.tenant_id, id)
+        .await;
     Redirect::to("/sensors").into_response()
 }
 
@@ -230,7 +240,7 @@ pub async fn post_toggle_sensor(
 
     if let Ok(Some(mut sensor)) = state.sensors_client.get_sensor(session.tenant_id, id).await {
         sensor.enabled = !sensor.enabled;
-        let _ = state.sensors_client.update_sensor(session.role, &sensor).await;
+        let _ = state.sensors_client.update_sensor(session.role, &session.username, &sensor).await;
     }
     Redirect::to("/sensors").into_response()
 }
