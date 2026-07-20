@@ -78,6 +78,9 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
         ingestion_audit_log_client: Arc::new(
             crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default(),
         ),
+        egress_audit_log_client: Arc::new(
+            crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default(),
+        ),
         users_client: Arc::new(
             crate::users_client::users_client_test::InMemoryUsersClient::default(),
         ),

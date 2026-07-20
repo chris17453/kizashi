@@ -3,17 +3,20 @@
 mod health_test;
 
 use crate::allowlist::AllowlistRepository;
-use axum::extract::State;
+use crate::allowlist_audit_log::AllowlistAuditLogReader;
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::get;
 use axum::Router;
 use common::Role;
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AdminState {
     pub allowlist_repository: Arc<dyn AllowlistRepository>,
+    pub allowlist_audit_log_reader: Arc<dyn AllowlistAuditLogReader>,
 }
 
 async fn healthz() -> &'static str {
@@ -35,6 +38,16 @@ fn tenant_id_from_headers(headers: &HeaderMap) -> Result<String, (StatusCode, &'
         .and_then(|v| v.to_str().ok())
         .map(str::to_string)
         .ok_or((StatusCode::UNAUTHORIZED, "missing X-Tenant-Id header"))
+}
+
+/// The real user identity behind an allowlist change, written to `allowlist_audit_log`'s
+/// `actor` column — same trust boundary as `X-Tenant-Id`/`X-Role` (CLAUDE.md §5).
+fn username_from_headers(headers: &HeaderMap) -> Result<String, (StatusCode, &'static str)> {
+    headers
+        .get("x-username")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string)
+        .ok_or((StatusCode::UNAUTHORIZED, "missing X-Username header"))
 }
 
 /// RBAC v1 (ADR-0016): rejects the request unless the caller's role is at least `Operator` —
@@ -97,8 +110,33 @@ async fn put_allowlist(
     if let Some(response) = require_operator(&headers) {
         return response;
     }
-    match state.allowlist_repository.set_domains(&tenant_id, body.domains.clone()).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(actor) => actor,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.allowlist_repository.set_domains(&tenant_id, body.domains.clone(), &actor).await {
         Ok(()) => Json(body.domains).into_response(),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// GET /v1/audit-log/:entity_id — same generic shape config-admin-service/retention-service/
+/// auth-service already expose, so the Console UI's existing `HttpAuditLogClient` can read this
+/// back with no new client type (ADR-0097).
+async fn get_audit_log(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(entity_id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let Ok(tenant_uuid) = Uuid::parse_str(&tenant_id) else {
+        return error_response(StatusCode::BAD_REQUEST, "X-Tenant-Id is not a valid UUID");
+    };
+    match state.allowlist_audit_log_reader.list_for_entity(tenant_uuid, entity_id).await {
+        Ok(entries) => Json(entries).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }
@@ -107,5 +145,6 @@ pub fn build_router(state: AdminState) -> Router {
     Router::new()
         .route("/healthz", get(healthz))
         .route("/v1/allowlist", get(get_allowlist).put(put_allowlist))
+        .route("/v1/audit-log/:entity_id", get(get_audit_log))
         .with_state(state)
 }

@@ -1,6 +1,7 @@
 use egress_gateway::{
     admin_router, decide, parse_connect_target, parse_proxy_authorization, AdminState,
-    PostgresAllowlistRepository, PostgresAuditLogRepository, ProxyDeps,
+    PostgresAllowlistAuditLogReader, PostgresAllowlistRepository, PostgresAuditLogRepository,
+    ProxyDeps,
 };
 use hyper::body::Incoming;
 use hyper::server::conn::http1;
@@ -102,10 +103,13 @@ async fn main() {
     let allowlist_repository = Arc::new(PostgresAllowlistRepository::new(pool.clone()));
     let deps = Arc::new(ProxyDeps {
         allowlist_repository: allowlist_repository.clone(),
-        audit_log_repository: Arc::new(PostgresAuditLogRepository::new(pool)),
+        audit_log_repository: Arc::new(PostgresAuditLogRepository::new(pool.clone())),
     });
 
-    let admin_state = AdminState { allowlist_repository };
+    let admin_state = AdminState {
+        allowlist_repository,
+        allowlist_audit_log_reader: Arc::new(PostgresAllowlistAuditLogReader::new(pool)),
+    };
     let admin_listener = tokio::net::TcpListener::bind(&admin_addr).await.expect("bind failed");
     tracing::info!(addr = %admin_addr, "egress-gateway admin API listening");
     tokio::spawn(async move {

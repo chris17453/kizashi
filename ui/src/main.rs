@@ -110,7 +110,7 @@ async fn main() {
         )),
         egress_allowlist_client: Arc::new(HttpEgressAllowlistClient::new(
             client.clone(),
-            egress_gateway_url,
+            egress_gateway_url.clone(),
         )),
         backup_status_client: Arc::new(HttpBackupStatusClient::new(
             client.clone(),
@@ -131,6 +131,10 @@ async fn main() {
         ingestion_audit_log_client: Arc::new(IngestionGatewayApiKeyAuditLogClient::new(
             client.clone(),
             ingestion_gateway_url,
+        )),
+        egress_audit_log_client: Arc::new(HttpAuditLogClient::new(
+            client.clone(),
+            egress_gateway_url,
         )),
         login_attempts_client: Arc::new(HttpLoginAttemptsClient::new(
             client.clone(),

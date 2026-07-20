@@ -3,8 +3,8 @@
 //! immutability trigger really rejects UPDATE/DELETE. Requires DATABASE_URL.
 
 use egress_gateway::{
-    AllowlistRepository, AuditLogEntry, AuditLogRepository, PostgresAllowlistRepository,
-    PostgresAuditLogRepository,
+    AllowlistAuditLogReader, AllowlistRepository, AuditLogEntry, AuditLogRepository,
+    PostgresAllowlistAuditLogReader, PostgresAllowlistRepository, PostgresAuditLogRepository,
 };
 
 async fn test_pool() -> sqlx::PgPool {
@@ -29,9 +29,13 @@ async fn allowlist_set_then_get_round_trips_against_real_postgres() {
     let repo = PostgresAllowlistRepository::new(pool);
     let tenant_id = uuid::Uuid::new_v4().to_string();
 
-    repo.set_domains(&tenant_id, vec!["zendesk.com".to_string(), "example.com".to_string()])
-        .await
-        .unwrap();
+    repo.set_domains(
+        &tenant_id,
+        vec!["zendesk.com".to_string(), "example.com".to_string()],
+        "test-actor",
+    )
+    .await
+    .unwrap();
 
     let domains = repo.get_domains(&tenant_id).await.unwrap();
     assert_eq!(domains, vec!["zendesk.com".to_string(), "example.com".to_string()]);
@@ -51,11 +55,73 @@ async fn allowlist_set_replaces_the_existing_list_against_real_postgres() {
     let repo = PostgresAllowlistRepository::new(pool);
     let tenant_id = uuid::Uuid::new_v4().to_string();
 
-    repo.set_domains(&tenant_id, vec!["first.com".to_string()]).await.unwrap();
-    repo.set_domains(&tenant_id, vec!["second.com".to_string()]).await.unwrap();
+    repo.set_domains(&tenant_id, vec!["first.com".to_string()], "test-actor").await.unwrap();
+    repo.set_domains(&tenant_id, vec!["second.com".to_string()], "test-actor").await.unwrap();
 
     let domains = repo.get_domains(&tenant_id).await.unwrap();
     assert_eq!(domains, vec!["second.com".to_string()]);
+}
+
+#[tokio::test]
+async fn set_domains_writes_an_allowlist_audit_row_in_the_same_transaction() {
+    let pool = test_pool().await;
+    let repo = PostgresAllowlistRepository::new(pool.clone());
+    let audit_reader = PostgresAllowlistAuditLogReader::new(pool);
+    let tenant_uuid = uuid::Uuid::new_v4();
+    let tenant_id = tenant_uuid.to_string();
+
+    repo.set_domains(&tenant_id, vec!["zendesk.com".to_string()], "operator@example.com")
+        .await
+        .expect("set_domains should succeed");
+
+    let entries = audit_reader
+        .list_for_entity(tenant_uuid, tenant_uuid)
+        .await
+        .expect("list_for_entity should succeed");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].actor, "operator@example.com");
+    assert_eq!(entries[0].change_type, egress_gateway::AllowlistChangeType::Created);
+    assert!(entries[0].before.is_none());
+
+    repo.set_domains(&tenant_id, vec!["example.com".to_string()], "operator@example.com")
+        .await
+        .expect("second set_domains should succeed");
+    let entries = audit_reader.list_for_entity(tenant_uuid, tenant_uuid).await.unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[1].change_type, egress_gateway::AllowlistChangeType::Updated);
+    assert!(entries[1].before.is_some());
+}
+
+#[tokio::test]
+async fn allowlist_audit_log_rejects_update_at_the_database_level() {
+    let pool = test_pool().await;
+    let repo = PostgresAllowlistRepository::new(pool.clone());
+    let tenant_id = uuid::Uuid::new_v4().to_string();
+    repo.set_domains(&tenant_id, vec!["zendesk.com".to_string()], "test-actor").await.unwrap();
+
+    let err = sqlx::query(
+        "UPDATE allowlist_audit_log SET actor = 'someone-else' WHERE tenant_id = $1::uuid",
+    )
+    .bind(&tenant_id)
+    .execute(&pool)
+    .await
+    .expect_err("update should be rejected by the immutability trigger");
+    assert!(err.to_string().contains("append-only"));
+}
+
+#[tokio::test]
+async fn allowlist_audit_log_rejects_delete_at_the_database_level() {
+    let pool = test_pool().await;
+    let repo = PostgresAllowlistRepository::new(pool.clone());
+    let tenant_id = uuid::Uuid::new_v4().to_string();
+    repo.set_domains(&tenant_id, vec!["zendesk.com".to_string()], "test-actor").await.unwrap();
+
+    let err = sqlx::query("DELETE FROM allowlist_audit_log WHERE tenant_id = $1::uuid")
+        .bind(&tenant_id)
+        .execute(&pool)
+        .await
+        .expect_err("delete should be rejected by the immutability trigger");
+    assert!(err.to_string().contains("append-only"));
 }
 
 #[tokio::test]

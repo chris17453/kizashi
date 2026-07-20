@@ -16,6 +16,7 @@ impl AllowlistRepository for InMemoryAllowlistRepository {
         &self,
         tenant_id: &str,
         domains: Vec<String>,
+        _actor: &str,
     ) -> Result<(), AllowlistError> {
         self.domains.lock().unwrap().insert(tenant_id.to_string(), domains);
         Ok(())
@@ -34,6 +35,7 @@ impl AllowlistRepository for FailingAllowlistRepository {
         &self,
         _tenant_id: &str,
         _domains: Vec<String>,
+        _actor: &str,
     ) -> Result<(), AllowlistError> {
         Err(AllowlistError::Backend("simulated failure".to_string()))
     }
@@ -69,7 +71,7 @@ fn host_matching_is_not_fooled_by_a_suffix_that_is_not_a_subdomain_boundary() {
 #[tokio::test]
 async fn in_memory_repository_round_trips_domains() {
     let repo = InMemoryAllowlistRepository::default();
-    repo.set_domains("tenant-a", vec!["zendesk.com".to_string()]).await.unwrap();
+    repo.set_domains("tenant-a", vec!["zendesk.com".to_string()], "test-actor").await.unwrap();
 
     let domains = repo.get_domains("tenant-a").await.unwrap();
     assert_eq!(domains, vec!["zendesk.com".to_string()]);

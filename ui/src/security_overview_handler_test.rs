@@ -72,6 +72,7 @@ async fn state_with_session(session_store: InMemorySessionStore) -> (AppState, S
         retention_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         auth_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         ingestion_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
+        egress_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         users_client: Arc::new(InMemoryUsersClient::default()),
         saved_search_queries_client: Arc::new(InMemorySavedSearchQueriesClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),

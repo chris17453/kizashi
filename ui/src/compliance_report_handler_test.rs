@@ -77,6 +77,7 @@ fn base_state(
         retention_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         auth_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         ingestion_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
+        egress_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         users_client: Arc::new(users_client),
         saved_search_queries_client: Arc::new(InMemorySavedSearchQueriesClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),

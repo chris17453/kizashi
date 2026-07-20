@@ -8,12 +8,14 @@ use askama::Template;
 use axum::extract::{Form, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
+use uuid::Uuid;
 
 #[derive(Template)]
 #[template(path = "egress_allowlist.html")]
 struct EgressAllowlistTemplate {
     show_nav: bool,
     is_admin: bool,
+    tenant_id: Uuid,
     domains: Vec<String>,
     can_write: bool,
     saved: bool,
@@ -41,6 +43,7 @@ pub async fn get_egress_allowlist(State(state): State<AppState>, headers: Header
             EgressAllowlistTemplate {
                 show_nav: true,
                 is_admin,
+                tenant_id: session.tenant_id,
                 domains,
                 can_write,
                 saved: false,
@@ -54,6 +57,7 @@ pub async fn get_egress_allowlist(State(state): State<AppState>, headers: Header
             EgressAllowlistTemplate {
                 show_nav: true,
                 is_admin,
+                tenant_id: session.tenant_id,
                 domains: vec![],
                 can_write,
                 saved: false,
@@ -101,6 +105,7 @@ pub async fn post_egress_allowlist(
             EgressAllowlistTemplate {
                 show_nav: true,
                 is_admin,
+                tenant_id: session.tenant_id,
                 domains,
                 can_write: true,
                 saved: true,
@@ -114,6 +119,7 @@ pub async fn post_egress_allowlist(
             EgressAllowlistTemplate {
                 show_nav: true,
                 is_admin,
+                tenant_id: session.tenant_id,
                 domains: parse_domains(&form.domains),
                 can_write: true,
                 saved: false,

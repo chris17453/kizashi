@@ -4776,3 +4776,33 @@ architectural decision.
   `watkinslabs` tenant: Users renders the bulk-delete UI.
 - **PR:** pending
 - **ADR:** docs/adr/0096-users-and-retention-policies-bulk-delete.md
+
+## [2026-07-20] feature/0097-egress-allowlist-audit-log — Egress Allowlist audit log
+- **Type:** feature
+- **Branch:** feature/0097-egress-allowlist-audit-log
+- **Summary:** An eighth UI audit pass looking for Egress Allowlist's missing audit-history link
+  surfaced a deeper CLAUDE.md §5 violation: `PUT /v1/allowlist` had zero audit logging at the
+  backend, not just a missing UI link. Adds real audit infrastructure to `egress-gateway`
+  (`allowlist_audit_log` table with a DB-level immutability trigger, a transactional
+  `record_allowlist_audit_entry` write alongside every `set_domains` call, actor now required via
+  `X-Username`), a `GET /v1/audit-log/:entity_id` endpoint deliberately shaped to match the
+  existing shared `HttpAuditLogClient` contract (no new UI client type needed, unlike
+  ADR-0094's ingestion-gateway case), and wires the Console UI's `egress_audit_log_client` +
+  "View change history" link into `egress_allowlist.html`.
+- **Tests:** `cargo test -p egress-gateway --lib` — 37 passed (7 new: `allowlist_audit_log`
+  reader tests, `get_audit_log_returns_entries_for_the_entity`,
+  `put_allowlist_requires_username_header`). `cargo test -p egress-gateway --test
+  repository_integration_test` against real Postgres — 9 passed (3 new:
+  `set_domains_writes_an_allowlist_audit_row_in_the_same_transaction`,
+  `allowlist_audit_log_rejects_update_at_the_database_level`,
+  `allowlist_audit_log_rejects_delete_at_the_database_level` — proves the transactional write and
+  the immutability trigger both actually work). `cargo test -p kizashi-ui --lib` — 470 passed (2
+  new: `shows_entries_from_the_egress_client_for_the_egress_service`,
+  `shows_a_link_to_the_audit_history_scoped_to_the_tenant`). `cargo build --workspace`,
+  `cargo clippy -p egress-gateway --all-targets --all-features -- -D warnings`, `cargo clippy -p
+  kizashi-ui --all-targets --all-features -- -D warnings`, `cargo fmt --all --check` all clean.
+  No file exceeds 500 lines. Live-verified against the real `watkinslabs` tenant: saved an
+  allowlist change, followed the new "View change history" link, confirmed the real entry
+  (actor, `created`, before/after domain lists) renders at `/audit-log/egress/<tenant_id>`.
+- **PR:** #127
+- **ADR:** docs/adr/0097-egress-allowlist-audit-log.md
