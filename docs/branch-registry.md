@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0078         |
-| fix           | `fix/`     | 0013         |
+| fix           | `fix/`     | 0014         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
 | chore         | `chore/`   | 0005         |
@@ -117,3 +117,4 @@ manually created branches.
 | 0076 | `feature/0076-api-keys-bulk-revoke` | feature | 2026-07-20 | open | pending | |
 | 0012 | `fix/0012-disable-toggle-confirm-danger` | fix | 2026-07-20 | open | pending | |
 | 0077 | `feature/0077-triggers-page-search` | feature | 2026-07-20 | open | pending | |
+| 0013 | `fix/0013-disabled-button-accessible-labels` | fix | 2026-07-20 | open | pending | |

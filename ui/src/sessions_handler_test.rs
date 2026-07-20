@@ -112,6 +112,22 @@ async fn shows_an_empty_state_with_no_other_sessions_besides_the_caller() {
 }
 
 #[tokio::test]
+async fn marks_the_callers_own_revoke_button_with_an_accessible_label() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    let state = state_with_store(store).await;
+
+    let response = get_page(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(
+        body.contains(r#"aria-label="Revoke -- use Log out instead of revoking your own session""#)
+    );
+}
+
+#[tokio::test]
 async fn only_lists_sessions_for_the_callers_own_tenant() {
     let store = InMemorySessionStore::default();
     let tenant_a = Uuid::new_v4();

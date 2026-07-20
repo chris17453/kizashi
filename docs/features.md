@@ -4220,3 +4220,19 @@ architectural decision.
   clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0066-triggers-page-search.md
+
+## [2026-07-20] fix/0013-disabled-button-accessible-labels — Accessible labels on disabled self-action buttons
+- **Type:** fix
+- **Branch:** fix/0013-disabled-button-accessible-labels
+- **Summary:** Closes a UI/UX audit accessibility finding: `aria-label` was essentially unused
+  sitewide. The Users page's disabled "Remove" and Active Sessions page's disabled "Revoke"
+  buttons (both disabled on the caller's own row) carried only a `title` explaining why, which
+  isn't reliably exposed to screen readers/keyboard navigation. Both now carry a matching
+  `aria-label` restating the button + reason (e.g. "Remove -- you can't remove yourself").
+  Scoped to these two concretely-flagged instances, not a full sitewide accessibility sweep.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 403 passed (2 new: aria-label present on the
+  current user's disabled Remove button, aria-label present on the caller's disabled Revoke
+  button). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets
+  --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0067-disabled-button-accessible-labels.md
