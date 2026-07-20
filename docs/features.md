@@ -4891,5 +4891,5 @@ architectural decision.
   Live-verified against the real `watkinslabs` tenant: revoked a session, confirmed a real,
   immutable `deleted`-type audit row (actor, `revoked_username`) renders at
   `/audit-log/auth/<session_id>`.
-- **PR:** pending
+- **PR:** #131
 - **ADR:** docs/adr/0101-session-revocation-audit-log.md
