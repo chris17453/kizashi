@@ -4824,3 +4824,25 @@ architectural decision.
   with the correct header and content-disposition filename.
 - **PR:** #128
 - **ADR:** docs/adr/0098-login-attempts-csv-export.md
+
+## [2026-07-20] feature/0097-sessions-bulk-revoke — Sessions bulk-revoke
+- **Type:** feature
+- **Branch:** feature/0097-sessions-bulk-revoke
+- **Summary:** A ninth UI audit pass found Active Sessions was the last list page with a
+  destructive per-row action still missing bulk-select, inconsistent with API Keys/Sensors/
+  Users/Retention Policies (ADR-0065/ADR-0095/ADR-0096). Adds `POST
+  /security/sessions/bulk-revoke` (checkboxes + "Revoke selected" + a `parse_ids` helper), same
+  shape as the existing bulk-action pages. Session ids are opaque `String`s, not `Uuid`s, so
+  `parse_ids` here skips the further-parse step those precedents have. The caller's own current
+  session is excluded from the checkbox column, matching the existing single-revoke
+  self-protection.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 474 passed (4 new:
+  `bulk_revoke_removes_every_selected_session`,
+  `bulk_revoke_does_not_remove_a_session_belonging_to_a_different_tenant`,
+  `bulk_revoke_requires_admin`,
+  `shows_bulk_revoke_ui_with_a_checkbox_per_row_excluding_the_current_session`). `cargo build
+  --workspace`, `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`, `cargo
+  fmt --all --check` all clean. No file exceeds 500 lines. Live-verified against the real
+  `watkinslabs` tenant: Sessions renders the bulk-revoke checkboxes/form/button.
+- **PR:** #129
+- **ADR:** docs/adr/0099-sessions-bulk-revoke.md

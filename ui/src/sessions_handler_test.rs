@@ -32,6 +32,7 @@ fn router(state: AppState) -> Router {
     Router::new()
         .route("/security/sessions", get(get_sessions))
         .route("/security/sessions/:id/revoke", post(post_revoke_session))
+        .route("/security/sessions/bulk-revoke", post(post_bulk_revoke_sessions))
         .with_state(state)
 }
 
@@ -314,6 +315,99 @@ async fn revoke_does_not_remove_a_session_belonging_to_a_different_tenant() {
         .unwrap();
 
     assert!(state.session_store.get(&other_tenant_session_id).await.is_some());
+}
+
+#[tokio::test]
+async fn bulk_revoke_removes_every_selected_session() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let admin_session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    let bob_id = store.create(sample_session(tenant_id, Role::Operator, "bob")).await;
+    let carol_id = store.create(sample_session(tenant_id, Role::Operator, "carol")).await;
+    let state = state_with_store(store).await;
+
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/sessions/bulk-revoke")
+                .header("cookie", format!("kizashi_session={admin_session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={bob_id}&ids={carol_id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(state.session_store.get(&bob_id).await, None);
+    assert_eq!(state.session_store.get(&carol_id).await, None);
+}
+
+#[tokio::test]
+async fn bulk_revoke_does_not_remove_a_session_belonging_to_a_different_tenant() {
+    let store = InMemorySessionStore::default();
+    let admin_session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let other_tenant_session_id =
+        store.create(sample_session(Uuid::new_v4(), Role::Operator, "victim")).await;
+    let state = state_with_store(store).await;
+
+    router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/sessions/bulk-revoke")
+                .header("cookie", format!("kizashi_session={admin_session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={other_tenant_session_id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(state.session_store.get(&other_tenant_session_id).await.is_some());
+}
+
+#[tokio::test]
+async fn bulk_revoke_requires_admin() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let operator_session_id =
+        store.create(sample_session(tenant_id, Role::Operator, "alice")).await;
+    let target_id = store.create(sample_session(tenant_id, Role::Operator, "bob")).await;
+    let state = state_with_store(store).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/sessions/bulk-revoke")
+                .header("cookie", format!("kizashi_session={operator_session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={target_id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn shows_bulk_revoke_ui_with_a_checkbox_per_row_excluding_the_current_session() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    let bob_id = store.create(sample_session(tenant_id, Role::Operator, "bob")).await;
+    let state = state_with_store(store).await;
+
+    let response = get_page(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("bulk-revoke-form"));
+    assert!(body.contains(&format!(r#"value="{bob_id}""#)));
+    assert!(body.contains("Revoke selected"));
 }
 
 #[tokio::test]
