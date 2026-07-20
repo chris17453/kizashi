@@ -14,6 +14,10 @@ mod recent_audit_log_handler_test;
 #[cfg(test)]
 mod session_revoked_audit_handler_test;
 
+#[path = "audit_log_error_hygiene_test.rs"]
+#[cfg(test)]
+mod audit_log_error_hygiene_test;
+
 use crate::local_login_handler::AuthState;
 use crate::local_user_repository::{LocalUser, LocalUserRepositoryError};
 use crate::password::hash_password;
@@ -274,7 +278,13 @@ pub async fn get_user_audit_log(
     };
     match state.audit_log_reader.list_for_entity(tenant_id, id).await {
         Ok(entries) => Json(entries).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "audit log lookup failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }
 
@@ -301,7 +311,13 @@ pub async fn get_recent_audit_log(
         query.limit.unwrap_or(DEFAULT_RECENT_AUDIT_LOG_LIMIT).min(MAX_RECENT_AUDIT_LOG_LIMIT);
     match state.audit_log_reader.list_recent(tenant_id, limit as i64, query.before).await {
         Ok(entries) => Json(entries).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "recent audit log lookup failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }
 
@@ -347,6 +363,12 @@ pub async fn post_session_revoked_audit(
         .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "session revocation audit write failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }
