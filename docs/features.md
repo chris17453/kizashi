@@ -4062,3 +4062,24 @@ architectural decision.
   prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0062-users-page-search.md
+
+## [2026-07-20] chore/0004-docker-build-cache-mounts — Add BuildKit cache mounts to the shared Dockerfile
+- **Type:** chore
+- **Branch:** chore/0004-docker-build-cache-mounts
+- **Summary:** The shared `Dockerfile`'s builder stage had no cache mounts at all — every
+  `docker compose build <service>` recompiled the entire dependency tree (aws-sdk-s3, sqlx,
+  tokio, hundreds of crates) completely from scratch, every single time, in `--release` mode
+  with `lto = true`/`codegen-units = 1` (the slowest possible profile), regardless of how small
+  the actual source change was. Added `--mount=type=cache` for `/usr/local/cargo/registry`,
+  `/usr/local/cargo/git`, and `/app/target`, persisting compiled dependency artifacts across
+  `docker build` invocations (shared across every `BIN` this one Dockerfile builds, since
+  they're all one Cargo workspace). No behavior change to the built images themselves — same
+  binary output, same runtime image, purely a build-time cache.
+- **Tests:** No Rust code changed (Dockerfile-only), so no `cargo test`/clippy/fmt run for this
+  change. Verified directly instead: touched one file in `kizashi-ui` and rebuilt —
+  **25 seconds** (down from ~2-3 minutes), with the build log showing only `kizashi-ui` itself
+  recompiling, all dependencies served from cache. Repeated with a different binary
+  (`auth-service`, a different dependency mix) touched and rebuilt — **53 seconds**, confirming
+  the cache is genuinely shared across different `BIN` builds, not a fluke of one image.
+- **PR:** pending
+- **ADR:** n/a (build-tooling fix, not an architectural decision)
