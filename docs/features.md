@@ -3747,3 +3747,30 @@ architectural decision.
 - **PR:** pending
 - **ADR:** docs/adr/0048-permissions-reference-page.md, docs/adr/0049-audit-log-csv-export.md,
   docs/adr/0050-analysis-config-api-key-redaction.md
+
+## [2026-07-20] feature/0059-totp-multi-factor-authentication — TOTP-based multi-factor authentication
+- **Type:** feature
+- **Branch:** feature/0059-totp-multi-factor-authentication
+- **Summary:** Closes the most consequential gap found by an explicit SOC 2/ISO 27001-mapped
+  compliance rubric run this session (11/16 domains previously "done", MFA the standout
+  "missing"): adds opt-in, self-service TOTP-based MFA for local login. New `mfa_secret`/
+  `mfa_enabled` columns on `local_users` plus a `mfa_challenges` table bridging the two-step login
+  flow; enrollment requires explicit code confirmation before `mfa_enabled` flips (an unconfirmed
+  secret can never gate login); disable requires re-entering the password. `local_login` now
+  returns `{mfa_required, challenge_token}` instead of a session grant for MFA-enabled users; a
+  new `POST /v1/auth/local/mfa/challenge` endpoint (the only MFA endpoint with no
+  X-Role/X-Tenant-Id/X-Username trust, since no session exists yet at that point) completes login.
+  Console UI gets `GET/POST /login/mfa` (challenge page, bridging cookies mirroring the OIDC flow
+  cookie pattern) and a new `/security/mfa` self-service settings page (QR code enrollment,
+  verify, disable). OIDC/SSO logins are unaffected. New `totp-rs` dependency.
+- **Tests:** `cargo test -p auth-service` (114 lib + 5 real-Postgres integration tests, incl.
+  enroll/verify/disable/challenge/status handler tests, challenge single-use and expiry, and the
+  `local_login` MFA-required branch); `cargo test -p kizashi-ui --lib` (341 passed, incl. 22 new
+  MFA-related tests across `mfa_client`, `mfa_login_handler`, `mfa_settings_handler`,
+  `auth_client`). Full workspace gate green: `cargo build --workspace`, `cargo test --workspace
+  --all-features` against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (111 test binaries, 0
+  failures), `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt
+  --all --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories,
+  unchanged -- no new advisories from the new dependency).
+- **PR:** pending
+- **ADR:** docs/adr/0051-totp-multi-factor-authentication.md

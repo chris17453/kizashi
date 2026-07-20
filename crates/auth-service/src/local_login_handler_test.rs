@@ -25,6 +25,8 @@ fn sample_user(tenant_id: Uuid, password: &str) -> LocalUser {
         username: "alice".to_string(),
         password_hash: hash_password(password).unwrap(),
         role: common::Role::Operator,
+        mfa_secret: None,
+        mfa_enabled: false,
     }
 }
 
@@ -42,6 +44,7 @@ async fn correct_credentials_mint_a_session_token() {
         audit_log_reader: Arc::new(
             crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
         ),
+            mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "correct-password"});
@@ -82,6 +85,7 @@ async fn wrong_password_is_rejected_with_401() {
         audit_log_reader: Arc::new(
             crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
         ),
+            mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "wrong-password"});
@@ -112,6 +116,7 @@ async fn unknown_username_is_rejected_with_401_not_404() {
         audit_log_reader: Arc::new(
             crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
         ),
+            mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
     };
 
     let body =
@@ -146,6 +151,7 @@ async fn unknown_tenant_name_is_rejected_with_401_not_404() {
         audit_log_reader: Arc::new(
             crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
         ),
+            mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
     };
 
     let body = serde_json::json!({"tenant_name": "nonexistent", "username": "alice", "password": "whatever"});
@@ -180,6 +186,7 @@ async fn repository_failure_returns_500() {
         audit_log_reader: Arc::new(
             crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
         ),
+            mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
     };
 
     let body =
@@ -210,6 +217,7 @@ async fn tenant_repository_failure_returns_500() {
         audit_log_reader: Arc::new(
             crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
         ),
+            mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
     };
 
     let body =
@@ -242,6 +250,7 @@ async fn session_mint_failure_returns_502() {
         audit_log_reader: Arc::new(
             crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
         ),
+            mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "correct-password"});
@@ -258,4 +267,43 @@ async fn session_mint_failure_returns_502() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
+async fn correct_credentials_for_an_mfa_enabled_user_returns_a_challenge_not_a_session() {
+    let tenant_id = Uuid::new_v4();
+    let mut user = sample_user(tenant_id, "correct-password");
+    user.mfa_enabled = true;
+    let session_client = Arc::new(InMemorySessionClient::default());
+    let state = AuthState {
+        local_user_repository: Arc::new(InMemoryLocalUserRepository::with_user(user)),
+        tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
+        tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
+        session_client: session_client.clone(),
+        oidc_clients: std::collections::HashMap::new(),
+        audit_log_reader: Arc::new(
+            crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
+        ),
+        mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
+    };
+
+    let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "correct-password"});
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/auth/local/login")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(session_client.minted.lock().unwrap().len(), 0, "no session should be minted yet");
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["mfa_required"], true);
+    assert!(json["challenge_token"].as_str().is_some_and(|t| !t.is_empty()));
 }

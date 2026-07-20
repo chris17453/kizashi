@@ -30,6 +30,9 @@ pub(crate) fn default_state() -> AuthState {
         ),
         oidc_clients: std::collections::HashMap::new(),
         audit_log_reader: Arc::new(InMemoryAuditLogReader::default()),
+        mfa_challenge_repository: Arc::new(
+            crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default(),
+        ),
     }
 }
 
@@ -159,6 +162,8 @@ async fn list_users_returns_only_the_callers_tenant() {
                 username: "alice".to_string(),
                 password_hash: "hash".to_string(),
                 role: Role::Admin,
+                mfa_secret: None,
+                mfa_enabled: false,
             },
             "test-actor",
         )
@@ -173,6 +178,8 @@ async fn list_users_returns_only_the_callers_tenant() {
                 username: "eve".to_string(),
                 password_hash: "hash".to_string(),
                 role: Role::Admin,
+                mfa_secret: None,
+                mfa_enabled: false,
             },
             "test-actor",
         )
@@ -199,6 +206,8 @@ async fn update_user_role_changes_the_role() {
         username: "bob".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Operator,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     state.local_user_repository.create(user.clone(), "test-actor").await.unwrap();
 
@@ -242,6 +251,8 @@ async fn delete_user_removes_the_user() {
         username: "bob".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Operator,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     state.local_user_repository.create(user.clone(), "test-actor").await.unwrap();
 
@@ -267,6 +278,8 @@ async fn delete_user_rejects_deleting_the_last_admin() {
         username: "sole-admin".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Admin,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     state.local_user_repository.create(admin.clone(), "test-actor").await.unwrap();
 
@@ -292,6 +305,8 @@ async fn delete_user_allows_deleting_an_admin_when_another_admin_remains() {
         username: "admin-one".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Admin,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     let admin_two = LocalUser {
         id: Uuid::new_v4(),
@@ -299,6 +314,8 @@ async fn delete_user_allows_deleting_an_admin_when_another_admin_remains() {
         username: "admin-two".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Admin,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     state.local_user_repository.create(admin_one.clone(), "test-actor").await.unwrap();
     state.local_user_repository.create(admin_two, "test-actor").await.unwrap();
@@ -325,6 +342,8 @@ async fn update_user_role_rejects_demoting_the_last_admin() {
         username: "sole-admin".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Admin,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     state.local_user_repository.create(admin.clone(), "test-actor").await.unwrap();
 
@@ -350,6 +369,8 @@ async fn update_user_role_allows_reassigning_the_sole_admin_to_admin() {
         username: "sole-admin".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Admin,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     state.local_user_repository.create(admin.clone(), "test-actor").await.unwrap();
 
@@ -375,6 +396,8 @@ async fn update_user_role_allows_demoting_an_admin_when_another_admin_remains() 
         username: "admin-one".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Admin,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     let admin_two = LocalUser {
         id: Uuid::new_v4(),
@@ -382,6 +405,8 @@ async fn update_user_role_allows_demoting_an_admin_when_another_admin_remains() 
         username: "admin-two".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Admin,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     state.local_user_repository.create(admin_one.clone(), "test-actor").await.unwrap();
     state.local_user_repository.create(admin_two, "test-actor").await.unwrap();

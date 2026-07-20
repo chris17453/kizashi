@@ -8,7 +8,7 @@ use std::sync::Mutex;
 #[derive(Default)]
 pub struct InMemoryAuthClient {
     pub logins: Mutex<Vec<(String, String, String)>>,
-    pub result: Mutex<Option<(String, Uuid, Role)>>,
+    pub result: Mutex<Option<LocalLoginResult>>,
 }
 
 #[async_trait]
@@ -18,7 +18,7 @@ impl AuthClient for InMemoryAuthClient {
         tenant_name: &str,
         username: &str,
         password: &str,
-    ) -> Result<(String, Uuid, Role), AuthClientError> {
+    ) -> Result<LocalLoginResult, AuthClientError> {
         self.logins.lock().unwrap().push((
             tenant_name.to_string(),
             username.to_string(),
@@ -37,7 +37,7 @@ impl AuthClient for FailingAuthClient {
         _tenant_name: &str,
         _username: &str,
         _password: &str,
-    ) -> Result<(String, Uuid, Role), AuthClientError> {
+    ) -> Result<LocalLoginResult, AuthClientError> {
         Err(AuthClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -88,11 +88,34 @@ async fn http_client_returns_the_token_and_tenant_id_on_valid_credentials() {
     .await;
     let client = HttpAuthClient::new(reqwest::Client::new(), url);
 
-    let (token, returned_tenant_id, role) =
-        client.local_login("acme", "alice", "correct-password").await.unwrap();
-    assert_eq!(token, "issued-token");
-    assert_eq!(returned_tenant_id, tenant_id);
-    assert_eq!(role, Role::Operator);
+    let result = client.local_login("acme", "alice", "correct-password").await.unwrap();
+    assert_eq!(
+        result,
+        LocalLoginResult::LoggedIn {
+            token: "issued-token".to_string(),
+            tenant_id,
+            role: Role::Operator
+        }
+    );
+}
+
+#[tokio::test]
+async fn http_client_returns_mfa_required_when_the_backend_asks_for_a_challenge() {
+    async fn handler() -> axum::response::Response {
+        Json(serde_json::json!({"mfa_required": true, "challenge_token": "chal-123"}))
+            .into_response()
+    }
+    let app = Router::new().route("/v1/auth/local/login", post(handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let client = HttpAuthClient::new(reqwest::Client::new(), format!("http://{addr}"));
+
+    let result = client.local_login("acme", "alice", "correct-password").await.unwrap();
+
+    assert_eq!(result, LocalLoginResult::MfaRequired { challenge_token: "chal-123".to_string() });
 }
 
 #[tokio::test]

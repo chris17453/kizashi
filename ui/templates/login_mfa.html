@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="brand">
+  <span class="brand-mark">&#9670;</span>
+  <span class="brand-name">Kizashi</span>
+</div>
+<h1>Enter your authentication code</h1>
+<p class="muted">Open your authenticator app and enter the current 6-digit code.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+<form class="login" method="post" action="/login/mfa">
+  <label for="code">Code</label>
+  <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" autofocus required>
+  <button type="submit">Verify</button>
+</form>
+{% endblock %}

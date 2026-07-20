@@ -15,6 +15,15 @@ pub enum AuthClientError {
     InvalidCredentials,
 }
 
+/// A successful `local_login` call either grants a session outright, or (ADR-0051) hands back a
+/// short-lived `challenge_token` the caller must complete via `MfaClient::challenge` before a
+/// real session exists — the password alone was correct, but that's only the first factor.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LocalLoginResult {
+    LoggedIn { token: String, tenant_id: Uuid, role: Role },
+    MfaRequired { challenge_token: String },
+}
+
 /// Console UI's client for Auth Service's local-login endpoint — the browser never talks to
 /// Auth Service directly, since session establishment (the `HttpOnly` cookie) is this
 /// process's job (ADR-0014).
@@ -25,7 +34,7 @@ pub trait AuthClient: Send + Sync {
         tenant_name: &str,
         username: &str,
         password: &str,
-    ) -> Result<(String, Uuid, Role), AuthClientError>;
+    ) -> Result<LocalLoginResult, AuthClientError>;
 }
 
 pub struct HttpAuthClient {
@@ -41,9 +50,12 @@ impl HttpAuthClient {
 
 #[derive(serde::Deserialize)]
 struct LoginResponse {
-    token: String,
-    tenant_id: Uuid,
-    role: Role,
+    token: Option<String>,
+    tenant_id: Option<Uuid>,
+    role: Option<Role>,
+    #[serde(default)]
+    mfa_required: bool,
+    challenge_token: Option<String>,
 }
 
 #[async_trait]
@@ -53,7 +65,7 @@ impl AuthClient for HttpAuthClient {
         tenant_name: &str,
         username: &str,
         password: &str,
-    ) -> Result<(String, Uuid, Role), AuthClientError> {
+    ) -> Result<LocalLoginResult, AuthClientError> {
         let response = self
             .client
             .post(format!("{}/v1/auth/local/login", self.auth_service_url))
@@ -74,6 +86,18 @@ impl AuthClient for HttpAuthClient {
 
         let body: LoginResponse =
             response.json().await.map_err(|e| AuthClientError::Unreachable(e.to_string()))?;
-        Ok((body.token, body.tenant_id, body.role))
+
+        if body.mfa_required {
+            let challenge_token = body.challenge_token.ok_or_else(|| {
+                AuthClientError::Unreachable("missing challenge_token".to_string())
+            })?;
+            return Ok(LocalLoginResult::MfaRequired { challenge_token });
+        }
+
+        let (token, tenant_id, role) = match (body.token, body.tenant_id, body.role) {
+            (Some(token), Some(tenant_id), Some(role)) => (token, tenant_id, role),
+            _ => return Err(AuthClientError::Unreachable("incomplete login response".to_string())),
+        };
+        Ok(LocalLoginResult::LoggedIn { token, tenant_id, role })
     }
 }

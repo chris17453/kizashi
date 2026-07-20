@@ -46,6 +46,7 @@ pub(crate) fn default_state() -> AppState {
             crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
         ),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
+            mfa_client: Arc::new(crate::mfa_client::mfa_client_test::InMemoryMfaClient::default()),
     }
 }
 
@@ -108,8 +109,11 @@ async fn get_login_falls_back_to_defaults_when_the_workspace_has_no_branding() {
 async fn post_login_with_valid_credentials_sets_a_session_cookie_and_redirects() {
     let auth_client = InMemoryAuthClient::default();
     let tenant_id = Uuid::new_v4();
-    *auth_client.result.lock().unwrap() =
-        Some(("issued-token".to_string(), tenant_id, common::Role::Admin));
+    *auth_client.result.lock().unwrap() = Some(LocalLoginResult::LoggedIn {
+        token: "issued-token".to_string(),
+        tenant_id,
+        role: common::Role::Admin,
+    });
     let state = AppState { auth_client: Arc::new(auth_client), ..default_state() };
 
     let response = router(state)

@@ -12,6 +12,9 @@ mod health;
 mod internal_secret;
 mod local_login_handler;
 mod local_user_repository;
+mod mfa;
+mod mfa_handler;
+mod mfa_repository;
 mod oidc_client;
 mod oidc_handler;
 mod password;
@@ -26,9 +29,18 @@ pub use audit_log::{
 pub use branding_handler::{get_branding, get_branding_by_id, put_branding};
 pub use health::build_router as health_router;
 pub use internal_secret::require_internal_secret;
-pub use local_login_handler::{local_login, AuthState, LocalLoginRequest, LoginResponse};
+pub use local_login_handler::{
+    local_login, AuthState, LocalLoginRequest, LoginResponse, MfaRequiredResponse,
+};
 pub use local_user_repository::{
     LocalUser, LocalUserRepository, LocalUserRepositoryError, PostgresLocalUserRepository,
+};
+pub use mfa_handler::{
+    get_mfa_status, post_mfa_challenge, post_mfa_disable, post_mfa_enroll, post_mfa_verify,
+    MfaChallengeRequest, MfaCodeRequest, MfaDisableRequest, MfaEnrollResponse, MfaStatusResponse,
+};
+pub use mfa_repository::{
+    MfaChallengeRepository, MfaRepositoryError, PostgresMfaChallengeRepository,
 };
 pub use oidc_client::{
     OidcClient, OidcError, OidcProviderConfig, OidcUserInfo, StandardOidcClient,
@@ -60,6 +72,10 @@ pub fn build_router(state: AuthState, internal_secret: String) -> Router {
         .route("/v1/auth/local/login", post(local_login))
         .route("/v1/auth/oidc/:provider/authorize", get(authorize))
         .route("/v1/auth/oidc/:provider/callback", post(callback))
+        // No X-Role/X-Tenant-Id/X-Username trust here at all -- identity comes entirely from
+        // possessing a valid, single-use challenge_token plus a current TOTP code (ADR-0051),
+        // the same "no header trust, so no internal-secret gate needed" shape as /login itself.
+        .route("/v1/auth/local/mfa/challenge", post(post_mfa_challenge))
         // `GET` is the Console UI's login page (unauthenticated, workspace-name-keyed);
         // deliberately unauthenticated per `branding_handler::get_branding`'s doc comment.
         .route("/v1/tenants/:name/branding", get(get_branding))
@@ -83,6 +99,13 @@ pub fn build_router(state: AuthState, internal_secret: String) -> Router {
         // segment — axum disambiguates this exact path from the `:entity_id` one above by
         // shape). Same protected group so it inherits the `X-Internal-Secret` gate below.
         .route("/v1/audit-log", get(get_recent_audit_log))
+        // Self-service MFA management -- reached only via an already-authenticated Console UI
+        // session (the caller manages their own second factor, identified by X-Username same as
+        // every other protected route), unlike /mfa/challenge above.
+        .route("/v1/auth/local/mfa/status", get(get_mfa_status))
+        .route("/v1/auth/local/mfa/enroll", post(post_mfa_enroll))
+        .route("/v1/auth/local/mfa/verify", post(post_mfa_verify))
+        .route("/v1/auth/local/mfa/disable", post(post_mfa_disable))
         .with_state(state)
         .layer(axum::middleware::from_fn_with_state(internal_secret, require_internal_secret));
 

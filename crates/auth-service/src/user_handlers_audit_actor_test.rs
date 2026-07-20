@@ -34,6 +34,8 @@ async fn update_user_role_requires_a_username_header() {
         username: "bob".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Operator,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     state.local_user_repository.create(user.clone(), "test-actor").await.unwrap();
 
@@ -60,6 +62,8 @@ async fn delete_user_requires_a_username_header() {
         username: "bob".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Operator,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     state.local_user_repository.create(user.clone(), "test-actor").await.unwrap();
 
@@ -105,6 +109,8 @@ async fn update_user_role_threads_the_real_username_through_as_the_audit_actor()
         username: "bob".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Operator,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     let repo = Arc::new(InMemoryLocalUserRepository::with_user(user.clone()));
     let state = AuthState { local_user_repository: repo.clone(), ..default_state() };
@@ -132,6 +138,8 @@ async fn delete_user_threads_the_real_username_through_as_the_audit_actor() {
         username: "bob".to_string(),
         password_hash: "hash".to_string(),
         role: Role::Operator,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     let repo = Arc::new(InMemoryLocalUserRepository::with_user(user.clone()));
     let state = AuthState { local_user_repository: repo.clone(), ..default_state() };
