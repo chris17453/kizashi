@@ -101,10 +101,14 @@ fn entry(actor: &str, changed_at: &str) -> AuditLogEntry {
 }
 
 async fn get_page(state: AppState, session_id: &str) -> axum::http::Response<Body> {
+    get_page_at(state, session_id, "/audit-log").await
+}
+
+async fn get_page_at(state: AppState, session_id: &str, uri: &str) -> axum::http::Response<Body> {
     router(state)
         .oneshot(
             Request::builder()
-                .uri("/audit-log")
+                .uri(uri)
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -155,6 +159,38 @@ async fn merges_and_sorts_entries_from_all_three_services_most_recent_first() {
 }
 
 #[tokio::test]
+async fn filters_by_the_q_query_param_case_insensitively() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let config_client = Arc::new(InMemoryAuditLogClient::default());
+    *config_client.recent.lock().unwrap() =
+        vec![entry("alice", "2026-07-18T00:00:00Z"), entry("bob", "2026-07-19T00:00:00Z")];
+    state.config_audit_log_client = config_client;
+
+    let response = get_page_at(state, &session_id, "/audit-log?q=ALICE").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("alice"));
+    assert!(!body.contains(">bob<"));
+}
+
+#[tokio::test]
+async fn shows_a_no_match_empty_state_for_an_unmatched_query() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let config_client = Arc::new(InMemoryAuditLogClient::default());
+    *config_client.recent.lock().unwrap() = vec![entry("alice", "2026-07-18T00:00:00Z")];
+    state.config_audit_log_client = config_client;
+
+    let response = get_page_at(state, &session_id, "/audit-log?q=nonexistent").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No audit activity on this page matches"));
+}
+
+#[tokio::test]
 async fn shows_a_load_older_link_when_a_full_page_is_returned() {
     let (mut state, session_id, _tenant_id) = state_with_session().await;
     let config_client = Arc::new(InMemoryAuditLogClient::default());
@@ -165,7 +201,7 @@ async fn shows_a_load_older_link_when_a_full_page_is_returned() {
 
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("/audit-log?before="));
+    assert!(body.contains("/audit-log?q=&before="));
 }
 
 #[tokio::test]
