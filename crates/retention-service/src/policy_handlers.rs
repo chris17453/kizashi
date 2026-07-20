@@ -51,6 +51,18 @@ fn role_from_headers(headers: &HeaderMap) -> Result<Role, (StatusCode, &'static 
     raw.parse().map_err(|_| (StatusCode::BAD_REQUEST, "X-Role is not a recognized role"))
 }
 
+/// The real user who performed the action, as set by whatever gateway sits in front of this
+/// service — distinct from `X-Tenant-Id` (which identifies the tenant, not the person), so audit
+/// log rows (CLAUDE.md §5) can actually answer "who did this," not just "which tenant." Same
+/// convention as auth-service, config-admin-service, and ingestion-gateway.
+fn username_from_headers(headers: &HeaderMap) -> Result<String, (StatusCode, &'static str)> {
+    headers
+        .get("x-username")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .ok_or((StatusCode::UNAUTHORIZED, "missing X-Username header"))
+}
+
 fn require_operator(headers: &HeaderMap) -> Option<Response> {
     match role_from_headers(headers) {
         Ok(role) if role.at_least(Role::Operator) => None,
@@ -84,7 +96,11 @@ pub async fn create_policy(
     if let Some(response) = require_operator(&headers) {
         return response;
     }
-    match state.policy_repository.create(policy).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.policy_repository.create(policy, &actor).await {
         Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
         Err(e) => policy_error_response(e),
     }
@@ -103,7 +119,11 @@ pub async fn update_policy(
         return response;
     }
     policy.id = id;
-    match state.policy_repository.update(policy).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.policy_repository.update(policy, &actor).await {
         Ok(updated) => Json(updated).into_response(),
         Err(e) => policy_error_response(e),
     }
@@ -121,7 +141,11 @@ pub async fn delete_policy(
     if let Some(response) = require_operator(&headers) {
         return response;
     }
-    match state.policy_repository.delete(tenant_id, id).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.policy_repository.delete(tenant_id, id, &actor).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => policy_error_response(e),
     }

@@ -44,13 +44,19 @@ pub trait RetentionPolicyRepository: Send + Sync {
     async fn create(
         &self,
         policy: RetentionPolicy,
+        actor: &str,
     ) -> Result<RetentionPolicy, RetentionPolicyRepositoryError>;
     async fn update(
         &self,
         policy: RetentionPolicy,
+        actor: &str,
     ) -> Result<RetentionPolicy, RetentionPolicyRepositoryError>;
-    async fn delete(&self, tenant_id: Uuid, id: Uuid)
-        -> Result<(), RetentionPolicyRepositoryError>;
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        actor: &str,
+    ) -> Result<(), RetentionPolicyRepositoryError>;
     async fn get(
         &self,
         tenant_id: Uuid,
@@ -88,6 +94,7 @@ impl RetentionPolicyRepository for PostgresRetentionPolicyRepository {
     async fn create(
         &self,
         policy: RetentionPolicy,
+        actor: &str,
     ) -> Result<RetentionPolicy, RetentionPolicyRepositoryError> {
         let mut tx = self
             .pool
@@ -115,7 +122,7 @@ impl RetentionPolicyRepository for PostgresRetentionPolicyRepository {
                 entity_type: "retention_policy".to_string(),
                 entity_id: policy.id,
                 change_type: ChangeType::Created,
-                actor: policy.tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: None,
                 after: serde_json::to_value(&policy).unwrap_or_default(),
                 changed_at: chrono::Utc::now(),
@@ -131,6 +138,7 @@ impl RetentionPolicyRepository for PostgresRetentionPolicyRepository {
     async fn update(
         &self,
         policy: RetentionPolicy,
+        actor: &str,
     ) -> Result<RetentionPolicy, RetentionPolicyRepositoryError> {
         let mut tx = self
             .pool
@@ -172,7 +180,7 @@ impl RetentionPolicyRepository for PostgresRetentionPolicyRepository {
                 entity_type: "retention_policy".to_string(),
                 entity_id: policy.id,
                 change_type: ChangeType::Updated,
-                actor: policy.tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: Some(serde_json::to_value(&before).unwrap_or_default()),
                 after: serde_json::to_value(&policy).unwrap_or_default(),
                 changed_at: chrono::Utc::now(),
@@ -189,6 +197,7 @@ impl RetentionPolicyRepository for PostgresRetentionPolicyRepository {
         &self,
         tenant_id: Uuid,
         id: Uuid,
+        actor: &str,
     ) -> Result<(), RetentionPolicyRepositoryError> {
         let mut tx = self
             .pool
@@ -225,7 +234,7 @@ impl RetentionPolicyRepository for PostgresRetentionPolicyRepository {
                 entity_type: "retention_policy".to_string(),
                 entity_id: id,
                 change_type: ChangeType::Deleted,
-                actor: tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: Some(serde_json::to_value(&before).unwrap_or_default()),
                 after: serde_json::Value::Null,
                 changed_at: chrono::Utc::now(),

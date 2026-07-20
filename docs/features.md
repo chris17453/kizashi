@@ -3214,3 +3214,33 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — direct correction to ADR-0037's stated thresholds/assumptions, not a new
   architectural decision.
+
+## [2026-07-19] fix/0006-retention-service-audit-actor — audit log actor is now the real user, not the tenant id
+- **Type:** fix
+- **Branch:** fix/0006-retention-service-audit-actor
+- **Summary:** `RetentionPolicyRepository::create/update/delete` hardcoded the audit log's
+  `actor` field to `tenant_id.to_string()` at all three call sites in `retention_policy.rs`,
+  which made the audit trail useless for its compliance purpose (CLAUDE.md §5) — `tenant_id` is
+  already its own column on every audit row, so reusing it as `actor` can never answer "who did
+  this." Fixes: added a `username_from_headers` helper in `policy_handlers.rs` that reads the
+  `X-Username` header (mirroring the existing `tenant_id_from_headers`/`role_from_headers`
+  pattern), returning `401 missing X-Username header` when absent; added an `actor: &str`
+  parameter to the `RetentionPolicyRepository::create/update/delete` trait methods and threaded
+  the real username from the handlers through to the `AuditLogEntry` construction, replacing all
+  three hardcoded `tenant_id.to_string()` sites. Same `X-Username` / `username_from_headers` /
+  401 convention agreed with the parallel fixes to auth-service, config-admin-service, and
+  ingestion-gateway so all four services share one wire contract; the Console UI's outgoing
+  header is a separate follow-up PR.
+- **Tests:** `cargo test -p retention-service --all-features` — 54 unit tests pass (including new
+  `create_policy_requires_username_header`, `update_policy_requires_username_header`,
+  `delete_policy_requires_username_header` in `policy_handlers_test.rs`) and 8 real-Postgres
+  integration tests pass in `tests/retention_policy_integration_test.rs`, including
+  `create_policy_writes_a_created_audit_row_in_the_same_transaction` now asserting
+  `entries[0].actor == "alice@example.com"` and `entries[0].actor != tenant_id.to_string()`, plus
+  actor assertions added to the update and delete audit-row tests. 3 pre-existing
+  `s3_archive_store_integration_test.rs` failures (missing `AWS_REGION`/minio fixtures in this
+  environment) are unrelated to this change. `cargo clippy -p retention-service --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo build
+  --workspace --all-targets` — clean.
+- **PR:** (not yet opened — committed locally for integration alongside sibling service fixes)
+- **ADR:** n/a — bug fix to existing audit-log wiring, no new architectural decision.
