@@ -96,6 +96,12 @@ async fn is_sole_admin(
     }
 }
 
+/// Duplicate-key conflicts get a clean, specific message since that's a real, expected outcome
+/// a caller can act on ("pick a different username"). Every other `Backend` error is logged in
+/// full server-side and replaced with a generic message before it reaches the client -- the raw
+/// string can be anything from a SQL syntax error to a connection-pool timeout, and was
+/// previously passed straight through as the HTTP body, visible verbatim to any Admin using the
+/// Console UI. Internal failure detail belongs in logs, not in a response an operator sees.
 fn user_error_response(e: LocalUserRepositoryError) -> Response {
     match e {
         LocalUserRepositoryError::NotFound(id) => {
@@ -105,7 +111,11 @@ fn user_error_response(e: LocalUserRepositoryError) -> Response {
             error_response(StatusCode::CONFLICT, "username already exists in this tenant")
         }
         LocalUserRepositoryError::Backend(msg) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, msg)
+            tracing::error!(error = %msg, "user repository backend error");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
         }
     }
 }

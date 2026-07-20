@@ -4512,3 +4512,20 @@ architectural decision.
   warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0082-data-viewer-date-range-and-normalization-filters.md
+
+## [2026-07-20] fix/0021-auth-service-error-message-leak-fix — Auth Service stops leaking raw backend errors on user create/update failures
+- **Type:** fix
+- **Branch:** fix/0021-auth-service-error-message-leak-fix
+- **Summary:** Closes an information-leak gap from a fourth audit pass: `user_handlers.rs`'s
+  `user_error_response` passed any non-duplicate-key `LocalUserRepositoryError::Backend` message
+  straight through as the HTTP 500 body, verbatim, to a client (rendered directly in the Console
+  UI's error banner for an Admin to read). Every such error is now logged via `tracing::error!`
+  and replaced with a generic message before it reaches the client — same log-then-generalize
+  pattern already used elsewhere in this service. The duplicate-key case (a real, actionable
+  outcome) is unchanged.
+- **Tests:** `cargo test -p auth-service --lib` — 151 passed (1 new: a backend failure's raw
+  error string never appears in the response body). `cargo build --workspace` clean. `cargo
+  clippy -p auth-service --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
+  --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0083-auth-service-error-message-leak-fix.md

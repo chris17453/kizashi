@@ -90,6 +90,34 @@ async fn create_user_succeeds_for_an_admin() {
 }
 
 #[tokio::test]
+async fn create_user_backend_failure_does_not_leak_the_raw_error_to_the_client() {
+    let tenant_id = Uuid::new_v4();
+    let state = AuthState {
+        local_user_repository: Arc::new(
+            crate::local_user_repository::local_user_repository_test::FailingLocalUserRepository,
+        ),
+        ..default_state()
+    };
+
+    let response = send(
+        router(state),
+        "POST",
+        "/v1/users".to_string(),
+        Some(tenant_id),
+        Some("admin"),
+        Some(serde_json::json!({"username": "bob", "password": "hunter2pass-is-long-enough", "role": "operator"})),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    // The repository's raw error ("simulated failure") must never reach the client -- only a
+    // generic message, with the real detail logged server-side instead.
+    assert!(!text.contains("simulated failure"));
+}
+
+#[tokio::test]
 async fn create_user_is_rejected_for_an_operator() {
     let tenant_id = Uuid::new_v4();
     let response = send(
