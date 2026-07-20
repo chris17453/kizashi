@@ -70,6 +70,7 @@ async fn renders_the_sensor_and_its_records_when_found() {
         .sensors_client
         .register_sensor(
             Role::Operator,
+            "test-actor",
             tenant_id,
             "zendesk",
             "support-poller",

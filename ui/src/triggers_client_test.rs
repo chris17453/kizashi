@@ -31,6 +31,7 @@ impl TriggersClient for InMemoryTriggersClient {
     async fn create_trigger(
         &self,
         role: Role,
+        _actor: &str,
         trigger: TriggerDefinition,
     ) -> Result<TriggerDefinition, TriggersClientError> {
         if !role.at_least(Role::Operator) {
@@ -71,6 +72,7 @@ impl TriggersClient for FailingTriggersClient {
     async fn create_trigger(
         &self,
         _role: Role,
+        _actor: &str,
         _trigger: TriggerDefinition,
     ) -> Result<TriggerDefinition, TriggersClientError> {
         Err(TriggersClientError::Unreachable("simulated failure".to_string()))
@@ -112,6 +114,9 @@ async fn spawn_stub_server() -> String {
     ) -> axum::response::Response {
         if headers.get("x-role").and_then(|v| v.to_str().ok()) != Some("operator") {
             return axum::http::StatusCode::FORBIDDEN.into_response();
+        }
+        if headers.get("x-username").and_then(|v| v.to_str().ok()) != Some("alice") {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
         }
         (axum::http::StatusCode::CREATED, Json(body)).into_response()
     }
@@ -187,7 +192,7 @@ async fn http_client_creates_a_trigger_against_a_real_server() {
     let url = spawn_stub_server().await;
     let client = HttpTriggersClient::new(reqwest::Client::new(), url, String::new());
 
-    let created = client.create_trigger(Role::Operator, sample_trigger()).await.unwrap();
+    let created = client.create_trigger(Role::Operator, "alice", sample_trigger()).await.unwrap();
     assert_eq!(created.name, "urgent-spike");
 }
 
@@ -196,8 +201,18 @@ async fn http_client_create_is_rejected_for_insufficient_role() {
     let url = spawn_stub_server().await;
     let client = HttpTriggersClient::new(reqwest::Client::new(), url, String::new());
 
-    let err = client.create_trigger(Role::Viewer, sample_trigger()).await.unwrap_err();
+    let err = client.create_trigger(Role::Viewer, "alice", sample_trigger()).await.unwrap_err();
     assert!(matches!(err, TriggersClientError::Rejected(403)));
+}
+
+#[tokio::test]
+async fn http_client_create_is_rejected_when_actor_header_missing_expected_value() {
+    let url = spawn_stub_server().await;
+    let client = HttpTriggersClient::new(reqwest::Client::new(), url, String::new());
+
+    let err =
+        client.create_trigger(Role::Operator, "someone-else", sample_trigger()).await.unwrap_err();
+    assert!(matches!(err, TriggersClientError::Rejected(401)));
 }
 
 #[tokio::test]
