@@ -154,6 +154,7 @@ pub async fn get_sso_callback(
             tenant_id: session.tenant_id,
             username,
             role: session.role,
+            created_at: chrono::Utc::now(),
         })
         .await;
 

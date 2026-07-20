@@ -32,6 +32,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
             tenant_id,
             username: "alice".to_string(),
             role: common::Role::Admin,
+            created_at: chrono::Utc::now(),
         })
         .await;
     let state = AppState {
@@ -158,6 +159,7 @@ async fn get_generate_form_leaves_the_api_key_blank_for_a_viewer() {
             tenant_id,
             username: "viewer".to_string(),
             role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
         })
         .await;
     let (mut state, _session_id, _tenant_id) = state_with_session().await;

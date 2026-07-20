@@ -3,6 +3,7 @@
 pub(crate) mod session_test;
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use common::Role;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -14,6 +15,7 @@ pub struct Session {
     pub tenant_id: Uuid,
     pub username: String,
     pub role: Role,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Auth Service has no session/cookie layer of its own (ADR-0009 — "that's Console UI's job
@@ -25,6 +27,12 @@ pub trait SessionStore: Send + Sync {
     async fn create(&self, session: Session) -> String;
     async fn get(&self, session_id: &str) -> Option<Session>;
     async fn delete(&self, session_id: &str);
+
+    /// Every active session for a tenant, session id alongside session — powers the Console
+    /// UI's `/security/sessions` admin page (ADR-0046). Single-instance-only, same as the rest
+    /// of this in-memory store (ADR-0014): a multi-replica UI deployment would need a shared
+    /// session backend before this can list sessions started on a different instance.
+    async fn list_for_tenant(&self, tenant_id: Uuid) -> Vec<(String, Session)>;
 }
 
 #[derive(Default)]
@@ -46,5 +54,15 @@ impl SessionStore for InMemorySessionStore {
 
     async fn delete(&self, session_id: &str) {
         self.sessions.lock().unwrap().remove(session_id);
+    }
+
+    async fn list_for_tenant(&self, tenant_id: Uuid) -> Vec<(String, Session)> {
+        self.sessions
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, session)| session.tenant_id == tenant_id)
+            .map(|(id, session)| (id.clone(), session.clone()))
+            .collect()
     }
 }

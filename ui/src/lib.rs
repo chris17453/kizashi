@@ -52,6 +52,7 @@ mod root_handler;
 mod sensor_detail_handler;
 mod sensor_script_handler;
 mod sensors_handler;
+mod sessions_handler;
 mod sso_login_handler;
 mod static_assets;
 mod triggers_handler;
@@ -128,6 +129,7 @@ pub use root_handler::get_root;
 pub use sensor_detail_handler::get_sensor_detail;
 pub use sensor_script_handler::{get_generate_form, get_generate_select, post_generate_script};
 pub use sensors_handler::{get_sensors, post_delete_sensor, post_sensors, post_toggle_sensor};
+pub use sessions_handler::{get_sessions, post_revoke_session};
 pub use sso_login_handler::{get_sso_callback, get_sso_login};
 pub use static_assets::get_charts_js;
 pub use triggers_handler::{get_triggers, post_trigger};
@@ -212,6 +214,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/users/:id/delete", axum::routing::post(post_delete_user))
         .route("/audit-log", get(get_recent_audit_log))
         .route("/audit-log/:service/:entity_id", get(get_entity_audit_log))
+        .route("/security/sessions", get(get_sessions))
+        .route("/security/sessions/:id/revoke", axum::routing::post(post_revoke_session))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
         .route("/data/reprocess", axum::routing::post(post_reprocess))
