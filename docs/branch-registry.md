@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0085         |
-| fix           | `fix/`     | 0020         |
+| fix           | `fix/`     | 0021         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
 | chore         | `chore/`   | 0005         |
@@ -132,3 +132,4 @@ manually created branches.
 | 0018 | `fix/0018-permissions-reference-stale-rows` | fix | 2026-07-20 | open | pending | |
 | 0019 | `fix/0019-search-term-url-encoding-fix` | fix | 2026-07-20 | open | pending | |
 | 0084 | `feature/0084-sensors-page-search-and-sort` | feature | 2026-07-20 | open | pending | |
+| 0020 | `fix/0020-overview-dashboard-surfaces-backend-errors` | fix | 2026-07-20 | open | pending | |

@@ -4476,3 +4476,21 @@ architectural decision.
   fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0080-sensors-page-search-and-sort.md
+
+## [2026-07-20] fix/0020-overview-dashboard-surfaces-backend-errors — Overview dashboard surfaces backend errors instead of silently showing zero
+- **Type:** fix
+- **Branch:** fix/0020-overview-dashboard-surfaces-backend-errors
+- **Summary:** Closes a real correctness gap from a fourth audit pass: the Overview dashboard
+  (the landing page every user sees first) was the one page where every backend call silently
+  `.unwrap_or_default()`'d, so a genuine outage rendered a plausible "0 sensors / 0 records / 0
+  events" dashboard indistinguishable from a healthy idle tenant. All five calls now push a
+  labeled entry into an `errors: Vec<String>` field on failure, same shape
+  `security_overview_handler.rs` already used, rendered the same way every other error-bearing
+  page does. The page still renders with partial data on failure — the fix is visibility, not a
+  hard failure.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 428 passed (1 new: a sensors + platform-health
+  failure renders visibly with labeled error text, not silently as zero). `cargo build
+  --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
+  clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0081-overview-dashboard-surfaces-backend-errors.md

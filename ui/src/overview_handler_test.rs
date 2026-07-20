@@ -202,6 +202,35 @@ async fn shows_an_empty_state_for_recent_activity_when_there_are_no_events() {
 }
 
 #[tokio::test]
+async fn a_backend_failure_is_surfaced_not_silently_shown_as_zero() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    state.sensors_client =
+        Arc::new(crate::sensors_client::sensors_client_test::FailingSensorsClient);
+    state.health_client = Arc::new(crate::health_client::health_client_test::FailingHealthClient);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/overview")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    // Previously every backend call silently `.unwrap_or_default()`'d, so a real outage
+    // rendered as a plausible "0 sensors" dashboard indistinguishable from a healthy idle
+    // tenant -- assert the failure is now visible on the page, not just that it doesn't crash.
+    assert!(body.contains("class=\"error\""), "a backend failure should render visibly");
+    assert!(body.contains("sensors:"));
+    assert!(body.contains("platform health:"));
+}
+
+#[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session().await;
 

@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% block content %}
 <h1>Overview</h1>
+{% for e in errors %}<p class="error">{{ e }}</p>{% endfor %}
 
 <div class="kpi-grid">
   <div class="kpi-card kpi-accent">
