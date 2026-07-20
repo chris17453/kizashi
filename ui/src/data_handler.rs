@@ -67,7 +67,14 @@ struct DataTemplate {
     can_write: bool,
     reprocessed: Option<usize>,
     error: Option<String>,
+    sensor_names: Vec<String>,
 }
+
+/// Upper bound on how many registered sensor names populate the Connector ID datalist — a
+/// plain HTML datalist stops being a usable picker well before "thousands of sensors" scale,
+/// so past this we still let the operator type any connector_id freely (the field always
+/// accepts free text; the datalist is autocomplete convenience, not a hard picker).
+const SENSOR_NAME_SUGGESTION_LIMIT: i64 = 500;
 
 /// GET /data — the Data Viewer: search across every connector's ingested records by
 /// connector, source type, free-text substring match, and (for email-shaped records)
@@ -110,6 +117,13 @@ pub async fn get_data(
     let can_write = session.role.at_least(common::Role::Operator);
     let reprocessed = query.reprocessed;
 
+    let sensor_names = state
+        .sensors_client
+        .list_sensors(session.tenant_id, SENSOR_NAME_SUGGESTION_LIMIT, 0)
+        .await
+        .map(|page| page.sensors.into_iter().map(|s| s.name).collect())
+        .unwrap_or_default();
+
     match state.stats_client.search_records(session.tenant_id, &filter).await {
         Ok(result) => Html(
             DataTemplate {
@@ -122,6 +136,7 @@ pub async fn get_data(
                 can_write,
                 reprocessed,
                 error: None,
+                sensor_names,
             }
             .render()
             .unwrap(),
@@ -138,6 +153,7 @@ pub async fn get_data(
                 can_write,
                 reprocessed,
                 error: Some(e.to_string()),
+                sensor_names,
             }
             .render()
             .unwrap(),
