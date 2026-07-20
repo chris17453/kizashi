@@ -5,10 +5,24 @@ mod api_keys_handler_test;
 use crate::session_guard::require_session;
 use crate::{ApiKeySummary, AppState};
 use askama::Template;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use uuid::Uuid;
+
+#[derive(serde::Deserialize, Default)]
+pub struct ApiKeysQuery {
+    #[serde(default)]
+    q: String,
+}
+
+/// Case-insensitive substring match on label -- same in-handler-filter shape as the Users page
+/// search (ADR-0062): `ApiKeysClient::list_api_keys` has no search parameter, and a tenant's key
+/// list is realistically small enough that filtering the already-fetched list is the right size
+/// of fix, not a new backend query param.
+fn matches_query(key: &ApiKeySummary, q: &str) -> bool {
+    q.is_empty() || key.label.to_lowercase().contains(&q.to_lowercase())
+}
 
 #[derive(Template)]
 #[template(path = "api_keys.html")]
@@ -24,9 +38,14 @@ struct ApiKeysTemplate {
     /// only gate.
     can_write: bool,
     error: Option<String>,
+    q: String,
 }
 
-pub async fn get_api_keys(State(state): State<AppState>, headers: HeaderMap) -> Response {
+pub async fn get_api_keys(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ApiKeysQuery>,
+) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(session) => session,
         Err(response) => return response,
@@ -35,9 +54,16 @@ pub async fn get_api_keys(State(state): State<AppState>, headers: HeaderMap) -> 
 
     match state.api_keys_client.list_api_keys(session.tenant_id).await {
         Ok(keys) => Html(
-            ApiKeysTemplate { show_nav: true, keys, created_key: None, can_write, error: None }
-                .render()
-                .unwrap(),
+            ApiKeysTemplate {
+                show_nav: true,
+                keys: keys.into_iter().filter(|k| matches_query(k, &query.q)).collect(),
+                created_key: None,
+                can_write,
+                error: None,
+                q: query.q,
+            }
+            .render()
+            .unwrap(),
         )
         .into_response(),
         Err(e) => Html(
@@ -47,6 +73,7 @@ pub async fn get_api_keys(State(state): State<AppState>, headers: HeaderMap) -> 
                 created_key: None,
                 can_write,
                 error: Some(e.to_string()),
+                q: query.q,
             }
             .render()
             .unwrap(),
@@ -90,6 +117,7 @@ pub async fn post_api_keys(
                     created_key: None,
                     can_write,
                     error: Some(e.to_string()),
+                    q: String::new(),
                 }
                 .render()
                 .unwrap(),
@@ -100,9 +128,16 @@ pub async fn post_api_keys(
 
     let keys = state.api_keys_client.list_api_keys(session.tenant_id).await.unwrap_or_default();
     Html(
-        ApiKeysTemplate { show_nav: true, keys, created_key, can_write, error: None }
-            .render()
-            .unwrap(),
+        ApiKeysTemplate {
+            show_nav: true,
+            keys,
+            created_key,
+            can_write,
+            error: None,
+            q: String::new(),
+        }
+        .render()
+        .unwrap(),
     )
     .into_response()
 }
