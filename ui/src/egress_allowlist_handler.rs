@@ -89,7 +89,7 @@ pub async fn post_egress_allowlist(
 
     match state
         .egress_allowlist_client
-        .put_allowlist(session.tenant_id, session.role, domains)
+        .put_allowlist(session.tenant_id, session.role, domains, &session.username)
         .await
     {
         Ok(domains) => Html(

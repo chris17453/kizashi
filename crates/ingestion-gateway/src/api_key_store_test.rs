@@ -8,6 +8,9 @@ use std::sync::Mutex;
 pub struct InMemoryApiKeyStore {
     pub keys_by_hash: Mutex<HashMap<String, Uuid>>,
     pub summaries: Mutex<Vec<ApiKeySummary>>,
+    /// Records the `actor` passed to `create`/`revoke`, keyed by entity id, so tests can assert
+    /// the real username was threaded through rather than the tenant_id.
+    pub actors_by_entity: Mutex<HashMap<Uuid, String>>,
 }
 
 impl InMemoryApiKeyStore {
@@ -28,6 +31,7 @@ impl ApiKeyStore for InMemoryApiKeyStore {
         &self,
         tenant_id: Uuid,
         label: &str,
+        actor: &str,
     ) -> Result<(ApiKeySummary, String), ApiKeyStoreError> {
         let plaintext = generate_api_key();
         let summary = ApiKeySummary {
@@ -38,6 +42,7 @@ impl ApiKeyStore for InMemoryApiKeyStore {
             revoked_at: None,
         };
         self.keys_by_hash.lock().unwrap().insert(hash_api_key(&plaintext), tenant_id);
+        self.actors_by_entity.lock().unwrap().insert(summary.id, actor.to_string());
         self.summaries.lock().unwrap().push(summary.clone());
         Ok((summary, plaintext))
     }
@@ -53,12 +58,13 @@ impl ApiKeyStore for InMemoryApiKeyStore {
             .collect())
     }
 
-    async fn revoke(&self, tenant_id: Uuid, id: Uuid) -> Result<(), ApiKeyStoreError> {
+    async fn revoke(&self, tenant_id: Uuid, id: Uuid, actor: &str) -> Result<(), ApiKeyStoreError> {
         let mut summaries = self.summaries.lock().unwrap();
         if let Some(existing) =
             summaries.iter_mut().find(|s| s.id == id && s.tenant_id == tenant_id)
         {
             existing.revoked_at = Some(Utc::now());
+            self.actors_by_entity.lock().unwrap().insert(id, actor.to_string());
         }
         Ok(())
     }
@@ -76,6 +82,7 @@ impl ApiKeyStore for FailingApiKeyStore {
         &self,
         _tenant_id: Uuid,
         _label: &str,
+        _actor: &str,
     ) -> Result<(ApiKeySummary, String), ApiKeyStoreError> {
         Err(ApiKeyStoreError::Backend("simulated failure".to_string()))
     }
@@ -84,7 +91,12 @@ impl ApiKeyStore for FailingApiKeyStore {
         Err(ApiKeyStoreError::Backend("simulated failure".to_string()))
     }
 
-    async fn revoke(&self, _tenant_id: Uuid, _id: Uuid) -> Result<(), ApiKeyStoreError> {
+    async fn revoke(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+        _actor: &str,
+    ) -> Result<(), ApiKeyStoreError> {
         Err(ApiKeyStoreError::Backend("simulated failure".to_string()))
     }
 }
@@ -123,7 +135,7 @@ async fn create_returns_a_plaintext_key_that_resolves_to_the_tenant() {
     let store = InMemoryApiKeyStore::default();
     let tenant_id = Uuid::new_v4();
 
-    let (summary, plaintext) = store.create(tenant_id, "ci-agent").await.unwrap();
+    let (summary, plaintext) = store.create(tenant_id, "ci-agent", "alice").await.unwrap();
 
     assert_eq!(summary.tenant_id, tenant_id);
     assert_eq!(summary.label, "ci-agent");
@@ -135,8 +147,8 @@ async fn create_returns_a_plaintext_key_that_resolves_to_the_tenant() {
 async fn list_is_scoped_to_tenant() {
     let store = InMemoryApiKeyStore::default();
     let tenant_id = Uuid::new_v4();
-    store.create(tenant_id, "mine").await.unwrap();
-    store.create(Uuid::new_v4(), "not-mine").await.unwrap();
+    store.create(tenant_id, "mine", "alice").await.unwrap();
+    store.create(Uuid::new_v4(), "not-mine", "bob").await.unwrap();
 
     let found = store.list(tenant_id).await.unwrap();
     assert_eq!(found.len(), 1);
@@ -147,10 +159,26 @@ async fn list_is_scoped_to_tenant() {
 async fn revoke_marks_the_key_revoked() {
     let store = InMemoryApiKeyStore::default();
     let tenant_id = Uuid::new_v4();
-    let (summary, _plaintext) = store.create(tenant_id, "to-revoke").await.unwrap();
+    let (summary, _plaintext) = store.create(tenant_id, "to-revoke", "alice").await.unwrap();
 
-    store.revoke(tenant_id, summary.id).await.unwrap();
+    store.revoke(tenant_id, summary.id, "alice").await.unwrap();
 
     let found = store.list(tenant_id).await.unwrap();
     assert!(found[0].revoked_at.is_some());
+}
+
+#[tokio::test]
+async fn create_and_revoke_thread_the_real_actor_not_the_tenant_id() {
+    let store = InMemoryApiKeyStore::default();
+    let tenant_id = Uuid::new_v4();
+
+    let (summary, _plaintext) = store.create(tenant_id, "audited", "alice").await.unwrap();
+    assert_eq!(store.actors_by_entity.lock().unwrap().get(&summary.id), Some(&"alice".to_string()));
+    assert_ne!(
+        store.actors_by_entity.lock().unwrap().get(&summary.id),
+        Some(&tenant_id.to_string())
+    );
+
+    store.revoke(tenant_id, summary.id, "bob").await.unwrap();
+    assert_eq!(store.actors_by_entity.lock().unwrap().get(&summary.id), Some(&"bob".to_string()));
 }

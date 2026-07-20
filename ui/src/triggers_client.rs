@@ -43,10 +43,13 @@ pub trait TriggersClient: Send + Sync {
     ) -> Result<TriggersPage, TriggersClientError>;
 
     /// Creates a trigger — operator-only (RBAC v1, ADR-0016); `trigger.tenant_id` must already
-    /// be set to the calling session's tenant (config-admin-service rejects a mismatch).
+    /// be set to the calling session's tenant (config-admin-service rejects a mismatch). `actor`
+    /// is the signed-in session's username, sent as `X-Username` so config-admin-service can
+    /// record the real actor on the audit-log entry instead of just the tenant.
     async fn create_trigger(
         &self,
         role: Role,
+        actor: &str,
         trigger: TriggerDefinition,
     ) -> Result<TriggerDefinition, TriggersClientError>;
 
@@ -117,6 +120,7 @@ impl TriggersClient for HttpTriggersClient {
     async fn create_trigger(
         &self,
         role: Role,
+        actor: &str,
         trigger: TriggerDefinition,
     ) -> Result<TriggerDefinition, TriggersClientError> {
         let response = self
@@ -124,6 +128,7 @@ impl TriggersClient for HttpTriggersClient {
             .post(format!("{}/v1/trigger-definitions", self.config_admin_service_url))
             .header("x-tenant-id", trigger.tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(&trigger)
             .send()
             .await

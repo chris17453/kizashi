@@ -4,7 +4,7 @@ mod analysis_config_handlers_test;
 
 use crate::analysis_config_publisher::AnalysisConfigPublisher;
 use crate::analysis_config_repository::{AnalysisConfigRepository, AnalysisConfigRepositoryError};
-use crate::handlers::{require_operator, tenant_id_from_headers};
+use crate::handlers::{require_operator, tenant_id_from_headers, username_from_headers};
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
@@ -75,13 +75,17 @@ pub async fn put_analysis_config(
     if let Some(response) = require_operator(&headers) {
         return response;
     }
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
 
     let mut config = AnalysisConfig::new(tenant_id, body.prompt);
     config.provider = body.provider;
     config.model = body.model;
     config.endpoint = body.endpoint;
     config.api_key = body.api_key;
-    match state.repository.upsert(config).await {
+    match state.repository.upsert(config, &actor).await {
         Ok(saved) => {
             if let Err(e) = state.publisher.publish_analysis_config_changed(&saved).await {
                 tracing::error!(tenant_id = %saved.tenant_id, error = %e, "failed to publish analysis_config.changed");

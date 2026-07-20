@@ -24,6 +24,7 @@ impl RetentionPoliciesClient for InMemoryRetentionPoliciesClient {
         &self,
         role: Role,
         policy: RetentionPolicy,
+        _actor: &str,
     ) -> Result<RetentionPolicy, RetentionPoliciesClientError> {
         if !role.at_least(Role::Operator) {
             return Err(RetentionPoliciesClientError::Rejected(403));
@@ -36,6 +37,7 @@ impl RetentionPoliciesClient for InMemoryRetentionPoliciesClient {
         &self,
         role: Role,
         policy: RetentionPolicy,
+        _actor: &str,
     ) -> Result<RetentionPolicy, RetentionPoliciesClientError> {
         if !role.at_least(Role::Operator) {
             return Err(RetentionPoliciesClientError::Rejected(403));
@@ -55,6 +57,7 @@ impl RetentionPoliciesClient for InMemoryRetentionPoliciesClient {
         role: Role,
         _tenant_id: Uuid,
         id: Uuid,
+        _actor: &str,
     ) -> Result<(), RetentionPoliciesClientError> {
         if !role.at_least(Role::Operator) {
             return Err(RetentionPoliciesClientError::Rejected(403));
@@ -84,6 +87,7 @@ impl RetentionPoliciesClient for FailingRetentionPoliciesClient {
         &self,
         _role: Role,
         _policy: RetentionPolicy,
+        _actor: &str,
     ) -> Result<RetentionPolicy, RetentionPoliciesClientError> {
         Err(RetentionPoliciesClientError::Unreachable("simulated failure".to_string()))
     }
@@ -92,6 +96,7 @@ impl RetentionPoliciesClient for FailingRetentionPoliciesClient {
         &self,
         _role: Role,
         _policy: RetentionPolicy,
+        _actor: &str,
     ) -> Result<RetentionPolicy, RetentionPoliciesClientError> {
         Err(RetentionPoliciesClientError::Unreachable("simulated failure".to_string()))
     }
@@ -101,6 +106,7 @@ impl RetentionPoliciesClient for FailingRetentionPoliciesClient {
         _role: Role,
         _tenant_id: Uuid,
         _id: Uuid,
+        _actor: &str,
     ) -> Result<(), RetentionPoliciesClientError> {
         Err(RetentionPoliciesClientError::Unreachable("simulated failure".to_string()))
     }
@@ -172,7 +178,7 @@ async fn http_client_creates_a_policy_against_a_real_server() {
         enabled: true,
     };
 
-    let created = client.create_policy(Role::Operator, policy.clone()).await.unwrap();
+    let created = client.create_policy(Role::Operator, policy.clone(), "alice").await.unwrap();
 
     assert_eq!(created.tenant_id, tenant_id);
     assert_eq!(created.ttl_days, 30);
@@ -191,7 +197,7 @@ async fn http_client_updates_a_policy_against_a_real_server() {
     };
     policy.enabled = false;
 
-    let updated = client.update_policy(Role::Operator, policy).await.unwrap();
+    let updated = client.update_policy(Role::Operator, policy, "alice").await.unwrap();
     assert!(!updated.enabled);
 }
 
@@ -200,7 +206,7 @@ async fn http_client_deletes_a_policy_against_a_real_server() {
     let url = spawn_stub_server().await;
     let client = HttpRetentionPoliciesClient::new(reqwest::Client::new(), url);
 
-    client.delete_policy(Role::Operator, Uuid::new_v4(), Uuid::new_v4()).await.unwrap();
+    client.delete_policy(Role::Operator, Uuid::new_v4(), Uuid::new_v4(), "alice").await.unwrap();
 }
 
 #[tokio::test]

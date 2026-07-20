@@ -46,6 +46,7 @@ async fn create_api_key_returns_the_plaintext_key_once() {
                 .uri("/v1/api-keys")
                 .header("x-tenant-id", tenant_id.to_string())
                 .header("x-role", "admin")
+                .header("x-username", "alice")
                 .header("content-type", "application/json")
                 .body(Body::from(r#"{"label":"ci-agent"}"#))
                 .unwrap(),
@@ -58,6 +59,62 @@ async fn create_api_key_returns_the_plaintext_key_once() {
     let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(body["label"], "ci-agent");
     assert!(body["api_key"].as_str().unwrap().starts_with("kzsh_"));
+}
+
+#[tokio::test]
+async fn create_api_key_passes_the_real_username_as_actor_not_the_tenant_id() {
+    let store = Arc::new(InMemoryApiKeyStore::default());
+    let tenant_id = Uuid::new_v4();
+
+    let response = router(state_with(store.clone()))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/api-keys")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "admin")
+                .header("x-username", "alice")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"label":"ci-agent"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let id: Uuid = body["id"].as_str().unwrap().parse().unwrap();
+
+    let recorded_actor = store.actors_by_entity.lock().unwrap().get(&id).cloned();
+    assert_eq!(recorded_actor, Some("alice".to_string()));
+    assert_ne!(recorded_actor, Some(tenant_id.to_string()));
+}
+
+#[tokio::test]
+async fn revoke_api_key_passes_the_real_username_as_actor_not_the_tenant_id() {
+    let store = Arc::new(InMemoryApiKeyStore::default());
+    let tenant_id = Uuid::new_v4();
+    let (summary, _plaintext) = store.create(tenant_id, "to-revoke", "alice").await.unwrap();
+
+    let response = router(state_with(store.clone()))
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/api-keys/{}", summary.id))
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "operator")
+                .header("x-username", "bob")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let recorded_actor = store.actors_by_entity.lock().unwrap().get(&summary.id).cloned();
+    assert_eq!(recorded_actor, Some("bob".to_string()));
+    assert_ne!(recorded_actor, Some(tenant_id.to_string()));
 }
 
 #[tokio::test]
@@ -123,11 +180,33 @@ async fn create_api_key_missing_tenant_header_is_unauthorized() {
 }
 
 #[tokio::test]
+async fn create_api_key_missing_username_header_is_unauthorized() {
+    let state = state_with(Arc::new(InMemoryApiKeyStore::default()));
+    let tenant_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/api-keys")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "admin")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"label":"ci-agent"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn list_api_keys_is_scoped_to_tenant_and_never_exposes_key_material() {
     let store = Arc::new(InMemoryApiKeyStore::default());
     let tenant_id = Uuid::new_v4();
-    store.create(tenant_id, "mine").await.unwrap();
-    store.create(Uuid::new_v4(), "not-mine").await.unwrap();
+    store.create(tenant_id, "mine", "alice").await.unwrap();
+    store.create(Uuid::new_v4(), "not-mine", "bob").await.unwrap();
     let state = state_with(store);
 
     let response = router(state)
@@ -155,7 +234,7 @@ async fn list_api_keys_is_scoped_to_tenant_and_never_exposes_key_material() {
 async fn revoke_api_key_marks_it_revoked() {
     let store = Arc::new(InMemoryApiKeyStore::default());
     let tenant_id = Uuid::new_v4();
-    let (summary, _plaintext) = store.create(tenant_id, "to-revoke").await.unwrap();
+    let (summary, _plaintext) = store.create(tenant_id, "to-revoke", "alice").await.unwrap();
     let state = state_with(store.clone());
 
     let response = router(state)
@@ -165,6 +244,7 @@ async fn revoke_api_key_marks_it_revoked() {
                 .uri(format!("/v1/api-keys/{}", summary.id))
                 .header("x-tenant-id", tenant_id.to_string())
                 .header("x-role", "operator")
+                .header("x-username", "bob")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -180,7 +260,7 @@ async fn revoke_api_key_marks_it_revoked() {
 async fn get_api_key_audit_log_returns_the_created_entry() {
     let store = Arc::new(InMemoryApiKeyStore::default());
     let tenant_id = Uuid::new_v4();
-    let (summary, _plaintext) = store.create(tenant_id, "audited").await.unwrap();
+    let (summary, _plaintext) = store.create(tenant_id, "audited", "alice").await.unwrap();
     let mut state = state_with(store);
     let reader = crate::audit_log::audit_log_test::InMemoryAuditLogReader::default();
     reader.entries.lock().unwrap().push(crate::audit_log::AuditLogEntry {

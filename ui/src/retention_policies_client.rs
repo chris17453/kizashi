@@ -58,6 +58,7 @@ pub trait RetentionPoliciesClient: Send + Sync {
         &self,
         role: Role,
         policy: RetentionPolicy,
+        actor: &str,
     ) -> Result<RetentionPolicy, RetentionPoliciesClientError>;
 
     /// Persists `policy` as-is via `PUT /v1/retention-policies/:id` — used for both the
@@ -67,6 +68,7 @@ pub trait RetentionPoliciesClient: Send + Sync {
         &self,
         role: Role,
         policy: RetentionPolicy,
+        actor: &str,
     ) -> Result<RetentionPolicy, RetentionPoliciesClientError>;
 
     /// Deletes a policy via `DELETE /v1/retention-policies/:id`, matching
@@ -76,6 +78,7 @@ pub trait RetentionPoliciesClient: Send + Sync {
         role: Role,
         tenant_id: Uuid,
         id: Uuid,
+        actor: &str,
     ) -> Result<(), RetentionPoliciesClientError>;
 }
 
@@ -114,12 +117,14 @@ impl RetentionPoliciesClient for HttpRetentionPoliciesClient {
         &self,
         role: Role,
         policy: RetentionPolicy,
+        actor: &str,
     ) -> Result<RetentionPolicy, RetentionPoliciesClientError> {
         let response = self
             .client
             .post(format!("{}/v1/retention-policies", self.retention_service_url))
             .header("x-tenant-id", policy.tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(&policy)
             .send()
             .await
@@ -135,12 +140,14 @@ impl RetentionPoliciesClient for HttpRetentionPoliciesClient {
         &self,
         role: Role,
         policy: RetentionPolicy,
+        actor: &str,
     ) -> Result<RetentionPolicy, RetentionPoliciesClientError> {
         let response = self
             .client
             .put(format!("{}/v1/retention-policies/{}", self.retention_service_url, policy.id))
             .header("x-tenant-id", policy.tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(&policy)
             .send()
             .await
@@ -157,12 +164,14 @@ impl RetentionPoliciesClient for HttpRetentionPoliciesClient {
         role: Role,
         tenant_id: Uuid,
         id: Uuid,
+        actor: &str,
     ) -> Result<(), RetentionPoliciesClientError> {
         let response = self
             .client
             .delete(format!("{}/v1/retention-policies/{id}", self.retention_service_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .send()
             .await
             .map_err(|e| RetentionPoliciesClientError::Unreachable(e.to_string()))?;

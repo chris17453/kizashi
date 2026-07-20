@@ -3211,7 +3211,7 @@ architectural decision.
   concurrency=4; if `ANALYSIS_BATCH_SIZE` or per-request latency grow significantly, this
   threshold should be revisited. `docs/adr/0037-analysis-service-consumer-liveness-healthcheck.md`
   updated to reflect these numbers is a candidate follow-up, not done in this PR.
-- **PR:** (opened in this branch's PR)
+- **PR:** [#60](https://github.com/chris17453/kizashi/pull/60)
 - **ADR:** n/a — direct correction to ADR-0037's stated thresholds/assumptions, not a new
   architectural decision.
 
@@ -3247,5 +3247,211 @@ architectural decision.
   dropdown. Test sensor cleaned up afterward.
 - **Follow-up:** this audit was not exhaustive — see ADR-0038's Consequences section for what's
   still open (SSO/auth-provider config UI, further per-page polish).
-- **PR:** (opened in this branch's PR)
+- **PR:** [#61](https://github.com/chris17453/kizashi/pull/61)
 - **ADR:** [ADR-0038](../docs/adr/0038-console-ui-availability-and-usability-fixes.md)
+
+## [2026-07-19] fix/0006-auth-service-audit-actor — auth-service audit log now records the real actor, not the tenant_id
+- **Type:** fix
+- **Branch:** fix/0006-auth-service-audit-actor
+- **Summary:** Every `AuditLogEntry.actor` written by `LocalUserRepository` (create/update_role/
+  delete) was set to the tenant_id — a value already present as its own column on every audit
+  row — making the audit trail useless for answering "who did this" (CLAUDE.md §5). Added a
+  `username_from_headers` helper (`crates/auth-service/src/user_handlers.rs`) that reads a new
+  `X-Username` header, mirroring the existing `tenant_id_from_headers`/`role_from_headers`
+  pattern (401 `"missing X-Username header"` when absent). `create_user`, `update_user_role`,
+  and `delete_user` now extract the real username and thread it through as `actor` instead of
+  `&tenant_id.to_string()`. `LocalUserRepository::create` gained an `actor: &str` parameter
+  (previously missing entirely — the Postgres impl hardcoded `user.tenant_id.to_string()`) on
+  the trait, the Postgres impl, and the in-memory test double. The UI's outgoing requests are
+  not touched here — that's a separate follow-up PR to add the `X-Username` header on the
+  sending side.
+- **Tests:** TDD per CLAUDE.md §2 — failing tests written first for the new header behavior and
+  actor threading, then made to pass. `cargo test -p auth-service --all-features` (real
+  Postgres at `postgres://kizashi:kizashi@localhost:55432/kizashi`) — 65 lib tests + 2
+  `hash_password` bin tests + 6 Postgres integration tests (including new
+  `create_writes_an_audit_row_with_the_real_actor_not_the_tenant_id` and
+  `create_records_the_real_actor_not_the_tenant_id`) all passed, 0 failed. New handler tests in
+  `user_handlers_audit_actor_test.rs` (split out to stay under the 500-line file limit):
+  `create_user_requires_a_username_header`, `update_user_role_requires_a_username_header`,
+  `delete_user_requires_a_username_header` (assert 401), and
+  `create_user_threads_the_real_username_through_as_the_audit_actor`,
+  `update_user_role_threads_the_real_username_through_as_the_audit_actor`,
+  `delete_user_threads_the_real_username_through_as_the_audit_actor` (assert the repository
+  receives the real actor). `cargo clippy -p auth-service --all-targets --all-features -- -D
+  warnings` — clean. `cargo fmt --all --check` — clean. `cargo build --workspace --all-targets`
+  — clean, confirms the trait signature change didn't break other crates.
+- **PR:** (opened in the integration branch's PR — see below)
+- **ADR:** n/a — this is a bugfix restoring intended audit-log behavior (CLAUDE.md §5), not a
+  new architectural decision; no spec §11 open item touched.
+
+## [2026-07-19] fix/0006-config-admin-service-audit-actor — Config Admin Service audit log records the real actor, not the tenant id
+- **Type:** fix
+- **Branch:** fix/0006-config-admin-service-audit-actor
+- **Summary:** Every audit-log write in `config-admin-service` (sensor, trigger-definition,
+  normalization-mapping, analysis-config repositories) hardcoded `AuditLogEntry.actor` to
+  `tenant_id.to_string()`, which made the audit trail unable to answer "who made this change" —
+  only "which tenant", already a separate column on every row (CLAUDE.md §5). Adds
+  `username_from_headers` (reads `X-Username`, mirroring the existing `X-Tenant-Id`/`X-Role`
+  helpers in `handlers.rs`), threads a new `actor: &str` parameter through every
+  create/update/delete/upsert repository method, and updates every write handler
+  (`sensor_handlers.rs`, `handlers.rs` trigger/mapping handlers, `analysis_config_handlers.rs`)
+  to extract the real caller identity from that header instead. Matches the same
+  `X-Username`/`username_from_headers`/`missing X-Username header` convention used by the
+  sibling fixes landing in auth-service, retention-service, and ingestion-gateway so all four
+  services agree on the wire contract. The UI does not yet send `X-Username` — that lands in a
+  separate PR.
+- **Tests:** `cargo test -p config-admin-service --all-features` (real Postgres +
+  RabbitMQ) — 117 passed, 0 failed, across unit tests (92) and integration test files
+  (`repository_integration_test.rs` 18, `sensor_publisher_integration_test.rs` 2,
+  `trigger_publisher_integration_test.rs` 1, `mapping_publisher_integration_test.rs` 1,
+  `analysis_config_publisher_integration_test.rs` 1, `saved_search_query_repository_integration_test.rs`
+  2). New regression coverage: `create_trigger_records_the_real_actor_not_the_tenant_id` and
+  `sensor_create_update_and_delete_all_record_the_real_actor_not_the_tenant_id` in
+  `repository_integration_test.rs` assert the written `actor` equals the real username and is
+  never equal to `tenant_id.to_string()`, against real Postgres. New handler-level 401 coverage:
+  `create_trigger_requires_username_header`, `create_sensor_requires_username_header`,
+  `put_requires_username_header`. `cargo clippy -p config-admin-service --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo build
+  --workspace --all-targets` — clean (no other crate constructs these repository trait objects
+  directly, confirmed by grep).
+- **PR:** (opened in the integration branch's PR — see above)
+- **ADR:** n/a — bug fix restoring already-documented CLAUDE.md §5 behavior, not a new
+  architectural decision.
+## [2026-07-19] fix/0006-retention-service-audit-actor — audit log actor is now the real user, not the tenant id
+- **Type:** fix
+- **Branch:** fix/0006-retention-service-audit-actor
+- **Summary:** `RetentionPolicyRepository::create/update/delete` hardcoded the audit log's
+  `actor` field to `tenant_id.to_string()` at all three call sites in `retention_policy.rs`,
+  which made the audit trail useless for its compliance purpose (CLAUDE.md §5) — `tenant_id` is
+  already its own column on every audit row, so reusing it as `actor` can never answer "who did
+  this." Fixes: added a `username_from_headers` helper in `policy_handlers.rs` that reads the
+  `X-Username` header (mirroring the existing `tenant_id_from_headers`/`role_from_headers`
+  pattern), returning `401 missing X-Username header` when absent; added an `actor: &str`
+  parameter to the `RetentionPolicyRepository::create/update/delete` trait methods and threaded
+  the real username from the handlers through to the `AuditLogEntry` construction, replacing all
+  three hardcoded `tenant_id.to_string()` sites. Same `X-Username` / `username_from_headers` /
+  401 convention agreed with the parallel fixes to auth-service, config-admin-service, and
+  ingestion-gateway so all four services share one wire contract; the Console UI's outgoing
+  header is a separate follow-up PR.
+- **Tests:** `cargo test -p retention-service --all-features` — 54 unit tests pass (including new
+  `create_policy_requires_username_header`, `update_policy_requires_username_header`,
+  `delete_policy_requires_username_header` in `policy_handlers_test.rs`) and 8 real-Postgres
+  integration tests pass in `tests/retention_policy_integration_test.rs`, including
+  `create_policy_writes_a_created_audit_row_in_the_same_transaction` now asserting
+  `entries[0].actor == "alice@example.com"` and `entries[0].actor != tenant_id.to_string()`, plus
+  actor assertions added to the update and delete audit-row tests. 3 pre-existing
+  `s3_archive_store_integration_test.rs` failures (missing `AWS_REGION`/minio fixtures in this
+  environment) are unrelated to this change. `cargo clippy -p retention-service --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo build
+  --workspace --all-targets` — clean.
+- **PR:** (opened in the integration branch's PR — see above)
+- **ADR:** n/a — bug fix to existing audit-log wiring, no new architectural decision.
+## [2026-07-19] fix/0006-ingestion-gateway-audit-actor — API key audit log records the real actor, not the tenant_id
+- **Type:** fix
+- **Branch:** fix/0006-ingestion-gateway-audit-actor
+- **Summary:** `ApiKeyStore::create`/`revoke` in `crates/ingestion-gateway` hardcoded
+  `AuditLogEntry.actor` to `tenant_id.to_string()`, making the audit log useless for its
+  compliance purpose (CLAUDE.md §5) — `tenant_id` is already a separate column on every row, so
+  the audit trail couldn't say *who* created or revoked an API key. Added a
+  `username_from_headers` helper in `api_key_handlers.rs` (reads `X-Username`, 401s if absent —
+  same wire contract as auth-service/config-admin-service/retention-service's identical fix),
+  threaded a new `actor: &str` parameter through `ApiKeyStore::create`/`revoke` (trait, Postgres
+  impl, and the in-memory/failing test doubles), and wired `create_api_key`/`revoke_api_key` to
+  pass the real username instead of the tenant_id fallback.
+- **Tests:** `cargo test -p ingestion-gateway --all-features` — 44 passed, 0 failed (38 unit +
+  6 integration against real Postgres), including new tests
+  `create_and_revoke_thread_the_real_actor_not_the_tenant_id` (store-level),
+  `create_api_key_passes_the_real_username_as_actor_not_the_tenant_id` and
+  `revoke_api_key_passes_the_real_username_as_actor_not_the_tenant_id` (handler-level,
+  asserting the recorded actor equals the `X-Username` header value and is never the tenant_id),
+  `create_api_key_missing_username_header_is_unauthorized` (401 on missing `X-Username`), and
+  updated integration tests `create_writes_a_created_audit_row_and_the_key_resolves` /
+  `revoke_writes_a_deleted_audit_row_and_the_key_stops_resolving` to assert the persisted
+  `AuditLogEntry.actor` is the real username. `cargo clippy -p ingestion-gateway --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo build
+  --workspace --all-targets` — clean.
+- **PR:** (opened in the integration branch's PR — see above)
+- **ADR:** n/a — bugfix restoring the audit log's intended behavior, not a new architectural
+  decision.
+## [2026-07-19] fix/0006-ui-actor-header-batch2 — Console UI sends `X-Username` on API-keys/egress-allowlist/users/retention-policy writes
+- **Type:** fix
+- **Branch:** fix/0006-ui-actor-header-batch2
+- **Summary:** Compliance defect (CLAUDE.md §5): audit-log entries recorded the tenant, never
+  the real acting user. This is the Console UI half of the fix — `ApiKeysClient`,
+  `EgressAllowlistClient`, `UsersClient`, and `RetentionPoliciesClient`'s mutating methods
+  (`create_api_key`/`revoke_api_key`, `put_allowlist`, `create_user`/`update_user_role`/
+  `delete_user`, `create_policy`/`update_policy`/`delete_policy`) now take a trailing
+  `actor: &str` parameter and send it as the `x-username` header alongside the existing
+  `x-tenant-id`/`x-role` headers, matching the codebase's lowercase header convention. Every
+  call site in `api_keys_handler.rs`, `egress_allowlist_handler.rs`, `users_handler.rs`,
+  `retention_policies_handler.rs`, and `sensor_script_handler.rs` (the auto-generated-API-key
+  path) now passes `&session.username` from the authenticated `Session`. Backend services
+  (auth-service, config-admin-service, retention-service, ingestion-gateway) reading this header
+  and using it as the real audit-log actor are a parallel, separate change.
+- **Tests:** `cargo test -p kizashi-ui --all-features` — 244 passed, 0 failed (up from prior
+  count; added `http_client_sends_x_username_header_on_create` in
+  `api_keys_client_test.rs` and `http_client_sends_x_username_header_on_create_user` in
+  `users_client_test.rs`, each spinning a real axum stub server and asserting the exact
+  `x-username` header value received). `cargo clippy -p kizashi-ui --all-targets --all-features
+  -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo build --workspace
+  --all-targets` — clean.
+- **PR:** (opened in the integration branch's PR — see above)
+- **ADR:** n/a
+## [2026-07-19] fix/0007-ui-actor-header-batch1 — Console UI sends X-Username on sensor/trigger/mapping/analysis-config writes
+- **Type:** fix
+- **Branch:** fix/0007-ui-actor-header-batch1
+- **Summary:** Compliance defect (CLAUDE.md §5): every audit-log entry's "actor" was recorded as
+  the tenant_id, never the real signed-in user, because Console UI's HTTP clients never sent who
+  was making the request. Adds an `actor: &str` parameter (the signed-in `Session.username`) to
+  every mutating trait method on `SensorsClient` (`register_sensor`, `delete_sensor`,
+  `update_sensor`), `TriggersClient` (`create_trigger`), `NormalizationMappingsClient`
+  (`create_mapping`), and `AnalysisConfigClient` (`put_analysis_config`), sent as the
+  case-insensitive `X-Username` header alongside the existing `X-Tenant-Id`/`X-Role` headers, and
+  wires `&session.username` through from every handler call site
+  (`sensors_handler.rs`, `triggers_handler.rs`, `normalization_mappings_handler.rs`,
+  `analysis_config_handler.rs`). Backend-side reading of this header (config-admin-service et al.)
+  is out of scope for this branch — landing in parallel sibling branches
+  (`fix/0006-*-audit-actor`) that make each service actually use it as the audit-log actor and
+  401 a write missing it.
+- **Tests:** `cargo test -p kizashi-ui --all-features` — 245 passed, 0 failed. Added
+  `http_client_register_sensor_is_rejected_when_actor_header_missing_expected_value`,
+  `http_client_create_is_rejected_when_actor_header_missing_expected_value` (triggers and
+  normalization-mappings clients), and
+  `http_client_put_is_rejected_when_actor_header_missing_expected_value` (analysis-config
+  client), each asserting against a real spawned axum stub server that rejects the request with
+  401 unless `X-Username` carries the expected actor, mirroring the existing `x-role` assertion
+  pattern in those same `_client_test.rs` files. `cargo clippy -p kizashi-ui --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo build
+  --workspace --all-targets` — clean.
+- **PR:** (opened in the integration branch's PR — see above)
+- **ADR:** n/a — implements existing audit-log requirement (CLAUDE.md §5), not a new
+  architectural decision.
+
+## [2026-07-20] fix/0006-audit-log-real-actor — audit log actor identity fixed platform-wide (integration of 6 parallel branches)
+- **Type:** fix
+- **Branch:** fix/0006-audit-log-real-actor
+- **Summary:** Integrates six coordinated branches (one per backend service — auth-service,
+  config-admin-service, retention-service, ingestion-gateway — plus two UI-client batches) that
+  together fix a systemic compliance defect discovered during a live Console UI audit: every
+  audit-log write across the entire platform recorded `tenant_id` as the "actor," never the
+  real user who performed the action. Landed as one integration since the wire contract
+  (`X-Username` header, `username_from_headers` helper, `401` on missing) only works if backend
+  reads and UI sends land together — merging either half alone would either 401 every admin
+  write or silently keep the audit log wrong. See ADR-0039 for the full design and rationale,
+  and the six individual feature-log entries above for per-service detail.
+- **Tests:** `cargo build --workspace --all-targets` — clean. `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean.
+  `cargo test --workspace --all-features` (full real-infra stack: Postgres, RabbitMQ,
+  ClickHouse, greenmail, mssql-CI) — every test binary passed, 0 failed, including 248 kizashi-ui
+  tests (up from 241 at the start of this session). `cargo deny check` / `cargo audit` — clean,
+  same 3 pre-existing allow-listed advisories.
+- **Live verification:** rebuilt and redeployed all five affected services
+  (auth-service, config-admin-service, retention-service, ingestion-gateway, kizashi-ui)
+  together against the real running stack. Registered a real sensor through the Console UI and
+  confirmed via direct Postgres query that the fresh audit row's `actor` column is the real
+  username (`demo`), not the tenant UUID. Toggled a real user's role through the Users page and
+  confirmed via the Audit History page's screenshot that the newest row shows `demo` as the
+  actor while older, pre-fix rows correctly still show their original (UUID) actor value,
+  proving the immutable audit trail wasn't rewritten, only new writes changed.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0039](../docs/adr/0039-audit-log-actor-identity.md)

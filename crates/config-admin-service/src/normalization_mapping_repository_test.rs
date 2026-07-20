@@ -17,6 +17,7 @@ impl NormalizationMappingRepository for InMemoryNormalizationMappingRepository {
     async fn create(
         &self,
         mapping: NormalizationMapping,
+        _actor: &str,
     ) -> Result<NormalizationMapping, NormalizationMappingRepositoryError> {
         self.mappings.lock().unwrap().push(mapping.clone());
         Ok(mapping)
@@ -25,6 +26,7 @@ impl NormalizationMappingRepository for InMemoryNormalizationMappingRepository {
     async fn update(
         &self,
         mapping: NormalizationMapping,
+        _actor: &str,
     ) -> Result<NormalizationMapping, NormalizationMappingRepositoryError> {
         let mut mappings = self.mappings.lock().unwrap();
         match mappings.iter_mut().find(|m| m.id == mapping.id && m.tenant_id == mapping.tenant_id) {
@@ -72,6 +74,7 @@ impl NormalizationMappingRepository for FailingNormalizationMappingRepository {
     async fn create(
         &self,
         _mapping: NormalizationMapping,
+        _actor: &str,
     ) -> Result<NormalizationMapping, NormalizationMappingRepositoryError> {
         Err(NormalizationMappingRepositoryError::Backend("simulated failure".to_string()))
     }
@@ -79,6 +82,7 @@ impl NormalizationMappingRepository for FailingNormalizationMappingRepository {
     async fn update(
         &self,
         _mapping: NormalizationMapping,
+        _actor: &str,
     ) -> Result<NormalizationMapping, NormalizationMappingRepositoryError> {
         Err(NormalizationMappingRepositoryError::Backend("simulated failure".to_string()))
     }
@@ -111,7 +115,7 @@ async fn create_then_get_round_trips() {
     let tenant_id = Uuid::new_v4();
     let mapping = sample_mapping(tenant_id);
 
-    repo.create(mapping.clone()).await.unwrap();
+    repo.create(mapping.clone(), "test-actor").await.unwrap();
     let found = repo.get(tenant_id, mapping.id).await.unwrap();
     assert_eq!(found, Some(mapping));
 }
@@ -121,7 +125,7 @@ async fn update_of_unknown_mapping_returns_not_found() {
     let repo = InMemoryNormalizationMappingRepository::default();
     let mapping = sample_mapping(Uuid::new_v4());
 
-    let err = repo.update(mapping).await.unwrap_err();
+    let err = repo.update(mapping, "test-actor").await.unwrap_err();
     assert!(matches!(err, NormalizationMappingRepositoryError::NotFound(_)));
 }
 
@@ -129,7 +133,7 @@ async fn update_of_unknown_mapping_returns_not_found() {
 async fn list_is_scoped_to_tenant() {
     let tenant_id = Uuid::new_v4();
     let repo = InMemoryNormalizationMappingRepository::with_mapping(sample_mapping(tenant_id));
-    repo.create(sample_mapping(Uuid::new_v4())).await.unwrap();
+    repo.create(sample_mapping(Uuid::new_v4()), "test-actor").await.unwrap();
 
     let found = repo.list(tenant_id).await.unwrap();
     assert_eq!(found.len(), 1);

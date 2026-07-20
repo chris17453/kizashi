@@ -48,10 +48,13 @@ pub trait AnalysisConfigClient: Send + Sync {
         tenant_id: Uuid,
     ) -> Result<Option<AnalysisConfigView>, AnalysisConfigClientError>;
 
+    /// `actor` is the signed-in session's username, sent as `X-Username` so config-admin-service
+    /// can record the real actor on the audit-log entry instead of just the tenant.
     async fn put_analysis_config(
         &self,
         tenant_id: Uuid,
         role: Role,
+        actor: &str,
         input: AnalysisConfigInput<'_>,
     ) -> Result<AnalysisConfigView, AnalysisConfigClientError>;
 }
@@ -91,6 +94,7 @@ impl AnalysisConfigClient for HttpAnalysisConfigClient {
         &self,
         tenant_id: Uuid,
         role: Role,
+        actor: &str,
         input: AnalysisConfigInput<'_>,
     ) -> Result<AnalysisConfigView, AnalysisConfigClientError> {
         let response = self
@@ -98,6 +102,7 @@ impl AnalysisConfigClient for HttpAnalysisConfigClient {
             .put(format!("{}/v1/analysis-config", self.config_admin_service_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(&serde_json::json!({
                 "prompt": input.prompt,
                 "provider": input.provider,

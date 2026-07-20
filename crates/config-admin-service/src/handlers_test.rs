@@ -66,7 +66,10 @@ async fn send(
     let mut req =
         Request::builder().method(method).uri(uri).header("content-type", "application/json");
     if let Some(tenant_id) = tenant_header {
-        req = req.header("x-tenant-id", tenant_id.to_string()).header("x-role", "admin");
+        req = req
+            .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", "admin")
+            .header("x-username", "test-actor@example.com");
     }
     let body = body.map(|b| Body::from(b.to_string())).unwrap_or(Body::empty());
     app.oneshot(req.body(body).unwrap()).await.unwrap()
@@ -151,6 +154,30 @@ async fn create_trigger_requires_role_header() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
+/// Regression coverage for the audit-actor bug (CLAUDE.md §5): `X-Username` is required on
+/// every write handler that records an audit-log entry, mirroring how `X-Tenant-Id`/`X-Role`
+/// are already required above — without it, `actor` on the audit row has no real identity to
+/// record.
+#[tokio::test]
+async fn create_trigger_requires_username_header() {
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id);
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/trigger-definitions")
+                .header("content-type", "application/json")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "operator")
+                .body(Body::from(serde_json::to_value(&trigger).unwrap().to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
 #[tokio::test]
 async fn create_trigger_rejects_a_viewer_role() {
     let tenant_id = Uuid::new_v4();
@@ -183,6 +210,7 @@ async fn create_trigger_allows_an_operator_role() {
                 .header("content-type", "application/json")
                 .header("x-tenant-id", tenant_id.to_string())
                 .header("x-role", "operator")
+                .header("x-username", "test-actor@example.com")
                 .body(Body::from(serde_json::to_value(&trigger).unwrap().to_string()))
                 .unwrap(),
         )

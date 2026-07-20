@@ -14,12 +14,12 @@ impl InMemorySensorRepository {
 
 #[async_trait]
 impl SensorRepository for InMemorySensorRepository {
-    async fn create(&self, sensor: Sensor) -> Result<Sensor, SensorRepositoryError> {
+    async fn create(&self, sensor: Sensor, _actor: &str) -> Result<Sensor, SensorRepositoryError> {
         self.sensors.lock().unwrap().push(sensor.clone());
         Ok(sensor)
     }
 
-    async fn update(&self, sensor: Sensor) -> Result<Sensor, SensorRepositoryError> {
+    async fn update(&self, sensor: Sensor, _actor: &str) -> Result<Sensor, SensorRepositoryError> {
         let mut sensors = self.sensors.lock().unwrap();
         match sensors.iter_mut().find(|a| a.id == sensor.id && a.tenant_id == sensor.tenant_id) {
             Some(existing) => {
@@ -62,7 +62,12 @@ impl SensorRepository for InMemorySensorRepository {
         Ok(sensors.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
 
-    async fn delete(&self, tenant_id: Uuid, id: Uuid) -> Result<(), SensorRepositoryError> {
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        _actor: &str,
+    ) -> Result<(), SensorRepositoryError> {
         let mut sensors = self.sensors.lock().unwrap();
         let before_len = sensors.len();
         sensors.retain(|a| !(a.id == id && a.tenant_id == tenant_id));
@@ -91,11 +96,11 @@ pub struct FailingSensorRepository;
 
 #[async_trait]
 impl SensorRepository for FailingSensorRepository {
-    async fn create(&self, _sensor: Sensor) -> Result<Sensor, SensorRepositoryError> {
+    async fn create(&self, _sensor: Sensor, _actor: &str) -> Result<Sensor, SensorRepositoryError> {
         Err(SensorRepositoryError::Backend("simulated failure".to_string()))
     }
 
-    async fn update(&self, _sensor: Sensor) -> Result<Sensor, SensorRepositoryError> {
+    async fn update(&self, _sensor: Sensor, _actor: &str) -> Result<Sensor, SensorRepositoryError> {
         Err(SensorRepositoryError::Backend("simulated failure".to_string()))
     }
 
@@ -116,7 +121,12 @@ impl SensorRepository for FailingSensorRepository {
         Err(SensorRepositoryError::Backend("simulated failure".to_string()))
     }
 
-    async fn delete(&self, _tenant_id: Uuid, _id: Uuid) -> Result<(), SensorRepositoryError> {
+    async fn delete(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+        _actor: &str,
+    ) -> Result<(), SensorRepositoryError> {
         Err(SensorRepositoryError::Backend("simulated failure".to_string()))
     }
 
@@ -144,7 +154,7 @@ async fn create_then_get_round_trips() {
     let tenant_id = Uuid::new_v4();
     let sensor = sample_sensor(tenant_id);
 
-    repo.create(sensor.clone()).await.unwrap();
+    repo.create(sensor.clone(), "test-actor").await.unwrap();
     let found = repo.get(tenant_id, sensor.id).await.unwrap();
     assert_eq!(found, Some(sensor));
 }
@@ -154,7 +164,7 @@ async fn update_of_unknown_sensor_returns_not_found() {
     let repo = InMemorySensorRepository::default();
     let sensor = sample_sensor(Uuid::new_v4());
 
-    let err = repo.update(sensor).await.unwrap_err();
+    let err = repo.update(sensor, "test-actor").await.unwrap_err();
     assert!(matches!(err, SensorRepositoryError::NotFound(_)));
 }
 
@@ -162,7 +172,7 @@ async fn update_of_unknown_sensor_returns_not_found() {
 async fn list_is_scoped_to_tenant() {
     let tenant_id = Uuid::new_v4();
     let repo = InMemorySensorRepository::with_sensor(sample_sensor(tenant_id));
-    repo.create(sample_sensor(Uuid::new_v4())).await.unwrap();
+    repo.create(sample_sensor(Uuid::new_v4()), "test-actor").await.unwrap();
 
     let found = repo.list(tenant_id, 25, 0).await.unwrap();
     assert_eq!(found.len(), 1);
@@ -173,7 +183,9 @@ async fn list_respects_limit_and_offset() {
     let tenant_id = Uuid::new_v4();
     let repo = InMemorySensorRepository::default();
     for name in ["a", "b", "c"] {
-        repo.create(Sensor::new(tenant_id, "zendesk", name, serde_json::json!({}))).await.unwrap();
+        repo.create(Sensor::new(tenant_id, "zendesk", name, serde_json::json!({})), "test-actor")
+            .await
+            .unwrap();
     }
 
     let found = repo.list(tenant_id, 1, 1).await.unwrap();
@@ -187,7 +199,7 @@ async fn delete_removes_the_sensor() {
     let sensor = sample_sensor(tenant_id);
     let repo = InMemorySensorRepository::with_sensor(sensor.clone());
 
-    repo.delete(tenant_id, sensor.id).await.unwrap();
+    repo.delete(tenant_id, sensor.id, "test-actor").await.unwrap();
     let found = repo.get(tenant_id, sensor.id).await.unwrap();
     assert_eq!(found, None);
 }
@@ -196,7 +208,7 @@ async fn delete_removes_the_sensor() {
 async fn delete_of_unknown_sensor_returns_not_found() {
     let repo = InMemorySensorRepository::default();
 
-    let err = repo.delete(Uuid::new_v4(), Uuid::new_v4()).await.unwrap_err();
+    let err = repo.delete(Uuid::new_v4(), Uuid::new_v4(), "test-actor").await.unwrap_err();
     assert!(matches!(err, SensorRepositoryError::NotFound(_)));
 }
 

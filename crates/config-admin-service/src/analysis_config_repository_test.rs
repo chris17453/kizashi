@@ -11,6 +11,7 @@ impl AnalysisConfigRepository for InMemoryAnalysisConfigRepository {
     async fn upsert(
         &self,
         config: AnalysisConfig,
+        _actor: &str,
     ) -> Result<AnalysisConfig, AnalysisConfigRepositoryError> {
         let mut configs = self.configs.lock().unwrap();
         match configs.iter_mut().find(|c| c.tenant_id == config.tenant_id) {
@@ -35,6 +36,7 @@ impl AnalysisConfigRepository for FailingAnalysisConfigRepository {
     async fn upsert(
         &self,
         _config: AnalysisConfig,
+        _actor: &str,
     ) -> Result<AnalysisConfig, AnalysisConfigRepositoryError> {
         Err(AnalysisConfigRepositoryError::Backend("simulated failure".to_string()))
     }
@@ -53,7 +55,7 @@ async fn upsert_then_get_round_trips() {
     let tenant_id = Uuid::new_v4();
     let config = AnalysisConfig::new(tenant_id, "look for urgent tickets");
 
-    repo.upsert(config.clone()).await.unwrap();
+    repo.upsert(config.clone(), "test-actor").await.unwrap();
 
     let found = repo.get(tenant_id).await.unwrap();
     assert_eq!(found, Some(config));
@@ -63,10 +65,10 @@ async fn upsert_then_get_round_trips() {
 async fn upsert_replaces_the_existing_config_for_that_tenant() {
     let repo = InMemoryAnalysisConfigRepository::default();
     let tenant_id = Uuid::new_v4();
-    repo.upsert(AnalysisConfig::new(tenant_id, "first prompt")).await.unwrap();
+    repo.upsert(AnalysisConfig::new(tenant_id, "first prompt"), "test-actor").await.unwrap();
 
     let updated = AnalysisConfig::new(tenant_id, "second prompt");
-    repo.upsert(updated.clone()).await.unwrap();
+    repo.upsert(updated.clone(), "test-actor").await.unwrap();
 
     let found = repo.get(tenant_id).await.unwrap();
     assert_eq!(found, Some(updated));

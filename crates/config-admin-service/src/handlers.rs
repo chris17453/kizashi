@@ -49,6 +49,19 @@ pub(crate) fn tenant_id_from_headers(
     Uuid::parse_str(raw).map_err(|_| (StatusCode::BAD_REQUEST, "X-Tenant-Id is not a valid UUID"))
 }
 
+/// Every write handler that records an audit-log entry trusts `X-Username` for the real actor
+/// identity, forwarded by Console UI's session alongside `X-Tenant-Id`/`X-Role` — without it the
+/// audit trail (CLAUDE.md §5) can only prove *which tenant* changed something, never *who*.
+pub(crate) fn username_from_headers(
+    headers: &HeaderMap,
+) -> Result<String, (StatusCode, &'static str)> {
+    let raw = headers
+        .get("x-username")
+        .and_then(|v| v.to_str().ok())
+        .ok_or((StatusCode::UNAUTHORIZED, "missing X-Username header"))?;
+    Ok(raw.to_string())
+}
+
 fn trigger_error_response(e: TriggerDefinitionRepositoryError) -> Response {
     match e {
         TriggerDefinitionRepositoryError::NotFound(id) => {
@@ -117,7 +130,11 @@ pub async fn create_trigger(
     if let Some(response) = require_operator(&headers) {
         return response;
     }
-    match state.trigger_repository.create(trigger).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.trigger_repository.create(trigger, &actor).await {
         Ok(created) => {
             if let Err(e) = state.trigger_publisher.publish_trigger_changed(&created).await {
                 tracing::error!(trigger_id = %created.id, error = %e, "failed to publish trigger.changed");
@@ -141,7 +158,11 @@ pub async fn update_trigger(
         return response;
     }
     trigger.id = id;
-    match state.trigger_repository.update(trigger).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.trigger_repository.update(trigger, &actor).await {
         Ok(updated) => {
             if let Err(e) = state.trigger_publisher.publish_trigger_changed(&updated).await {
                 tracing::error!(trigger_id = %updated.id, error = %e, "failed to publish trigger.changed");
@@ -218,7 +239,11 @@ pub async fn create_mapping(
     if let Some(response) = require_operator(&headers) {
         return response;
     }
-    match state.mapping_repository.create(mapping).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.mapping_repository.create(mapping, &actor).await {
         Ok(created) => {
             if let Err(e) = state.mapping_publisher.publish_mapping_changed(&created).await {
                 tracing::error!(mapping_id = %created.id, error = %e, "failed to publish mapping.changed");
@@ -242,7 +267,11 @@ pub async fn update_mapping(
         return response;
     }
     mapping.id = id;
-    match state.mapping_repository.update(mapping).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.mapping_repository.update(mapping, &actor).await {
         Ok(updated) => {
             if let Err(e) = state.mapping_publisher.publish_mapping_changed(&updated).await {
                 tracing::error!(mapping_id = %updated.id, error = %e, "failed to publish mapping.changed");

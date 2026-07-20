@@ -194,7 +194,7 @@ async fn post_update_user_role_changes_the_role_and_redirects() {
     let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
     let created = state
         .users_client
-        .create_user(tenant_id, Role::Admin, "bob", "pw", Role::Operator)
+        .create_user(tenant_id, Role::Admin, "bob", "pw", Role::Operator, "test-actor")
         .await
         .unwrap();
 
@@ -218,7 +218,7 @@ async fn post_delete_user_removes_the_user_and_redirects() {
     let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
     let created = state
         .users_client
-        .create_user(tenant_id, Role::Admin, "bob", "pw", Role::Operator)
+        .create_user(tenant_id, Role::Admin, "bob", "pw", Role::Operator, "test-actor")
         .await
         .unwrap();
 

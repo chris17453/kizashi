@@ -43,6 +43,7 @@ pub trait ApiKeysClient: Send + Sync {
         tenant_id: Uuid,
         role: Role,
         label: &str,
+        actor: &str,
     ) -> Result<String, ApiKeysClientError>;
 
     async fn revoke_api_key(
@@ -50,6 +51,7 @@ pub trait ApiKeysClient: Send + Sync {
         tenant_id: Uuid,
         role: Role,
         id: Uuid,
+        actor: &str,
     ) -> Result<(), ApiKeysClientError>;
 }
 
@@ -89,12 +91,14 @@ impl ApiKeysClient for HttpApiKeysClient {
         tenant_id: Uuid,
         role: Role,
         label: &str,
+        actor: &str,
     ) -> Result<String, ApiKeysClientError> {
         let response = self
             .client
             .post(format!("{}/v1/api-keys", self.ingestion_gateway_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(&serde_json::json!({"label": label}))
             .send()
             .await
@@ -118,12 +122,14 @@ impl ApiKeysClient for HttpApiKeysClient {
         tenant_id: Uuid,
         role: Role,
         id: Uuid,
+        actor: &str,
     ) -> Result<(), ApiKeysClientError> {
         let response = self
             .client
             .delete(format!("{}/v1/api-keys/{id}", self.ingestion_gateway_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .send()
             .await
             .map_err(|e| ApiKeysClientError::Unreachable(e.to_string()))?;

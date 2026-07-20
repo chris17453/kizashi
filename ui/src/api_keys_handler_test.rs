@@ -67,7 +67,11 @@ async fn state_with_session() -> (AppState, String, Uuid) {
 #[tokio::test]
 async fn viewer_role_does_not_see_create_form_or_revoke_buttons() {
     let (state, _admin_session_id, tenant_id) = state_with_session().await;
-    state.api_keys_client.create_api_key(tenant_id, common::Role::Admin, "ci-agent").await.unwrap();
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
+        .await
+        .unwrap();
     let viewer_session_id = state
         .session_store
         .create(Session {
@@ -100,7 +104,11 @@ async fn viewer_role_does_not_see_create_form_or_revoke_buttons() {
 #[tokio::test]
 async fn operator_role_sees_create_form_and_revoke_buttons() {
     let (state, _admin_session_id, tenant_id) = state_with_session().await;
-    state.api_keys_client.create_api_key(tenant_id, common::Role::Admin, "ci-agent").await.unwrap();
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
+        .await
+        .unwrap();
     let operator_session_id = state
         .session_store
         .create(Session {
@@ -132,7 +140,11 @@ async fn operator_role_sees_create_form_and_revoke_buttons() {
 #[tokio::test]
 async fn get_api_keys_renders_the_table_when_signed_in() {
     let (state, session_id, tenant_id) = state_with_session().await;
-    state.api_keys_client.create_api_key(tenant_id, common::Role::Admin, "ci-agent").await.unwrap();
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
+        .await
+        .unwrap();
 
     let response = router(state)
         .oneshot(
@@ -216,7 +228,7 @@ async fn post_revoke_api_key_revokes_and_redirects() {
     let (state, session_id, tenant_id) = state_with_session().await;
     state
         .api_keys_client
-        .create_api_key(tenant_id, common::Role::Admin, "to-revoke")
+        .create_api_key(tenant_id, common::Role::Admin, "to-revoke", "test-actor")
         .await
         .unwrap();
     let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();

@@ -28,8 +28,10 @@ pub struct AuditLogEntry {
     pub entity_type: String,
     pub entity_id: Uuid,
     pub change_type: ChangeType,
-    /// Records the tenant_id for now — Auth Service's session doesn't carry a user identity
-    /// beyond tenant yet (ADR-0009/ADR-0010). Becomes a real user id once one exists.
+    /// The real user identity behind the change — sourced from the `X-Username` header, the
+    /// same trust boundary already established for `X-Tenant-Id`/`X-Role` (see
+    /// `username_from_headers`). `tenant_id` above already records *which tenant*; this field
+    /// exists so the audit trail can also answer *who*.
     pub actor: String,
     pub before: Option<serde_json::Value>,
     pub after: serde_json::Value,

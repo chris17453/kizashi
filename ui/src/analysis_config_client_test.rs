@@ -23,6 +23,7 @@ impl AnalysisConfigClient for InMemoryAnalysisConfigClient {
         &self,
         tenant_id: Uuid,
         role: Role,
+        _actor: &str,
         input: AnalysisConfigInput<'_>,
     ) -> Result<AnalysisConfigView, AnalysisConfigClientError> {
         if !role.at_least(Role::Operator) {
@@ -55,6 +56,7 @@ impl AnalysisConfigClient for FailingAnalysisConfigClient {
         &self,
         _tenant_id: Uuid,
         _role: Role,
+        _actor: &str,
         _input: AnalysisConfigInput<'_>,
     ) -> Result<AnalysisConfigView, AnalysisConfigClientError> {
         Err(AnalysisConfigClientError::Unreachable("simulated failure".to_string()))
@@ -83,6 +85,9 @@ async fn spawn_stub_server() -> String {
     ) -> axum::response::Response {
         if headers.get("x-role").and_then(|v| v.to_str().ok()) != Some("operator") {
             return axum::http::StatusCode::FORBIDDEN.into_response();
+        }
+        if headers.get("x-username").and_then(|v| v.to_str().ok()) != Some("alice") {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
         }
         Json(serde_json::json!({
             "tenant_id": "11111111-1111-1111-1111-111111111111",
@@ -122,6 +127,7 @@ async fn http_client_puts_a_new_prompt_against_a_real_server() {
         .put_analysis_config(
             Uuid::new_v4(),
             Role::Operator,
+            "alice",
             AnalysisConfigInput {
                 prompt: "flag policy violations",
                 provider: AnalysisProvider::AzureFoundry,
@@ -144,6 +150,7 @@ async fn http_client_puts_an_openai_compatible_config_and_round_trips_the_new_fi
         .put_analysis_config(
             Uuid::new_v4(),
             Role::Operator,
+            "alice",
             AnalysisConfigInput {
                 prompt: "flag urgent issues",
                 provider: AnalysisProvider::OpenAiCompatible,
@@ -169,6 +176,7 @@ async fn http_client_put_is_rejected_for_insufficient_role() {
         .put_analysis_config(
             Uuid::new_v4(),
             Role::Viewer,
+            "alice",
             AnalysisConfigInput {
                 prompt: "x",
                 provider: AnalysisProvider::AzureFoundry,
@@ -180,6 +188,29 @@ async fn http_client_put_is_rejected_for_insufficient_role() {
         .await
         .unwrap_err();
     assert!(matches!(err, AnalysisConfigClientError::Rejected(403)));
+}
+
+#[tokio::test]
+async fn http_client_put_is_rejected_when_actor_header_missing_expected_value() {
+    let url = spawn_stub_server().await;
+    let client = HttpAnalysisConfigClient::new(reqwest::Client::new(), url);
+
+    let err = client
+        .put_analysis_config(
+            Uuid::new_v4(),
+            Role::Operator,
+            "someone-else",
+            AnalysisConfigInput {
+                prompt: "x",
+                provider: AnalysisProvider::AzureFoundry,
+                model: None,
+                endpoint: None,
+                api_key: None,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, AnalysisConfigClientError::Rejected(401)));
 }
 
 #[tokio::test]
