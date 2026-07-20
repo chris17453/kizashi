@@ -7,7 +7,7 @@ use crate::session_guard::require_session;
 use crate::{AppState, ConnectorStatSummary};
 use askama::Template;
 use axum::extract::{Path, Query, State};
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use chrono::{DateTime, Utc};
 use common::Sensor;
@@ -166,6 +166,9 @@ pub async fn post_sensors(
         Ok(session) => session,
         Err(response) => return response,
     };
+    if !session.role.at_least(common::Role::Operator) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
 
     let config: serde_json::Value = if form.config.trim().is_empty() {
         serde_json::json!({})
@@ -217,6 +220,9 @@ pub async fn post_delete_sensor(
         Ok(session) => session,
         Err(response) => return response,
     };
+    if !session.role.at_least(common::Role::Operator) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
 
     let _ = state
         .sensors_client
@@ -237,6 +243,9 @@ pub async fn post_toggle_sensor(
         Ok(session) => session,
         Err(response) => return response,
     };
+    if !session.role.at_least(common::Role::Operator) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
 
     if let Ok(Some(mut sensor)) = state.sensors_client.get_sensor(session.tenant_id, id).await {
         sensor.enabled = !sensor.enabled;

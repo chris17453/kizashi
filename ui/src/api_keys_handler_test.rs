@@ -203,6 +203,35 @@ async fn post_api_keys_creates_and_shows_the_plaintext_key_once() {
 }
 
 #[tokio::test]
+async fn post_api_keys_is_rejected_for_a_viewer() {
+    let (state, _admin_session_id, tenant_id) = state_with_session().await;
+    let viewer_session_id = state
+        .session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "viewer-alice".to_string(),
+            role: common::Role::Viewer,
+        })
+        .await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api-keys")
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("label=ci-agent"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn post_api_keys_backend_failure_rerenders_with_an_error() {
     let (mut state, session_id, _tenant_id) = state_with_session().await;
     state.api_keys_client = Arc::new(FailingApiKeysClient);
@@ -224,6 +253,41 @@ async fn post_api_keys_backend_failure_rerenders_with_an_error() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("unreachable"));
+}
+
+#[tokio::test]
+async fn post_revoke_api_key_is_rejected_for_a_viewer() {
+    let (state, _admin_session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "to-revoke", "test-actor")
+        .await
+        .unwrap();
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let id = keys[0].id;
+    let viewer_session_id = state
+        .session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "viewer-alice".to_string(),
+            role: common::Role::Viewer,
+        })
+        .await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api-keys/{id}/revoke"))
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]

@@ -29,6 +29,8 @@ async fn main() {
     let ingestion_service_url =
         std::env::var("INGESTION_SERVICE_URL").expect("INGESTION_SERVICE_URL must be set");
     let bucket = std::env::var("AWS_S3_BUCKET").expect("AWS_S3_BUCKET must be set");
+    let internal_secret =
+        std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
 
     let pool = common::connect_with_schema(&database_url, "retention_service")
         .await
@@ -53,6 +55,7 @@ async fn main() {
             ingestion_service_url,
         )),
         archive_store: Arc::new(archive_store),
+        internal_secret,
     };
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");

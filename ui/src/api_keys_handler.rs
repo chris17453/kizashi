@@ -6,7 +6,7 @@ use crate::session_guard::require_session;
 use crate::{ApiKeySummary, AppState};
 use askama::Template;
 use axum::extract::{Path, State};
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use uuid::Uuid;
 
@@ -69,7 +69,10 @@ pub async fn post_api_keys(
         Ok(session) => session,
         Err(response) => return response,
     };
-    let can_write = session.role.at_least(common::Role::Operator);
+    if !session.role.at_least(common::Role::Operator) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let can_write = true;
 
     let created_key = match state
         .api_keys_client
@@ -113,6 +116,9 @@ pub async fn post_revoke_api_key(
         Ok(session) => session,
         Err(response) => return response,
     };
+    if !session.role.at_least(common::Role::Operator) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
 
     let _ = state
         .api_keys_client

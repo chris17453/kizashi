@@ -300,6 +300,35 @@ async fn post_sensors_backend_failure_rerenders_with_an_error() {
 }
 
 #[tokio::test]
+async fn post_sensors_is_rejected_for_a_viewer() {
+    let (state, _admin_session_id, tenant_id) = state_with_session().await;
+    let viewer_session_id = state
+        .session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "viewer-alice".to_string(),
+            role: common::Role::Viewer,
+        })
+        .await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/sensors")
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("connector_type=zendesk&name=support-poller&config={}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn post_delete_sensor_removes_it_and_redirects() {
     let (mut state, session_id, tenant_id) = state_with_session().await;
     let sensors_client = Arc::new(InMemorySensorsClient::default());
@@ -330,6 +359,48 @@ async fn post_delete_sensor_removes_it_and_redirects() {
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert!(sensors_client.sensors.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn post_delete_sensor_is_rejected_for_a_viewer() {
+    let (mut state, _admin_session_id, tenant_id) = state_with_session().await;
+    let sensors_client = Arc::new(InMemorySensorsClient::default());
+    let sensor = sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    state.sensors_client = sensors_client.clone();
+    let viewer_session_id = state
+        .session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "viewer-alice".to_string(),
+            role: common::Role::Viewer,
+        })
+        .await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/sensors/{}/delete", sensor.id))
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(sensors_client.sensors.lock().unwrap().len(), 1);
 }
 
 #[tokio::test]
@@ -365,6 +436,50 @@ async fn post_toggle_sensor_flips_enabled_and_redirects() {
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     let stored = sensors_client.sensors.lock().unwrap();
     assert!(!stored.iter().find(|a| a.id == sensor.id).unwrap().enabled);
+}
+
+#[tokio::test]
+async fn post_toggle_sensor_is_rejected_for_a_viewer() {
+    let (mut state, _admin_session_id, tenant_id) = state_with_session().await;
+    let sensors_client = Arc::new(InMemorySensorsClient::default());
+    let sensor = sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    assert!(sensor.enabled);
+    state.sensors_client = sensors_client.clone();
+    let viewer_session_id = state
+        .session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "viewer-alice".to_string(),
+            role: common::Role::Viewer,
+        })
+        .await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/sensors/{}/toggle", sensor.id))
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let stored = sensors_client.sensors.lock().unwrap();
+    assert!(stored.iter().find(|a| a.id == sensor.id).unwrap().enabled);
 }
 
 #[tokio::test]

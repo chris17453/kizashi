@@ -44,6 +44,11 @@ pub struct AppState {
     pub audit_reader: Arc<dyn AuditLogReader>,
     pub record_client: Arc<dyn RawRecordClient>,
     pub archive_store: Arc<dyn ArchiveStore>,
+    /// Shared-secret gate for `/v1/sweep` and `/v1/reimport` (checked via `X-Internal-Secret`,
+    /// same v1 stopgap pattern as query-gateway's `/internal/tokens`, ADR-0009) — these are
+    /// service-to-service operational triggers (an external CronJob-equivalent, ADR-0011 point
+    /// 5), not end-user-role-gated actions, so there's no `X-Role`/session to check against.
+    pub internal_secret: String,
 }
 
 pub fn build_router(state: AppState) -> Router {

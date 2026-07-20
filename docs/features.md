@@ -3547,3 +3547,39 @@ architectural decision.
   Settings page itself renders and round-trips saved values. Test branding cleared afterward.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0041](../docs/adr/0041-tenant-branding-white-label.md)
+
+## [2026-07-20] fix/0007-rbac-audit-fixes — closes two real RBAC gaps found by a platform-wide write-endpoint audit
+- **Type:** fix
+- **Branch:** fix/0007-rbac-audit-fixes
+- **Summary:** Delegated a systematic audit of every mutating HTTP handler in the workspace for
+  missing role/permission checks (part of the standing push toward an enterprise compliance
+  bar). Found two real gaps: (1) `retention-service`'s `POST /v1/sweep` and `POST /v1/reimport`
+  had **no authentication of any kind** — any caller able to reach the service could trigger a
+  destructive tenant-wide retention sweep or force an arbitrary archive reimport, the most
+  severe class of finding this audit could have produced. Fixed with the same shared-secret
+  pattern query-gateway's `/internal/tokens` already established (`X-Internal-Secret` header,
+  ADR-0009) — these are service-to-service operational triggers with no session/role behind
+  them, not end-user actions. (2) Four Console UI POST handlers
+  (`post_sensors`/`post_delete_sensor`/`post_toggle_sensor`/`post_api_keys`/
+  `post_revoke_api_key`) never checked `session.role.at_least(Operator)` before calling their
+  backend client, unlike every sibling write handler — not independently exploitable (the
+  backend still enforces it), but a real UX bug: a Viewer clicking delete/revoke/toggle was
+  silently redirected as if it succeeded (the 403 was discarded), when nothing happened. Now
+  returns a real 403.
+- **Tests:** `cargo test -p retention-service` — 57 unit + 8 policy-integration + 3 real-S3
+  integration tests, all passing (including 3 new tests: missing/wrong/correct internal
+  secret). `cargo test -p kizashi-ui` — 5 new viewer-rejection tests across sensors/api-keys
+  handlers, all passing. `cargo test --workspace --all-features` (full real-infra stack:
+  Postgres, RabbitMQ, ClickHouse, MinIO, greenmail, mssql-CI) — every test binary passed, 0
+  failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo deny check` / `cargo audit` — clean, same 3
+  pre-existing allow-listed advisories.
+- **Live verification:** rebuilt/redeployed `retention-service` and confirmed against the real
+  running container: `curl -X POST .../v1/sweep` with no header returned `200` (vulnerable)
+  *before* the fix, and `401`/`401`/`200` for missing/wrong/correct `X-Internal-Secret` *after*
+  — the sweep sidecar's real request against the live service also confirmed working
+  end-to-end. Rebuilt/redeployed `kizashi-ui`, created a real viewer-role test user, and
+  confirmed `POST /sensors` and `POST /api-keys` both now return `403` for that user against the
+  live running UI (test user deleted afterward).
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0042](../docs/adr/0042-retention-ops-internal-secret-and-ui-rbac-gaps.md)

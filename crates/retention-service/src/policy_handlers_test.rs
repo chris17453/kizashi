@@ -40,6 +40,7 @@ fn default_state() -> AppState {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         record_client: Arc::new(InMemoryRawRecordClient::default()),
         archive_store: Arc::new(InMemoryArchiveStore::default()),
+        internal_secret: "test-internal-secret".to_string(),
     }
 }
 
@@ -381,6 +382,7 @@ async fn delete_policy_succeeds_then_get_returns_404() {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         record_client: Arc::new(InMemoryRawRecordClient::default()),
         archive_store: Arc::new(InMemoryArchiveStore::default()),
+        internal_secret: "test-internal-secret".to_string(),
     };
     let app = router(state);
 

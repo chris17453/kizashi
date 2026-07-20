@@ -13,11 +13,23 @@ use common::{RawRecord, SourceType};
 use tower::ServiceExt;
 use uuid::Uuid;
 
+const TEST_SECRET: &str = "test-internal-secret";
+
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/sweep", post(trigger_sweep))
         .route("/v1/reimport", post(trigger_reimport))
         .with_state(state)
+}
+
+fn default_state() -> AppState {
+    AppState {
+        policy_repository: Arc::new(InMemoryRetentionPolicyRepository::default()),
+        audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        record_client: Arc::new(InMemoryRawRecordClient::default()),
+        archive_store: Arc::new(InMemoryArchiveStore::default()),
+        internal_secret: TEST_SECRET.to_string(),
+    }
 }
 
 #[tokio::test]
@@ -39,13 +51,19 @@ async fn trigger_sweep_archives_records_past_their_policy_ttl() {
 
     let state = AppState {
         policy_repository: Arc::new(policy_repository),
-        audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         record_client: Arc::new(record_client),
-        archive_store: Arc::new(InMemoryArchiveStore::default()),
+        ..default_state()
     };
 
     let response = router(state)
-        .oneshot(Request::builder().method("POST").uri("/v1/sweep").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/sweep")
+                .header("x-internal-secret", TEST_SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -53,6 +71,33 @@ async fn trigger_sweep_archives_records_past_their_policy_ttl() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let summary: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(summary["records_archived"], 1);
+}
+
+#[tokio::test]
+async fn trigger_sweep_rejects_a_missing_internal_secret() {
+    let response = router(default_state())
+        .oneshot(Request::builder().method("POST").uri("/v1/sweep").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn trigger_sweep_rejects_a_wrong_internal_secret() {
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/sweep")
+                .header("x-internal-secret", "wrong-secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -65,12 +110,7 @@ async fn trigger_reimport_replays_an_archived_batch() {
         .await
         .unwrap();
 
-    let state = AppState {
-        policy_repository: Arc::new(InMemoryRetentionPolicyRepository::default()),
-        audit_reader: Arc::new(InMemoryAuditLogReader::default()),
-        record_client: Arc::new(InMemoryRawRecordClient::default()),
-        archive_store: Arc::new(archive_store),
-    };
+    let state = AppState { archive_store: Arc::new(archive_store), ..default_state() };
 
     let response = router(state)
         .oneshot(
@@ -78,6 +118,7 @@ async fn trigger_reimport_replays_an_archived_batch() {
                 .method("POST")
                 .uri("/v1/reimport")
                 .header("content-type", "application/json")
+                .header("x-internal-secret", TEST_SECRET)
                 .body(Body::from(serde_json::json!({"archive_key": key}).to_string()))
                 .unwrap(),
         )
@@ -91,20 +132,31 @@ async fn trigger_reimport_replays_an_archived_batch() {
 }
 
 #[tokio::test]
-async fn trigger_reimport_returns_404_for_unknown_archive_key() {
-    let state = AppState {
-        policy_repository: Arc::new(InMemoryRetentionPolicyRepository::default()),
-        audit_reader: Arc::new(InMemoryAuditLogReader::default()),
-        record_client: Arc::new(InMemoryRawRecordClient::default()),
-        archive_store: Arc::new(InMemoryArchiveStore::default()),
-    };
-
-    let response = router(state)
+async fn trigger_reimport_rejects_a_missing_internal_secret() {
+    let response = router(default_state())
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/v1/reimport")
                 .header("content-type", "application/json")
+                .body(Body::from(serde_json::json!({"archive_key": "missing"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn trigger_reimport_returns_404_for_unknown_archive_key() {
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/reimport")
+                .header("content-type", "application/json")
+                .header("x-internal-secret", TEST_SECRET)
                 .body(Body::from(serde_json::json!({"archive_key": "missing"}).to_string()))
                 .unwrap(),
         )
