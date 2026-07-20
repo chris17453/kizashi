@@ -4371,3 +4371,18 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0074-pipeline-map-severity-text-label.md
+
+## [2026-07-20] fix/0016-inline-edit-input-accessible-names — Accessible names on per-row inline-edit inputs
+- **Type:** fix
+- **Branch:** fix/0016-inline-edit-input-accessible-names
+- **Summary:** Closes another accessibility gap from a fresh audit: Retention Policies' inline
+  TTL edit input and Users' inline role select (one per table row) had no accessible name
+  distinguishing which row they acted on. Both now carry an `aria-label` naming the specific
+  row (`"TTL in days for {data_class}"`, `"Role for {username}"`). A repo-wide check found no
+  other unlabeled per-row inline-edit inputs.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 419 passed (1 new: TTL input aria-label renders;
+  1 existing test extended with the role-select aria-label assertion). `cargo build
+  --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
+  clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0075-inline-edit-input-accessible-names.md
