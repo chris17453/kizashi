@@ -162,7 +162,7 @@ pub use sensor_script_handler::{get_generate_form, get_generate_select, post_gen
 pub use sensors_handler::{get_sensors, post_delete_sensor, post_sensors, post_toggle_sensor};
 pub use sessions_handler::{get_sessions, post_revoke_session};
 pub use sso_login_handler::{get_sso_callback, get_sso_login};
-pub use static_assets::get_charts_js;
+pub use static_assets::{get_charts_js, get_confirm_danger_js};
 pub use triggers_handler::{get_triggers, post_trigger};
 pub use users_handler::{
     get_export_user, get_users, post_delete_user, post_update_user_role, post_users,
@@ -274,6 +274,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/data/:id", get(get_data_detail))
         .route("/data/:id/journey", get(get_record_journey))
         .route("/static/charts.js", get(get_charts_js))
+        .route("/static/confirm-danger.js", get(get_confirm_danger_js))
         .with_state(state)
         // Applies tenant branding (ADR-0059) to every already-rendered authenticated page by
         // rewriting the response body, not per-handler template fields -- see
