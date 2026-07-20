@@ -4303,3 +4303,21 @@ architectural decision.
   --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0070-triggers-page-sortable-columns.md
+
+## [2026-07-20] feature/0081-session-idle-timeout — Console UI session idle timeout
+- **Type:** feature
+- **Branch:** feature/0081-session-idle-timeout
+- **Summary:** Closes a real enterprise-compliance gap found by a fresh audit: sessions never
+  expired, living until explicit logout, admin revoke, or a process restart no matter how long
+  idle. `InMemorySessionStore` now enforces a sliding idle timeout, defaulting to 30 minutes,
+  configurable via `SESSION_IDLE_TIMEOUT_MINUTES`. Every `get()` call refreshes the idle clock
+  on success or expires+deletes the session if idle too long; `list_for_tenant`
+  (`/security/sessions`) also prunes expired sessions as a side effect. `last_active_at` is
+  tracked internally by the store, not as a new field on `Session`, to avoid touching every
+  handler test's direct `Session { .. }` construction.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 414 passed (4 new: idle session expires, active
+  session within the window still works, activity slides the timeout forward, expired sessions
+  are pruned from `list_for_tenant`). `cargo build --workspace` clean. `cargo clippy -p
+  kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0071-session-idle-timeout.md

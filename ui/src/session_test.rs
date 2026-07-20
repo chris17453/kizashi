@@ -70,3 +70,54 @@ async fn list_for_tenant_reflects_deletions() {
 
     assert!(store.list_for_tenant(session.tenant_id).await.is_empty());
 }
+
+#[tokio::test]
+async fn get_returns_none_once_the_idle_timeout_has_elapsed() {
+    let store = InMemorySessionStore::with_idle_timeout(chrono::Duration::milliseconds(1));
+    let session_id = store.create(sample_session()).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    assert_eq!(store.get(&session_id).await, None);
+}
+
+#[tokio::test]
+async fn get_before_the_idle_timeout_elapses_still_returns_the_session() {
+    let store = InMemorySessionStore::with_idle_timeout(chrono::Duration::minutes(30));
+    let session = sample_session();
+    let session_id = store.create(session.clone()).await;
+
+    assert_eq!(store.get(&session_id).await, Some(session));
+}
+
+#[tokio::test]
+async fn activity_slides_the_idle_timeout_forward() {
+    // A short-but-not-instant timeout: two gets spaced half the timeout apart should both
+    // succeed, because each `get()` refreshes the idle clock -- if it didn't, the second get
+    // would still be inside the *original* window and this test wouldn't distinguish sliding
+    // from fixed-expiry behavior. What actually proves sliding is the third sleep: it's longer
+    // than the timeout measured from creation, but well within it measured from the second get.
+    let store = InMemorySessionStore::with_idle_timeout(chrono::Duration::milliseconds(60));
+    let session_id = store.create(sample_session()).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    assert!(store.get(&session_id).await.is_some(), "still within the original window");
+
+    tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+    assert!(
+        store.get(&session_id).await.is_some(),
+        "70ms since creation exceeds the 60ms timeout, but only 40ms since the last get -- \
+         sliding renewal should have kept this session alive"
+    );
+}
+
+#[tokio::test]
+async fn list_for_tenant_prunes_expired_sessions() {
+    let store = InMemorySessionStore::with_idle_timeout(chrono::Duration::milliseconds(1));
+    let session = sample_session();
+    store.create(session.clone()).await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    assert!(store.list_for_tenant(session.tenant_id).await.is_empty());
+}

@@ -365,6 +365,10 @@ services:
       # won't send over plain HTTP would silently break every login). Set to "true" behind a
       # real TLS-terminating deployment.
       COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      # Sliding idle timeout, in minutes -- an inactive session is signed out automatically
+      # instead of living forever until explicit logout/revoke (enterprise session-timeout
+      # policy). Any activity resets the clock; defaults to 30.
+      SESSION_IDLE_TIMEOUT_MINUTES: "${SESSION_IDLE_TIMEOUT_MINUTES:-30}"
     ports: ["8093:8080"]
     # service_started, not service_healthy: the Console UI calls these over HTTP per-request
     # and already renders per-page/per-widget error states when a backend is unreachable (see
