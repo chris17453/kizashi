@@ -161,3 +161,47 @@ pub async fn post_revoke_api_key(
         .await;
     Redirect::to("/api-keys").into_response()
 }
+
+/// `axum::extract::Form` deserializes via `serde_urlencoded`, which -- unlike some other form
+/// crates -- does NOT collect repeated same-named fields (one checkbox per row, all named
+/// `ids`) into a `Vec`; it only supports flat scalar struct fields. Parsing the raw body as a
+/// flat list of `(key, value)` pairs instead and filtering for `"ids"` sidesteps that limitation
+/// without adding a new dependency (`serde_urlencoded` is already a direct dependency).
+fn parse_ids(raw_body: &[u8]) -> Vec<Uuid> {
+    let Ok(pairs) = serde_urlencoded::from_bytes::<Vec<(String, String)>>(raw_body) else {
+        return Vec::new();
+    };
+    pairs
+        .into_iter()
+        .filter(|(key, _)| key == "ids")
+        .filter_map(|(_, value)| value.parse::<Uuid>().ok())
+        .collect()
+}
+
+/// POST /api-keys/bulk-revoke — revokes every selected key (ADR-0065's bulk-action pattern:
+/// loop over the existing single-item `ApiKeysClient::revoke_api_key` rather than adding a new
+/// bulk backend endpoint, since a handful of sequential revoke calls triggered by one admin
+/// click is not a real performance concern at this scale). Best-effort per key, same as the
+/// single-revoke handler above -- one key's revoke failing (e.g. already revoked) doesn't stop
+/// the rest from being processed. Empty (nothing selected) is a legitimate no-op, not an error.
+pub async fn post_bulk_revoke_api_keys(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Operator) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    for id in parse_ids(&body) {
+        let _ = state
+            .api_keys_client
+            .revoke_api_key(session.tenant_id, session.role, id, &session.username)
+            .await;
+    }
+    Redirect::to("/api-keys").into_response()
+}

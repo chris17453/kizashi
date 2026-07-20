@@ -19,6 +19,7 @@ fn router(state: AppState) -> Router {
     Router::new()
         .route("/api-keys", get(get_api_keys).post(post_api_keys))
         .route("/api-keys/:id/revoke", post(post_revoke_api_key))
+        .route("/api-keys/bulk-revoke", post(post_bulk_revoke_api_keys))
         .with_state(state)
 }
 
@@ -379,4 +380,116 @@ async fn post_revoke_api_key_revokes_and_redirects() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[tokio::test]
+async fn post_bulk_revoke_api_keys_revokes_every_selected_key() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "first", "test-actor")
+        .await
+        .unwrap();
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "second", "test-actor")
+        .await
+        .unwrap();
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "untouched", "test-actor")
+        .await
+        .unwrap();
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let first_id = keys.iter().find(|k| k.label == "first").unwrap().id;
+    let second_id = keys.iter().find(|k| k.label == "second").unwrap().id;
+
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api-keys/bulk-revoke")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={first_id}&ids={second_id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let first = keys.iter().find(|k| k.label == "first").unwrap();
+    let second = keys.iter().find(|k| k.label == "second").unwrap();
+    let untouched = keys.iter().find(|k| k.label == "untouched").unwrap();
+    assert!(first.revoked_at.is_some());
+    assert!(second.revoked_at.is_some());
+    assert!(untouched.revoked_at.is_none());
+}
+
+#[tokio::test]
+async fn post_bulk_revoke_api_keys_with_no_selection_is_a_no_op() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "untouched", "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api-keys/bulk-revoke")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(""))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    assert!(keys[0].revoked_at.is_none());
+}
+
+#[tokio::test]
+async fn post_bulk_revoke_api_keys_is_rejected_for_a_viewer() {
+    let (state, _session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "first", "test-actor")
+        .await
+        .unwrap();
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let id = keys[0].id;
+
+    let session_store = InMemorySessionStore::default();
+    let viewer_session_id = session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "viewer-user".to_string(),
+            role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
+        })
+        .await;
+    let mut viewer_state = state.clone();
+    viewer_state.session_store = Arc::new(session_store);
+
+    let response = router(viewer_state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api-keys/bulk-revoke")
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
