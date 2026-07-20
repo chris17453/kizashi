@@ -1,3 +1,6 @@
+#[path = "events_handler_filtering_test.rs"]
+#[cfg(test)]
+mod events_handler_filtering_test;
 #[path = "events_handler_test.rs"]
 #[cfg(test)]
 mod events_handler_test;

@@ -1,3 +1,6 @@
+#[path = "data_handler_mutations_test.rs"]
+#[cfg(test)]
+mod data_handler_mutations_test;
 #[path = "data_handler_test.rs"]
 #[cfg(test)]
 mod data_handler_test;

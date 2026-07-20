@@ -1,0 +1,417 @@
+use super::*;
+use crate::auth_client::auth_client_test::InMemoryAuthClient;
+use crate::events_client::events_client_test::InMemoryEventsClient;
+use crate::health_client::health_client_test::InMemoryHealthClient;
+use crate::health_client::PlatformHealthSummary;
+use crate::session::SessionStore;
+use crate::session::{InMemorySessionStore, Session};
+use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use axum::routing::get;
+use axum::Router;
+use std::sync::Arc;
+use tower::ServiceExt;
+use uuid::Uuid;
+
+fn router(state: AppState) -> Router {
+    Router::new().route("/triggers", get(get_triggers).post(post_trigger)).with_state(state)
+}
+
+async fn state_with_session() -> (AppState, String) {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Admin).await;
+    (state, session_id)
+}
+
+async fn state_with_session_and_role(role: common::Role) -> (AppState, String, Uuid) {
+    let session_store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "alice".to_string(),
+            role,
+            created_at: chrono::Utc::now(),
+        })
+        .await;
+    let state = AppState {
+        session_store: Arc::new(session_store),
+        auth_client: Arc::new(InMemoryAuthClient::default()),
+        branding_client: Arc::new(crate::branding_client::branding_client_test::InMemoryBrandingClient::default()),
+        oidc_client: Arc::new(crate::oidc_client::oidc_client_test::InMemoryOidcClient::default()),
+        pending_oidc_flow_store: Arc::new(crate::pending_oidc_flow::InMemoryPendingOidcFlowStore::default()),
+        events_client: Arc::new(InMemoryEventsClient::default()),
+        triggers_client: Arc::new(InMemoryTriggersClient::default()),
+        health_client: Arc::new(InMemoryHealthClient {
+            summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
+        }),
+        sensors_client: Arc::new(crate::sensors_client::sensors_client_test::InMemorySensorsClient::default()),
+        api_keys_client: Arc::new(crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default()),
+        backlog_client: Arc::new(crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default()),
+        execution_client: std::sync::Arc::new(crate::execution_client::execution_client_test::InMemoryExecutionClient::default()),
+        analysis_config_client: std::sync::Arc::new(crate::analysis_config_client::analysis_config_client_test::InMemoryAnalysisConfigClient::default()),
+        normalization_mappings_client: std::sync::Arc::new(crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient::default()),
+        retention_policies_client: std::sync::Arc::new(crate::retention_policies_client::retention_policies_client_test::InMemoryRetentionPoliciesClient::default()),
+        egress_allowlist_client: std::sync::Arc::new(crate::egress_allowlist_client::egress_allowlist_client_test::InMemoryEgressAllowlistClient::default()),
+        config_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
+        retention_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
+        auth_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
+        ingestion_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
+        users_client: std::sync::Arc::new(crate::users_client::users_client_test::InMemoryUsersClient::default()),
+        saved_search_queries_client: std::sync::Arc::new(crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default()),
+        stats_client: Arc::new(
+            crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient::default(),
+        ),
+        ingestion_gateway_public_url: "http://localhost:8081".to_string(),
+            mfa_client: Arc::new(crate::mfa_client::mfa_client_test::InMemoryMfaClient::default()),
+            login_attempts_client: Arc::new(crate::login_attempts_client::login_attempts_client_test::InMemoryLoginAttemptsClient::default()),
+                backup_status_client: Arc::new(crate::backup_status_client::backup_status_client_test::InMemoryBackupStatusClient::default()),
+};
+    (state, session_id, tenant_id)
+}
+
+#[tokio::test]
+async fn post_creates_a_threshold_trigger_and_redirects() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    let mut state = state;
+    state.triggers_client = triggers_client.clone();
+
+    let body = "name=urgent-spike&event_type_match=priority_score&window_seconds=3600&condition_shape=threshold_over_window&field=priority_score&threshold=5&direction=above&count=&action_url=https%3A%2F%2Fexample.com%2Fhook";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let created = triggers_client.created.lock().unwrap();
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].name, "urgent-spike");
+    assert_eq!(created[0].event_type_match, "priority_score");
+    assert_eq!(created[0].window_seconds, 3600);
+    assert!(matches!(
+        created[0].condition,
+        common::TriggerCondition::ThresholdOverWindow { threshold, .. } if threshold == 5.0
+    ));
+    assert_eq!(created[0].actions.len(), 1);
+}
+
+#[tokio::test]
+async fn post_creates_a_count_trigger() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    let mut state = state;
+    state.triggers_client = triggers_client.clone();
+
+    let body = "name=high-volume&event_type_match=sentiment&window_seconds=1800&condition_shape=count_over_window&field=&threshold=&direction=above&count=3&action_url=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let created = triggers_client.created.lock().unwrap();
+    assert_eq!(created.len(), 1);
+    assert!(matches!(
+        created[0].condition,
+        common::TriggerCondition::CountOverWindow { count } if count == 3
+    ));
+    assert!(created[0].actions.is_empty());
+}
+
+#[tokio::test]
+async fn post_rerenders_with_a_form_error_when_the_threshold_field_is_missing() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+
+    let body = "name=bad&event_type_match=x&window_seconds=3600&condition_shape=threshold_over_window&field=&threshold=&direction=above&count=&action_url=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("field is required"));
+}
+
+#[tokio::test]
+async fn post_creates_a_correlated_trigger_deriving_event_type_match_from_the_first_leg() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    let mut state = state;
+    state.triggers_client = triggers_client.clone();
+
+    let body = "name=email-and-chat&event_type_match=&window_seconds=3600&condition_shape=correlated_over_window&field=&threshold=&direction=above&count=&action_url=&correlated_event_type_1=sentiment_drop_email&correlated_min_count_1=1&correlated_event_type_2=unresolved_chat&correlated_min_count_2=1&correlated_event_type_3=&correlated_min_count_3=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let created = triggers_client.created.lock().unwrap();
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].event_type_match, "sentiment_drop_email");
+    match &created[0].condition {
+        common::TriggerCondition::CorrelatedOverWindow { conditions } => {
+            assert_eq!(conditions.len(), 2);
+            assert_eq!(conditions[0].event_type, "sentiment_drop_email");
+            assert_eq!(conditions[0].min_count, 1);
+            assert_eq!(conditions[1].event_type, "unresolved_chat");
+            assert_eq!(conditions[1].min_count, 1);
+        }
+        other => panic!("expected CorrelatedOverWindow, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn post_creates_a_correlated_trigger_with_all_six_sources() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    let mut state = state;
+    state.triggers_client = triggers_client.clone();
+
+    let body = "name=six-sources&event_type_match=&window_seconds=3600&condition_shape=correlated_over_window&field=&threshold=&direction=above&count=&action_url=\
+        &correlated_event_type_1=a&correlated_min_count_1=1\
+        &correlated_event_type_2=b&correlated_min_count_2=1\
+        &correlated_event_type_3=c&correlated_min_count_3=1\
+        &correlated_event_type_4=d&correlated_min_count_4=1\
+        &correlated_event_type_5=e&correlated_min_count_5=1\
+        &correlated_event_type_6=f&correlated_min_count_6=1";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let created = triggers_client.created.lock().unwrap();
+    match &created[0].condition {
+        common::TriggerCondition::CorrelatedOverWindow { conditions } => {
+            assert_eq!(conditions.len(), 6);
+            let event_types: Vec<&str> = conditions.iter().map(|c| c.event_type.as_str()).collect();
+            assert_eq!(event_types, vec!["a", "b", "c", "d", "e", "f"]);
+        }
+        other => panic!("expected CorrelatedOverWindow, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn post_rerenders_with_a_form_error_when_no_correlated_rows_are_filled_in() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+
+    let body = "name=bad&event_type_match=&window_seconds=3600&condition_shape=correlated_over_window&field=&threshold=&direction=above&count=&action_url=&correlated_event_type_1=&correlated_min_count_1=&correlated_event_type_2=&correlated_min_count_2=&correlated_event_type_3=&correlated_min_count_3=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("at least one correlated"));
+}
+
+#[tokio::test]
+async fn post_rerenders_with_a_form_error_when_a_correlated_row_has_an_invalid_min_count() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Operator).await;
+
+    let body = "name=bad&event_type_match=&window_seconds=3600&condition_shape=correlated_over_window&field=&threshold=&direction=above&count=&action_url=&correlated_event_type_1=sentiment_drop_email&correlated_min_count_1=not-a-number&correlated_event_type_2=&correlated_min_count_2=&correlated_event_type_3=&correlated_min_count_3=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("valid min count"));
+}
+
+#[tokio::test]
+async fn test_query_params_render_a_would_fire_result() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Viewer).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    *triggers_client.test_result.lock().unwrap() =
+        Some(crate::TriggerTestResult { would_fire: true, contributing_record_count: 2 });
+    let mut state = state;
+    state.triggers_client = triggers_client;
+    let trigger_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/triggers?test_trigger_id={trigger_id}&test_group_key=cust-1"))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("cust-1"));
+    assert!(body.contains("would fire"));
+    assert!(body.contains("2 contributing record"));
+}
+
+#[tokio::test]
+async fn test_query_params_render_a_would_not_fire_result() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Viewer).await;
+    let triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::InMemoryTriggersClient::default());
+    *triggers_client.test_result.lock().unwrap() =
+        Some(crate::TriggerTestResult { would_fire: false, contributing_record_count: 0 });
+    let mut state = state;
+    state.triggers_client = triggers_client;
+    let trigger_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/triggers?test_trigger_id={trigger_id}&test_group_key=cust-2"))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("would not fire"));
+}
+
+#[tokio::test]
+async fn no_test_result_shown_without_test_query_params() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("would fire"));
+    assert!(!body.contains("would not fire"));
+}
+
+#[tokio::test]
+async fn a_backend_failure_testing_a_trigger_does_not_break_the_page() {
+    let (mut state, session_id) = state_with_session().await;
+    state.triggers_client =
+        Arc::new(crate::triggers_client::triggers_client_test::FailingTriggersClient);
+    let trigger_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/triggers?test_trigger_id={trigger_id}&test_group_key=cust-1"))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn post_rejects_a_viewer_role() {
+    let (state, session_id, _tenant_id) = state_with_session_and_role(common::Role::Viewer).await;
+
+    let body = "name=x&event_type_match=x&window_seconds=3600&condition_shape=count_over_window&field=&threshold=&direction=above&count=1&action_url=";
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}

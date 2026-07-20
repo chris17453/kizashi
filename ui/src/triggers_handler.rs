@@ -1,3 +1,6 @@
+#[path = "triggers_handler_mutations_test.rs"]
+#[cfg(test)]
+mod triggers_handler_mutations_test;
 #[path = "triggers_handler_test.rs"]
 #[cfg(test)]
 mod triggers_handler_test;

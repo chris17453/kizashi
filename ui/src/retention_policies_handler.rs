@@ -1,3 +1,6 @@
+#[path = "retention_policies_handler_mutations_test.rs"]
+#[cfg(test)]
+mod retention_policies_handler_mutations_test;
 #[path = "retention_policies_handler_test.rs"]
 #[cfg(test)]
 mod retention_policies_handler_test;

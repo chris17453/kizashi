@@ -76,6 +76,7 @@ pub use analysis_config_client::{
 pub use api_keys_client::{ApiKeySummary, ApiKeysClient, ApiKeysClientError, HttpApiKeysClient};
 pub use audit_log_client::{
     AuditLogClient, AuditLogClientError, AuditLogEntry, HttpAuditLogClient,
+    IngestionGatewayApiKeyAuditLogClient,
 };
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient, LocalLoginResult};
 pub use backlog_client::{BacklogClient, BacklogClientError, HttpBacklogClient, QueueDepthSummary};
@@ -209,6 +210,10 @@ pub struct AppState {
     pub config_audit_log_client: Arc<dyn AuditLogClient>,
     pub retention_audit_log_client: Arc<dyn AuditLogClient>,
     pub auth_audit_log_client: Arc<dyn AuditLogClient>,
+    /// `ingestion-gateway`'s per-API-key audit trail -- a distinct URL shape from the other
+    /// three (see `IngestionGatewayApiKeyAuditLogClient`'s doc comment), so it isn't just
+    /// another `HttpAuditLogClient` pointed at a different base URL.
+    pub ingestion_audit_log_client: Arc<dyn AuditLogClient>,
     /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
     /// reachable from inside this container (e.g. a customer-hosted connector polling in from
     /// outside the platform's own network), so it's a separate, operator-configurable value

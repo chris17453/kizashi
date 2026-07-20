@@ -73,6 +73,7 @@ async fn state_with_mfa_client(mfa_client: Arc<dyn MfaClient>) -> (AppState, Str
         config_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         retention_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         auth_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
+        ingestion_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         users_client: Arc::new(InMemoryUsersClient::default()),
         saved_search_queries_client: Arc::new(InMemorySavedSearchQueriesClient::default()),
         mfa_client,
