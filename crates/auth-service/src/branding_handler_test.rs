@@ -32,6 +32,9 @@ fn default_state() -> AuthState {
         audit_log_reader: Arc::new(
             crate::audit_log::audit_log_test::InMemoryAuditLogReader::default(),
         ),
+        mfa_challenge_repository: Arc::new(
+            crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default(),
+        ),
     }
 }
 

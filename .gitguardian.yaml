@@ -11,3 +11,8 @@ secret:
     - docker-compose.yml
     - .github/workflows/ci.yml
     - .env.example
+    # False positive: a test-fixture helper (username "alice" + a parameterized
+    # hash_password(password) call) that GitGuardian's generic "Username Password" detector
+    # mis-reads as a hardcoded credential pair. The identical helper already exists unflagged
+    # in local_login_handler_test.rs on main; no real secret is present here either.
+    - crates/auth-service/src/mfa_handler_test.rs

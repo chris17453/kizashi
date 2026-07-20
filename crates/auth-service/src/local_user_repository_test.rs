@@ -29,6 +29,10 @@ impl LocalUserRepository for InMemoryLocalUserRepository {
             .cloned())
     }
 
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<LocalUser>, LocalUserRepositoryError> {
+        Ok(self.users.lock().unwrap().iter().find(|u| u.id == id).cloned())
+    }
+
     async fn list(&self, tenant_id: Uuid) -> Result<Vec<LocalUser>, LocalUserRepositoryError> {
         Ok(self
             .users
@@ -82,6 +86,36 @@ impl LocalUserRepository for InMemoryLocalUserRepository {
         }
         Ok(())
     }
+
+    async fn set_pending_mfa_secret(
+        &self,
+        id: Uuid,
+        secret_base32: &str,
+    ) -> Result<(), LocalUserRepositoryError> {
+        let mut users = self.users.lock().unwrap();
+        let user =
+            users.iter_mut().find(|u| u.id == id).ok_or(LocalUserRepositoryError::NotFound(id))?;
+        user.mfa_secret = Some(secret_base32.to_string());
+        user.mfa_enabled = false;
+        Ok(())
+    }
+
+    async fn confirm_mfa(&self, id: Uuid) -> Result<(), LocalUserRepositoryError> {
+        let mut users = self.users.lock().unwrap();
+        let user =
+            users.iter_mut().find(|u| u.id == id).ok_or(LocalUserRepositoryError::NotFound(id))?;
+        user.mfa_enabled = true;
+        Ok(())
+    }
+
+    async fn disable_mfa(&self, id: Uuid) -> Result<(), LocalUserRepositoryError> {
+        let mut users = self.users.lock().unwrap();
+        let user =
+            users.iter_mut().find(|u| u.id == id).ok_or(LocalUserRepositoryError::NotFound(id))?;
+        user.mfa_secret = None;
+        user.mfa_enabled = false;
+        Ok(())
+    }
 }
 
 pub struct FailingLocalUserRepository;
@@ -93,6 +127,10 @@ impl LocalUserRepository for FailingLocalUserRepository {
         _tenant_id: Uuid,
         _username: &str,
     ) -> Result<Option<LocalUser>, LocalUserRepositoryError> {
+        Err(LocalUserRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn find_by_id(&self, _id: Uuid) -> Result<Option<LocalUser>, LocalUserRepositoryError> {
         Err(LocalUserRepositoryError::Backend("simulated failure".to_string()))
     }
 
@@ -126,6 +164,22 @@ impl LocalUserRepository for FailingLocalUserRepository {
     ) -> Result<(), LocalUserRepositoryError> {
         Err(LocalUserRepositoryError::Backend("simulated failure".to_string()))
     }
+
+    async fn set_pending_mfa_secret(
+        &self,
+        _id: Uuid,
+        _secret_base32: &str,
+    ) -> Result<(), LocalUserRepositoryError> {
+        Err(LocalUserRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn confirm_mfa(&self, _id: Uuid) -> Result<(), LocalUserRepositoryError> {
+        Err(LocalUserRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn disable_mfa(&self, _id: Uuid) -> Result<(), LocalUserRepositoryError> {
+        Err(LocalUserRepositoryError::Backend("simulated failure".to_string()))
+    }
 }
 
 fn sample_user(tenant_id: Uuid) -> LocalUser {
@@ -135,6 +189,8 @@ fn sample_user(tenant_id: Uuid) -> LocalUser {
         username: "alice".to_string(),
         password_hash: "hash".to_string(),
         role: common::Role::Operator,
+        mfa_secret: None,
+        mfa_enabled: false,
     }
 }
 
@@ -156,6 +212,8 @@ async fn does_not_find_the_same_username_in_a_different_tenant() {
         username: "alice".to_string(),
         password_hash: "hash".to_string(),
         role: common::Role::Viewer,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
     let repo = InMemoryLocalUserRepository::with_user(user);
 
@@ -233,4 +291,55 @@ async fn delete_for_a_different_tenant_leaves_the_user_intact_and_returns_not_fo
     let err = repo.delete(Uuid::new_v4(), user.id, "actor").await;
     assert!(matches!(err, Err(LocalUserRepositoryError::NotFound(_))));
     assert_eq!(repo.list(tenant_id).await.unwrap(), vec![user]);
+}
+
+#[tokio::test]
+async fn find_by_id_finds_a_user_regardless_of_tenant() {
+    let tenant_id = Uuid::new_v4();
+    let user = sample_user(tenant_id);
+    let repo = InMemoryLocalUserRepository::with_user(user.clone());
+
+    assert_eq!(repo.find_by_id(user.id).await.unwrap(), Some(user));
+    assert_eq!(repo.find_by_id(Uuid::new_v4()).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn set_pending_mfa_secret_stores_the_secret_but_does_not_enable_it() {
+    let tenant_id = Uuid::new_v4();
+    let user = sample_user(tenant_id);
+    let repo = InMemoryLocalUserRepository::with_user(user.clone());
+
+    repo.set_pending_mfa_secret(user.id, "SECRETBASE32").await.unwrap();
+
+    let found = repo.find_by_id(user.id).await.unwrap().unwrap();
+    assert_eq!(found.mfa_secret, Some("SECRETBASE32".to_string()));
+    assert!(!found.mfa_enabled);
+}
+
+#[tokio::test]
+async fn confirm_mfa_enables_a_pending_secret() {
+    let tenant_id = Uuid::new_v4();
+    let user = sample_user(tenant_id);
+    let repo = InMemoryLocalUserRepository::with_user(user.clone());
+    repo.set_pending_mfa_secret(user.id, "SECRETBASE32").await.unwrap();
+
+    repo.confirm_mfa(user.id).await.unwrap();
+
+    let found = repo.find_by_id(user.id).await.unwrap().unwrap();
+    assert!(found.mfa_enabled);
+}
+
+#[tokio::test]
+async fn disable_mfa_clears_the_secret_and_flag() {
+    let tenant_id = Uuid::new_v4();
+    let user = sample_user(tenant_id);
+    let repo = InMemoryLocalUserRepository::with_user(user.clone());
+    repo.set_pending_mfa_secret(user.id, "SECRETBASE32").await.unwrap();
+    repo.confirm_mfa(user.id).await.unwrap();
+
+    repo.disable_mfa(user.id).await.unwrap();
+
+    let found = repo.find_by_id(user.id).await.unwrap().unwrap();
+    assert_eq!(found.mfa_secret, None);
+    assert!(!found.mfa_enabled);
 }

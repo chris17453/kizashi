@@ -58,6 +58,8 @@ fn sample_user(tenant_id: Uuid) -> auth_service::LocalUser {
         username: format!("user-{}", Uuid::new_v4()),
         password_hash: hash_password("correct-horse-battery-staple").unwrap(),
         role: Role::Operator,
+        mfa_secret: None,
+        mfa_enabled: false,
     }
 }
 

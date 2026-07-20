@@ -4,6 +4,7 @@ mod local_login_handler_test;
 
 use crate::audit_log::AuditLogReader;
 use crate::local_user_repository::LocalUserRepository;
+use crate::mfa_repository::MfaChallengeRepository;
 use crate::oidc_handler::OidcClients;
 use crate::password::verify_password;
 use crate::session_client::SessionClient;
@@ -23,6 +24,7 @@ pub struct AuthState {
     pub session_client: Arc<dyn SessionClient>,
     pub oidc_clients: OidcClients,
     pub audit_log_reader: Arc<dyn AuditLogReader>,
+    pub mfa_challenge_repository: Arc<dyn MfaChallengeRepository>,
 }
 
 #[derive(serde::Deserialize)]
@@ -41,6 +43,16 @@ pub struct LoginResponse {
     /// login omits it since the caller already knows the username it just typed in.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
+}
+
+/// What `local_login` returns for a user with MFA enabled (ADR-0051) instead of a real session
+/// grant -- the password check already passed, but the caller must still complete
+/// `POST /v1/auth/local/mfa/challenge` with `challenge_token` and a current code before Console
+/// UI can establish a session.
+#[derive(serde::Serialize)]
+pub struct MfaRequiredResponse {
+    pub mfa_required: bool,
+    pub challenge_token: String,
 }
 
 #[derive(serde::Serialize)]
@@ -102,6 +114,15 @@ pub async fn local_login(
         );
     }
     let user = user.expect("authenticated implies user is Some");
+
+    if user.mfa_enabled {
+        return match state.mfa_challenge_repository.create(user.id, user.tenant_id).await {
+            Ok(challenge_token) => {
+                Json(MfaRequiredResponse { mfa_required: true, challenge_token }).into_response()
+            }
+            Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        };
+    }
 
     match state.session_client.mint_session(user.tenant_id, user.role, "local-login").await {
         Ok(token) => Json(LoginResponse {

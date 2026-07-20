@@ -148,6 +148,8 @@ pub async fn create_user(
         username: req.username,
         password_hash,
         role: req.role,
+        mfa_secret: None,
+        mfa_enabled: false,
     };
 
     match state.local_user_repository.create(user, &actor).await {

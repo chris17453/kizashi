@@ -2,11 +2,19 @@
 #[cfg(test)]
 pub(crate) mod login_handler_test;
 
+use crate::auth_client::LocalLoginResult;
 use crate::{AppState, Session, SESSION_COOKIE_NAME};
 use askama::Template;
 use axum::extract::{Form, Query, State};
 use axum::http::header::SET_COOKIE;
 use axum::response::{Html, IntoResponse, Redirect, Response};
+
+/// The two cookies bridging `POST /login`'s password check and `GET`/`POST /login/mfa`'s code
+/// check across separate HTTP round trips (ADR-0051) -- both `HttpOnly` and short-lived by
+/// construction (the challenge token itself expires server-side after 5 minutes; the cookies
+/// aren't independently time-limited beyond that, matching the SSO flow cookie's precedent).
+pub const MFA_CHALLENGE_COOKIE_NAME: &str = "kizashi_mfa_challenge";
+pub const MFA_USERNAME_COOKIE_NAME: &str = "kizashi_mfa_username";
 
 #[derive(Template)]
 #[template(path = "login.html")]
@@ -87,7 +95,29 @@ pub async fn post_login(State(state): State<AppState>, Form(form): Form<LoginFor
         .local_login(&form.tenant_name, &form.username, &form.password)
         .await
     {
-        Ok(result) => result,
+        Ok(LocalLoginResult::LoggedIn { token, tenant_id, role }) => (token, tenant_id, role),
+        Ok(LocalLoginResult::MfaRequired { challenge_token }) => {
+            let secure = crate::cookie_secure_suffix(crate::cookie_secure());
+            let mut response = Redirect::to("/login/mfa").into_response();
+            response.headers_mut().append(
+                SET_COOKIE,
+                format!(
+                    "{MFA_CHALLENGE_COOKIE_NAME}={challenge_token}; Path=/; HttpOnly; SameSite=Strict{secure}"
+                )
+                .parse()
+                .unwrap(),
+            );
+            response.headers_mut().append(
+                SET_COOKIE,
+                format!(
+                    "{MFA_USERNAME_COOKIE_NAME}={}; Path=/; HttpOnly; SameSite=Strict{secure}",
+                    form.username
+                )
+                .parse()
+                .unwrap(),
+            );
+            return response;
+        }
         Err(_) => return login_error("Invalid workspace, username, or password"),
     };
 

@@ -67,6 +67,7 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
         analysis_config_client: Arc::new(InMemoryAnalysisConfigClient::default()),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
+            mfa_client: Arc::new(crate::mfa_client::mfa_client_test::InMemoryMfaClient::default()),
     };
     (state, session_id, tenant_id)
 }

@@ -17,6 +17,7 @@ mod events_client;
 mod execution_client;
 mod health_client;
 mod ingestion_stats_client;
+mod mfa_client;
 mod normalization_mappings_client;
 mod oidc_client;
 mod pending_oidc_flow;
@@ -41,6 +42,8 @@ mod health_handler;
 mod healthz;
 mod login_handler;
 mod logout_handler;
+mod mfa_login_handler;
+mod mfa_settings_handler;
 mod normalization_mappings_handler;
 mod overview_handler;
 mod permissions_reference_handler;
@@ -67,7 +70,7 @@ pub use api_keys_client::{ApiKeySummary, ApiKeysClient, ApiKeysClientError, Http
 pub use audit_log_client::{
     AuditLogClient, AuditLogClientError, AuditLogEntry, HttpAuditLogClient,
 };
-pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient};
+pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient, LocalLoginResult};
 pub use backlog_client::{BacklogClient, BacklogClientError, HttpBacklogClient, QueueDepthSummary};
 pub use branding_client::{Branding, BrandingClient, BrandingClientError, HttpBrandingClient};
 pub use cookie_security::{cookie_secure, cookie_secure_suffix};
@@ -85,6 +88,7 @@ pub use ingestion_stats_client::{
     ConnectorStatSummary, HttpIngestionStatsClient, IngestionStatsClient,
     IngestionStatsClientError, RecordSearchFilter, RecordSummary,
 };
+pub use mfa_client::{HttpMfaClient, MfaClient, MfaClientError, MfaEnrollment};
 pub use normalization_mappings_client::{
     HttpNormalizationMappingsClient, NormalizationMappingsClient, NormalizationMappingsClientError,
 };
@@ -117,6 +121,11 @@ pub use health_handler::get_health;
 pub use healthz::healthz;
 pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
+pub use mfa_login_handler::{get_mfa_challenge, post_mfa_challenge as post_mfa_login_challenge};
+pub use mfa_settings_handler::{
+    get_mfa_settings, post_mfa_disable as post_mfa_settings_disable,
+    post_mfa_enroll as post_mfa_settings_enroll, post_mfa_verify as post_mfa_settings_verify,
+};
 pub use normalization_mappings_handler::{get_normalization_mappings, post_normalization_mapping};
 pub use overview_handler::get_overview;
 pub use permissions_reference_handler::get_permissions_reference;
@@ -149,6 +158,7 @@ pub const SESSION_COOKIE_NAME: &str = "kizashi_session";
 pub struct AppState {
     pub session_store: Arc<dyn SessionStore>,
     pub auth_client: Arc<dyn AuthClient>,
+    pub mfa_client: Arc<dyn MfaClient>,
     pub branding_client: Arc<dyn BrandingClient>,
     pub oidc_client: Arc<dyn OidcClient>,
     pub pending_oidc_flow_store: Arc<dyn PendingOidcFlowStore>,
@@ -185,6 +195,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/", get(get_root))
         .route("/healthz", get(healthz))
         .route("/login", get(get_login).post(post_login))
+        .route("/login/mfa", get(get_mfa_challenge).post(post_mfa_login_challenge))
         .route("/login/sso", get(get_sso_login))
         .route("/login/sso/callback", get(get_sso_callback))
         .route("/logout", get(get_logout))
@@ -221,6 +232,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/audit-log/:service/:entity_id", get(get_entity_audit_log))
         .route("/security", get(get_security_overview))
         .route("/security/permissions", get(get_permissions_reference))
+        .route("/security/mfa", get(get_mfa_settings))
+        .route("/security/mfa/enroll", axum::routing::post(post_mfa_settings_enroll))
+        .route("/security/mfa/verify", axum::routing::post(post_mfa_settings_verify))
+        .route("/security/mfa/disable", axum::routing::post(post_mfa_settings_disable))
         .route("/security/sessions", get(get_sessions))
         .route("/security/sessions/:id/revoke", axum::routing::post(post_revoke_session))
         .route("/reports", get(get_reports))

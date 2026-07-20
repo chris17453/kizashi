@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Two-Factor Authentication</h1>
+<p class="muted">Add a second factor to your own login using any TOTP authenticator app
+(Google Authenticator, 1Password, Authy, etc). This only affects your account.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if let Some(enrollment) = enrollment %}
+<div class="panel">
+  <h2>Scan this QR code</h2>
+  <p class="muted">Scan with your authenticator app, then enter the current code below to confirm.</p>
+  <img src="data:image/png;base64,{{ enrollment.qr_code_base64_png }}" alt="QR code" style="background:#fff; padding:0.5rem; border-radius:6px;">
+  <p class="muted">Can't scan? Enter this key manually:</p>
+  <code class="key-reveal">{{ enrollment.secret_base32 }}</code>
+  <form class="inline" method="post" action="/security/mfa/verify">
+    <label for="code">Code from your authenticator app</label>
+    <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" required>
+    <button type="submit">Confirm and enable</button>
+  </form>
+</div>
+{% else %}
+  {% if enabled %}
+  <div class="panel">
+    <h2>Two-factor authentication is enabled</h2>
+    <p class="muted">Enter your password to turn it off.</p>
+    <form class="inline" method="post" action="/security/mfa/disable">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+      <button type="submit" class="btn-danger">Disable</button>
+    </form>
+  </div>
+  {% else %}
+  <div class="panel">
+    <h2>Two-factor authentication is not enabled</h2>
+    <form method="post" action="/security/mfa/enroll">
+      <button type="submit">Enable MFA</button>
+    </form>
+  </div>
+  {% endif %}
+{% endif %}
+{% endblock %}
