@@ -43,16 +43,49 @@
 </div>
 {% endif %}
 
+<form class="inline" method="get" action="/sensors" style="margin-bottom:1rem;">
+  <label for="q">Search</label>
+  <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by name&hellip;">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="dir" value="{{ dir }}">
+  <button type="submit">Search</button>
+  {% if !q.is_empty() %}<a href="/sensors" class="btn-link">Clear</a>{% endif %}
+</form>
+
 {% if sensors.is_empty() && page == 0 && !has_more %}
 <div class="empty-state">
   <div class="empty-icon">&#11041;</div>
+  {% if q.is_empty() %}
   <p>No sensors registered yet for this tenant.</p>
   {% if can_write %}<p>Use the form above to register one, or generate a deploy script to stand a new one up.</p>{% endif %}
+  {% else %}
+  <p>No sensors on this page match &ldquo;{{ q }}&rdquo;.</p>
+  {% endif %}
 </div>
 {% else %}
 <table>
   <thead>
-    <tr><th scope="col">Name</th><th scope="col">Connector Type</th><th scope="col">Status</th><th scope="col">Records</th><th scope="col">Last Ingested</th><th scope="col">Enabled</th><th scope="col"></th><th scope="col"></th></tr>
+    <tr>
+      <th scope="col">
+        <a href="/sensors?q={{ q|urlencode }}&sort=name&dir={% if sort == "name" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Name{% if sort == "name" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th scope="col">
+        <a href="/sensors?q={{ q|urlencode }}&sort=connector_type&dir={% if sort == "connector_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Connector Type{% if sort == "connector_type" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th scope="col">Status</th>
+      <th scope="col">Records</th>
+      <th scope="col">Last Ingested</th>
+      <th scope="col">
+        <a href="/sensors?q={{ q|urlencode }}&sort=enabled&dir={% if sort == "enabled" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Enabled{% if sort == "enabled" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th scope="col"></th><th scope="col"></th>
+    </tr>
   </thead>
   <tbody>
     {% for sensor in sensors %}
@@ -96,6 +129,9 @@
 <div class="pagination">
   {% if page > 0 %}
   <form method="get" action="/sensors" class="pagination-form">
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="dir" value="{{ dir }}">
     <input type="hidden" name="page" value="{{ page - 1 }}">
     <button type="submit" class="btn">&larr; Previous</button>
   </form>
@@ -103,6 +139,9 @@
   <span class="muted">Page {{ page + 1 }}</span>
   {% if has_more %}
   <form method="get" action="/sensors" class="pagination-form">
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="dir" value="{{ dir }}">
     <input type="hidden" name="page" value="{{ page + 1 }}">
     <button type="submit" class="btn">Next &rarr;</button>
   </form>

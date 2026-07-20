@@ -52,6 +52,32 @@ fn default_page() -> i64 {
 pub struct SensorsQuery {
     #[serde(default = "default_page")]
     pub page: i64,
+    #[serde(default)]
+    pub q: String,
+    #[serde(default)]
+    pub sort: String,
+    #[serde(default)]
+    pub dir: String,
+}
+
+/// Case-insensitive substring match on name -- same shape as Triggers' search (ADR-0066). Like
+/// Triggers, `list_sensors` is server-paginated, so this only filters the *current page's*
+/// already-fetched sensors, not the tenant's full set.
+fn matches_query(row: &SensorRow, q: &str) -> bool {
+    q.is_empty() || row.name.to_lowercase().contains(&q.to_lowercase())
+}
+
+/// Same shape as Triggers' sortable columns (ADR-0070), applied after the search filter and,
+/// like search, only reordering the current page.
+fn sort_rows(rows: &mut [SensorRow], sort: &str, dir: &str) {
+    match sort {
+        "connector_type" => rows.sort_by_key(|r| r.connector_type.to_lowercase()),
+        "enabled" => rows.sort_by_key(|r| !r.enabled),
+        _ => rows.sort_by_key(|r| r.name.to_lowercase()),
+    }
+    if dir == "desc" {
+        rows.reverse();
+    }
 }
 
 #[derive(Template)]
@@ -67,6 +93,9 @@ struct SensorsTemplate {
     /// so this is presentation-layer only for now, not a substitute for server-side gating.
     can_write: bool,
     error: Option<String>,
+    q: String,
+    sort: String,
+    dir: String,
 }
 
 pub async fn get_sensors(
@@ -96,6 +125,9 @@ pub async fn get_sensors(
                     has_more: false,
                     can_write,
                     error: Some(e.to_string()),
+                    q: query.q,
+                    sort: query.sort,
+                    dir: query.dir,
                 }
                 .render()
                 .unwrap(),
@@ -105,15 +137,23 @@ pub async fn get_sensors(
     };
 
     let stats = state.stats_client.connector_stats(session.tenant_id).await.unwrap_or_default();
+    let mut rows: Vec<SensorRow> = join_sensor_stats(sensors, stats)
+        .into_iter()
+        .filter(|r| matches_query(r, &query.q))
+        .collect();
+    sort_rows(&mut rows, &query.sort, &query.dir);
 
     Html(
         SensorsTemplate {
             show_nav: true,
-            sensors: join_sensor_stats(sensors, stats),
+            sensors: rows,
             page,
             has_more,
             can_write,
             error: None,
+            q: query.q,
+            sort: query.sort,
+            dir: query.dir,
         }
         .render()
         .unwrap(),
@@ -150,6 +190,9 @@ async fn rerender_with_error(
             has_more: false,
             can_write,
             error: Some(error),
+            q: String::new(),
+            sort: String::new(),
+            dir: String::new(),
         }
         .render()
         .unwrap(),

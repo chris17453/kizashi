@@ -4460,3 +4460,19 @@ architectural decision.
   warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0079-search-term-url-encoding-fix.md
+
+## [2026-07-20] feature/0084-sensors-page-search-and-sort — Sensors page search and sortable columns
+- **Type:** feature
+- **Branch:** feature/0084-sensors-page-search-and-sort
+- **Summary:** Closes a parity gap from a third audit pass: Sensors had pagination but no
+  search or sort, unlike every other list page shipped this session. `GET /sensors` now
+  accepts `?q=` (name substring match) and `?sort=name|connector_type|enabled` with
+  `?dir=asc|desc`, same pattern as Triggers (ADR-0066/0070). Since `list_sensors` is
+  server-paginated, both only apply to the current fetched page. `q`/`sort`/`dir` carry through
+  the search form and Previous/Next links.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 427 passed (3 new: case-insensitive name filter,
+  "no sensors on this page match" empty state, descending name sort). `cargo build --workspace`
+  clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo
+  fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0080-sensors-page-search-and-sort.md

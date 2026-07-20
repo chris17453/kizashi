@@ -201,6 +201,130 @@ async fn get_sensors_renders_the_sensors_table_when_signed_in() {
 }
 
 #[tokio::test]
+async fn get_sensors_filters_by_the_q_query_param_case_insensitively() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "sql",
+            "billing-sync",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/sensors?q=SUPPORT")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("support-poller"));
+    assert!(!body.contains("billing-sync"));
+}
+
+#[tokio::test]
+async fn get_sensors_shows_a_no_match_empty_state_for_an_unmatched_query() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/sensors?q=nonexistent")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No sensors on this page match"));
+}
+
+#[tokio::test]
+async fn get_sensors_sorts_by_name_descending_when_dir_is_desc() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "zendesk",
+            "alpha-sensor",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "sql",
+            "zeta-sensor",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/sensors?sort=name&dir=desc")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    let alpha_pos = body.find("alpha-sensor").unwrap();
+    let zeta_pos = body.find("zeta-sensor").unwrap();
+    assert!(zeta_pos < alpha_pos);
+}
+
+#[tokio::test]
 async fn get_sensors_shows_an_empty_state_with_no_sensors_registered() {
     let (state, session_id, _tenant_id) = state_with_session().await;
 
