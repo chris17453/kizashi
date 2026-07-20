@@ -4269,3 +4269,20 @@ architectural decision.
 - **PR:** pending
 - **ADR:** none — not an architectural decision, a scope call recorded here per CLAUDE.md's
   "no silent omission" principle.
+
+## [2026-07-20] feature/0079-audit-log-search — Global Audit Log page search
+- **Type:** feature
+- **Branch:** feature/0079-audit-log-search
+- **Summary:** Closes another UI/UX audit finding: the global Audit Log page (`GET /audit-log`)
+  had cursor pagination but no search. It now accepts `?q=` and filters on a case-insensitive
+  substring match across actor/entity_type/change_type. Since the page is already
+  cursor-paginated, search only applies to the currently fetched page — same accepted limitation
+  as Triggers (ADR-0066) and Login Attempts (ADR-0063). The "Load older" cursor is computed from
+  the full fetched page before filtering, so pagination keeps advancing correctly regardless of
+  what's displayed; `q` carries through that link. CSV export intentionally stays unfiltered.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 408 passed (2 new: case-insensitive actor filter
+  match, "no audit activity on this page matches" empty state for an unmatched query; 1 existing
+  test updated for the new link shape). `cargo build --workspace` clean. `cargo clippy -p
+  kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0069-audit-log-search.md

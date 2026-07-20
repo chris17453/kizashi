@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0079         |
+| feature       | `feature/` | 0080         |
 | fix           | `fix/`     | 0014         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
@@ -120,3 +120,4 @@ manually created branches.
 | 0013 | `fix/0013-disabled-button-accessible-labels` | fix | 2026-07-20 | open | pending | |
 | 0078 | `feature/0078-sessions-page-sortable-columns` | feature | 2026-07-20 | open | pending | |
 | 0003 | `docs/0003-normalization-mappings-pagination-evaluated-and-skipped` | docs | 2026-07-20 | open | pending | |
+| 0079 | `feature/0079-audit-log-search` | feature | 2026-07-20 | open | pending | |

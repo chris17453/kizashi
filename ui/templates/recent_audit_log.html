@@ -10,10 +10,21 @@ full before/after diff.</p>
 
 <p><a href="/audit-log/export.csv" class="btn-link">Download CSV &#8595;</a></p>
 
+<form class="inline" method="get" action="/audit-log" style="margin-bottom:1rem;">
+  <label for="q">Search</label>
+  <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by actor, entity, or change&hellip;">
+  <button type="submit">Search</button>
+  {% if !q.is_empty() %}<a href="/audit-log" class="btn-link">Clear</a>{% endif %}
+</form>
+
 {% if entries.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#9776;</div>
+  {% if q.is_empty() %}
   <p>No audit activity yet.</p>
+  {% else %}
+  <p>No audit activity on this page matches &ldquo;{{ q }}&rdquo;.</p>
+  {% endif %}
 </div>
 {% else %}
 <table>
@@ -34,7 +45,7 @@ full before/after diff.</p>
 </table>
 {% if let Some(before) = next_before %}
 <p>
-  <a href="/audit-log?before={{ before }}">Load older &rarr;</a>
+  <a href="/audit-log?q={{ q }}&before={{ before }}">Load older &rarr;</a>
   &middot;
   <a href="/audit-log/export.csv?before={{ before }}" class="btn-link">Download CSV from here &#8595;</a>
 </p>

@@ -22,9 +22,26 @@ struct RecentAuditLogEntryView {
     changed_at: DateTime<Utc>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Default)]
 pub struct RecentAuditLogQuery {
     before: Option<DateTime<Utc>>,
+    #[serde(default)]
+    q: String,
+}
+
+/// Case-insensitive substring match across actor/entity_type/change_type -- same in-handler
+/// filter shape as the other list-page searches (ADR-0062), but since this page is already
+/// cursor-paginated (`before`), it only searches the *currently fetched* page, not the
+/// tenant's full audit history -- the same accepted "doesn't compose with pagination in one
+/// request" limitation ADR-0063 documented for Login Attempts.
+fn matches_query(entry: &RecentAuditLogEntryView, q: &str) -> bool {
+    if q.is_empty() {
+        return true;
+    }
+    let q = q.to_lowercase();
+    entry.actor.to_lowercase().contains(&q)
+        || entry.entity_type.to_lowercase().contains(&q)
+        || entry.change_type.to_lowercase().contains(&q)
 }
 
 #[derive(Template)]
@@ -34,6 +51,7 @@ struct RecentAuditLogTemplate {
     entries: Vec<RecentAuditLogEntryView>,
     next_before: Option<DateTime<Utc>>,
     error: Option<String>,
+    q: String,
 }
 
 /// Fetches one page (up to `limit` per source, `PAGE_SIZE`-capped by the caller) from all three
@@ -84,8 +102,11 @@ pub async fn get_recent_audit_log(
         fetch_merged_page(&state, session.tenant_id, query.before, PAGE_SIZE).await;
     merged.truncate(PAGE_SIZE as usize);
 
+    // Cursor computed from the full fetched page, before the search filter narrows what's
+    // displayed -- "Load older" must keep advancing through real history regardless of what q
+    // currently matches.
     let next_before = merged.last().map(|(_, e)| e.changed_at);
-    let entries = merged
+    let entries: Vec<RecentAuditLogEntryView> = merged
         .into_iter()
         .map(|(service, e)| RecentAuditLogEntryView {
             service,
@@ -94,11 +115,16 @@ pub async fn get_recent_audit_log(
             actor: e.actor,
             changed_at: e.changed_at,
         })
+        .filter(|entry| matches_query(entry, &query.q))
         .collect();
     let error = if errors.is_empty() { None } else { Some(errors.join("; ")) };
 
-    Html(RecentAuditLogTemplate { show_nav: true, entries, next_before, error }.render().unwrap())
-        .into_response()
+    Html(
+        RecentAuditLogTemplate { show_nav: true, entries, next_before, error, q: query.q }
+            .render()
+            .unwrap(),
+    )
+    .into_response()
 }
 
 /// Successive pages fetched per audit source when building the CSV export, each page requesting
