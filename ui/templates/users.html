@@ -46,7 +46,19 @@
 {% else %}
 <table>
   <thead>
-    <tr><th>Username</th><th>Role</th><th></th><th></th><th></th></tr>
+    <tr>
+      <th>
+        <a href="/users?q={{ q }}&sort=username&dir={% if sort == "username" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Username{% if sort == "username" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th>
+        <a href="/users?q={{ q }}&sort=role&dir={% if sort == "role" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Role{% if sort == "role" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th></th><th></th><th></th>
+    </tr>
   </thead>
   <tbody>
     {% for user in users %}

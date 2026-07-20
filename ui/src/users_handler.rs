@@ -38,12 +38,18 @@ struct UsersTemplate {
     users: Vec<UserRow>,
     error: Option<String>,
     q: String,
+    sort: String,
+    dir: String,
 }
 
 #[derive(serde::Deserialize, Default)]
 pub struct UsersQuery {
     #[serde(default)]
     q: String,
+    #[serde(default)]
+    sort: String,
+    #[serde(default)]
+    dir: String,
 }
 
 /// Case-insensitive substring match on username -- `UsersClient::list_users` has no search
@@ -52,6 +58,20 @@ pub struct UsersQuery {
 /// tenant's user list realistically stays small enough to filter client-side-of-the-fetch.
 fn matches_query(row: &UserRow, q: &str) -> bool {
     q.is_empty() || row.username.to_lowercase().contains(&q.to_lowercase())
+}
+
+/// Sorts by whichever column header was clicked (`?sort=username|role`, default `username`),
+/// same in-handler shape as the search filter above -- no backend change, since this is a
+/// client-side-of-the-fetch operation on an already-small list. `dir=desc` reverses; anything
+/// else (including absent) is ascending.
+fn sort_rows(rows: &mut [UserRow], sort: &str, dir: &str) {
+    match sort {
+        "role" => rows.sort_by(|a, b| a.role_str.cmp(&b.role_str)),
+        _ => rows.sort_by_key(|a| a.username.to_lowercase()),
+    }
+    if dir == "desc" {
+        rows.reverse();
+    }
 }
 
 /// Full-page access to `/users` is `Admin`-only, matching Auth Service's own enforcement
@@ -81,25 +101,38 @@ pub async fn get_users(
     };
 
     match state.users_client.list_users(session.tenant_id, session.role).await {
-        Ok(users) => Html(
+        Ok(users) => {
+            let mut rows: Vec<UserRow> = users
+                .into_iter()
+                .map(|u| to_row(u, &session.username))
+                .filter(|row| matches_query(row, &query.q))
+                .collect();
+            sort_rows(&mut rows, &query.sort, &query.dir);
+            Html(
+                UsersTemplate {
+                    show_nav: true,
+                    users: rows,
+                    error: None,
+                    q: query.q,
+                    sort: query.sort,
+                    dir: query.dir,
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response()
+        }
+        Err(e) => Html(
             UsersTemplate {
                 show_nav: true,
-                users: users
-                    .into_iter()
-                    .map(|u| to_row(u, &session.username))
-                    .filter(|row| matches_query(row, &query.q))
-                    .collect(),
-                error: None,
+                users: vec![],
+                error: Some(e.to_string()),
                 q: query.q,
+                sort: query.sort,
+                dir: query.dir,
             }
             .render()
             .unwrap(),
-        )
-        .into_response(),
-        Err(e) => Html(
-            UsersTemplate { show_nav: true, users: vec![], error: Some(e.to_string()), q: query.q }
-                .render()
-                .unwrap(),
         )
         .into_response(),
     }
@@ -125,6 +158,8 @@ async fn rerender_with_error(
             users: users.into_iter().map(|u| to_row(u, &session.username)).collect(),
             error: Some(error),
             q: String::new(),
+            sort: String::new(),
+            dir: String::new(),
         }
         .render()
         .unwrap(),

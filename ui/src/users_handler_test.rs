@@ -219,6 +219,117 @@ async fn get_users_shows_a_no_match_empty_state_for_an_unmatched_query() {
 }
 
 #[tokio::test]
+async fn get_users_sorts_by_username_ascending_by_default_when_sort_param_is_set() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "zed-user", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "aaa-user", "pw", Role::Viewer, "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/users?sort=username")
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    let aaa_pos = text.find("aaa-user").expect("aaa-user missing");
+    let zed_pos = text.find("zed-user").expect("zed-user missing");
+    assert!(aaa_pos < zed_pos, "expected ascending username order");
+}
+
+#[tokio::test]
+async fn get_users_sorts_descending_when_dir_is_desc() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "zed-user", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "aaa-user", "pw", Role::Viewer, "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/users?sort=username&dir=desc")
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    let aaa_pos = text.find("aaa-user").expect("aaa-user missing");
+    let zed_pos = text.find("zed-user").expect("zed-user missing");
+    assert!(zed_pos < aaa_pos, "expected descending username order");
+}
+
+#[tokio::test]
+async fn get_users_sorts_by_role() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    state
+        .users_client
+        .create_user(
+            tenant_id,
+            Role::Admin,
+            "user-with-viewer-role",
+            "pw",
+            Role::Viewer,
+            "test-actor",
+        )
+        .await
+        .unwrap();
+    state
+        .users_client
+        .create_user(
+            tenant_id,
+            Role::Admin,
+            "user-with-admin-role",
+            "pw",
+            Role::Admin,
+            "test-actor",
+        )
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/users?sort=role")
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    // "admin" < "viewer" alphabetically, so ascending role sort puts the admin row first.
+    let admin_pos = text.find("user-with-admin-role").expect("admin row missing");
+    let viewer_pos = text.find("user-with-viewer-role").expect("viewer row missing");
+    assert!(admin_pos < viewer_pos, "expected alphabetical role order");
+}
+
+#[tokio::test]
 async fn post_users_creates_a_user_and_redirects() {
     let (state, session_id, _) = state_with_session(Role::Admin).await;
     let response = router(state)

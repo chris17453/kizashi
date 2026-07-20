@@ -4153,3 +4153,20 @@ architectural decision.
   allow-listed warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
+
+## [2026-07-20] feature/0075-users-page-sortable-columns — Users page sortable columns
+- **Type:** feature
+- **Branch:** feature/0075-users-page-sortable-columns
+- **Summary:** Closes another UI/UX audit finding: no table anywhere supported column sorting,
+  always shown in whatever order the backend returned. `GET /users` now accepts `?sort=
+  username|role` and `?dir=asc|desc`, applied in-handler after the search filter. Column
+  headers are clickable toggle links with a ▲/▼ indicator on the active column; unset
+  `sort`/`dir` defaults to ascending-by-username rather than an arbitrary backend order. Search
+  and sort compose correctly in one request since sorting runs on the already-filtered rows.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 396 passed (3 new: ascending username sort,
+  descending sort via `dir=desc`, sort by role). `cargo build --workspace` clean. `cargo clippy
+  -p kizashi-ui --all-targets --all-features -- -D warnings` clean (one `unnecessary_sort_by`
+  finding fixed with `sort_by_key`). `cargo fmt --all --check` clean. `cargo deny check`/`cargo
+  audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0064-users-page-sortable-columns.md
