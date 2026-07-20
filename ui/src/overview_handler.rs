@@ -33,6 +33,11 @@ struct OverviewTemplate {
     /// `RECENT_ACTIVITY_LIMIT` — fills the dead space below the pipeline card with real content
     /// instead of leaving it empty.
     recent_events: Vec<EventSummary>,
+    /// One entry per backend call that failed -- every KPI tile used to `.unwrap_or_default()`
+    /// silently, so a genuine outage rendered as a plausible-looking "0 sensors / 0 records / 0
+    /// events" dashboard, indistinguishable from an idle-but-healthy tenant. Surfaced the same
+    /// way `security_overview_handler.rs` already does for its own KPI tiles.
+    errors: Vec<String>,
 }
 
 /// GET /overview — the landing dashboard: KPI cards summarizing sensors, ingestion volume,
@@ -44,27 +49,48 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
         Err(response) => return response,
     };
 
+    let mut errors = Vec::new();
+
     // Capped at 1000, same tradeoff as the events count below — a KPI tile approximates at
     // very high sensor counts rather than needing an exact total.
-    let sensors = state
-        .sensors_client
-        .list_sensors(session.tenant_id, 1000, 0)
-        .await
-        .map(|page| page.sensors)
-        .unwrap_or_default();
-    let connector_stats =
-        state.stats_client.connector_stats(session.tenant_id).await.unwrap_or_default();
+    let sensors = match state.sensors_client.list_sensors(session.tenant_id, 1000, 0).await {
+        Ok(page) => page.sensors,
+        Err(e) => {
+            errors.push(format!("sensors: {e}"));
+            vec![]
+        }
+    };
+    let connector_stats = match state.stats_client.connector_stats(session.tenant_id).await {
+        Ok(stats) => stats,
+        Err(e) => {
+            errors.push(format!("ingestion stats: {e}"));
+            vec![]
+        }
+    };
     // Capped at 1000 (the same ceiling the backend itself clamps to) — a KPI tile approximates
     // at very high volume rather than needing an exact count, same tradeoff this dashboard
     // already made before pagination existed (it used to silently cap at the default limit).
-    let events = state
-        .events_client
-        .list_events(&session.bearer_token, 1000, 0)
-        .await
-        .map(|page| page.events)
-        .unwrap_or_default();
-    let health = state.health_client.platform_health().await.ok();
-    let depths = state.backlog_client.queue_depths().await.unwrap_or_default();
+    let events = match state.events_client.list_events(&session.bearer_token, 1000, 0).await {
+        Ok(page) => page.events,
+        Err(e) => {
+            errors.push(format!("events: {e}"));
+            vec![]
+        }
+    };
+    let health = match state.health_client.platform_health().await {
+        Ok(h) => Some(h),
+        Err(e) => {
+            errors.push(format!("platform health: {e}"));
+            None
+        }
+    };
+    let depths = match state.backlog_client.queue_depths().await {
+        Ok(depths) => depths,
+        Err(e) => {
+            errors.push(format!("queue depths: {e}"));
+            vec![]
+        }
+    };
     let pipeline_items =
         health.as_ref().map(|h| build_topology_items(h, &depths)).unwrap_or_default();
 
@@ -96,6 +122,7 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
             services_total,
             pipeline_items,
             recent_events,
+            errors,
         }
         .render()
         .unwrap(),
