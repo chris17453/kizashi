@@ -1,6 +1,6 @@
 #[path = "login_handler_test.rs"]
 #[cfg(test)]
-mod login_handler_test;
+pub(crate) mod login_handler_test;
 
 use crate::{AppState, Session, SESSION_COOKIE_NAME};
 use askama::Template;

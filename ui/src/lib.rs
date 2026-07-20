@@ -16,6 +16,8 @@ mod execution_client;
 mod health_client;
 mod ingestion_stats_client;
 mod normalization_mappings_client;
+mod oidc_client;
+mod pending_oidc_flow;
 mod retention_policies_client;
 mod saved_search_queries_client;
 mod sensors_client;
@@ -46,6 +48,7 @@ mod root_handler;
 mod sensor_detail_handler;
 mod sensor_script_handler;
 mod sensors_handler;
+mod sso_login_handler;
 mod static_assets;
 mod triggers_handler;
 mod users_handler;
@@ -76,6 +79,8 @@ pub use ingestion_stats_client::{
 pub use normalization_mappings_client::{
     HttpNormalizationMappingsClient, NormalizationMappingsClient, NormalizationMappingsClientError,
 };
+pub use oidc_client::{HttpOidcClient, OidcClient, OidcClientError};
+pub use pending_oidc_flow::{InMemoryPendingOidcFlowStore, PendingOidcFlow, PendingOidcFlowStore};
 pub use retention_policies_client::{
     DataClass, HttpRetentionPoliciesClient, RetentionPoliciesClient, RetentionPoliciesClientError,
     RetentionPolicy,
@@ -115,6 +120,7 @@ pub use root_handler::get_root;
 pub use sensor_detail_handler::get_sensor_detail;
 pub use sensor_script_handler::{get_generate_form, get_generate_select, post_generate_script};
 pub use sensors_handler::{get_sensors, post_delete_sensor, post_sensors, post_toggle_sensor};
+pub use sso_login_handler::{get_sso_callback, get_sso_login};
 pub use static_assets::get_charts_js;
 pub use triggers_handler::{get_triggers, post_trigger};
 pub use users_handler::{get_users, post_delete_user, post_update_user_role, post_users};
@@ -129,6 +135,8 @@ pub const SESSION_COOKIE_NAME: &str = "kizashi_session";
 pub struct AppState {
     pub session_store: Arc<dyn SessionStore>,
     pub auth_client: Arc<dyn AuthClient>,
+    pub oidc_client: Arc<dyn OidcClient>,
+    pub pending_oidc_flow_store: Arc<dyn PendingOidcFlowStore>,
     pub events_client: Arc<dyn EventsClient>,
     pub triggers_client: Arc<dyn TriggersClient>,
     pub health_client: Arc<dyn HealthClient>,
@@ -162,6 +170,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/", get(get_root))
         .route("/healthz", get(healthz))
         .route("/login", get(get_login).post(post_login))
+        .route("/login/sso", get(get_sso_login))
+        .route("/login/sso/callback", get(get_sso_callback))
         .route("/logout", get(get_logout))
         .route("/events", get(get_events))
         .route("/triggers", get(get_triggers).post(post_trigger))

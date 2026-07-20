@@ -2,8 +2,9 @@ use kizashi_ui::{
     build_router, AppState, HttpAnalysisConfigClient, HttpApiKeysClient, HttpAuditLogClient,
     HttpAuthClient, HttpBacklogClient, HttpEgressAllowlistClient, HttpEventsClient,
     HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
-    HttpNormalizationMappingsClient, HttpRetentionPoliciesClient, HttpSavedSearchQueriesClient,
-    HttpSensorsClient, HttpTriggersClient, HttpUsersClient, InMemorySessionStore,
+    HttpNormalizationMappingsClient, HttpOidcClient, HttpRetentionPoliciesClient,
+    HttpSavedSearchQueriesClient, HttpSensorsClient, HttpTriggersClient, HttpUsersClient,
+    InMemoryPendingOidcFlowStore, InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -38,6 +39,8 @@ async fn main() {
     let state = AppState {
         session_store: Arc::new(InMemorySessionStore::default()),
         auth_client: Arc::new(HttpAuthClient::new(client.clone(), auth_service_url.clone())),
+        oidc_client: Arc::new(HttpOidcClient::new(client.clone(), auth_service_url.clone())),
+        pending_oidc_flow_store: Arc::new(InMemoryPendingOidcFlowStore::default()),
         events_client: Arc::new(HttpEventsClient::new(client.clone(), query_gateway_url)),
         triggers_client: Arc::new(HttpTriggersClient::new(
             client.clone(),

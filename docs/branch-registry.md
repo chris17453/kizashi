@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0053         |
+| feature       | `feature/` | 0054         |
 | fix           | `fix/`     | 0007         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -85,3 +85,4 @@ manually created branches.
 | 0051 | `feature/0051-ui-polish-sensor-picker-and-trigger-form` | feature | 2026-07-19 | merged | #61 | |
 | 0006 | `fix/0006-audit-log-real-actor` | fix | 2026-07-20 | open | pending | integrates 6 parallel agent branches (auth-service, config-admin-service, retention-service, ingestion-gateway, ui batch1, ui batch2) into one atomic PR since backend+UI must land together |
 | 0052 | `feature/0052-overview-recent-activity` | feature | 2026-07-19 | open | pending | |
+| 0053 | `feature/0053-console-ui-oidc-sso-login` | feature | 2026-07-19 | open | pending | |

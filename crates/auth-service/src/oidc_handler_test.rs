@@ -8,6 +8,7 @@ use axum::http::Request;
 use axum::routing::{get, post};
 use axum::Router;
 use tower::ServiceExt;
+use uuid::Uuid;
 
 fn router(state: AuthState) -> Router {
     Router::new()
@@ -25,7 +26,7 @@ fn state_with_provider(
     oidc_clients.insert(provider.to_string(), client);
     AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::default()),
-        tenant_repository: Arc::new(InMemoryTenantRepository::default()),
+        tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", Uuid::new_v4())),
         session_client,
         oidc_clients,
         audit_log_reader: Arc::new(
@@ -104,7 +105,7 @@ async fn callback_completes_exchange_and_mints_a_session() {
         session_client.clone(),
     );
 
-    let body = serde_json::json!({"code": "auth-code", "code_verifier": "verifier", "tenant_id": Uuid::new_v4()});
+    let body = serde_json::json!({"code": "auth-code", "code_verifier": "verifier", "tenant_name": "acme"});
     let response = router(state)
         .oneshot(
             Request::builder()
@@ -129,7 +130,7 @@ async fn callback_returns_404_for_an_unknown_provider() {
         Arc::new(InMemorySessionClient::default()),
     );
 
-    let body = serde_json::json!({"code": "auth-code", "code_verifier": "verifier", "tenant_id": Uuid::new_v4()});
+    let body = serde_json::json!({"code": "auth-code", "code_verifier": "verifier", "tenant_name": "acme"});
     let response = router(state)
         .oneshot(
             Request::builder()
@@ -153,7 +154,7 @@ async fn callback_returns_502_when_code_exchange_fails() {
         Arc::new(InMemorySessionClient::default()),
     );
 
-    let body = serde_json::json!({"code": "auth-code", "code_verifier": "verifier", "tenant_id": Uuid::new_v4()});
+    let body = serde_json::json!({"code": "auth-code", "code_verifier": "verifier", "tenant_name": "acme"});
     let response = router(state)
         .oneshot(
             Request::builder()
@@ -177,7 +178,7 @@ async fn callback_returns_502_when_session_mint_fails() {
         Arc::new(FailingSessionClient),
     );
 
-    let body = serde_json::json!({"code": "auth-code", "code_verifier": "verifier", "tenant_id": Uuid::new_v4()});
+    let body = serde_json::json!({"code": "auth-code", "code_verifier": "verifier", "tenant_name": "acme"});
     let response = router(state)
         .oneshot(
             Request::builder()
@@ -191,4 +192,28 @@ async fn callback_returns_502_when_session_mint_fails() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
+async fn callback_returns_400_when_the_tenant_name_is_unknown() {
+    let state = state_with_provider(
+        "entra",
+        Arc::new(InMemoryOidcClient::default()),
+        Arc::new(InMemorySessionClient::default()),
+    );
+
+    let body = serde_json::json!({"code": "auth-code", "code_verifier": "verifier", "tenant_name": "nonexistent-workspace"});
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/auth/oidc/entra/callback")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

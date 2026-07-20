@@ -15,4 +15,10 @@
   <input type="password" id="password" name="password" autocomplete="current-password" required>
   <button type="submit">Sign in</button>
 </form>
+<div class="login-divider"><span>or</span></div>
+<form class="login" method="get" action="/login/sso">
+  <label for="sso_tenant_name">Workspace</label>
+  <input type="text" id="sso_tenant_name" name="tenant_name" placeholder="acme" autocapitalize="off" autocomplete="organization" required>
+  <button type="submit" class="btn-secondary">Sign in with SSO</button>
+</form>
 {% endblock %}
