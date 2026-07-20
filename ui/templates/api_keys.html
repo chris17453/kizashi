@@ -80,7 +80,7 @@
           Created{% if sort == "created_at" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
-      <th scope="col">Status</th><th scope="col"></th>
+      <th scope="col">Status</th><th scope="col"></th><th scope="col"></th>
     </tr>
   </thead>
   <tbody>
@@ -108,6 +108,7 @@
         {% endif %}
       </td>
       {% endif %}
+      <td><a href="/audit-log/ingestion/{{ key.id }}">History</a></td>
     </tr>
     {% endfor %}
   </tbody>

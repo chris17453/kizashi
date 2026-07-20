@@ -105,6 +105,64 @@ async fn http_client_returns_unreachable_when_server_is_down() {
     assert!(matches!(err, AuditLogClientError::Unreachable(_)));
 }
 
+async fn spawn_stub_api_key_audit_server() -> String {
+    async fn handler(headers: HeaderMap) -> axum::response::Response {
+        if headers.get("x-tenant-id").is_none() {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
+        Json(serde_json::json!([{
+            "id": "11111111-1111-1111-1111-111111111111",
+            "entity_type": "api_key",
+            "entity_id": "22222222-2222-2222-2222-222222222222",
+            "change_type": "revoked",
+            "actor": "alice",
+            "before": null,
+            "after": {"label": "ci-agent"},
+            "changed_at": "2026-07-19T00:00:00Z"
+        }]))
+        .into_response()
+    }
+    let app = Router::new().route("/v1/api-keys/:id/audit-log", get(handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    format!("http://{addr}")
+}
+
+#[tokio::test]
+async fn ingestion_gateway_client_lists_api_key_entries_against_a_real_server() {
+    let url = spawn_stub_api_key_audit_server().await;
+    let client = IngestionGatewayApiKeyAuditLogClient::new(reqwest::Client::new(), url);
+
+    let entries = client.list_for_entity(Uuid::new_v4(), Uuid::new_v4()).await.unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].change_type, "revoked");
+    assert_eq!(entries[0].entity_type, "api_key");
+}
+
+#[tokio::test]
+async fn ingestion_gateway_client_returns_unreachable_when_server_is_down() {
+    let client = IngestionGatewayApiKeyAuditLogClient::new(
+        reqwest::Client::new(),
+        "http://127.0.0.1:1".to_string(),
+    );
+    let err = client.list_for_entity(Uuid::new_v4(), Uuid::new_v4()).await.unwrap_err();
+    assert!(matches!(err, AuditLogClientError::Unreachable(_)));
+}
+
+#[tokio::test]
+async fn ingestion_gateway_client_list_recent_is_unsupported() {
+    let client = IngestionGatewayApiKeyAuditLogClient::new(
+        reqwest::Client::new(),
+        "http://127.0.0.1:1".to_string(),
+    );
+    let err = client.list_recent(Uuid::new_v4(), 25, None).await.unwrap_err();
+    assert!(matches!(err, AuditLogClientError::Unreachable(_)));
+}
+
 async fn spawn_stub_recent_server() -> String {
     async fn handler(
         headers: HeaderMap,

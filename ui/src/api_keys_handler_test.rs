@@ -61,6 +61,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         config_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
         retention_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
         auth_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
+        ingestion_audit_log_client: std::sync::Arc::new(crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default()),
         users_client: std::sync::Arc::new(crate::users_client::users_client_test::InMemoryUsersClient::default()),
         saved_search_queries_client: std::sync::Arc::new(crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default()),
         stats_client: Arc::new(InMemoryIngestionStatsClient::default()),
@@ -199,6 +200,33 @@ async fn get_api_keys_revoke_buttons_ask_for_confirmation_before_submitting() {
     // button's form= attribute rather than physically wrapping the table) confirm before
     // submitting.
     assert_eq!(body.matches("onsubmit=\"return confirm(").count(), 2);
+}
+
+#[tokio::test]
+async fn get_api_keys_links_each_key_to_its_audit_history() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
+        .await
+        .unwrap();
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let key_id = keys.iter().find(|k| k.label == "ci-agent").unwrap().id;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/api-keys")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(&format!("/audit-log/ingestion/{key_id}")));
 }
 
 #[tokio::test]

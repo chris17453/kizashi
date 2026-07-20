@@ -4714,3 +4714,28 @@ architectural decision.
   `watkinslabs` tenant: Users/API Keys/Sensors pages all render the confirmation attribute.
 - **PR:** pending
 - **ADR:** docs/adr/0093-confirm-destructive-actions.md
+
+## [2026-07-20] feature/0094-api-key-audit-history-link — API Key per-key audit history link
+- **Type:** feature
+- **Branch:** feature/0094-api-key-audit-history-link
+- **Summary:** Closes the last remaining sixth-audit-pass gap: API Keys had no link to their own
+  change history, unlike every other config entity. `ingestion-gateway` already audited
+  create/revoke and already exposed `GET /v1/api-keys/:id/audit-log`, but that route's shape
+  didn't match the shared `AuditLogClient`/`HttpAuditLogClient` pair the UI already used for
+  config-admin-service/retention-service/auth-service, and `ingestion-gateway` has no tenant-wide
+  feed of its own. New `IngestionGatewayApiKeyAuditLogClient` (a second `AuditLogClient` impl)
+  closes that gap; `audit_log_handler.rs` gained a fourth `"ingestion"` service arm; `api_keys.html`
+  gained a per-key "History" link.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 458 passed (5 new: the new client's
+  list_for_entity/unreachable/list_recent-is-unsupported behavior against a real stub server, the
+  ingestion service arm rendering entries, and the per-key History link rendering with the real
+  key id). Also split four pre-existing 500+-line test files (`data_handler_test.rs`,
+  `events_handler_test.rs`, `retention_policies_handler_test.rs`, `triggers_handler_test.rs`) —
+  three already over the limit before this PR, one pushed over by this PR's own confirmation
+  test — per CLAUDE.md §0's file-size rule; the whole `ui/src` directory is now compliant.
+  `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
+  warnings` clean. `cargo fmt --all --check` clean. Live-verified against the real `watkinslabs`
+  tenant: the per-key History link renders with the real key id and resolves to a working
+  audit-log page (200 OK).
+- **PR:** pending
+- **ADR:** docs/adr/0094-api-key-audit-history-link.md

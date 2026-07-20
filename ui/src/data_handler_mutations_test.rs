@@ -4,12 +4,13 @@ use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
+use crate::saved_search_queries_client::SavedSearchQueriesClient;
 use crate::sensors_client::sensors_client_test::InMemorySensorsClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::routing::{get, post};
+use axum::routing::get;
 use axum::Router;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -17,21 +18,26 @@ use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
     Router::new()
-        .route("/sensors/generate", get(get_generate_select))
-        .route("/sensors/generate/form", get(get_generate_form))
-        .route("/sensors/generate/script", post(post_generate_script))
+        .route("/data", get(get_data))
+        .route("/data/export.csv", get(get_data_export_csv))
+        .route("/data/reprocess", axum::routing::post(post_reprocess))
+        .route("/data/saved-searches", axum::routing::post(post_save_search))
+        .route("/data/saved-searches/:id/delete", axum::routing::post(post_delete_saved_search))
         .with_state(state)
 }
 
-async fn state_with_session() -> (AppState, String, Uuid) {
+async fn state_with_session() -> (AppState, String) {
+    state_with_session_role(common::Role::Admin).await
+}
+
+async fn state_with_session_role(role: common::Role) -> (AppState, String) {
     let session_store = InMemorySessionStore::default();
-    let tenant_id = Uuid::new_v4();
     let session_id = session_store
         .create(Session {
             bearer_token: "tok".to_string(),
-            tenant_id,
+            tenant_id: Uuid::new_v4(),
             username: "alice".to_string(),
-            role: common::Role::Admin,
+            role,
             created_at: chrono::Utc::now(),
         })
         .await;
@@ -72,51 +78,57 @@ async fn state_with_session() -> (AppState, String, Uuid) {
             login_attempts_client: Arc::new(crate::login_attempts_client::login_attempts_client_test::InMemoryLoginAttemptsClient::default()),
                 backup_status_client: Arc::new(crate::backup_status_client::backup_status_client_test::InMemoryBackupStatusClient::default()),
 };
-    (state, session_id, tenant_id)
+    (state, session_id)
 }
 
 #[tokio::test]
-async fn get_generate_select_lists_every_connector_type() {
-    let (state, session_id, _tenant_id) = state_with_session().await;
+async fn post_save_search_creates_a_bookmark_and_redirects() {
+    let (state, session_id) = state_with_session().await;
+    let saved_client = Arc::new(
+        crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default(),
+    );
+    let mut state = state;
+    state.saved_search_queries_client = saved_client.clone();
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/sensors/generate")
+                .method("POST")
+                .uri("/data/saved-searches")
                 .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("name=urgent%20tickets&q=urgent&connector_id=&source_type=&subject=&email_from=&attachment_filename="))
                 .unwrap(),
         )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Zendesk"));
-    assert!(body.contains("Fabric"));
-}
-
-#[tokio::test]
-async fn get_generate_select_redirects_to_login_when_not_signed_in() {
-    let (state, _session_id, _tenant_id) = state_with_session().await;
-
-    let response = router(state)
-        .oneshot(Request::builder().uri("/sensors/generate").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let saved = saved_client.queries.lock().unwrap();
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0].name, "urgent tickets");
 }
 
 #[tokio::test]
-async fn get_generate_form_shows_the_zendesk_specific_fields() {
-    let (state, session_id, _tenant_id) = state_with_session().await;
+async fn saved_searches_render_as_links_on_the_page() {
+    let (mut state, session_id) = state_with_session().await;
+    let saved_client = Arc::new(
+        crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default(),
+    );
+    saved_client
+        .create(
+            state.session_store.get(&session_id).await.unwrap().tenant_id,
+            "urgent tickets",
+            serde_json::json!({"q": "urgent", "connector_id": "", "source_type": "", "subject": "", "email_from": "", "attachment_filename": "", "page": 0}),
+        )
+        .await
+        .unwrap();
+    state.saved_search_queries_client = saved_client;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/sensors/generate/form?connector_type=zendesk")
+                .uri("/data")
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -124,114 +136,105 @@ async fn get_generate_form_shows_the_zendesk_specific_fields() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("ZENDESK_SUBDOMAIN"));
-    assert!(body.contains("ZENDESK_API_TOKEN"));
+    assert!(body.contains("urgent tickets"));
+    assert!(body.contains("q=urgent"));
 }
 
 #[tokio::test]
-async fn get_generate_form_auto_fills_a_freshly_generated_api_key_for_an_operator() {
-    let (state, session_id, _tenant_id) = state_with_session().await;
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .uri("/sensors/generate/form?connector_type=zendesk")
-                .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("kzsh_"), "should pre-fill an auto-generated key, not a blank field");
-    assert!(body.contains("generated automatically"));
-}
-
-#[tokio::test]
-async fn get_generate_form_leaves_the_api_key_blank_for_a_viewer() {
-    let session_store = InMemorySessionStore::default();
-    let tenant_id = Uuid::new_v4();
-    let session_id = session_store
-        .create(Session {
-            bearer_token: "tok".to_string(),
-            tenant_id,
-            username: "viewer".to_string(),
-            role: common::Role::Viewer,
-            created_at: chrono::Utc::now(),
-        })
-        .await;
-    let (mut state, _session_id, _tenant_id) = state_with_session().await;
-    state.session_store = Arc::new(session_store);
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .uri("/sensors/generate/form?connector_type=zendesk")
-                .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(!body.contains("kzsh_"));
-    assert!(body.contains("can't create API keys"));
-}
-
-#[tokio::test]
-async fn post_generate_script_renders_all_three_variants_with_submitted_values() {
-    let (state, session_id, tenant_id) = state_with_session().await;
-
-    let body = "connector_type=zendesk&name=support-poller&gateway_url=http%3A%2F%2Fexample.com&api_key=my-secret-key&ZENDESK_SUBDOMAIN=acme&ZENDESK_EMAIL=ops%40acme.com&ZENDESK_API_TOKEN=tok-123";
+async fn post_delete_saved_search_removes_it_and_redirects() {
+    let (mut state, session_id) = state_with_session().await;
+    let saved_client = Arc::new(
+        crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient::default(),
+    );
+    let tenant_id = state.session_store.get(&session_id).await.unwrap().tenant_id;
+    let created = saved_client.create(tenant_id, "to remove", serde_json::json!({})).await.unwrap();
+    state.saved_search_queries_client = saved_client.clone();
 
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/sensors/generate/script")
+                .uri(format!("/data/saved-searches/{}/delete", created.id))
                 .header("cookie", format!("kizashi_session={session_id}"))
-                .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from(body))
+                .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let rendered = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(rendered.contains("support-poller"));
-    assert!(rendered.contains("my-secret-key"));
-    assert!(rendered.contains("acme"));
-    assert!(rendered.contains(&tenant_id.to_string()));
-    assert!(rendered.contains("zendesk-connector"));
-    assert!(rendered.contains("cargo run --release -p connector-zendesk"));
-    assert!(rendered.contains("$env:ZENDESK_SUBDOMAIN"));
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert!(saved_client.list(tenant_id).await.unwrap().is_empty());
 }
 
 #[tokio::test]
-async fn post_generate_script_omits_empty_optional_fields() {
-    let (state, session_id, _tenant_id) = state_with_session().await;
-
-    let body = "connector_type=generic&name=my-generic&gateway_url=http%3A%2F%2Fexample.com&api_key=key&GENERIC_SOURCE_URL=http%3A%2F%2Fsource.example.com&GENERIC_BEARER_TOKEN=";
+async fn reprocess_redirects_with_the_count_and_calls_the_client() {
+    let (mut state, session_id) = state_with_session().await;
+    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
+    *stats_client.reprocessed.lock().unwrap() = 42;
+    state.stats_client = stats_client;
 
     let response = router(state)
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/sensors/generate/script")
+                .uri("/data/reprocess")
                 .header("cookie", format!("kizashi_session={session_id}"))
-                .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from(body))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers().get("location").unwrap(), "/data?reprocessed=42");
+}
+
+#[tokio::test]
+async fn reprocess_rejects_a_viewer_role() {
+    let (state, session_id) = state_with_session_role(common::Role::Viewer).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/data/reprocess")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn reprocess_requires_a_session() {
+    let (state, _session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder().method("POST").uri("/data/reprocess").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers().get("location").unwrap(), "/login");
+}
+
+#[tokio::test]
+async fn data_page_shows_the_reprocess_button_for_an_operator_and_confirmation_when_present() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data?reprocessed=5")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
                 .unwrap(),
         )
         .await
@@ -239,6 +242,41 @@ async fn post_generate_script_omits_empty_optional_fields() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let rendered = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(!rendered.contains("GENERIC_BEARER_TOKEN"));
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Reprocess unnormalized records"));
+    assert!(body.contains("Republished 5 unnormalized record"));
+}
+
+#[tokio::test]
+async fn data_page_hides_the_reprocess_button_for_a_viewer() {
+    let (state, session_id) = state_with_session_role(common::Role::Viewer).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("Reprocess unnormalized records"));
+}
+
+#[test]
+fn parse_date_range_treats_from_as_start_of_day_and_to_as_end_of_day() {
+    let (from, to) = parse_date_range("2026-07-15", "2026-07-20");
+    assert_eq!(from.unwrap().to_rfc3339(), "2026-07-15T00:00:00+00:00");
+    assert_eq!(to.unwrap().to_rfc3339(), "2026-07-20T23:59:59+00:00");
+}
+
+#[test]
+fn parse_date_range_leaves_an_empty_or_unparseable_side_as_none() {
+    let (from, to) = parse_date_range("", "not-a-date");
+    assert!(from.is_none());
+    assert!(to.is_none());
 }

@@ -5,7 +5,7 @@ use kizashi_ui::{
     HttpIngestionStatsClient, HttpLoginAttemptsClient, HttpMfaClient,
     HttpNormalizationMappingsClient, HttpOidcClient, HttpRetentionPoliciesClient,
     HttpSavedSearchQueriesClient, HttpSensorsClient, HttpTriggersClient, HttpUsersClient,
-    InMemoryPendingOidcFlowStore, InMemorySessionStore,
+    InMemoryPendingOidcFlowStore, InMemorySessionStore, IngestionGatewayApiKeyAuditLogClient,
 };
 use std::sync::Arc;
 
@@ -86,7 +86,10 @@ async fn main() {
             client.clone(),
             config_admin_service_url.clone(),
         )),
-        api_keys_client: Arc::new(HttpApiKeysClient::new(client.clone(), ingestion_gateway_url)),
+        api_keys_client: Arc::new(HttpApiKeysClient::new(
+            client.clone(),
+            ingestion_gateway_url.clone(),
+        )),
         backlog_client: Arc::new(HttpBacklogClient::new(client.clone(), observability_url)),
         stats_client: Arc::new(HttpIngestionStatsClient::new(
             client.clone(),
@@ -124,6 +127,10 @@ async fn main() {
         auth_audit_log_client: Arc::new(HttpAuditLogClient::new(
             client.clone(),
             auth_service_url.clone(),
+        )),
+        ingestion_audit_log_client: Arc::new(IngestionGatewayApiKeyAuditLogClient::new(
+            client.clone(),
+            ingestion_gateway_url,
         )),
         login_attempts_client: Arc::new(HttpLoginAttemptsClient::new(
             client.clone(),
