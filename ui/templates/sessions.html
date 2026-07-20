@@ -6,10 +6,21 @@ that login out immediately, without changing the user's password — use this if
 team or you suspect a session was compromised. This list only reflects logins started on this
 Console UI instance (ADR-0046).</p>
 
+<form class="inline" method="get" action="/security/sessions" style="margin-bottom:1rem;">
+  <label for="q">Search</label>
+  <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by username&hellip;">
+  <button type="submit">Search</button>
+  {% if !q.is_empty() %}<a href="/security/sessions" class="btn-link">Clear</a>{% endif %}
+</form>
+
 {% if sessions.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#128274;</div>
+  {% if q.is_empty() %}
   <p>No active sessions.</p>
+  {% else %}
+  <p>No sessions match &ldquo;{{ q }}&rdquo;.</p>
+  {% endif %}
 </div>
 {% else %}
 <table>

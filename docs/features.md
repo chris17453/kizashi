@@ -4099,3 +4099,18 @@ architectural decision.
   warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
+
+## [2026-07-20] feature/0072-sessions-page-search — Active Sessions page search
+- **Type:** feature
+- **Branch:** feature/0072-sessions-page-search
+- **Summary:** Extends ADR-0062's search pattern to the Active Sessions page: `GET
+  /security/sessions` now accepts `?q=` and filters the fetched session list by a
+  case-insensitive username substring match, in-handler. Bookmarkable `GET` search form, "Clear"
+  link when active, distinct "no results" vs "no active sessions" empty states.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 386 passed (2 new: case-insensitive username
+  filter match, "no sessions match" empty state for an unmatched query). `cargo build
+  --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
+  clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
+  allow-listed warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
