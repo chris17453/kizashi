@@ -4252,3 +4252,20 @@ architectural decision.
   --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0068-sessions-page-sortable-columns.md
+
+## [2026-07-20] docs/0003-normalization-mappings-pagination-evaluated-and-skipped — Normalization Mappings pagination evaluated and skipped
+- **Type:** docs
+- **Branch:** docs/0003-normalization-mappings-pagination-evaluated-and-skipped
+- **Summary:** A UI/UX audit flagged Field Mappings (normalization mappings) as still missing
+  pagination, unlike Triggers/Login Attempts. Investigated and deliberately skipped: unlike
+  those pages, this list has zero pagination infrastructure anywhere in the stack (repository,
+  SQL, HTTP contract all fetch-all with no limit/offset), so adding it would mean a cross-service
+  backend change to config-admin-service, not just a UI-layer addition. Checked actual real-tenant
+  usage — one mapping per source_type per tenant, realistically a handful of rows even at scale
+  (bounded by connector-type count, not ingested record volume) — the same "too few rows to
+  matter" reasoning already used to skip Retention Policies pagination/search. Recording this
+  explicitly so the item isn't silently dropped or re-flagged as an oversight in a future audit.
+- **Tests:** N/A — no code change, decision-only.
+- **PR:** pending
+- **ADR:** none — not an architectural decision, a scope call recorded here per CLAUDE.md's
+  "no silent omission" principle.
