@@ -157,8 +157,8 @@ pub use recent_audit_log_handler::{get_recent_audit_log, get_recent_audit_log_cs
 pub use record_journey_handler::get_record_journey;
 pub use reports_handler::get_reports;
 pub use retention_policies_handler::{
-    get_retention_policies, post_delete_retention_policy, post_edit_retention_policy,
-    post_retention_policies, post_toggle_retention_policy,
+    get_retention_policies, post_bulk_delete_retention_policies, post_delete_retention_policy,
+    post_edit_retention_policy, post_retention_policies, post_toggle_retention_policy,
 };
 pub use root_handler::get_root;
 pub use security_overview_handler::get_security_overview;
@@ -172,7 +172,8 @@ pub use sso_login_handler::{get_sso_callback, get_sso_login};
 pub use static_assets::{get_charts_js, get_confirm_danger_js};
 pub use triggers_handler::{get_triggers, post_trigger};
 pub use users_handler::{
-    get_export_user, get_users, post_delete_user, post_update_user_role, post_users,
+    get_export_user, get_users, post_bulk_delete_users, post_delete_user, post_update_user_role,
+    post_users,
 };
 
 use axum::routing::get;
@@ -259,10 +260,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/retention-policies/:id/toggle", axum::routing::post(post_toggle_retention_policy))
         .route("/retention-policies/:id/edit", axum::routing::post(post_edit_retention_policy))
         .route("/retention-policies/:id/delete", axum::routing::post(post_delete_retention_policy))
+        .route(
+            "/retention-policies/bulk-delete",
+            axum::routing::post(post_bulk_delete_retention_policies),
+        )
         .route("/egress-allowlist", get(get_egress_allowlist).post(post_egress_allowlist))
         .route("/users", get(get_users).post(post_users))
         .route("/users/:id/role", axum::routing::post(post_update_user_role))
         .route("/users/:id/delete", axum::routing::post(post_delete_user))
+        .route("/users/bulk-delete", axum::routing::post(post_bulk_delete_users))
         .route("/users/:id/export", get(get_export_user))
         .route("/audit-log", get(get_recent_audit_log))
         .route("/audit-log/export.csv", get(get_recent_audit_log_csv))

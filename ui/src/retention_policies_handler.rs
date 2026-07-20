@@ -1,3 +1,6 @@
+#[path = "retention_policies_handler_bulk_delete_test.rs"]
+#[cfg(test)]
+mod retention_policies_handler_bulk_delete_test;
 #[path = "retention_policies_handler_mutations_test.rs"]
 #[cfg(test)]
 mod retention_policies_handler_mutations_test;
@@ -246,6 +249,49 @@ pub async fn post_edit_retention_policy(
                 .update_policy(session.role, policy, &session.username)
                 .await;
         }
+    }
+    Redirect::to("/retention-policies").into_response()
+}
+
+/// `axum::extract::Form` deserializes via `serde_urlencoded`, which -- unlike some other form
+/// crates -- does NOT collect repeated same-named fields (one checkbox per row, all named
+/// `ids`) into a `Vec`; it only supports flat scalar struct fields. Parsing the raw body as a
+/// flat list of `(key, value)` pairs instead and filtering for `"ids"` sidesteps that limitation
+/// without adding a new dependency (`serde_urlencoded` is already a direct dependency). Same
+/// pattern as API Keys' `post_bulk_revoke_api_keys`, Sensors' `post_bulk_delete_sensors`, and
+/// Users' `post_bulk_delete_users` (ADR-0065/ADR-0095).
+fn parse_ids(raw_body: &[u8]) -> Vec<Uuid> {
+    let Ok(pairs) = serde_urlencoded::from_bytes::<Vec<(String, String)>>(raw_body) else {
+        return Vec::new();
+    };
+    pairs
+        .into_iter()
+        .filter(|(key, _)| key == "ids")
+        .filter_map(|(_, value)| value.parse::<Uuid>().ok())
+        .collect()
+}
+
+/// POST /retention-policies/bulk-delete — removes every selected policy (same bulk-action
+/// pattern API Keys/Sensors/Users already have): loop over the existing single-item
+/// `RetentionPoliciesClient::delete_policy` rather than a new bulk backend endpoint.
+pub async fn post_bulk_delete_retention_policies(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Operator) {
+        return axum::http::StatusCode::FORBIDDEN.into_response();
+    }
+
+    for id in parse_ids(&body) {
+        let _ = state
+            .retention_policies_client
+            .delete_policy(session.role, session.tenant_id, id, &session.username)
+            .await;
     }
     Redirect::to("/retention-policies").into_response()
 }

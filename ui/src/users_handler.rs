@@ -231,6 +231,48 @@ pub async fn post_update_user_role(
     Redirect::to("/users").into_response()
 }
 
+/// `axum::extract::Form` deserializes via `serde_urlencoded`, which -- unlike some other form
+/// crates -- does NOT collect repeated same-named fields (one checkbox per row, all named
+/// `ids`) into a `Vec`; it only supports flat scalar struct fields. Parsing the raw body as a
+/// flat list of `(key, value)` pairs instead and filtering for `"ids"` sidesteps that limitation
+/// without adding a new dependency (`serde_urlencoded` is already a direct dependency). Same
+/// pattern as API Keys' `post_bulk_revoke_api_keys` and Sensors' `post_bulk_delete_sensors`
+/// (ADR-0065/ADR-0095).
+fn parse_ids(raw_body: &[u8]) -> Vec<Uuid> {
+    let Ok(pairs) = serde_urlencoded::from_bytes::<Vec<(String, String)>>(raw_body) else {
+        return Vec::new();
+    };
+    pairs
+        .into_iter()
+        .filter(|(key, _)| key == "ids")
+        .filter_map(|(_, value)| value.parse::<Uuid>().ok())
+        .collect()
+}
+
+/// POST /users/bulk-delete — removes every selected user (same bulk-action pattern API Keys and
+/// Sensors already have, ADR-0065/ADR-0095: loop over the existing single-item
+/// `UsersClient::delete_user` rather than a new bulk backend endpoint). Best-effort per user,
+/// same as the single-delete handler below -- the backend's own last-admin/self-delete
+/// protections (ADR-0031) still apply per call, this handler adds no new authorization logic.
+pub async fn post_bulk_delete_users(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let session = match require_admin_session(&state, &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+
+    for id in parse_ids(&body) {
+        let _ = state
+            .users_client
+            .delete_user(session.tenant_id, session.role, id, &session.username)
+            .await;
+    }
+    Redirect::to("/users").into_response()
+}
+
 pub async fn post_delete_user(
     State(state): State<AppState>,
     headers: HeaderMap,
