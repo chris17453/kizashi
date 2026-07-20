@@ -51,7 +51,7 @@ Console UI instance (ADR-0046).</p>
       <td>{{ s.role_str }}</td>
       <td>{{ s.created_at }}</td>
       <td>
-        <form class="inline" method="post" action="/security/sessions/{{ s.id }}/revoke" style="display:inline">
+        <form class="inline" method="post" action="/security/sessions/{{ s.id }}/revoke" style="display:inline" onsubmit="return confirm('Revoke this session? The user will be signed out immediately.');">
           <button type="submit" class="btn-danger" {% if s.is_current %}disabled title="use Log out instead of revoking your own session" aria-label="Revoke -- use Log out instead of revoking your own session"{% endif %}>Revoke</button>
         </form>
       </td>

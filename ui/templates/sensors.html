@@ -63,9 +63,16 @@
   {% endif %}
 </div>
 {% else %}
+{% if can_write %}
+<!-- Declared empty and referenced by `form="bulk-delete-form"` on each checkbox/button below,
+     rather than physically wrapping the table -- HTML forms can't nest, and each row also needs
+     its own single-sensor delete/toggle forms. Same pattern as API Keys' bulk-revoke. -->
+<form id="bulk-delete-form" method="post" action="/sensors/bulk-delete" onsubmit="return confirm('Remove the selected sensors? This cannot be undone.');"></form>
+{% endif %}
 <table>
   <thead>
     <tr>
+      {% if can_write %}<th scope="col"></th>{% endif %}
       <th scope="col">
         <a href="/sensors?q={{ q|urlencode }}&sort=name&dir={% if sort == "name" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Name{% if sort == "name" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
@@ -90,6 +97,11 @@
   <tbody>
     {% for sensor in sensors %}
     <tr>
+      {% if can_write %}
+      <td>
+        <input type="checkbox" name="ids" value="{{ sensor.id }}" form="bulk-delete-form" aria-label="Select {{ sensor.name }} for bulk removal">
+      </td>
+      {% endif %}
       <td><a href="/sensors/{{ sensor.id }}">{{ sensor.name }}</a></td>
       <td>{{ sensor.connector_type }}</td>
       {% if let Some(count) = sensor.record_count %}
@@ -125,6 +137,9 @@
     {% endfor %}
   </tbody>
 </table>
+{% if can_write %}
+<p><button type="submit" form="bulk-delete-form" class="btn-danger">Remove selected</button></p>
+{% endif %}
 
 <div class="pagination">
   {% if page > 0 %}
