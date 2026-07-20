@@ -24,6 +24,19 @@ impl AuditLogReader for InMemoryAuditLogReader {
     }
 }
 
+pub struct FailingAuditLogReader;
+
+#[async_trait]
+impl AuditLogReader for FailingAuditLogReader {
+    async fn list_for_entity(
+        &self,
+        _tenant_id: Uuid,
+        _entity_id: Uuid,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogError> {
+        Err(AuditLogError::Backend("simulated failure".to_string()))
+    }
+}
+
 fn sample_entry(tenant_id: Uuid, entity_id: Uuid) -> AuditLogEntry {
     AuditLogEntry {
         id: Uuid::new_v4(),

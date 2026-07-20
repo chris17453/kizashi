@@ -329,7 +329,13 @@ pub async fn get_audit_log(
     };
     match state.audit_reader.list_for_entity(tenant_id, entity_id).await {
         Ok(entries) => Json(entries).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "audit log lookup failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }
 
@@ -365,6 +371,12 @@ pub async fn get_recent_audit_log(
     let limit = query.limit.min(MAX_RECENT_AUDIT_LOG_LIMIT) as i64;
     match state.audit_reader.list_recent(tenant_id, limit, query.before).await {
         Ok(entries) => Json(entries).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "recent audit log lookup failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }

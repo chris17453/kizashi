@@ -128,6 +128,9 @@ async fn list_events_returns_500_on_repository_failure() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
 }
 
 #[tokio::test]
@@ -149,6 +152,28 @@ async fn get_event_returns_404_for_unknown_id() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn get_event_returns_500_on_repository_failure() {
+    let tenant_id = Uuid::new_v4();
+    let state = DashboardState { event_query_repository: Arc::new(FailingEventQueryRepository) };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v1/events/{}", Uuid::new_v4()))
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
 }
 
 #[tokio::test]
@@ -263,4 +288,7 @@ async fn daily_event_counts_returns_500_on_repository_failure() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
 }

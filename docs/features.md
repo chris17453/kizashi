@@ -4917,3 +4917,27 @@ architectural decision.
   redeploy.
 - **PR:** #132
 - **ADR:** docs/adr/0102-scrub-audit-log-error-responses.md
+
+## [2026-07-20] feature/0103-error-scrub-rollout — Error-scrub rollout to remaining services
+- **Type:** feature
+- **Branch:** feature/0103-error-scrub-rollout
+- **Summary:** ADR-0102 fixed auth-service's raw-backend-error leaks and explicitly scoped out
+  dashboard-api, config-admin-service, ingestion-gateway, and retention-service as follow-up. A
+  twelfth audit pass confirmed all remaining sites with exact citations; this closes them: 3 in
+  dashboard-api (`list_events`, `get_event`, `daily_event_counts`), 5 in config-admin-service
+  (analysis-config GET/PUT x3, audit-log GET x2), 4 in ingestion-gateway (create/list/revoke API
+  key + audit-log — added a `FailingAuditLogReader` test double since none existed), 2 in
+  retention-service (audit-log GET x2). `retention-service/src/ops_handlers.rs`'s two endpoints
+  were deliberately left alone — they're internal-secret-gated (only the scheduler calls them,
+  not Console UI users), a different threat model, and one of them (`trigger_reimport`) has real
+  404-vs-500 semantics that deserve a deliberate look rather than a mechanical scrub.
+- **Tests:** `cargo test -p dashboard-api --lib` — 27 passed. `cargo test -p
+  config-admin-service --lib` — 114 passed. `cargo test -p ingestion-gateway --lib` — 41 passed.
+  `cargo test -p retention-service --lib` — 66 passed. Every touched site gained/updated a test
+  asserting the 500 body doesn't contain the `"simulated failure"` marker string, TDD'd (red
+  confirmed before each fix). `cargo build --workspace`, `cargo clippy` clean across all four
+  crates, `cargo fmt --all --check` clean. No file exceeds 500 lines. Live-verified against the
+  real `watkinslabs` tenant: rebuilt/redeployed all four services, confirmed normal (non-error)
+  paths for Events, Triggers, API Keys, Retention Policies, and AI Analysis all still return 200.
+- **PR:** pending
+- **ADR:** docs/adr/0103-error-scrub-rollout.md

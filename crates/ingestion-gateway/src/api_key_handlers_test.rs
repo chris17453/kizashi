@@ -311,4 +311,81 @@ async fn backend_failure_surfaces_as_500() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
+}
+
+#[tokio::test]
+async fn create_backend_failure_does_not_leak_the_raw_error() {
+    let state = state_with(Arc::new(FailingApiKeyStore));
+    let tenant_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/api-keys")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "operator")
+                .header("x-username", "operator")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::json!({"label": "test"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
+}
+
+#[tokio::test]
+async fn revoke_backend_failure_does_not_leak_the_raw_error() {
+    let state = state_with(Arc::new(FailingApiKeyStore));
+    let tenant_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/api-keys/{}", Uuid::new_v4()))
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "operator")
+                .header("x-username", "operator")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
+}
+
+#[tokio::test]
+async fn audit_log_backend_failure_does_not_leak_the_raw_error() {
+    let mut state = state_with(Arc::new(InMemoryApiKeyStore::default()));
+    state.audit_reader = Arc::new(crate::audit_log::audit_log_test::FailingAuditLogReader);
+    let tenant_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v1/api-keys/{}/audit-log", Uuid::new_v4()))
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
 }

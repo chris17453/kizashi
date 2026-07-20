@@ -247,6 +247,51 @@ async fn get_returns_500_on_backend_failure() {
     };
     let response = send(router(state), "GET", Some(Uuid::new_v4()), None, None).await;
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
+}
+
+#[tokio::test]
+async fn put_returns_500_without_leaking_the_raw_error_when_the_existing_key_lookup_fails() {
+    let state = AnalysisConfigState {
+        repository: Arc::new(FailingAnalysisConfigRepository),
+        publisher: Arc::new(InMemoryAnalysisConfigPublisher::default()),
+    };
+    // api_key omitted -> triggers the "look up the existing key" branch, which fails here.
+    let response = send(
+        router(state),
+        "PUT",
+        Some(Uuid::new_v4()),
+        Some("operator"),
+        Some(serde_json::json!({"prompt": "x"})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
+}
+
+#[tokio::test]
+async fn put_returns_500_without_leaking_the_raw_error_when_the_upsert_fails() {
+    let state = AnalysisConfigState {
+        repository: Arc::new(FailingAnalysisConfigRepository),
+        publisher: Arc::new(InMemoryAnalysisConfigPublisher::default()),
+    };
+    // api_key explicitly provided -> skips the lookup branch, fails in the final upsert instead.
+    let response = send(
+        router(state),
+        "PUT",
+        Some(Uuid::new_v4()),
+        Some("operator"),
+        Some(serde_json::json!({"prompt": "x", "api_key": "sk-real"})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
 }
 
 /// RBAC audit fix: GET /v1/analysis-config must never expose the real `api_key`, to *any*
