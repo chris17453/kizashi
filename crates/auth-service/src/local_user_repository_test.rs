@@ -4,11 +4,12 @@ use std::sync::Mutex;
 #[derive(Default)]
 pub struct InMemoryLocalUserRepository {
     pub users: Mutex<Vec<LocalUser>>,
+    pub last_actor: Mutex<Option<String>>,
 }
 
 impl InMemoryLocalUserRepository {
     pub fn with_user(user: LocalUser) -> Self {
-        Self { users: Mutex::new(vec![user]) }
+        Self { users: Mutex::new(vec![user]), last_actor: Mutex::new(None) }
     }
 }
 
@@ -39,7 +40,12 @@ impl LocalUserRepository for InMemoryLocalUserRepository {
             .collect())
     }
 
-    async fn create(&self, user: LocalUser) -> Result<LocalUser, LocalUserRepositoryError> {
+    async fn create(
+        &self,
+        user: LocalUser,
+        actor: &str,
+    ) -> Result<LocalUser, LocalUserRepositoryError> {
+        *self.last_actor.lock().unwrap() = Some(actor.to_string());
         self.users.lock().unwrap().push(user.clone());
         Ok(user)
     }
@@ -49,8 +55,9 @@ impl LocalUserRepository for InMemoryLocalUserRepository {
         tenant_id: Uuid,
         id: Uuid,
         role: Role,
-        _actor: &str,
+        actor: &str,
     ) -> Result<LocalUser, LocalUserRepositoryError> {
+        *self.last_actor.lock().unwrap() = Some(actor.to_string());
         let mut users = self.users.lock().unwrap();
         let user = users
             .iter_mut()
@@ -64,8 +71,9 @@ impl LocalUserRepository for InMemoryLocalUserRepository {
         &self,
         tenant_id: Uuid,
         id: Uuid,
-        _actor: &str,
+        actor: &str,
     ) -> Result<(), LocalUserRepositoryError> {
+        *self.last_actor.lock().unwrap() = Some(actor.to_string());
         let mut users = self.users.lock().unwrap();
         let before_len = users.len();
         users.retain(|u| !(u.id == id && u.tenant_id == tenant_id));
@@ -92,7 +100,11 @@ impl LocalUserRepository for FailingLocalUserRepository {
         Err(LocalUserRepositoryError::Backend("simulated failure".to_string()))
     }
 
-    async fn create(&self, _user: LocalUser) -> Result<LocalUser, LocalUserRepositoryError> {
+    async fn create(
+        &self,
+        _user: LocalUser,
+        _actor: &str,
+    ) -> Result<LocalUser, LocalUserRepositoryError> {
         Err(LocalUserRepositoryError::Backend("simulated failure".to_string()))
     }
 
@@ -155,8 +167,8 @@ async fn does_not_find_the_same_username_in_a_different_tenant() {
 async fn list_returns_only_users_for_the_given_tenant() {
     let tenant_id = Uuid::new_v4();
     let repo = InMemoryLocalUserRepository::default();
-    repo.create(sample_user(tenant_id)).await.unwrap();
-    repo.create(sample_user(Uuid::new_v4())).await.unwrap();
+    repo.create(sample_user(tenant_id), "actor").await.unwrap();
+    repo.create(sample_user(Uuid::new_v4()), "actor").await.unwrap();
 
     let found = repo.list(tenant_id).await.unwrap();
     assert_eq!(found.len(), 1);
@@ -168,9 +180,20 @@ async fn create_adds_a_user_that_can_then_be_found() {
     let repo = InMemoryLocalUserRepository::default();
     let user = sample_user(tenant_id);
 
-    let created = repo.create(user.clone()).await.unwrap();
+    let created = repo.create(user.clone(), "actor").await.unwrap();
     assert_eq!(created, user);
     assert_eq!(repo.list(tenant_id).await.unwrap(), vec![user]);
+}
+
+#[tokio::test]
+async fn create_records_the_real_actor_not_the_tenant_id() {
+    let tenant_id = Uuid::new_v4();
+    let repo = InMemoryLocalUserRepository::default();
+    let user = sample_user(tenant_id);
+
+    repo.create(user, "alice-the-admin").await.unwrap();
+
+    assert_eq!(*repo.last_actor.lock().unwrap(), Some("alice-the-admin".to_string()));
 }
 
 #[tokio::test]

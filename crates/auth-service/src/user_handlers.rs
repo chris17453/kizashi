@@ -1,6 +1,10 @@
 #[path = "user_handlers_test.rs"]
 #[cfg(test)]
-mod user_handlers_test;
+pub(crate) mod user_handlers_test;
+
+#[path = "user_handlers_audit_actor_test.rs"]
+#[cfg(test)]
+mod user_handlers_audit_actor_test;
 
 use crate::local_login_handler::AuthState;
 use crate::local_user_repository::{LocalUser, LocalUserRepositoryError};
@@ -34,6 +38,18 @@ fn role_from_headers(headers: &HeaderMap) -> Result<Role, (StatusCode, &'static 
         .and_then(|v| v.to_str().ok())
         .ok_or((StatusCode::UNAUTHORIZED, "missing X-Role header"))?;
     raw.parse().map_err(|_| (StatusCode::BAD_REQUEST, "X-Role is not a recognized role"))
+}
+
+/// The real identity of the caller (as opposed to `tenant_id_from_headers`, which only
+/// identifies *which tenant*), so audit log rows (`AuditLogEntry.actor`) record who performed
+/// the action rather than the tenant_id — which is already a separate column on every row and
+/// tells an auditor nothing about "who" (CLAUDE.md §5).
+fn username_from_headers(headers: &HeaderMap) -> Result<String, (StatusCode, &'static str)> {
+    headers
+        .get("x-username")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_string())
+        .ok_or((StatusCode::UNAUTHORIZED, "missing X-Username header"))
 }
 
 /// User management (ADR-0016 follow-up: the "assign role to another user" surface explicitly
@@ -99,6 +115,10 @@ pub async fn create_user(
         Ok(id) => id,
         Err((status, msg)) => return error_response(status, msg),
     };
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
     if let Some(response) = require_admin(&headers) {
         return response;
     }
@@ -119,7 +139,7 @@ pub async fn create_user(
         role: req.role,
     };
 
-    match state.local_user_repository.create(user).await {
+    match state.local_user_repository.create(user, &actor).await {
         Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
         Err(e) => user_error_response(e),
     }
@@ -154,6 +174,10 @@ pub async fn update_user_role(
         Ok(id) => id,
         Err((status, msg)) => return error_response(status, msg),
     };
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
     if let Some(response) = require_admin(&headers) {
         return response;
     }
@@ -169,11 +193,7 @@ pub async fn update_user_role(
             Err(response) => return response,
         }
     }
-    match state
-        .local_user_repository
-        .update_role(tenant_id, id, req.role, &tenant_id.to_string())
-        .await
-    {
+    match state.local_user_repository.update_role(tenant_id, id, req.role, &actor).await {
         Ok(updated) => Json(updated).into_response(),
         Err(e) => user_error_response(e),
     }
@@ -186,6 +206,10 @@ pub async fn delete_user(
 ) -> Response {
     let tenant_id = match tenant_id_from_headers(&headers) {
         Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
         Err((status, msg)) => return error_response(status, msg),
     };
     if let Some(response) = require_admin(&headers) {
@@ -201,7 +225,7 @@ pub async fn delete_user(
         Ok(false) => {}
         Err(response) => return response,
     }
-    match state.local_user_repository.delete(tenant_id, id, &tenant_id.to_string()).await {
+    match state.local_user_repository.delete(tenant_id, id, &actor).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => user_error_response(e),
     }
