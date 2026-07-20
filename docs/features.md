@@ -4286,3 +4286,20 @@ architectural decision.
   kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0069-audit-log-search.md
+
+## [2026-07-20] feature/0080-triggers-page-sortable-columns — Triggers page sortable columns
+- **Type:** feature
+- **Branch:** feature/0080-triggers-page-sortable-columns
+- **Summary:** Closes the last item from the original UI/UX audit list: Triggers had pagination
+  and search but no column sorting. `GET /triggers` now accepts `?sort=name|event_type_match
+  |enabled` and `?dir=asc|desc`, applied after the search filter, same pattern as Users
+  (ADR-0064) and Active Sessions (ADR-0068). Since `list_triggers` is server-paginated, sort only
+  reorders the current page — same accepted limitation as search (ADR-0066). `q`/`sort`/`dir` all
+  carry through the search form and Previous/Next links. Normalization Mappings sort was
+  evaluated and skipped in the same pass — its backend already returns `ORDER BY source_type`
+  and the list is realistically one row per tenant, so a sort UI adds no real value (ADR-0070).
+- **Tests:** `cargo test -p kizashi-ui --lib` — 410 passed (2 new: descending name sort, enabled-
+  status grouping). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets
+  --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0070-triggers-page-sortable-columns.md

@@ -127,6 +127,8 @@
 <form class="inline" method="get" action="/triggers" style="margin-bottom:1rem;">
   <label for="q">Search</label>
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by name&hellip;">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="dir" value="{{ dir }}">
   <button type="submit">Search</button>
   {% if !q.is_empty() %}<a href="/triggers" class="btn-link">Clear</a>{% endif %}
 </form>
@@ -144,7 +146,24 @@
 {% else %}
 <table>
   <thead>
-    <tr><th>Name</th><th>Event Type Match</th><th>Enabled</th><th>Test</th><th></th></tr>
+    <tr>
+      <th>
+        <a href="/triggers?q={{ q }}&sort=name&dir={% if sort == "name" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Name{% if sort == "name" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th>
+        <a href="/triggers?q={{ q }}&sort=event_type_match&dir={% if sort == "event_type_match" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Event Type Match{% if sort == "event_type_match" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th>
+        <a href="/triggers?q={{ q }}&sort=enabled&dir={% if sort == "enabled" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Enabled{% if sort == "enabled" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th>Test</th><th></th>
+    </tr>
   </thead>
   <tbody>
     {% for trigger in triggers %}
@@ -171,6 +190,8 @@
   {% if page > 0 %}
   <form method="get" action="/triggers" class="pagination-form">
     <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="dir" value="{{ dir }}">
     <input type="hidden" name="page" value="{{ page - 1 }}">
     <button type="submit" class="btn">&larr; Previous</button>
   </form>
@@ -179,6 +200,8 @@
   {% if has_more %}
   <form method="get" action="/triggers" class="pagination-form">
     <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="dir" value="{{ dir }}">
     <input type="hidden" name="page" value="{{ page + 1 }}">
     <button type="submit" class="btn">Next &rarr;</button>
   </form>

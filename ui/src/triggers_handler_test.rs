@@ -122,6 +122,79 @@ async fn renders_the_triggers_table_when_signed_in() {
 }
 
 #[tokio::test]
+async fn sorts_by_name_descending_when_dir_is_desc() {
+    let (mut state, session_id) = state_with_session().await;
+    let triggers_client = InMemoryTriggersClient::default();
+    triggers_client.triggers.lock().unwrap().push(TriggerSummary {
+        id: Uuid::new_v4(),
+        name: "alpha-trigger".to_string(),
+        event_type_match: "sentiment".to_string(),
+        enabled: true,
+    });
+    triggers_client.triggers.lock().unwrap().push(TriggerSummary {
+        id: Uuid::new_v4(),
+        name: "zeta-trigger".to_string(),
+        event_type_match: "ticket".to_string(),
+        enabled: true,
+    });
+    state.triggers_client = Arc::new(triggers_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers?sort=name&dir=desc")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    let alpha_pos = body.find("alpha-trigger").unwrap();
+    let zeta_pos = body.find("zeta-trigger").unwrap();
+    assert!(zeta_pos < alpha_pos);
+}
+
+#[tokio::test]
+async fn sorts_by_enabled_status() {
+    let (mut state, session_id) = state_with_session().await;
+    let triggers_client = InMemoryTriggersClient::default();
+    triggers_client.triggers.lock().unwrap().push(TriggerSummary {
+        id: Uuid::new_v4(),
+        name: "enabled-trigger".to_string(),
+        event_type_match: "sentiment".to_string(),
+        enabled: true,
+    });
+    triggers_client.triggers.lock().unwrap().push(TriggerSummary {
+        id: Uuid::new_v4(),
+        name: "disabled-trigger".to_string(),
+        event_type_match: "ticket".to_string(),
+        enabled: false,
+    });
+    state.triggers_client = Arc::new(triggers_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers?sort=enabled")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    let enabled_pos = body.find("enabled-trigger").unwrap();
+    let disabled_pos = body.find("disabled-trigger").unwrap();
+    assert!(enabled_pos < disabled_pos, "enabled triggers should sort first");
+}
+
+#[tokio::test]
 async fn filters_by_the_q_query_param_case_insensitively() {
     let (mut state, session_id) = state_with_session().await;
     let triggers_client = InMemoryTriggersClient::default();

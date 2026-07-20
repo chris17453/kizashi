@@ -28,6 +28,10 @@ pub struct TriggersQuery {
     pub test_group_key: Option<String>,
     #[serde(default)]
     pub q: String,
+    #[serde(default)]
+    pub sort: String,
+    #[serde(default)]
+    pub dir: String,
 }
 
 /// Case-insensitive substring match on name -- same shape as Users/API Keys search (ADR-0062),
@@ -37,6 +41,21 @@ pub struct TriggersQuery {
 /// documented for Login Attempts, not a full server-side search.
 fn matches_query(trigger: &TriggerSummary, q: &str) -> bool {
     q.is_empty() || trigger.name.to_lowercase().contains(&q.to_lowercase())
+}
+
+/// Same shape as Users' sortable columns (ADR-0064), applied after the search filter. Like
+/// search above, this only reorders the *current page's* rows -- `list_triggers` already
+/// returns `ORDER BY name` server-side, so an unset `sort` keeps that existing default rather
+/// than introducing a new one.
+fn sort_rows(rows: &mut [TriggerSummary], sort: &str, dir: &str) {
+    match sort {
+        "event_type_match" => rows.sort_by_key(|t| t.event_type_match.to_lowercase()),
+        "enabled" => rows.sort_by_key(|t| !t.enabled),
+        _ => rows.sort_by_key(|t| t.name.to_lowercase()),
+    }
+    if dir == "desc" {
+        rows.reverse();
+    }
 }
 
 struct TestResultView {
@@ -57,6 +76,8 @@ struct TriggersTemplate {
     form_error: Option<String>,
     test_result: Option<TestResultView>,
     q: String,
+    sort: String,
+    dir: String,
 }
 
 pub async fn get_triggers(
@@ -90,26 +111,29 @@ pub async fn get_triggers(
         .list_triggers(session.tenant_id, DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE)
         .await
     {
-        Ok(result) => Html(
-            TriggersTemplate {
-                show_nav: true,
-                triggers: result
-                    .triggers
-                    .into_iter()
-                    .filter(|t| matches_query(t, &query.q))
-                    .collect(),
-                page,
-                has_more: result.has_more,
-                can_write,
-                error: None,
-                form_error: None,
-                test_result,
-                q: query.q,
-            }
-            .render()
-            .unwrap(),
-        )
-        .into_response(),
+        Ok(result) => {
+            let mut triggers: Vec<TriggerSummary> =
+                result.triggers.into_iter().filter(|t| matches_query(t, &query.q)).collect();
+            sort_rows(&mut triggers, &query.sort, &query.dir);
+            Html(
+                TriggersTemplate {
+                    show_nav: true,
+                    triggers,
+                    page,
+                    has_more: result.has_more,
+                    can_write,
+                    error: None,
+                    form_error: None,
+                    test_result,
+                    q: query.q,
+                    sort: query.sort,
+                    dir: query.dir,
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response()
+        }
         Err(e) => Html(
             TriggersTemplate {
                 show_nav: true,
@@ -121,6 +145,8 @@ pub async fn get_triggers(
                 form_error: None,
                 test_result,
                 q: query.q,
+                sort: query.sort,
+                dir: query.dir,
             }
             .render()
             .unwrap(),
@@ -281,6 +307,8 @@ pub async fn post_trigger(
                     form_error: Some(msg.to_string()),
                     test_result: None,
                     q: String::new(),
+                    sort: String::new(),
+                    dir: String::new(),
                 }
                 .render()
                 .unwrap(),
@@ -335,6 +363,8 @@ pub async fn post_trigger(
                     form_error: Some(e.to_string()),
                     test_result: None,
                     q: String::new(),
+                    sort: String::new(),
+                    dir: String::new(),
                 }
                 .render()
                 .unwrap(),
