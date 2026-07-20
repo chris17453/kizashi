@@ -4547,3 +4547,23 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0084-events-page-links-to-record-journey.md
+
+## [2026-07-20] feature/0087-data-viewer-csv-export — Data Viewer CSV export of the current filtered search
+- **Type:** feature
+- **Branch:** feature/0087-data-viewer-csv-export
+- **Summary:** Closes the top finding from a fifth audit pass focused on "data explorer"
+  completeness: the Data Viewer had no way to export a filtered search — an investigator had to
+  click into records one at a time. `GET /data/export.csv` now honors every filter the HTML view
+  accepts (via a shared `build_filter` helper), paginated internally up to 20 pages, exporting
+  id/connector_id/source_type/ingested_at/normalized/raw_payload per row. A "Download CSV of this
+  search" link on the Data Viewer always reflects the currently-active filters. Same pattern the
+  global Audit Log's CSV export already established (ADR-0049); no backend change needed.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 438 passed (3 new: header row + matching record
+  content, requires a session, 500 on backend failure). Live-verified against the real
+  `watkinslabs` tenant's actual ingested email data, not just synthetic fixtures — logged in as
+  the real `operator` account (password reset via direct DB access for this purpose) and
+  confirmed the Events page's real events (25 of them) each render a working "View journey" link
+  that loads real analysis results. `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
+  --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0085-data-viewer-csv-export.md

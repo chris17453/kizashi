@@ -21,6 +21,7 @@ use uuid::Uuid;
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/data", get(get_data))
+        .route("/data/export.csv", get(get_data_export_csv))
         .route("/data/reprocess", axum::routing::post(post_reprocess))
         .route("/data/saved-searches", axum::routing::post(post_save_search))
         .route("/data/saved-searches/:id/delete", axum::routing::post(post_delete_saved_search))
@@ -110,6 +111,75 @@ async fn renders_search_results_when_signed_in() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("zendesk"));
+}
+
+#[tokio::test]
+async fn export_csv_includes_the_header_row_and_matching_records() {
+    let (mut state, session_id) = state_with_session().await;
+    let record_id = Uuid::new_v4();
+    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
+    stats_client.records.lock().unwrap().push(RecordSummary {
+        id: record_id,
+        connector_id: "zendesk".to_string(),
+        source_type: "ticket".to_string(),
+        ingested_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+        raw_payload: serde_json::json!({"subject": "printer on fire"}),
+        normalized_payload: None,
+    });
+    state.stats_client = stats_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data/export.csv")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers().get("content-type").unwrap(), "text/csv");
+    assert!(response.headers().get("content-disposition").is_some());
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.starts_with("id,connector_id,source_type,ingested_at,normalized,raw_payload\n"));
+    assert!(body.contains(&record_id.to_string()));
+    assert!(body.contains("zendesk"));
+    assert!(body.contains("printer on fire"));
+    assert!(body.contains(",false,")); // not normalized
+}
+
+#[tokio::test]
+async fn export_csv_requires_a_session() {
+    let (state, _session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(Request::builder().uri("/data/export.csv").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[tokio::test]
+async fn export_csv_returns_500_when_the_backend_fails() {
+    let (mut state, session_id) = state_with_session().await;
+    state.stats_client = Arc::new(FailingIngestionStatsClient);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data/export.csv")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[tokio::test]

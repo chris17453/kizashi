@@ -132,7 +132,9 @@ pub use backup_status_handler::get_backups;
 pub use branding_handler::{get_branding_page, post_branding};
 pub use compliance_report_handler::get_compliance_report;
 pub use data_detail_handler::get_data_detail;
-pub use data_handler::{get_data, post_delete_saved_search, post_reprocess, post_save_search};
+pub use data_handler::{
+    get_data, get_data_export_csv, post_delete_saved_search, post_reprocess, post_save_search,
+};
 pub use egress_allowlist_handler::{get_egress_allowlist, post_egress_allowlist};
 pub use events_handler::get_events;
 pub use health_handler::get_health;
@@ -271,6 +273,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/security/sessions/:id/revoke", axum::routing::post(post_revoke_session))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
+        .route("/data/export.csv", get(get_data_export_csv))
         .route("/data/reprocess", axum::routing::post(post_reprocess))
         .route("/data/saved-searches", axum::routing::post(post_save_search))
         .route("/data/saved-searches/:id/delete", axum::routing::post(post_delete_saved_search))
