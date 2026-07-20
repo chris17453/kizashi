@@ -5,6 +5,8 @@
 
 mod api;
 mod classify;
+mod dead_letter;
+mod dead_letter_handlers;
 mod event_publisher;
 mod event_store;
 mod health;
@@ -17,6 +19,11 @@ mod trigger_repository;
 pub use api::{build_router as api_router, ApiState};
 pub use classify::{candidates, group_key, Candidate};
 pub use common::{EVENT_CREATED_EXCHANGE, RECORD_ANALYZED_EXCHANGE, TRIGGER_CHANGED_EXCHANGE};
+pub use dead_letter::{DeadLetterError, DeadLetterManager, RabbitMqDeadLetterManager};
+pub use dead_letter_handlers::{
+    build_router as dead_letter_router, get_dead_letter_count, post_dead_letter_replay,
+    DeadLetterState,
+};
 pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
 pub use event_store::{ClickHouseEventStore, EventStore, EventStoreError};
 pub use health::build_router as health_router;

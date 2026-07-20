@@ -4,6 +4,8 @@
 mod analysis_client;
 mod analysis_config_repository;
 mod batch_processor;
+mod dead_letter;
+mod dead_letter_handlers;
 mod event_publisher;
 mod health;
 mod retry;
@@ -17,6 +19,11 @@ pub use analysis_config_repository::{
 pub use batch_processor::{group_by_tenant, process_batch, AnalysisDeps, BatchError};
 pub use common::{
     ANALYSIS_CONFIG_CHANGED_EXCHANGE, RECORD_ANALYZED_EXCHANGE, RECORD_NORMALIZED_EXCHANGE,
+};
+pub use dead_letter::{DeadLetterError, DeadLetterManager, RabbitMqDeadLetterManager};
+pub use dead_letter_handlers::{
+    build_router as dead_letter_router, get_dead_letter_count, post_dead_letter_replay,
+    DeadLetterState,
 };
 pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
 pub use health::{build_router as health_router, ConsumerHeartbeat};

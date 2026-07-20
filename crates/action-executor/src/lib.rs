@@ -3,6 +3,8 @@
 //! writes an append-only ActionExecution audit row per action.
 
 mod action_dispatcher;
+mod dead_letter;
+mod dead_letter_handlers;
 mod execution_handlers;
 mod execution_repository;
 mod graph_send_mail_action_dispatcher;
@@ -16,6 +18,11 @@ mod trigger_client;
 
 pub use action_dispatcher::{ActionDispatcher, DispatchError, HttpActionDispatcher};
 pub use common::EVENT_CREATED_EXCHANGE;
+pub use dead_letter::{DeadLetterError, DeadLetterManager, RabbitMqDeadLetterManager};
+pub use dead_letter_handlers::{
+    build_router as dead_letter_router, get_dead_letter_count, post_dead_letter_replay,
+    DeadLetterState,
+};
 pub use execution_handlers::{build_router as execution_router, list_executions, ExecutionState};
 pub use execution_repository::{
     ExecutionRepository, ExecutionRepositoryError, PostgresExecutionRepository,

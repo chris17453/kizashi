@@ -5,8 +5,9 @@ use lapin::options::{
 };
 use lapin::types::FieldTable;
 use normalization_service::{
-    health_router, process_normalization, retry_count, should_dead_letter, source_type_key,
-    with_incremented_retry_count, HttpRecordClient, NormalizationDeps, PostgresMappingRepository,
+    dead_letter_router, health_router, process_normalization, retry_count, should_dead_letter,
+    source_type_key, with_incremented_retry_count, DeadLetterState, HttpRecordClient,
+    NormalizationDeps, PostgresMappingRepository, RabbitMqDeadLetterManager,
     RabbitMqEventPublisher, MAPPING_CHANGED_EXCHANGE, RECORD_INGESTED_EXCHANGE,
 };
 use std::sync::Arc;
@@ -23,6 +24,8 @@ async fn main() {
     let rabbitmq_url = std::env::var("RABBITMQ_URL").expect("RABBITMQ_URL must be set");
     let ingestion_service_url =
         std::env::var("INGESTION_SERVICE_URL").expect("INGESTION_SERVICE_URL must be set");
+    let internal_secret =
+        std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
     let pool = common::connect_with_schema(&database_url, "normalization_service")
@@ -44,6 +47,7 @@ async fn main() {
     let consume_channel = connection.create_channel().await.expect("failed to open channel");
     let mapping_changed_channel =
         connection.create_channel().await.expect("failed to open channel");
+    let dead_letter_channel = connection.create_channel().await.expect("failed to open channel");
 
     let deps = NormalizationDeps {
         mapping_repository: Arc::new(PostgresMappingRepository::new(pool)),
@@ -111,10 +115,19 @@ async fn main() {
         .await
         .expect("failed to bind queue");
 
+    let dead_letter_state = DeadLetterState {
+        dead_letter_manager: Arc::new(RabbitMqDeadLetterManager::new(
+            dead_letter_channel,
+            DEAD_LETTER_QUEUE_NAME.to_string(),
+            QUEUE_NAME.to_string(),
+        )),
+        internal_secret,
+    };
+    let app = health_router().merge(dead_letter_router(dead_letter_state));
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "normalization-service healthz listening");
     tokio::spawn(async move {
-        axum::serve(listener, health_router()).await.expect("healthz server error");
+        axum::serve(listener, app).await.expect("healthz server error");
     });
 
     let mut mapping_changed_consumer = mapping_changed_channel

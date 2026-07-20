@@ -1,7 +1,8 @@
 use analysis_service::{
-    health_router, process_batch, retry_count, should_dead_letter, with_incremented_retry_count,
-    AnalysisConfigRepository, AnalysisDeps, ConsumerHeartbeat, FoundryAnalysisClient,
-    PostgresAnalysisConfigRepository, RabbitMqEventPublisher, ANALYSIS_CONFIG_CHANGED_EXCHANGE,
+    dead_letter_router, health_router, process_batch, retry_count, should_dead_letter,
+    with_incremented_retry_count, AnalysisConfigRepository, AnalysisDeps, ConsumerHeartbeat,
+    DeadLetterState, FoundryAnalysisClient, PostgresAnalysisConfigRepository,
+    RabbitMqDeadLetterManager, RabbitMqEventPublisher, ANALYSIS_CONFIG_CHANGED_EXCHANGE,
     RECORD_NORMALIZED_EXCHANGE,
 };
 use futures_util::StreamExt;
@@ -46,6 +47,8 @@ async fn main() {
         std::env::var("AZURE_AI_FOUNDRY_ENDPOINT").expect("AZURE_AI_FOUNDRY_ENDPOINT must be set");
     let foundry_api_key =
         std::env::var("AZURE_AI_FOUNDRY_API_KEY").expect("AZURE_AI_FOUNDRY_API_KEY must be set");
+    let internal_secret =
+        std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
     let pool = common::connect_with_schema(&database_url, "analysis_service")
@@ -68,6 +71,7 @@ async fn main() {
     let consume_channel = connection.create_channel().await.expect("failed to open channel");
     let analysis_config_channel =
         connection.create_channel().await.expect("failed to open channel");
+    let dead_letter_channel = connection.create_channel().await.expect("failed to open channel");
 
     let ai_http_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
@@ -189,11 +193,19 @@ async fn main() {
 
     let heartbeat = Arc::new(ConsumerHeartbeat::new());
 
+    let dead_letter_state = DeadLetterState {
+        dead_letter_manager: Arc::new(RabbitMqDeadLetterManager::new(
+            dead_letter_channel,
+            DEAD_LETTER_QUEUE_NAME.to_string(),
+            QUEUE_NAME.to_string(),
+        )),
+        internal_secret,
+    };
+    let app = health_router(heartbeat.clone()).merge(dead_letter_router(dead_letter_state));
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "analysis-service healthz listening");
-    let health_heartbeat = heartbeat.clone();
     tokio::spawn(async move {
-        axum::serve(listener, health_router(health_heartbeat)).await.expect("healthz server error");
+        axum::serve(listener, app).await.expect("healthz server error");
     });
 
     let max_batch_size = batch_size();

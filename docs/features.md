@@ -4984,3 +4984,31 @@ architectural decision.
   that all three new dead-letter queues exist alongside the pre-existing one.
 - **PR:** #135
 - **ADR:** docs/adr/0105-retry-cap-and-dead-letter-for-pipeline-consumers.md
+
+## [2026-07-20] feature/0106-dead-letter-queue-visibility-and-replay — Dead letter queue visibility and replay
+- **Type:** feature
+- **Branch:** feature/0106-dead-letter-queue-visibility-and-replay
+- **Summary:** ADR-0105 gave all four record-pipeline consumers a dead-letter queue but left
+  zero operator-facing way to see or recover a dead-lettered message. Each service gains `GET
+  /v1/dead-letter` (queue depth) and `POST /v1/dead-letter/replay` (pops the oldest message,
+  resets its retry budget, republishes it), both internal-secret-gated matching
+  retention-service's `ops_handlers.rs` precedent — no Console UI page, same as
+  `/v1/sweep`/`/v1/reimport`. `analysis-service` and `normalization-service` needed
+  `INTERNAL_API_SECRET` wired for the first time (added to `docker-compose.yml` and
+  `scripts/run-local.sh`; the Helm chart needed no change, its `envFrom` already covers every
+  service). Live-checking against the running stack surfaced the gap was real, not
+  hypothetical: `analysis-service`'s dead-letter queue already held 152 messages and
+  `action-executor`'s held 14, silently accumulated during this session's own testing.
+- **Tests:** `cargo test -p analysis-service/-p normalization-service/-p trigger-engine/-p
+  action-executor --lib` — 46/32/58/66 passed (10 new dead-letter unit tests each). Real
+  RabbitMQ integration tests — 3 new tests × 4 services, confirmed stable across 3 consecutive
+  full runs (36/36 passing) after fixing a `basic_publish` confirm-await bug and a RabbitMQ
+  queue-statistics eventual-consistency race in the test helper. `cargo build --workspace`,
+  `cargo clippy` clean across all four crates, `cargo fmt --all --check` clean. No file exceeds
+  500 lines. Live-verified against the real stack: `GET /v1/dead-letter` immediately surfaced
+  the two real backlogs; `POST /v1/dead-letter/replay` against action-executor's queue correctly
+  moved a message back through the pipeline, which failed against its actually-stale trigger
+  reference and correctly re-dead-lettered — proving both the happy path and the "still broken"
+  path work as designed. Auth also verified (401 with no/wrong secret).
+- **PR:** pending
+- **ADR:** docs/adr/0106-dead-letter-queue-visibility-and-replay.md

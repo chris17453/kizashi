@@ -99,6 +99,7 @@ services:
       DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
       RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
       INGESTION_SERVICE_URL: http://ingestion-service:8080
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
     ports: ["8085:8080"]
     depends_on:
       ingestion-service: { condition: service_healthy }
@@ -112,6 +113,7 @@ services:
       RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
       AZURE_AI_FOUNDRY_ENDPOINT: "${AZURE_AI_FOUNDRY_ENDPOINT:-}"
       AZURE_AI_FOUNDRY_API_KEY: "${AZURE_AI_FOUNDRY_API_KEY:-}"
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
     ports: ["8086:8080"]
     depends_on:
       normalization-service: { condition: service_healthy }

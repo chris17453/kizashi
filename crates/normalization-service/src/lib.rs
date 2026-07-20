@@ -2,6 +2,8 @@
 //! tenant's NormalizationMapping, writes normalized_payload back through Ingestion Service's
 //! API, and publishes `record.normalized`.
 
+mod dead_letter;
+mod dead_letter_handlers;
 mod event_publisher;
 mod health;
 mod mapping_repository;
@@ -10,6 +12,11 @@ mod record_client;
 mod retry;
 
 pub use common::{MAPPING_CHANGED_EXCHANGE, RECORD_INGESTED_EXCHANGE, RECORD_NORMALIZED_EXCHANGE};
+pub use dead_letter::{DeadLetterError, DeadLetterManager, RabbitMqDeadLetterManager};
+pub use dead_letter_handlers::{
+    build_router as dead_letter_router, get_dead_letter_count, post_dead_letter_replay,
+    DeadLetterState,
+};
 pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
 pub use health::build_router as health_router;
 pub use mapping_repository::{
