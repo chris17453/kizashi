@@ -93,6 +93,7 @@ fn to_saved_search_row(query: SavedSearchQuery) -> SavedSearchRow {
 #[template(path = "data.html")]
 struct DataTemplate {
     show_nav: bool,
+    is_admin: bool,
     records: Vec<RecordSummary>,
     query: DataSearchQuery,
     page: i64,
@@ -151,6 +152,7 @@ pub async fn get_data(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let page = query.page.max(0);
     let filter = build_filter(&query, DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE);
@@ -178,6 +180,7 @@ pub async fn get_data(
         Ok(result) => Html(
             DataTemplate {
                 show_nav: true,
+                is_admin,
                 records: result.records,
                 query,
                 page,
@@ -195,6 +198,7 @@ pub async fn get_data(
         Err(e) => Html(
             DataTemplate {
                 show_nav: true,
+                is_admin,
                 records: vec![],
                 query,
                 page,

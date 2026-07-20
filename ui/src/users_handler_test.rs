@@ -100,6 +100,32 @@ async fn get_users_succeeds_for_an_admin() {
 }
 
 #[tokio::test]
+async fn get_users_shows_admin_only_nav_links_for_an_admin_session() {
+    let (state, session_id, _) = state_with_session(Role::Admin).await;
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/users")
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(
+        body.contains("href=\"/users\""),
+        "an Admin session should see the admin-only Users nav link"
+    );
+    assert!(
+        body.contains("href=\"/security/sessions\""),
+        "an Admin session should see the admin-only Active Sessions nav link"
+    );
+}
+
+#[tokio::test]
 async fn get_users_marks_the_current_users_remove_button_with_an_accessible_label() {
     let (mut state, session_id, tenant_id) = state_with_session(Role::Admin).await;
     let users_client = InMemoryUsersClient::default();
@@ -396,106 +422,6 @@ async fn get_users_sorts_by_role() {
     let admin_pos = text.find("user-with-admin-role").expect("admin row missing");
     let viewer_pos = text.find("user-with-viewer-role").expect("viewer row missing");
     assert!(admin_pos < viewer_pos, "expected alphabetical role order");
-}
-
-#[tokio::test]
-async fn post_users_creates_a_user_and_redirects() {
-    let (state, session_id, _) = state_with_session(Role::Admin).await;
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/users")
-                .header("cookie", cookie(&session_id))
-                .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from("username=bob&password=a-real-password&role=operator"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-}
-
-#[tokio::test]
-async fn post_users_is_forbidden_for_an_operator() {
-    let (state, session_id, _) = state_with_session(Role::Operator).await;
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/users")
-                .header("cookie", cookie(&session_id))
-                .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from("username=bob&password=a-real-password&role=operator"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-}
-
-#[tokio::test]
-async fn post_update_user_role_changes_the_role_and_redirects() {
-    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
-    let created = state
-        .users_client
-        .create_user(tenant_id, Role::Admin, "bob", "pw", Role::Operator, "test-actor")
-        .await
-        .unwrap();
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(format!("/users/{}/role", created.id))
-                .header("cookie", cookie(&session_id))
-                .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from("role=admin"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-}
-
-#[tokio::test]
-async fn post_delete_user_removes_the_user_and_redirects() {
-    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
-    let created = state
-        .users_client
-        .create_user(tenant_id, Role::Admin, "bob", "pw", Role::Operator, "test-actor")
-        .await
-        .unwrap();
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(format!("/users/{}/delete", created.id))
-                .header("cookie", cookie(&session_id))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-}
-
-#[tokio::test]
-async fn post_delete_user_is_forbidden_for_an_operator() {
-    let (state, session_id, _) = state_with_session(Role::Operator).await;
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(format!("/users/{}/delete", Uuid::new_v4()))
-                .header("cookie", cookie(&session_id))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]

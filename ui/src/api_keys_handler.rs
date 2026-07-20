@@ -28,6 +28,7 @@ fn matches_query(key: &ApiKeySummary, q: &str) -> bool {
 #[template(path = "api_keys.html")]
 struct ApiKeysTemplate {
     show_nav: bool,
+    is_admin: bool,
     keys: Vec<ApiKeySummary>,
     /// Set only immediately after a successful create — the one and only render where the
     /// plaintext key is ever available to show the operator.
@@ -50,12 +51,14 @@ pub async fn get_api_keys(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let can_write = session.role.at_least(common::Role::Operator);
 
     match state.api_keys_client.list_api_keys(session.tenant_id).await {
         Ok(keys) => Html(
             ApiKeysTemplate {
                 show_nav: true,
+                is_admin,
                 keys: keys.into_iter().filter(|k| matches_query(k, &query.q)).collect(),
                 created_key: None,
                 can_write,
@@ -69,6 +72,7 @@ pub async fn get_api_keys(
         Err(e) => Html(
             ApiKeysTemplate {
                 show_nav: true,
+                is_admin,
                 keys: vec![],
                 created_key: None,
                 can_write,
@@ -96,6 +100,7 @@ pub async fn post_api_keys(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     if !session.role.at_least(common::Role::Operator) {
         return StatusCode::FORBIDDEN.into_response();
     }
@@ -113,6 +118,7 @@ pub async fn post_api_keys(
             return Html(
                 ApiKeysTemplate {
                     show_nav: true,
+                    is_admin,
                     keys,
                     created_key: None,
                     can_write,
@@ -130,6 +136,7 @@ pub async fn post_api_keys(
     Html(
         ApiKeysTemplate {
             show_nav: true,
+            is_admin,
             keys,
             created_key,
             can_write,

@@ -40,6 +40,7 @@ fn pretty_json(value: &serde_json::Value) -> String {
 #[template(path = "audit_log.html")]
 struct AuditLogTemplate {
     show_nav: bool,
+    is_admin: bool,
     service: String,
     entity_id: Uuid,
     entries: Vec<AuditLogEntryView>,
@@ -60,6 +61,7 @@ pub async fn get_audit_log(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let client = match service.as_str() {
         "config" => &state.config_audit_log_client,
@@ -69,6 +71,7 @@ pub async fn get_audit_log(
             return Html(
                 AuditLogTemplate {
                     show_nav: true,
+                    is_admin,
                     service,
                     entity_id,
                     entries: vec![],
@@ -85,15 +88,23 @@ pub async fn get_audit_log(
         Ok(entries) => {
             let entries = entries.into_iter().map(to_view).collect();
             Html(
-                AuditLogTemplate { show_nav: true, service, entity_id, entries, error: None }
-                    .render()
-                    .unwrap(),
+                AuditLogTemplate {
+                    show_nav: true,
+                    is_admin,
+                    service,
+                    entity_id,
+                    entries,
+                    error: None,
+                }
+                .render()
+                .unwrap(),
             )
             .into_response()
         }
         Err(e) => Html(
             AuditLogTemplate {
                 show_nav: true,
+                is_admin,
                 service,
                 entity_id,
                 entries: vec![],

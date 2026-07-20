@@ -15,6 +15,7 @@ use uuid::Uuid;
 #[template(path = "sensor_detail.html")]
 struct SensorDetailTemplate {
     show_nav: bool,
+    is_admin: bool,
     sensor: Option<Sensor>,
     records: Vec<RecordSummary>,
     error: Option<String>,
@@ -32,6 +33,7 @@ pub async fn get_sensor_detail(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let sensor = match state.sensors_client.get_sensor(session.tenant_id, id).await {
         Ok(Some(sensor)) => sensor,
@@ -39,6 +41,7 @@ pub async fn get_sensor_detail(
             return Html(
                 SensorDetailTemplate {
                     show_nav: true,
+                    is_admin,
                     sensor: None,
                     records: vec![],
                     error: Some("no sensor with that id".to_string()),
@@ -52,6 +55,7 @@ pub async fn get_sensor_detail(
             return Html(
                 SensorDetailTemplate {
                     show_nav: true,
+                    is_admin,
                     sensor: None,
                     records: vec![],
                     error: Some(e.to_string()),
@@ -70,9 +74,15 @@ pub async fn get_sensor_detail(
         .unwrap_or_default();
 
     Html(
-        SensorDetailTemplate { show_nav: true, sensor: Some(sensor), records, error: None }
-            .render()
-            .unwrap(),
+        SensorDetailTemplate {
+            show_nav: true,
+            is_admin,
+            sensor: Some(sensor),
+            records,
+            error: None,
+        }
+        .render()
+        .unwrap(),
     )
     .into_response()
 }

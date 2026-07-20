@@ -17,6 +17,7 @@ const RECENT_ACTIVITY_LOOKBACK_LIMIT: u32 = 200;
 #[template(path = "security_overview.html")]
 struct SecurityOverviewTemplate {
     show_nav: bool,
+    is_admin: bool,
     active_session_count: usize,
     recent_activity_count: usize,
     admin_count: usize,
@@ -65,6 +66,7 @@ pub async fn get_security_overview(State(state): State<AppState>, headers: Heade
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let mut errors = Vec::new();
 
@@ -106,6 +108,7 @@ pub async fn get_security_overview(State(state): State<AppState>, headers: Heade
     Html(
         SecurityOverviewTemplate {
             show_nav: true,
+            is_admin,
             active_session_count,
             recent_activity_count,
             admin_count,

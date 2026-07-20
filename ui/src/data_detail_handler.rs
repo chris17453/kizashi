@@ -14,6 +14,7 @@ use uuid::Uuid;
 #[template(path = "data_detail.html")]
 struct DataDetailTemplate {
     show_nav: bool,
+    is_admin: bool,
     record: Option<RecordSummary>,
     raw_payload_pretty: String,
     normalized_payload_pretty: Option<String>,
@@ -34,6 +35,7 @@ pub async fn get_data_detail(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     match state.stats_client.get_record(session.tenant_id, id).await {
         Ok(Some(record)) => {
@@ -42,6 +44,7 @@ pub async fn get_data_detail(
             Html(
                 DataDetailTemplate {
                     show_nav: true,
+                    is_admin,
                     record: Some(record),
                     raw_payload_pretty,
                     normalized_payload_pretty,
@@ -55,6 +58,7 @@ pub async fn get_data_detail(
         Ok(None) => Html(
             DataDetailTemplate {
                 show_nav: true,
+                is_admin,
                 record: None,
                 raw_payload_pretty: String::new(),
                 normalized_payload_pretty: None,
@@ -67,6 +71,7 @@ pub async fn get_data_detail(
         Err(e) => Html(
             DataDetailTemplate {
                 show_nav: true,
+                is_admin,
                 record: None,
                 raw_payload_pretty: String::new(),
                 normalized_payload_pretty: None,

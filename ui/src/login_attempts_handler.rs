@@ -27,6 +27,7 @@ struct LoginAttemptRow {
 #[template(path = "login_attempts.html")]
 struct LoginAttemptsTemplate {
     show_nav: bool,
+    is_admin: bool,
     attempts: Vec<LoginAttemptRow>,
     failed_count: usize,
     next_before: Option<DateTime<Utc>>,
@@ -80,6 +81,7 @@ pub async fn get_login_attempts(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     match state
         .login_attempts_client
@@ -106,6 +108,7 @@ pub async fn get_login_attempts(
             Html(
                 LoginAttemptsTemplate {
                     show_nav: true,
+                    is_admin,
                     attempts: rows,
                     failed_count,
                     next_before,
@@ -120,6 +123,7 @@ pub async fn get_login_attempts(
         Err(e) => Html(
             LoginAttemptsTemplate {
                 show_nav: true,
+                is_admin,
                 attempts: vec![],
                 failed_count: 0,
                 next_before: None,

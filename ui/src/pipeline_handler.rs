@@ -14,23 +14,31 @@ use axum::response::{Html, IntoResponse, Response};
 #[template(path = "pipeline.html")]
 struct PipelineTemplate {
     show_nav: bool,
+    is_admin: bool,
     items: Vec<TopologyItem>,
     error: Option<String>,
 }
 
 pub async fn get_pipeline(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let session = require_session(state.session_store.as_ref(), &headers).await;
-    if let Err(response) = session {
-        return response;
-    }
+    let session = match session {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let health = match state.health_client.platform_health().await {
         Ok(summary) => summary,
         Err(e) => {
             return Html(
-                PipelineTemplate { show_nav: true, items: vec![], error: Some(e.to_string()) }
-                    .render()
-                    .unwrap(),
+                PipelineTemplate {
+                    show_nav: true,
+                    is_admin,
+                    items: vec![],
+                    error: Some(e.to_string()),
+                }
+                .render()
+                .unwrap(),
             )
             .into_response();
         }
@@ -42,5 +50,6 @@ pub async fn get_pipeline(State(state): State<AppState>, headers: HeaderMap) -> 
     let depths = state.backlog_client.queue_depths().await.unwrap_or_default();
     let items = build_topology_items(&health, &depths);
 
-    Html(PipelineTemplate { show_nav: true, items, error: None }.render().unwrap()).into_response()
+    Html(PipelineTemplate { show_nav: true, is_admin, items, error: None }.render().unwrap())
+        .into_response()
 }

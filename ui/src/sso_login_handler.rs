@@ -21,6 +21,7 @@ const DEFAULT_PROVIDER: &str = "entra";
 #[template(path = "login.html")]
 struct LoginTemplate {
     show_nav: bool,
+    is_admin: bool,
     error: Option<String>,
     tenant_name: String,
     product_name: String,
@@ -32,6 +33,7 @@ fn sso_error(message: impl Into<String>) -> Response {
     Html(
         LoginTemplate {
             show_nav: false,
+            is_admin: false,
             error: Some(message.into()),
             tenant_name: String::new(),
             product_name: String::new(),

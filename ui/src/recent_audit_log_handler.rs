@@ -48,6 +48,7 @@ fn matches_query(entry: &RecentAuditLogEntryView, q: &str) -> bool {
 #[template(path = "recent_audit_log.html")]
 struct RecentAuditLogTemplate {
     show_nav: bool,
+    is_admin: bool,
     entries: Vec<RecentAuditLogEntryView>,
     next_before: Option<DateTime<Utc>>,
     error: Option<String>,
@@ -97,6 +98,7 @@ pub async fn get_recent_audit_log(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let (mut merged, errors) =
         fetch_merged_page(&state, session.tenant_id, query.before, PAGE_SIZE).await;
@@ -120,9 +122,16 @@ pub async fn get_recent_audit_log(
     let error = if errors.is_empty() { None } else { Some(errors.join("; ")) };
 
     Html(
-        RecentAuditLogTemplate { show_nav: true, entries, next_before, error, q: query.q }
-            .render()
-            .unwrap(),
+        RecentAuditLogTemplate {
+            show_nav: true,
+            is_admin,
+            entries,
+            next_before,
+            error,
+            q: query.q,
+        }
+        .render()
+        .unwrap(),
     )
     .into_response()
 }

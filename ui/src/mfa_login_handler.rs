@@ -15,6 +15,7 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 #[template(path = "login_mfa.html")]
 struct MfaChallengeTemplate {
     show_nav: bool,
+    is_admin: bool,
     error: Option<String>,
 }
 
@@ -30,7 +31,8 @@ pub async fn get_mfa_challenge(headers: HeaderMap) -> Response {
     if session_cookie_value_named(&headers, MFA_CHALLENGE_COOKIE_NAME).is_none() {
         return Redirect::to("/login").into_response();
     }
-    Html(MfaChallengeTemplate { show_nav: false, error: None }.render().unwrap()).into_response()
+    Html(MfaChallengeTemplate { show_nav: false, is_admin: false, error: None }.render().unwrap())
+        .into_response()
 }
 
 #[derive(serde::Deserialize)]
@@ -39,8 +41,12 @@ pub struct MfaChallengeForm {
 }
 
 fn challenge_error(message: impl Into<String>) -> Response {
-    Html(MfaChallengeTemplate { show_nav: false, error: Some(message.into()) }.render().unwrap())
-        .into_response()
+    Html(
+        MfaChallengeTemplate { show_nav: false, is_admin: false, error: Some(message.into()) }
+            .render()
+            .unwrap(),
+    )
+    .into_response()
 }
 
 /// POST /login/mfa — completes the login started by `POST /login`, exchanging the challenge

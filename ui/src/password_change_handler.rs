@@ -13,6 +13,7 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 #[template(path = "password_settings.html")]
 struct PasswordSettingsTemplate {
     show_nav: bool,
+    is_admin: bool,
     error: Option<String>,
     success: bool,
 }
@@ -32,11 +33,13 @@ pub async fn get_password_settings(
     headers: HeaderMap,
     Query(query): Query<PasswordSettingsQuery>,
 ) -> Response {
-    if let Err(response) = require_session(state.session_store.as_ref(), &headers).await {
-        return response;
-    }
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    let is_admin = session.role.at_least(common::Role::Admin);
     Html(
-        PasswordSettingsTemplate { show_nav: true, error: None, success: query.changed }
+        PasswordSettingsTemplate { show_nav: true, is_admin, error: None, success: query.changed }
             .render()
             .unwrap(),
     )
@@ -63,11 +66,13 @@ pub async fn post_password_settings(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     if form.new_password != form.confirm_password {
         return Html(
             PasswordSettingsTemplate {
                 show_nav: true,
+                is_admin,
                 error: Some("New password and confirmation do not match.".to_string()),
                 success: false,
             }
@@ -88,9 +93,14 @@ pub async fn post_password_settings(
         .await
     {
         return Html(
-            PasswordSettingsTemplate { show_nav: true, error: Some(e.to_string()), success: false }
-                .render()
-                .unwrap(),
+            PasswordSettingsTemplate {
+                show_nav: true,
+                is_admin,
+                error: Some(e.to_string()),
+                success: false,
+            }
+            .render()
+            .unwrap(),
         )
         .into_response();
     }

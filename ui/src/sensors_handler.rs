@@ -1,3 +1,6 @@
+#[path = "sensors_handler_mutations_test.rs"]
+#[cfg(test)]
+mod sensors_handler_mutations_test;
 #[path = "sensors_handler_test.rs"]
 #[cfg(test)]
 mod sensors_handler_test;
@@ -84,6 +87,7 @@ fn sort_rows(rows: &mut [SensorRow], sort: &str, dir: &str) {
 #[template(path = "sensors.html")]
 struct SensorsTemplate {
     show_nav: bool,
+    is_admin: bool,
     sensors: Vec<SensorRow>,
     page: i64,
     has_more: bool,
@@ -107,6 +111,7 @@ pub async fn get_sensors(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let can_write = session.role.at_least(common::Role::Operator);
 
     let page = query.page.max(0);
@@ -120,6 +125,7 @@ pub async fn get_sensors(
             return Html(
                 SensorsTemplate {
                     show_nav: true,
+                    is_admin,
                     sensors: vec![],
                     page,
                     has_more: false,
@@ -146,6 +152,7 @@ pub async fn get_sensors(
     Html(
         SensorsTemplate {
             show_nav: true,
+            is_admin,
             sensors: rows,
             page,
             has_more,
@@ -172,6 +179,7 @@ pub struct RegisterSensorForm {
 async fn rerender_with_error(
     state: &AppState,
     tenant_id: Uuid,
+    is_admin: bool,
     can_write: bool,
     error: String,
 ) -> Response {
@@ -185,6 +193,7 @@ async fn rerender_with_error(
     Html(
         SensorsTemplate {
             show_nav: true,
+            is_admin,
             sensors: join_sensor_stats(sensors, stats),
             page: 0,
             has_more: false,
@@ -212,6 +221,7 @@ pub async fn post_sensors(
     if !session.role.at_least(common::Role::Operator) {
         return StatusCode::FORBIDDEN.into_response();
     }
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let config: serde_json::Value = if form.config.trim().is_empty() {
         serde_json::json!({})
@@ -222,6 +232,7 @@ pub async fn post_sensors(
                 return rerender_with_error(
                     &state,
                     session.tenant_id,
+                    is_admin,
                     session.role.at_least(common::Role::Operator),
                     "config must be valid JSON".to_string(),
                 )
@@ -245,6 +256,7 @@ pub async fn post_sensors(
         return rerender_with_error(
             &state,
             session.tenant_id,
+            is_admin,
             session.role.at_least(common::Role::Operator),
             e.to_string(),
         )

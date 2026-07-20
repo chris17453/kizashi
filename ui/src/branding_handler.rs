@@ -14,6 +14,7 @@ use axum::response::{Html, IntoResponse, Response};
 #[template(path = "branding.html")]
 struct BrandingTemplate {
     show_nav: bool,
+    is_admin: bool,
     product_name: String,
     logo_url: String,
     accent_color: String,
@@ -34,6 +35,7 @@ pub async fn get_branding_page(State(state): State<AppState>, headers: HeaderMap
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let can_write = session.role.at_least(common::Role::Admin);
 
     let (branding, error) = match state.branding_client.get_branding_by_id(session.tenant_id).await
@@ -45,6 +47,7 @@ pub async fn get_branding_page(State(state): State<AppState>, headers: HeaderMap
     Html(
         BrandingTemplate {
             show_nav: true,
+            is_admin,
             product_name: branding.product_name.unwrap_or_default(),
             logo_url: branding.logo_url.unwrap_or_default(),
             accent_color: branding.accent_color.unwrap_or_default(),
@@ -85,6 +88,7 @@ pub async fn post_branding(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     if !session.role.at_least(common::Role::Admin) {
         return StatusCode::FORBIDDEN.into_response();
     }
@@ -107,6 +111,7 @@ pub async fn post_branding(
     Html(
         BrandingTemplate {
             show_nav: true,
+            is_admin,
             product_name: branding.product_name.unwrap_or_default(),
             logo_url: branding.logo_url.unwrap_or_default(),
             accent_color: branding.accent_color.unwrap_or_default(),

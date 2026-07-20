@@ -68,6 +68,7 @@ struct TestResultView {
 #[template(path = "triggers.html")]
 struct TriggersTemplate {
     show_nav: bool,
+    is_admin: bool,
     triggers: Vec<TriggerSummary>,
     page: i64,
     has_more: bool,
@@ -89,6 +90,7 @@ pub async fn get_triggers(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let can_write = session.role.at_least(common::Role::Operator);
 
     let test_result = match (query.test_trigger_id, &query.test_group_key) {
@@ -118,6 +120,7 @@ pub async fn get_triggers(
             Html(
                 TriggersTemplate {
                     show_nav: true,
+                    is_admin,
                     triggers,
                     page,
                     has_more: result.has_more,
@@ -137,6 +140,7 @@ pub async fn get_triggers(
         Err(e) => Html(
             TriggersTemplate {
                 show_nav: true,
+                is_admin,
                 triggers: vec![],
                 page,
                 has_more: false,
@@ -283,6 +287,7 @@ pub async fn post_trigger(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let can_write = session.role.at_least(common::Role::Operator);
     if !can_write {
         return axum::http::StatusCode::FORBIDDEN.into_response();
@@ -299,6 +304,7 @@ pub async fn post_trigger(
             return Html(
                 TriggersTemplate {
                     show_nav: true,
+                    is_admin,
                     triggers: result.triggers,
                     page: 0,
                     has_more: result.has_more,
@@ -355,6 +361,7 @@ pub async fn post_trigger(
             Html(
                 TriggersTemplate {
                     show_nav: true,
+                    is_admin,
                     triggers: result.triggers,
                     page: 0,
                     has_more: result.has_more,

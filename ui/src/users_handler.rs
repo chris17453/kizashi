@@ -1,3 +1,6 @@
+#[path = "users_handler_mutations_test.rs"]
+#[cfg(test)]
+mod users_handler_mutations_test;
 #[path = "users_handler_test.rs"]
 #[cfg(test)]
 mod users_handler_test;
@@ -35,6 +38,7 @@ fn to_row(user: UiUser, current_username: &str) -> UserRow {
 #[template(path = "users.html")]
 struct UsersTemplate {
     show_nav: bool,
+    is_admin: bool,
     users: Vec<UserRow>,
     error: Option<String>,
     q: String,
@@ -99,6 +103,7 @@ pub async fn get_users(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(Role::Admin);
 
     match state.users_client.list_users(session.tenant_id, session.role).await {
         Ok(users) => {
@@ -111,6 +116,7 @@ pub async fn get_users(
             Html(
                 UsersTemplate {
                     show_nav: true,
+                    is_admin,
                     users: rows,
                     error: None,
                     q: query.q,
@@ -125,6 +131,7 @@ pub async fn get_users(
         Err(e) => Html(
             UsersTemplate {
                 show_nav: true,
+                is_admin,
                 users: vec![],
                 error: Some(e.to_string()),
                 q: query.q,
@@ -150,11 +157,13 @@ async fn rerender_with_error(
     session: &crate::Session,
     error: String,
 ) -> Response {
+    let is_admin = session.role.at_least(Role::Admin);
     let users =
         state.users_client.list_users(session.tenant_id, session.role).await.unwrap_or_default();
     Html(
         UsersTemplate {
             show_nav: true,
+            is_admin,
             users: users.into_iter().map(|u| to_row(u, &session.username)).collect(),
             error: Some(error),
             q: String::new(),
