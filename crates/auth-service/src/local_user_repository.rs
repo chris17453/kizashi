@@ -88,6 +88,16 @@ pub trait LocalUserRepository: Send + Sync {
     async fn confirm_mfa(&self, id: Uuid) -> Result<(), LocalUserRepositoryError>;
 
     async fn disable_mfa(&self, id: Uuid) -> Result<(), LocalUserRepositoryError>;
+
+    /// Self-service password change (ADR-0057, closing a gap ADR-0052 explicitly flagged: the
+    /// only prior way to change a password was an admin delete+recreate). No audit-log entry,
+    /// same reasoning as the MFA mutations above -- a user changing their own password isn't an
+    /// admin action on someone else.
+    async fn update_password(
+        &self,
+        id: Uuid,
+        new_password_hash: &str,
+    ) -> Result<(), LocalUserRepositoryError>;
 }
 
 pub struct PostgresLocalUserRepository {
@@ -373,6 +383,20 @@ impl LocalUserRepository for PostgresLocalUserRepository {
 
     async fn disable_mfa(&self, id: Uuid) -> Result<(), LocalUserRepositoryError> {
         sqlx::query("UPDATE local_users SET mfa_secret = NULL, mfa_enabled = false WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn update_password(
+        &self,
+        id: Uuid,
+        new_password_hash: &str,
+    ) -> Result<(), LocalUserRepositoryError> {
+        sqlx::query("UPDATE local_users SET password_hash = $1 WHERE id = $2")
+            .bind(new_password_hash)
             .bind(id)
             .execute(&self.pool)
             .await

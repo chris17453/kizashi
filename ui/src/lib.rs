@@ -51,6 +51,7 @@ mod mfa_login_handler;
 mod mfa_settings_handler;
 mod normalization_mappings_handler;
 mod overview_handler;
+mod password_change_handler;
 mod permissions_reference_handler;
 mod pipeline_handler;
 mod recent_audit_log_handler;
@@ -142,6 +143,7 @@ pub use mfa_settings_handler::{
 };
 pub use normalization_mappings_handler::{get_normalization_mappings, post_normalization_mapping};
 pub use overview_handler::get_overview;
+pub use password_change_handler::{get_password_settings, post_password_settings};
 pub use permissions_reference_handler::get_permissions_reference;
 pub use pipeline_handler::get_pipeline;
 pub use recent_audit_log_handler::{get_recent_audit_log, get_recent_audit_log_csv};
@@ -255,6 +257,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/security/mfa/enroll", axum::routing::post(post_mfa_settings_enroll))
         .route("/security/mfa/verify", axum::routing::post(post_mfa_settings_verify))
         .route("/security/mfa/disable", axum::routing::post(post_mfa_settings_disable))
+        .route("/security/password", get(get_password_settings).post(post_password_settings))
         .route("/security/sessions", get(get_sessions))
         .route("/security/login-attempts", get(get_login_attempts_page))
         .route("/security/backups", get(get_backups))

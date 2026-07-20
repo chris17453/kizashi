@@ -97,6 +97,22 @@ impl UsersClient for InMemoryUsersClient {
     async fn password_policy(&self) -> Result<PasswordPolicySummary, UsersClientError> {
         Ok(PasswordPolicySummary { min_length: 12, max_length: 128, blocklist_size: 10 })
     }
+
+    async fn change_password(
+        &self,
+        _tenant_id: Uuid,
+        _username: &str,
+        current_password: &str,
+        _new_password: &str,
+    ) -> Result<(), UsersClientError> {
+        if current_password == "wrong-password" {
+            return Err(UsersClientError::Rejected {
+                status: 401,
+                message: "current password is incorrect".to_string(),
+            });
+        }
+        Ok(())
+    }
 }
 
 pub struct FailingUsersClient;
@@ -154,6 +170,16 @@ impl UsersClient for FailingUsersClient {
     }
 
     async fn password_policy(&self) -> Result<PasswordPolicySummary, UsersClientError> {
+        Err(UsersClientError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn change_password(
+        &self,
+        _tenant_id: Uuid,
+        _username: &str,
+        _current_password: &str,
+        _new_password: &str,
+    ) -> Result<(), UsersClientError> {
         Err(UsersClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -215,11 +241,15 @@ async fn spawn_stub_server() -> String {
         Json(serde_json::json!({"min_length": 12, "max_length": 128, "blocklist_size": 10}))
             .into_response()
     }
+    async fn change_password_handler() -> axum::http::StatusCode {
+        axum::http::StatusCode::OK
+    }
     let app = Router::new()
         .route("/v1/users", get(list_handler).post(create_handler))
         .route("/v1/users/:id", axum::routing::put(update_handler).delete(delete_handler))
         .route("/v1/users/:id/data-subject-export", get(export_handler))
-        .route("/v1/auth/local/password-policy", get(password_policy_handler));
+        .route("/v1/auth/local/password-policy", get(password_policy_handler))
+        .route("/v1/auth/local/password", axum::routing::post(change_password_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -325,6 +355,17 @@ async fn http_client_gets_the_password_policy_against_a_real_server() {
 
     assert_eq!(policy.min_length, 12);
     assert_eq!(policy.blocklist_size, 10);
+}
+
+#[tokio::test]
+async fn http_client_changes_the_password_against_a_real_server() {
+    let url = spawn_stub_server().await;
+    let client = HttpUsersClient::new(reqwest::Client::new(), url);
+
+    client
+        .change_password(Uuid::new_v4(), "alice", "old-password", "a-new-password-99")
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

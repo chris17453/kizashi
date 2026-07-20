@@ -21,6 +21,7 @@ mod mfa_repository;
 mod oidc_client;
 mod oidc_handler;
 mod password;
+mod password_change_handler;
 mod password_policy;
 mod session_client;
 mod tenant_branding_repository;
@@ -57,6 +58,7 @@ pub use oidc_client::{
 };
 pub use oidc_handler::{authorize, callback, AuthorizeResponse, OidcCallbackRequest, OidcClients};
 pub use password::{hash_password, verify_password, PasswordError};
+pub use password_change_handler::{post_change_password, ChangePasswordRequest};
 pub use password_policy::{validate_password_strength, PasswordPolicyError};
 pub use session_client::{HttpSessionClient, SessionClient, SessionClientError};
 pub use tenant_branding_repository::{
@@ -117,6 +119,9 @@ pub fn build_router(state: AuthState, internal_secret: String) -> Router {
         .route("/v1/auth/local/mfa/enroll", post(post_mfa_enroll))
         .route("/v1/auth/local/mfa/verify", post(post_mfa_verify))
         .route("/v1/auth/local/mfa/disable", post(post_mfa_disable))
+        // Self-service password change (ADR-0057) -- same "already-authenticated, re-enter
+        // current password" bar as MFA disable above.
+        .route("/v1/auth/local/password", post(post_change_password))
         // Admin-only tenant-wide security telemetry (ADR-0053) -- same access bar as /v1/users,
         // a step above the self-service MFA routes above it.
         .route("/v1/auth/local/login-attempts", get(get_login_attempts))

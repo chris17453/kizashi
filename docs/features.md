@@ -3935,3 +3935,27 @@ architectural decision.
   allow-listed warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0056-compliance-report-generation.md
+
+## [2026-07-20] feature/0065-self-service-password-change — Self-service password change
+- **Type:** feature
+- **Branch:** feature/0065-self-service-password-change
+- **Summary:** Closes a gap ADR-0052 explicitly flagged when it shipped: previously the only way
+  to change a local user's password at all was an admin deleting and recreating the account.
+  New `LocalUserRepository::update_password` (plain UPDATE, no audit row — same reasoning as the
+  MFA enrollment mutations: a user changing their own password isn't an admin action on someone
+  else). New `POST /v1/auth/local/password`, requiring the current password (same trust
+  reasoning as MFA disable) and running the new password through the same
+  `validate_password_strength` check `create_user` uses. Console UI gained
+  `GET`/`POST /security/password`, self-service like `/security/mfa`, with a "Change Password"
+  nav entry.
+- **Tests:** `cargo test -p auth-service --lib` — 150 passed (5 new: repository unit test, 4
+  handler tests covering success/wrong-current-password/policy-rejection/missing-username).
+  `cargo test -p auth-service --test local_user_repository_integration_test` — 7 passed (1 new,
+  against real Postgres, also confirming no audit row is written for a self-service change).
+  `cargo test -p kizashi-ui --lib` — 370 passed (6 new UI handler tests + 1 HTTP client test).
+  `cargo build --workspace` clean. `cargo clippy -p auth-service --all-targets --all-features --
+  -D warnings` and `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` both
+  clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
+  allow-listed warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0057-self-service-password-change.md

@@ -89,6 +89,17 @@ pub trait UsersClient: Send + Sync {
     ) -> Result<Vec<u8>, UsersClientError>;
 
     async fn password_policy(&self) -> Result<PasswordPolicySummary, UsersClientError>;
+
+    /// Self-service password change (ADR-0057) — `POST /v1/auth/local/password`, requires the
+    /// caller's own current password (not just an authenticated session), same trust boundary
+    /// as `MfaClient::disable`.
+    async fn change_password(
+        &self,
+        tenant_id: Uuid,
+        username: &str,
+        current_password: &str,
+        new_password: &str,
+    ) -> Result<(), UsersClientError>;
 }
 
 /// Reads the backend's `{"error": "..."}` body when present, falling back to a generic message
@@ -255,5 +266,31 @@ impl UsersClient for HttpUsersClient {
             return Err(rejected_error(response).await);
         }
         response.json().await.map_err(|e| UsersClientError::Unreachable(e.to_string()))
+    }
+
+    async fn change_password(
+        &self,
+        tenant_id: Uuid,
+        username: &str,
+        current_password: &str,
+        new_password: &str,
+    ) -> Result<(), UsersClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/auth/local/password", self.auth_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .header("x-username", username)
+            .json(&serde_json::json!({
+                "current_password": current_password,
+                "new_password": new_password,
+            }))
+            .send()
+            .await
+            .map_err(|e| UsersClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(rejected_error(response).await);
+        }
+        Ok(())
     }
 }
