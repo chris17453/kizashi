@@ -121,6 +121,28 @@ async fn update_role_persists_against_real_postgres_and_writes_an_audit_row() {
 }
 
 #[tokio::test]
+async fn update_password_persists_against_real_postgres_with_no_audit_row() {
+    let pool = test_pool().await;
+    let repo = PostgresLocalUserRepository::new(pool.clone());
+    let audit_reader = auth_service::PostgresAuditLogReader::new(pool);
+    let tenant_id = Uuid::new_v4();
+    let user = sample_user(tenant_id);
+    repo.create(user.clone(), "test-actor").await.unwrap();
+
+    repo.update_password(user.id, "new-hash-value").await.unwrap();
+
+    let found = repo.find_by_id(user.id).await.unwrap().unwrap();
+    assert_eq!(found.password_hash, "new-hash-value");
+
+    let entries = audit_reader.list_for_entity(tenant_id, user.id).await.unwrap();
+    assert_eq!(
+        entries.len(),
+        1,
+        "only the original creation, no row for a self-service password change"
+    );
+}
+
+#[tokio::test]
 async fn delete_removes_the_user_and_is_scoped_to_tenant() {
     let pool = test_pool().await;
     let repo = PostgresLocalUserRepository::new(pool);

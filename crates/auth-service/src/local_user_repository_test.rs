@@ -116,6 +116,18 @@ impl LocalUserRepository for InMemoryLocalUserRepository {
         user.mfa_enabled = false;
         Ok(())
     }
+
+    async fn update_password(
+        &self,
+        id: Uuid,
+        new_password_hash: &str,
+    ) -> Result<(), LocalUserRepositoryError> {
+        let mut users = self.users.lock().unwrap();
+        let user =
+            users.iter_mut().find(|u| u.id == id).ok_or(LocalUserRepositoryError::NotFound(id))?;
+        user.password_hash = new_password_hash.to_string();
+        Ok(())
+    }
 }
 
 pub struct FailingLocalUserRepository;
@@ -178,6 +190,14 @@ impl LocalUserRepository for FailingLocalUserRepository {
     }
 
     async fn disable_mfa(&self, _id: Uuid) -> Result<(), LocalUserRepositoryError> {
+        Err(LocalUserRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn update_password(
+        &self,
+        _id: Uuid,
+        _new_password_hash: &str,
+    ) -> Result<(), LocalUserRepositoryError> {
         Err(LocalUserRepositoryError::Backend("simulated failure".to_string()))
     }
 }
@@ -342,4 +362,16 @@ async fn disable_mfa_clears_the_secret_and_flag() {
     let found = repo.find_by_id(user.id).await.unwrap().unwrap();
     assert_eq!(found.mfa_secret, None);
     assert!(!found.mfa_enabled);
+}
+
+#[tokio::test]
+async fn update_password_replaces_the_hash() {
+    let tenant_id = Uuid::new_v4();
+    let user = sample_user(tenant_id);
+    let repo = InMemoryLocalUserRepository::with_user(user.clone());
+
+    repo.update_password(user.id, "new-hash").await.unwrap();
+
+    let found = repo.find_by_id(user.id).await.unwrap().unwrap();
+    assert_eq!(found.password_hash, "new-hash");
 }
