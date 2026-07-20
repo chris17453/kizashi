@@ -4188,3 +4188,19 @@ architectural decision.
   entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0065-api-keys-bulk-revoke.md
+
+## [2026-07-20] fix/0012-disable-toggle-confirm-danger — Sensors/Retention Policies disable button uses confirm-danger styling
+- **Type:** fix
+- **Branch:** fix/0012-disable-toggle-confirm-danger
+- **Summary:** ADR-0061's shared confirm-danger.js hooks every `.btn-danger` submit button, but
+  the Sensors and Retention Policies "Disable" toggle buttons were plain `.btn`, silently
+  bypassing the confirmation dialog for a real, meaningfully risky state change (stops ingestion
+  monitoring / retention enforcement). The Enable/Disable button's class is now conditional on
+  current state: `.btn-danger` only when the click will disable, plain `.btn` when it will
+  enable — so only the actually-destructive direction gets the red styling and confirm prompt.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 399 passed (existing sensors/retention-policies
+  toggle tests unaffected, no test asserted on the button's CSS class so none needed updating).
+  `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
+  warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0061-destructive-action-confirmation.md (same pattern, no new decision to record)

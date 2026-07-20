@@ -80,7 +80,7 @@
       <td>
         {% if can_write %}
         <form class="inline" method="post" action="/sensors/{{ sensor.id }}/toggle" style="display:inline">
-          <button type="submit" class="btn">{% if sensor.enabled %}Disable{% else %}Enable{% endif %}</button>
+          <button type="submit" class="{% if sensor.enabled %}btn-danger{% else %}btn{% endif %}">{% if sensor.enabled %}Disable{% else %}Enable{% endif %}</button>
         </form>
         <form class="inline" method="post" action="/sensors/{{ sensor.id }}/delete" style="display:inline">
           <button type="submit" class="btn-danger">Remove</button>
