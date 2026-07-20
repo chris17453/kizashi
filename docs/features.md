@@ -4915,5 +4915,5 @@ architectural decision.
   `cargo fmt --all --check` all clean. No file exceeds 500 lines. Live-verified against the real
   `watkinslabs` tenant: confirmed the normal (non-error) path for `/audit-log` still works after
   redeploy.
-- **PR:** pending
+- **PR:** #132
 - **ADR:** docs/adr/0102-scrub-audit-log-error-responses.md
