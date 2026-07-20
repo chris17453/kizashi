@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0104         |
+| feature       | `feature/` | 0105         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
@@ -155,3 +155,4 @@ manually created branches.
 | 0101 | `feature/0101-session-revocation-audit-log` | feature | 2026-07-20 | open | pending | |
 | 0102 | `feature/0102-scrub-audit-log-error-responses` | feature | 2026-07-20 | open | pending | |
 | 0103 | `feature/0103-error-scrub-rollout` | feature | 2026-07-20 | open | pending | |
+| 0104 | `feature/0104-action-executions-immutability-trigger` | feature | 2026-07-20 | open | pending | |

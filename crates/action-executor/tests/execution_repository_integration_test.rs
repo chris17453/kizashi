@@ -108,3 +108,46 @@ async fn retried_executions_are_separate_append_only_rows() {
     .unwrap();
     assert_eq!(count.0, 2, "retry must append a new row, not replace the original");
 }
+
+#[tokio::test]
+async fn action_executions_rejects_update_at_the_database_level() {
+    let pool = test_pool().await;
+    let repo = PostgresExecutionRepository::new(pool.clone());
+    let execution = ActionExecution::new(
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        ActionType::Webhook,
+        serde_json::json!({}),
+    );
+    repo.insert(&execution).await.unwrap();
+
+    let err = sqlx::query("UPDATE action_executions SET status = $1 WHERE id = $2")
+        .bind(sqlx::types::Json(ActionExecutionStatus::Sent))
+        .bind(execution.id)
+        .execute(&pool)
+        .await
+        .expect_err("update should be rejected by the immutability trigger");
+    assert!(err.to_string().contains("append-only"));
+}
+
+#[tokio::test]
+async fn action_executions_rejects_delete_at_the_database_level() {
+    let pool = test_pool().await;
+    let repo = PostgresExecutionRepository::new(pool.clone());
+    let execution = ActionExecution::new(
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        ActionType::Webhook,
+        serde_json::json!({}),
+    );
+    repo.insert(&execution).await.unwrap();
+
+    let err = sqlx::query("DELETE FROM action_executions WHERE id = $1")
+        .bind(execution.id)
+        .execute(&pool)
+        .await
+        .expect_err("delete should be rejected by the immutability trigger");
+    assert!(err.to_string().contains("append-only"));
+}

@@ -4941,3 +4941,22 @@ architectural decision.
   paths for Events, Triggers, API Keys, Retention Policies, and AI Analysis all still return 200.
 - **PR:** #133
 - **ADR:** docs/adr/0103-error-scrub-rollout.md
+
+## [2026-07-20] feature/0104-action-executions-immutability-trigger — Action executions DB-level immutability
+- **Type:** feature
+- **Branch:** feature/0104-action-executions-immutability-trigger
+- **Summary:** A thirteenth audit pass, checking migration consistency across every audit-log
+  table in the platform, found `action_executions` (action-executor's execution audit log,
+  CLAUDE.md §5) was the one table without a `BEFORE UPDATE OR DELETE` immutability trigger —
+  every other audit table (auth, config-admin, retention, ingestion-gateway, egress-gateway x2)
+  has one. Enforcement was purely application-level (the repository trait exposes no update/
+  delete method), which a bug or direct DB access could bypass. New migration
+  `0003_action_executions_immutable.sql` adds the same trigger pattern every peer table uses.
+- **Tests:** `cargo test -p action-executor --test execution_repository_integration_test`
+  against real Postgres — 5 passed (2 new: `action_executions_rejects_update_at_the_database_level`,
+  `action_executions_rejects_delete_at_the_database_level`, proving the trigger actually works).
+  `cargo test -p action-executor --lib` — 52 passed. `cargo build --workspace`, `cargo clippy -p
+  action-executor --all-targets --all-features -- -D warnings`, `cargo fmt --all --check` all
+  clean.
+- **PR:** pending
+- **ADR:** docs/adr/0104-action-executions-immutability-trigger.md
