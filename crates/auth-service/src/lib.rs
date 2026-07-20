@@ -2,9 +2,14 @@
 //! Entra/generic-OAuth OIDC login (ADR-0009), both minting sessions via Query Gateway's
 //! internal API rather than writing into its token table directly (spec §2 principle 1).
 
+#[path = "lib_test.rs"]
+#[cfg(test)]
+mod lib_test;
+
 mod audit_log;
 mod branding_handler;
 mod health;
+mod internal_secret;
 mod local_login_handler;
 mod local_user_repository;
 mod oidc_client;
@@ -20,6 +25,7 @@ pub use audit_log::{
 };
 pub use branding_handler::{get_branding, get_branding_by_id, put_branding};
 pub use health::build_router as health_router;
+pub use internal_secret::require_internal_secret;
 pub use local_login_handler::{local_login, AuthState, LocalLoginRequest, LoginResponse};
 pub use local_user_repository::{
     LocalUser, LocalUserRepository, LocalUserRepositoryError, PostgresLocalUserRepository,
@@ -43,22 +49,38 @@ pub use user_handlers::{
 use axum::routing::{get, post, put};
 use axum::Router;
 
-pub fn build_router(state: AuthState) -> Router {
-    Router::new()
+/// `internal_secret` is the same `INTERNAL_API_SECRET` value already read once in `main.rs` and
+/// threaded into `HttpSessionClient` (ADR-0009) — reused here rather than reading the env var a
+/// second time, gating only the routes that trust `X-Role`/`X-Tenant-Id`/`X-Username`.
+pub fn build_router(state: AuthState, internal_secret: String) -> Router {
+    // Pre-session, browser-facing entry points: a real end user's browser (via the Console UI's
+    // backend-to-backend call) hits these directly before any session/role exists, so none of
+    // them read the trust headers the gate below protects — gating them would break login.
+    let public_routes = Router::new()
         .route("/v1/auth/local/login", post(local_login))
         .route("/v1/auth/oidc/:provider/authorize", get(authorize))
         .route("/v1/auth/oidc/:provider/callback", post(callback))
+        // `GET` is the Console UI's login page (unauthenticated, workspace-name-keyed);
+        // deliberately unauthenticated per `branding_handler::get_branding`'s doc comment.
+        .route("/v1/tenants/:name/branding", get(get_branding))
+        .route("/v1/tenants/id/:id/branding", get(get_branding_by_id))
+        .with_state(state.clone());
+
+    // Everything below is reached only via an already-authenticated Console UI session and
+    // trusts `X-Role`/`X-Tenant-Id`/`X-Username` at face value — gated so only the Console UI's
+    // own backend (which knows `INTERNAL_API_SECRET`) can reach it.
+    let protected_routes = Router::new()
+        // `PUT` here is the admin-only branding save; same `:name` path segment as the public
+        // `GET` above, merged into one route by axum, but only this half carries the gate.
+        .route("/v1/tenants/:name/branding", put(put_branding))
         .route("/v1/users", post(create_user).get(list_users))
         .route("/v1/users/:id", put(update_user_role).delete(delete_user))
-        // `:name` is a workspace name for GET (login page, unauthenticated), a tenant_id UUID
-        // for PUT (admin-only save) — axum only requires the path *segment name* to agree
-        // across methods on the same route, not the extracted type, so each handler parses it
-        // into whatever it actually needs.
-        .route("/v1/tenants/:name/branding", get(get_branding).put(put_branding))
-        .route("/v1/tenants/id/:id/branding", get(get_branding_by_id))
         // Same shape as config-admin-service's/retention-service's `GET
         // /v1/audit-log/:entity_id` (Console UI's `AuditLogClient` is written once against
         // that shared shape and reused for every backend that owns an audited entity type).
         .route("/v1/audit-log/:entity_id", get(get_user_audit_log))
         .with_state(state)
+        .layer(axum::middleware::from_fn_with_state(internal_secret, require_internal_secret));
+
+    public_routes.merge(protected_routes)
 }

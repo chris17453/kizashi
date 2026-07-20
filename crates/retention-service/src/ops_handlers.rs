@@ -20,7 +20,12 @@ const DEFAULT_SWEEP_BATCH_LIMIT: i64 = 500;
 /// query-gateway's `/internal/tokens` (ADR-0009). Previously these had *no* check at all: any
 /// caller able to reach retention-service could trigger a tenant-wide sweep or force a reimport
 /// of an arbitrary archive.
-fn has_valid_internal_secret(state: &AppState, headers: &HeaderMap) -> bool {
+///
+/// `pub(crate)` so `policy_handlers.rs` can apply the same gate to the retention-policy CRUD
+/// routes (security audit finding: those routes trusted `X-Role`/`X-Tenant-Id`/`X-Username` at
+/// face value with no verification the caller was actually the Console UI, since
+/// docker-compose publishes this service's port directly).
+pub(crate) fn has_valid_internal_secret(state: &AppState, headers: &HeaderMap) -> bool {
     let provided = headers.get("x-internal-secret").and_then(|v| v.to_str().ok());
     provided == Some(state.internal_secret.as_str())
 }

@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0055         |
-| fix           | `fix/`     | 0009         |
+| fix           | `fix/`     | 0010         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
 | chore         | `chore/`   | 0004         |
@@ -89,3 +89,4 @@ manually created branches.
 | 0054 | `feature/0054-tenant-branding-config` | feature | 2026-07-19 | open | pending | |
 | 0007 | `fix/0007-rbac-audit-fixes` | fix | 2026-07-19 | open | pending | |
 | 0008 | `fix/0008-tenant-isolation-and-cookie-security` | fix | 2026-07-19 | open | pending | |
+| 0009 | `fix/0009-internal-secret-header-trust-gap` | fix | 2026-07-19 | open | pending | |

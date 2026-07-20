@@ -21,7 +21,8 @@ pub enum TriggerClientError {
 pub trait TriggerClient: Send + Sync {
     /// `tenant_id` is the firing event's own tenant — sent as `X-Tenant-Id` so Trigger Engine
     /// can reject (404) a mismatch, since a trigger id alone doesn't prove which tenant it
-    /// belongs to.
+    /// belongs to. Also sends `X-Internal-Secret` (ADR-0044) so Trigger Engine can trust this
+    /// call actually came from Action Executor and not an arbitrary network caller.
     async fn get_trigger(
         &self,
         trigger_id: Uuid,
@@ -32,11 +33,16 @@ pub trait TriggerClient: Send + Sync {
 pub struct HttpTriggerClient {
     client: reqwest::Client,
     trigger_engine_url: String,
+    internal_secret: String,
 }
 
 impl HttpTriggerClient {
-    pub fn new(client: reqwest::Client, trigger_engine_url: String) -> Self {
-        Self { client, trigger_engine_url }
+    pub fn new(
+        client: reqwest::Client,
+        trigger_engine_url: String,
+        internal_secret: String,
+    ) -> Self {
+        Self { client, trigger_engine_url, internal_secret }
     }
 }
 
@@ -51,6 +57,7 @@ impl TriggerClient for HttpTriggerClient {
             .client
             .get(format!("{}/v1/triggers/{}", self.trigger_engine_url, trigger_id))
             .header("x-tenant-id", tenant_id.to_string())
+            .header("x-internal-secret", &self.internal_secret)
             .send()
             .await
             .map_err(|e| TriggerClientError::Unreachable(e.to_string()))?;

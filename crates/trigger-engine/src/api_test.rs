@@ -7,6 +7,8 @@ use axum::http::Request;
 use common::TriggerDefinition;
 use tower::ServiceExt;
 
+const TEST_SECRET: &str = "test-internal-secret";
+
 fn sample_trigger() -> TriggerDefinition {
     TriggerDefinition {
         id: Uuid::new_v4(),
@@ -38,11 +40,12 @@ async fn returns_200_and_the_trigger_when_found() {
         InMemorySignalRepository::default(),
     );
 
-    let response = build_router(state)
+    let response = build_router(state, TEST_SECRET.to_string())
         .oneshot(
             Request::builder()
                 .uri(format!("/v1/triggers/{}", trigger.id))
                 .header("x-tenant-id", trigger.tenant_id.to_string())
+                .header("x-internal-secret", TEST_SECRET)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -59,11 +62,12 @@ async fn returns_200_and_the_trigger_when_found() {
 async fn returns_404_when_not_found() {
     let state = state(InMemoryTriggerRepository::default(), InMemorySignalRepository::default());
 
-    let response = build_router(state)
+    let response = build_router(state, TEST_SECRET.to_string())
         .oneshot(
             Request::builder()
                 .uri(format!("/v1/triggers/{}", Uuid::new_v4()))
                 .header("x-tenant-id", Uuid::new_v4().to_string())
+                .header("x-internal-secret", TEST_SECRET)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -81,10 +85,36 @@ async fn returns_401_when_the_tenant_header_is_missing() {
         InMemorySignalRepository::default(),
     );
 
-    let response = build_router(state)
+    let response = build_router(state, TEST_SECRET.to_string())
         .oneshot(
             Request::builder()
                 .uri(format!("/v1/triggers/{}", trigger.id))
+                .header("x-internal-secret", TEST_SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn returns_401_when_the_internal_secret_header_is_missing() {
+    // Regression test for the security audit finding: a caller supplying a valid X-Tenant-Id
+    // but no shared secret must be rejected before ever reaching handler logic — proving the
+    // middleware layer, not tenant validation, is what's gating this.
+    let trigger = sample_trigger();
+    let state = state(
+        InMemoryTriggerRepository::with_trigger(trigger.clone()),
+        InMemorySignalRepository::default(),
+    );
+
+    let response = build_router(state, TEST_SECRET.to_string())
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v1/triggers/{}", trigger.id))
+                .header("x-tenant-id", trigger.tenant_id.to_string())
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -105,11 +135,12 @@ async fn returns_404_not_leaking_data_when_the_caller_is_from_a_different_tenant
         InMemorySignalRepository::default(),
     );
 
-    let response = build_router(state)
+    let response = build_router(state, TEST_SECRET.to_string())
         .oneshot(
             Request::builder()
                 .uri(format!("/v1/triggers/{}", trigger.id))
                 .header("x-tenant-id", Uuid::new_v4().to_string())
+                .header("x-internal-secret", TEST_SECRET)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -131,11 +162,12 @@ async fn send_test_request(
     let mut req = Request::builder()
         .method("POST")
         .uri(format!("/v1/triggers/{id}/test"))
-        .header("content-type", "application/json");
+        .header("content-type", "application/json")
+        .header("x-internal-secret", TEST_SECRET);
     if let Some(tenant_id) = tenant_id {
         req = req.header("x-tenant-id", tenant_id.to_string());
     }
-    build_router(api_state)
+    build_router(api_state, TEST_SECRET.to_string())
         .oneshot(
             req.body(Body::from(serde_json::json!({"group_key": group_key}).to_string())).unwrap(),
         )

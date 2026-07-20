@@ -20,6 +20,8 @@ async fn main() {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let rabbitmq_url = std::env::var("RABBITMQ_URL").expect("RABBITMQ_URL must be set");
     let clickhouse_url = std::env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set");
+    let internal_secret =
+        std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
     let pool = common::connect_with_schema(&database_url, "trigger_engine")
@@ -105,7 +107,7 @@ async fn main() {
         trigger_repository: deps.trigger_repository.clone(),
         signal_repository: deps.signal_repository.clone(),
     };
-    let app = health_router().merge(api_router(api_state));
+    let app = health_router().merge(api_router(api_state, internal_secret));
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "trigger-engine API listening");
     tokio::spawn(async move {

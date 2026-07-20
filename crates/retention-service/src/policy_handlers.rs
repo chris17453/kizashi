@@ -1,7 +1,11 @@
+#[path = "policy_handlers_auth_test.rs"]
+#[cfg(test)]
+mod policy_handlers_auth_test;
 #[path = "policy_handlers_test.rs"]
 #[cfg(test)]
 mod policy_handlers_test;
 
+use crate::ops_handlers::has_valid_internal_secret;
 use crate::retention_policy::{RetentionPolicy, RetentionPolicyRepositoryError};
 use crate::AppState;
 use axum::extract::{Path, State};
@@ -74,6 +78,20 @@ fn require_operator(headers: &HeaderMap) -> Option<Response> {
     }
 }
 
+/// Security audit finding: these routes trusted `X-Role`/`X-Tenant-Id`/`X-Username` at face
+/// value with no verification the caller was actually the Console UI (docker-compose publishes
+/// this service's port directly, so any network caller could `curl -H "X-Role: admin" ...`
+/// straight at it). Gate every policy route behind the same `X-Internal-Secret` shared-secret
+/// check `ops_handlers.rs` already uses for `/v1/sweep` and `/v1/reimport`, in addition to (not
+/// instead of) the tenant/role/username checks below.
+fn require_internal_secret(state: &AppState, headers: &HeaderMap) -> Option<Response> {
+    if has_valid_internal_secret(state, headers) {
+        None
+    } else {
+        Some(error_response(StatusCode::UNAUTHORIZED, "invalid internal secret"))
+    }
+}
+
 fn policy_error_response(e: RetentionPolicyRepositoryError) -> Response {
     match e {
         RetentionPolicyRepositoryError::NotFound(id) => {
@@ -90,6 +108,9 @@ pub async fn create_policy(
     headers: HeaderMap,
     Json(policy): Json<RetentionPolicy>,
 ) -> Response {
+    if let Some(response) = require_internal_secret(&state, &headers) {
+        return response;
+    }
     if let Some(response) = tenant_mismatch(&headers, policy.tenant_id) {
         return response;
     }
@@ -112,6 +133,9 @@ pub async fn update_policy(
     Path(id): Path<Uuid>,
     Json(mut policy): Json<RetentionPolicy>,
 ) -> Response {
+    if let Some(response) = require_internal_secret(&state, &headers) {
+        return response;
+    }
     if let Some(response) = tenant_mismatch(&headers, policy.tenant_id) {
         return response;
     }
@@ -134,6 +158,9 @@ pub async fn delete_policy(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Response {
+    if let Some(response) = require_internal_secret(&state, &headers) {
+        return response;
+    }
     let tenant_id = match tenant_id_from_headers(&headers) {
         Ok(id) => id,
         Err((status, msg)) => return error_response(status, msg),
@@ -156,6 +183,9 @@ pub async fn get_policy(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Response {
+    if let Some(response) = require_internal_secret(&state, &headers) {
+        return response;
+    }
     let tenant_id = match tenant_id_from_headers(&headers) {
         Ok(id) => id,
         Err((status, msg)) => return error_response(status, msg),
@@ -170,6 +200,9 @@ pub async fn get_policy(
 }
 
 pub async fn list_policies(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Some(response) = require_internal_secret(&state, &headers) {
+        return response;
+    }
     let tenant_id = match tenant_id_from_headers(&headers) {
         Ok(id) => id,
         Err((status, msg)) => return error_response(status, msg),
@@ -187,6 +220,9 @@ pub async fn get_audit_log(
     headers: HeaderMap,
     Path(entity_id): Path<Uuid>,
 ) -> Response {
+    if let Some(response) = require_internal_secret(&state, &headers) {
+        return response;
+    }
     let tenant_id = match tenant_id_from_headers(&headers) {
         Ok(id) => id,
         Err((status, msg)) => return error_response(status, msg),
