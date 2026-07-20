@@ -165,9 +165,27 @@ async fn shows_the_rbac_role_distribution() {
         state_with_session(InMemorySessionStore::default()).await;
     let users_client = Arc::new(InMemoryUsersClient::default());
     users_client.users.lock().unwrap().extend([
-        UiUser { id: Uuid::new_v4(), tenant_id, username: "a".to_string(), role: Role::Admin },
-        UiUser { id: Uuid::new_v4(), tenant_id, username: "b".to_string(), role: Role::Operator },
-        UiUser { id: Uuid::new_v4(), tenant_id, username: "c".to_string(), role: Role::Viewer },
+        UiUser {
+            id: Uuid::new_v4(),
+            tenant_id,
+            username: "a".to_string(),
+            role: Role::Admin,
+            mfa_enabled: false,
+        },
+        UiUser {
+            id: Uuid::new_v4(),
+            tenant_id,
+            username: "b".to_string(),
+            role: Role::Operator,
+            mfa_enabled: false,
+        },
+        UiUser {
+            id: Uuid::new_v4(),
+            tenant_id,
+            username: "c".to_string(),
+            role: Role::Viewer,
+            mfa_enabled: false,
+        },
     ]);
     state.users_client = users_client;
 

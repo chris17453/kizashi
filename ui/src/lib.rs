@@ -37,6 +37,7 @@ mod api_keys_handler;
 mod audit_log_handler;
 mod backup_status_handler;
 mod branding_handler;
+mod compliance_report_handler;
 mod data_detail_handler;
 mod data_handler;
 mod egress_allowlist_handler;
@@ -124,6 +125,7 @@ pub use api_keys_handler::{get_api_keys, post_api_keys, post_revoke_api_key};
 pub use audit_log_handler::get_audit_log as get_entity_audit_log;
 pub use backup_status_handler::get_backups;
 pub use branding_handler::{get_branding_page, post_branding};
+pub use compliance_report_handler::get_compliance_report;
 pub use data_detail_handler::get_data_detail;
 pub use data_handler::{get_data, post_delete_saved_search, post_reprocess, post_save_search};
 pub use egress_allowlist_handler::{get_egress_allowlist, post_egress_allowlist};
@@ -256,6 +258,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/security/sessions", get(get_sessions))
         .route("/security/login-attempts", get(get_login_attempts_page))
         .route("/security/backups", get(get_backups))
+        .route("/security/compliance-report", get(get_compliance_report))
         .route("/security/sessions/:id/revoke", axum::routing::post(post_revoke_session))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))

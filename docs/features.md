@@ -3909,3 +3909,29 @@ architectural decision.
   `cargo fmt --all --check` all still clean (Dockerfile-only change, no Rust source touched).
 - **PR:** pending
 - **ADR:** n/a (implementation detail of ADR-0055, not a new architectural decision)
+
+## [2026-07-20] feature/0064-compliance-report-generation — Compliance report generation
+- **Type:** feature
+- **Branch:** feature/0064-compliance-report-generation
+- **Summary:** Closes the last domain in the ADR-0051 compliance rubric. Previously the only
+  export was a raw audit-log CSV (ADR-0049) — individual change rows, not a "what controls are
+  in place right now" summary. New `GET /security/compliance-report` assembles a single
+  browser-printable HTML snapshot (RBAC distribution, MFA adoption, password policy, retention
+  coverage, egress allowlist size, 7-day failed-login count, backup/DR status, recent admin
+  activity) by reusing the exact same clients Security Overview (ADR-0047) already calls, plus
+  two clients from later rubric domains (login attempts, backup status) that existed but were
+  never folded into any dashboard — no new data-gathering, one document instead of five pages.
+  Closed two small real gaps rather than hardcoding UI copy that could drift: `UiUser` now
+  carries `mfa_enabled` (the auth-service column existed since ADR-0051 but was never exposed to
+  the Console UI), and a new `GET /v1/auth/local/password-policy` endpoint exposes the
+  live-enforced policy parameters instead of a static description.
+- **Tests:** `cargo test -p auth-service --lib` — 145 passed (2 new: `password_policy::summary`
+  unit test, `get_password_policy` handler test). `cargo test -p kizashi-ui --lib` — 363 passed
+  (4 new: full-snapshot rendering with seeded users/login-attempts/backup-run data, non-admin
+  forbidden, redirect-when-signed-out, plus the `password_policy` HTTP client test). `cargo
+  build --workspace` clean. `cargo clippy -p auth-service --all-targets --all-features -- -D
+  warnings` and `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` both
+  clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
+  allow-listed warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0056-compliance-report-generation.md

@@ -290,3 +290,12 @@ pub async fn get_recent_audit_log(
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }
+
+/// GET /v1/auth/local/password-policy — the policy's live parameters (ADR-0056), so the Console
+/// UI's compliance report describes what's actually enforced rather than a hardcoded copy that
+/// could silently drift. Not tenant-scoped or sensitive (it's the rule, not anyone's data), so
+/// no `X-Tenant-Id`/`X-Role` check -- same "public within the internal-secret gate" bar as
+/// nothing else on this router, actually, but there's no per-tenant variation to leak either.
+pub async fn get_password_policy() -> Response {
+    Json(crate::password_policy::summary()).into_response()
+}

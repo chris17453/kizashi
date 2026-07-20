@@ -13,6 +13,7 @@ pub(crate) fn router(state: AuthState) -> Router {
         .route("/v1/users", post(create_user).get(list_users))
         .route("/v1/users/:id", put(update_user_role).delete(delete_user))
         .route("/v1/users/:id/audit-log", get(get_user_audit_log))
+        .route("/v1/auth/local/password-policy", get(get_password_policy))
         .with_state(state)
 }
 
@@ -535,4 +536,22 @@ async fn create_user_rejects_a_common_password() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn get_password_policy_returns_the_live_enforced_parameters() {
+    let response = send(
+        router(default_state()),
+        "GET",
+        "/v1/auth/local/password-policy".to_string(),
+        None,
+        None,
+        None,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["min_length"], 12);
 }

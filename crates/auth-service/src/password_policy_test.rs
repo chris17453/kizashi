@@ -57,3 +57,11 @@ fn a_password_one_over_the_maximum_length_is_rejected() {
     let one_over: String = "x".repeat(MAX_LENGTH + 1);
     assert_eq!(validate_password_strength(&one_over, "alice"), Err(PasswordPolicyError::TooLong));
 }
+
+#[test]
+fn summary_reflects_the_actual_enforced_constants() {
+    let s = summary();
+    assert_eq!(s.min_length, MIN_LENGTH);
+    assert_eq!(s.max_length, MAX_LENGTH);
+    assert_eq!(s.blocklist_size, COMMON_PASSWORDS.len());
+}

@@ -42,6 +42,7 @@ impl UsersClient for InMemoryUsersClient {
             tenant_id,
             username: username.to_string(),
             role: new_user_role,
+            mfa_enabled: false,
         };
         self.users.lock().unwrap().push(user.clone());
         Ok(user)
@@ -91,6 +92,10 @@ impl UsersClient for InMemoryUsersClient {
         })
         .to_string()
         .into_bytes())
+    }
+
+    async fn password_policy(&self) -> Result<PasswordPolicySummary, UsersClientError> {
+        Ok(PasswordPolicySummary { min_length: 12, max_length: 128, blocklist_size: 10 })
     }
 }
 
@@ -145,6 +150,10 @@ impl UsersClient for FailingUsersClient {
         _role: Role,
         _id: Uuid,
     ) -> Result<Vec<u8>, UsersClientError> {
+        Err(UsersClientError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn password_policy(&self) -> Result<PasswordPolicySummary, UsersClientError> {
         Err(UsersClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -202,10 +211,15 @@ async fn spawn_stub_server() -> String {
         }))
         .into_response()
     }
+    async fn password_policy_handler() -> axum::response::Response {
+        Json(serde_json::json!({"min_length": 12, "max_length": 128, "blocklist_size": 10}))
+            .into_response()
+    }
     let app = Router::new()
         .route("/v1/users", get(list_handler).post(create_handler))
         .route("/v1/users/:id", axum::routing::put(update_handler).delete(delete_handler))
-        .route("/v1/users/:id/data-subject-export", get(export_handler));
+        .route("/v1/users/:id/data-subject-export", get(export_handler))
+        .route("/v1/auth/local/password-policy", get(password_policy_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -300,6 +314,17 @@ async fn http_client_exports_a_users_data_subject_record_against_a_real_server()
 
     let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(body["user"]["username"], "alice");
+}
+
+#[tokio::test]
+async fn http_client_gets_the_password_policy_against_a_real_server() {
+    let url = spawn_stub_server().await;
+    let client = HttpUsersClient::new(reqwest::Client::new(), url);
+
+    let policy = client.password_policy().await.unwrap();
+
+    assert_eq!(policy.min_length, 12);
+    assert_eq!(policy.blocklist_size, 10);
 }
 
 #[tokio::test]
