@@ -65,7 +65,7 @@ async fn create_writes_a_created_audit_row_and_the_key_resolves() {
     let audit_reader = PostgresAuditLogReader::new(pool.clone());
     let tenant_id = Uuid::new_v4();
 
-    let (summary, plaintext) = store.create(tenant_id, "ci-agent").await.unwrap();
+    let (summary, plaintext) = store.create(tenant_id, "ci-agent", "alice").await.unwrap();
 
     assert_eq!(summary.label, "ci-agent");
     assert_eq!(store.tenant_for_key(&plaintext).await.unwrap(), Some(tenant_id));
@@ -74,6 +74,15 @@ async fn create_writes_a_created_audit_row_and_the_key_resolves() {
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].change_type, ChangeType::Created);
     assert_eq!(entries[0].entity_type, "api_key");
+    assert_eq!(
+        entries[0].actor, "alice",
+        "audit actor must be the real user who performed the action, not the tenant_id"
+    );
+    assert_ne!(
+        entries[0].actor,
+        tenant_id.to_string(),
+        "audit actor must never fall back to the tenant_id"
+    );
 }
 
 #[tokio::test]
@@ -82,14 +91,18 @@ async fn revoke_writes_a_deleted_audit_row_and_the_key_stops_resolving() {
     let store = PostgresApiKeyStore::new(pool.clone());
     let audit_reader = PostgresAuditLogReader::new(pool.clone());
     let tenant_id = Uuid::new_v4();
-    let (summary, plaintext) = store.create(tenant_id, "to-revoke").await.unwrap();
+    let (summary, plaintext) = store.create(tenant_id, "to-revoke", "alice").await.unwrap();
 
-    store.revoke(tenant_id, summary.id).await.unwrap();
+    store.revoke(tenant_id, summary.id, "bob").await.unwrap();
 
     assert_eq!(store.tenant_for_key(&plaintext).await.unwrap(), None);
     let entries = audit_reader.list_for_entity(tenant_id, summary.id).await.unwrap();
     assert_eq!(entries.len(), 2);
-    assert!(entries.iter().any(|e| e.change_type == ChangeType::Deleted));
+    let deleted = entries.iter().find(|e| e.change_type == ChangeType::Deleted).unwrap();
+    assert_eq!(
+        deleted.actor, "bob",
+        "the Deleted audit row's actor must be the user who revoked the key"
+    );
 }
 
 #[tokio::test]
@@ -98,10 +111,10 @@ async fn revoking_an_already_revoked_key_is_a_no_op_not_an_error() {
     let store = PostgresApiKeyStore::new(pool.clone());
     let audit_reader = PostgresAuditLogReader::new(pool.clone());
     let tenant_id = Uuid::new_v4();
-    let (summary, _plaintext) = store.create(tenant_id, "double-revoke").await.unwrap();
+    let (summary, _plaintext) = store.create(tenant_id, "double-revoke", "alice").await.unwrap();
 
-    store.revoke(tenant_id, summary.id).await.unwrap();
-    store.revoke(tenant_id, summary.id).await.unwrap();
+    store.revoke(tenant_id, summary.id, "alice").await.unwrap();
+    store.revoke(tenant_id, summary.id, "alice").await.unwrap();
 
     let entries = audit_reader.list_for_entity(tenant_id, summary.id).await.unwrap();
     assert_eq!(entries.len(), 2, "second revoke must not write a duplicate audit row");
@@ -112,8 +125,8 @@ async fn list_is_scoped_to_tenant() {
     let pool = test_pool().await;
     let store = PostgresApiKeyStore::new(pool.clone());
     let tenant_id = Uuid::new_v4();
-    store.create(tenant_id, "mine").await.unwrap();
-    store.create(Uuid::new_v4(), "not-mine").await.unwrap();
+    store.create(tenant_id, "mine", "alice").await.unwrap();
+    store.create(Uuid::new_v4(), "not-mine", "bob").await.unwrap();
 
     let found = store.list(tenant_id).await.unwrap();
     assert_eq!(found.len(), 1);
@@ -125,7 +138,8 @@ async fn ingestion_gateway_audit_log_rejects_update_and_delete_at_the_database_l
     let pool = test_pool().await;
     let store = PostgresApiKeyStore::new(pool.clone());
     let tenant_id = Uuid::new_v4();
-    let (summary, _plaintext) = store.create(tenant_id, "immutability-check").await.unwrap();
+    let (summary, _plaintext) =
+        store.create(tenant_id, "immutability-check", "alice").await.unwrap();
 
     let update_err = sqlx::query(
         "UPDATE ingestion_gateway_audit_log SET actor = 'tampered' WHERE entity_id = $1",
