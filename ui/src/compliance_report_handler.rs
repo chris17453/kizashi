@@ -152,7 +152,7 @@ pub async fn get_compliance_report(State(state): State<AppState>, headers: Heade
 
     let (mut last_backup_status, mut last_backup_at, mut recent_backup_failure_count) =
         (None, None, 0);
-    match state.backup_status_client.list_recent(session.role).await {
+    match state.backup_status_client.list_recent(session.role, None).await {
         Ok(runs) => {
             if let Some(latest) = runs.first() {
                 last_backup_status = Some(latest.status.clone());

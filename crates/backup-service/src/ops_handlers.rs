@@ -4,7 +4,7 @@ mod ops_handlers_test;
 
 use crate::backup_executor::{run_backup, BackupExecutorState};
 use crate::AppState;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use common::Role;
@@ -57,9 +57,20 @@ fn require_admin(headers: &HeaderMap) -> Option<Response> {
 
 const DEFAULT_STATUS_LIMIT: i64 = 20;
 
+#[derive(serde::Deserialize, Default)]
+pub struct BackupStatusQuery {
+    before: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 /// GET /v1/backup/status — the last N backup runs, most recent first, for the Console UI's
-/// Backups page (ADR-0055).
-pub async fn get_backup_status(State(state): State<AppState>, headers: HeaderMap) -> Response {
+/// Backups page (ADR-0055). Accepts the same `?before=` exclusive keyset cursor `/audit-log`
+/// and `login_attempts` already use (ADR-0063), so a "Load older" link can page back through
+/// backup history instead of being capped at the first `DEFAULT_STATUS_LIMIT` runs forever.
+pub async fn get_backup_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<BackupStatusQuery>,
+) -> Response {
     if !has_valid_internal_secret(&state, &headers) {
         return (StatusCode::UNAUTHORIZED, "invalid internal secret").into_response();
     }
@@ -67,7 +78,7 @@ pub async fn get_backup_status(State(state): State<AppState>, headers: HeaderMap
         return response;
     }
 
-    match state.run_repository.list_recent(DEFAULT_STATUS_LIMIT).await {
+    match state.run_repository.list_recent(DEFAULT_STATUS_LIMIT, query.before).await {
         Ok(runs) => Json(runs).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }

@@ -27,7 +27,7 @@ async fn a_successful_backup_uploads_and_records_success_with_the_dump_size() {
 
     assert_eq!(outcome.status, BackupRunStatus::Success);
     assert_eq!(outcome.size_bytes, Some(128));
-    let runs = repo.list_recent(10).await.unwrap();
+    let runs = repo.list_recent(10, None).await.unwrap();
     assert_eq!(runs[0].status, BackupRunStatus::Success);
     assert_eq!(runs[0].size_bytes, Some(128));
 }
@@ -41,7 +41,7 @@ async fn a_dump_failure_is_recorded_as_a_failed_run() {
 
     assert_eq!(outcome.status, BackupRunStatus::Failed);
     assert!(outcome.error.is_some());
-    let runs = repo.list_recent(10).await.unwrap();
+    let runs = repo.list_recent(10, None).await.unwrap();
     assert_eq!(runs[0].status, BackupRunStatus::Failed);
 }
 
@@ -55,7 +55,7 @@ async fn an_upload_failure_is_recorded_as_a_failed_run() {
     let outcome = run_backup(&state, Utc::now()).await;
 
     assert_eq!(outcome.status, BackupRunStatus::Failed);
-    let runs = repo.list_recent(10).await.unwrap();
+    let runs = repo.list_recent(10, None).await.unwrap();
     assert_eq!(runs[0].status, BackupRunStatus::Failed);
 }
 

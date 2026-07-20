@@ -78,7 +78,15 @@ pub trait BackupRunRepository: Send + Sync {
         error: &str,
     ) -> Result<(), BackupRunRepositoryError>;
 
-    async fn list_recent(&self, limit: i64) -> Result<Vec<BackupRun>, BackupRunRepositoryError>;
+    /// `before`, when present, only returns runs started strictly earlier than that timestamp
+    /// -- the same exclusive keyset-cursor pagination shape `/audit-log`'s "Load older" link and
+    /// `login_attempts` already use (ADR-0063), so a tenant's backup history isn't capped at
+    /// the first `limit` rows forever as backups accumulate.
+    async fn list_recent(
+        &self,
+        limit: i64,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<BackupRun>, BackupRunRepositoryError>;
 }
 
 pub struct PostgresBackupRunRepository {
@@ -166,13 +174,26 @@ impl BackupRunRepository for PostgresBackupRunRepository {
         Ok(())
     }
 
-    async fn list_recent(&self, limit: i64) -> Result<Vec<BackupRun>, BackupRunRepositoryError> {
-        let rows: Vec<BackupRunRow> = sqlx::query_as(
-            "SELECT id, started_at, completed_at, status, target, size_bytes, error FROM backup_runs ORDER BY started_at DESC LIMIT $1",
-        )
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await
+    async fn list_recent(
+        &self,
+        limit: i64,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<BackupRun>, BackupRunRepositoryError> {
+        let rows: Vec<BackupRunRow> = match before {
+            Some(before) => sqlx::query_as(
+                "SELECT id, started_at, completed_at, status, target, size_bytes, error FROM backup_runs WHERE started_at < $1 ORDER BY started_at DESC LIMIT $2",
+            )
+            .bind(before)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await,
+            None => sqlx::query_as(
+                "SELECT id, started_at, completed_at, status, target, size_bytes, error FROM backup_runs ORDER BY started_at DESC LIMIT $1",
+            )
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await,
+        }
         .map_err(|e| BackupRunRepositoryError::Backend(e.to_string()))?;
 
         Ok(rows.into_iter().map(row_to_run).collect())

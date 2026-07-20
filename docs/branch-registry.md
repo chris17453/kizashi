@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0083         |
+| feature       | `feature/` | 0084         |
 | fix           | `fix/`     | 0017         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
@@ -127,3 +127,4 @@ manually created branches.
 | 0014 | `fix/0014-table-header-scope-attributes` | fix | 2026-07-20 | open | pending | |
 | 0015 | `fix/0014-pipeline-map-severity-text-label` | fix | 2026-07-20 | open | pending | numbering race with fix/0014-table-header-scope-attributes (both created before either merged); kept original branch name, registry # bumped to avoid collision (same precedent as row 0050) |
 | 0016 | `fix/0016-inline-edit-input-accessible-names` | fix | 2026-07-20 | open | pending | |
+| 0083 | `feature/0083-backups-pagination-and-cursor-urlencoding-fix` | feature | 2026-07-20 | open | pending | |

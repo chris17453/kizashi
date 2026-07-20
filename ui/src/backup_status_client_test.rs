@@ -15,8 +15,13 @@ impl BackupStatusClient for InMemoryBackupStatusClient {
     async fn list_recent(
         &self,
         _role: common::Role,
+        before: Option<DateTime<Utc>>,
     ) -> Result<Vec<BackupRun>, BackupStatusClientError> {
-        Ok(self.runs.lock().unwrap().clone())
+        let mut runs = self.runs.lock().unwrap().clone();
+        if let Some(before) = before {
+            runs.retain(|r| r.started_at < before);
+        }
+        Ok(runs)
     }
 }
 
@@ -27,6 +32,7 @@ impl BackupStatusClient for FailingBackupStatusClient {
     async fn list_recent(
         &self,
         _role: common::Role,
+        _before: Option<DateTime<Utc>>,
     ) -> Result<Vec<BackupRun>, BackupStatusClientError> {
         Err(BackupStatusClientError::Unreachable("simulated failure".to_string()))
     }
@@ -61,7 +67,7 @@ async fn http_client_lists_recent_runs_against_a_real_server() {
     let url = spawn_stub_server().await;
     let client = HttpBackupStatusClient::new(reqwest::Client::new(), url);
 
-    let runs = client.list_recent(common::Role::Admin).await.unwrap();
+    let runs = client.list_recent(common::Role::Admin, None).await.unwrap();
 
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].status, "success");
@@ -72,6 +78,29 @@ async fn http_client_lists_recent_runs_against_a_real_server() {
 async fn http_client_returns_unreachable_when_server_is_down() {
     let client =
         HttpBackupStatusClient::new(reqwest::Client::new(), "http://127.0.0.1:1".to_string());
-    let err = client.list_recent(common::Role::Admin).await.unwrap_err();
+    let err = client.list_recent(common::Role::Admin, None).await.unwrap_err();
     assert!(matches!(err, BackupStatusClientError::Unreachable(_)));
+}
+
+#[tokio::test]
+async fn http_client_sends_the_before_cursor_as_a_query_param() {
+    async fn handler(
+        axum::extract::Query(params): axum::extract::Query<
+            std::collections::HashMap<String, String>,
+        >,
+    ) -> axum::response::Response {
+        assert!(params.contains_key("before"));
+        Json(Vec::<serde_json::Value>::new()).into_response()
+    }
+    let app = Router::new().route("/v1/backup/status", get(handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let client = HttpBackupStatusClient::new(reqwest::Client::new(), format!("http://{addr}"));
+
+    let runs = client.list_recent(common::Role::Admin, Some(Utc::now())).await.unwrap();
+
+    assert!(runs.is_empty());
 }
