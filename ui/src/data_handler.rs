@@ -110,6 +110,32 @@ struct DataTemplate {
 /// accepts free text; the datalist is autocomplete convenience, not a hard picker).
 const SENSOR_NAME_SUGGESTION_LIMIT: i64 = 500;
 
+/// Shared by the HTML view and the CSV export -- the two must never silently diverge on what
+/// counts as "matching the current search," same reasoning as `recent_audit_log_handler`'s
+/// `fetch_merged_page`.
+fn build_filter(query: &DataSearchQuery, limit: i64, offset: i64) -> RecordSearchFilter {
+    let (from, to) = parse_date_range(&query.from, &query.to);
+    let normalized = match query.normalized.as_str() {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    };
+    RecordSearchFilter {
+        connector_id: (!query.connector_id.is_empty()).then(|| query.connector_id.clone()),
+        source_type: (!query.source_type.is_empty()).then(|| query.source_type.clone()),
+        query: (!query.q.is_empty()).then(|| query.q.clone()),
+        subject: (!query.subject.is_empty()).then(|| query.subject.clone()),
+        email_from: (!query.email_from.is_empty()).then(|| query.email_from.clone()),
+        attachment_filename: (!query.attachment_filename.is_empty())
+            .then(|| query.attachment_filename.clone()),
+        from,
+        to,
+        normalized,
+        limit,
+        offset,
+    }
+}
+
 /// GET /data — the Data Viewer: search across every connector's ingested records by
 /// connector, source type, free-text substring match, and (for email-shaped records)
 /// subject/from/attachment filename, tenant-scoped and paginated (`DEFAULT_PAGE_SIZE` per
@@ -127,26 +153,7 @@ pub async fn get_data(
     };
 
     let page = query.page.max(0);
-    let (from, to) = parse_date_range(&query.from, &query.to);
-    let normalized = match query.normalized.as_str() {
-        "true" => Some(true),
-        "false" => Some(false),
-        _ => None,
-    };
-    let filter = RecordSearchFilter {
-        connector_id: (!query.connector_id.is_empty()).then(|| query.connector_id.clone()),
-        source_type: (!query.source_type.is_empty()).then(|| query.source_type.clone()),
-        query: (!query.q.is_empty()).then(|| query.q.clone()),
-        subject: (!query.subject.is_empty()).then(|| query.subject.clone()),
-        email_from: (!query.email_from.is_empty()).then(|| query.email_from.clone()),
-        attachment_filename: (!query.attachment_filename.is_empty())
-            .then(|| query.attachment_filename.clone()),
-        from,
-        to,
-        normalized,
-        limit: DEFAULT_PAGE_SIZE,
-        offset: page * DEFAULT_PAGE_SIZE,
-    };
+    let filter = build_filter(&query, DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE);
 
     let saved_searches = state
         .saved_search_queries_client
@@ -203,6 +210,78 @@ pub async fn get_data(
         )
         .into_response(),
     }
+}
+
+/// Successive pages fetched per export, each page requesting the backend's own max page size --
+/// bounds the export to `CSV_MAX_PAGES * DEFAULT_PAGE_SIZE` rows worst case rather than looping
+/// until the search is exhausted, since an unbounded export against a very large filtered
+/// result could otherwise take an unreasonable time/response size. Same tradeoff
+/// `recent_audit_log_handler`'s CSV export already made (ADR-0049).
+const CSV_MAX_PAGES: usize = 20;
+
+fn csv_escape(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+/// GET /data/export.csv — a bulk export of the current filtered search, honoring every field
+/// `DataSearchQuery` accepts (via the same `build_filter` the HTML view uses, so the two can
+/// never silently diverge on what "the current search" means). Closes a real data-explorer gap:
+/// until now, handing a filtered record set to another tool meant clicking into records one at
+/// a time. Paginated internally up to `CSV_MAX_PAGES` pages -- a tenant with more matching
+/// records than that isn't capped forever, since search filters (especially a date range) can
+/// be narrowed to export the rest in a follow-up request, same as the audit log export.
+pub async fn get_data_export_csv(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<DataSearchQuery>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+
+    let mut all_records = Vec::new();
+    for page_num in 0..CSV_MAX_PAGES {
+        let filter = build_filter(&query, DEFAULT_PAGE_SIZE, page_num as i64 * DEFAULT_PAGE_SIZE);
+        match state.stats_client.search_records(session.tenant_id, &filter).await {
+            Ok(result) => {
+                let has_more = result.has_more;
+                all_records.extend(result.records);
+                if !has_more {
+                    break;
+                }
+            }
+            Err(e) => {
+                return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                    .into_response();
+            }
+        }
+    }
+
+    let mut csv = String::from("id,connector_id,source_type,ingested_at,normalized,raw_payload\n");
+    for record in &all_records {
+        csv.push_str(&format!(
+            "{},{},{},{},{},{}\n",
+            record.id,
+            csv_escape(&record.connector_id),
+            csv_escape(&record.source_type),
+            record.ingested_at.to_rfc3339(),
+            record.is_normalized(),
+            csv_escape(&record.raw_payload.to_string()),
+        ));
+    }
+
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(axum::http::header::CONTENT_TYPE, "text/csv".parse().unwrap());
+    headers.insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        format!("attachment; filename=\"data-export-{}.csv\"", session.tenant_id).parse().unwrap(),
+    );
+    (headers, csv).into_response()
 }
 
 /// POST /data/reprocess — operator-gated: republishes `record.ingested` for every one of this

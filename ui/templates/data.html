@@ -105,6 +105,18 @@
   <p>Try widening the filters above, or check that an agent has ingested data for this tenant.</p>
 </div>
 {% else %}
+<form method="get" action="/data/export.csv" style="margin-bottom:0.5rem;">
+  <input type="hidden" name="connector_id" value="{{ query.connector_id }}">
+  <input type="hidden" name="source_type" value="{{ query.source_type }}">
+  <input type="hidden" name="q" value="{{ query.q }}">
+  <input type="hidden" name="subject" value="{{ query.subject }}">
+  <input type="hidden" name="email_from" value="{{ query.email_from }}">
+  <input type="hidden" name="attachment_filename" value="{{ query.attachment_filename }}">
+  <input type="hidden" name="from" value="{{ query.from }}">
+  <input type="hidden" name="to" value="{{ query.to }}">
+  <input type="hidden" name="normalized" value="{{ query.normalized }}">
+  <button type="submit" class="btn-link">Download CSV of this search &#8595;</button>
+</form>
 <table>
   <thead>
     <tr><th scope="col">Record ID</th><th scope="col">Connector</th><th scope="col">Source Type</th><th scope="col">Ingested At</th><th scope="col">Normalized</th></tr>
