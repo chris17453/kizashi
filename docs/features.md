@@ -3455,3 +3455,25 @@ architectural decision.
   proving the immutable audit trail wasn't rewritten, only new writes changed.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0039](../docs/adr/0039-audit-log-actor-identity.md)
+
+## [2026-07-20] feature/0052-overview-recent-activity — Overview dashboard shows recent events, not dead whitespace
+- **Type:** feature
+- **Branch:** feature/0052-overview-recent-activity
+- **Summary:** Last item on the live Console UI audit's punch list: the Overview page had a lot
+  of empty space below the pipeline status card, with no secondary content. Adds a "Recent
+  activity" section showing the 5 most recent events (already fetched by this handler for the
+  KPI count, no new backend call), with an empty state matching the platform's existing pattern
+  when there's nothing yet, and a link to the full paginated Events page.
+- **Tests:** `cargo test -p kizashi-ui` — 2 new tests
+  (`shows_the_five_most_recent_events_as_recent_activity`,
+  `shows_an_empty_state_for_recent_activity_when_there_are_no_events`), 250 total passing (up
+  from 248). `cargo test --workspace --all-features` (full real-infra stack) — every test binary
+  passed, 0 failed. `cargo clippy --workspace --all-targets --all-features -- -D warnings` —
+  clean. `cargo fmt --all --check` — clean. `cargo deny check` / `cargo audit` — clean, same 3
+  pre-existing allow-listed advisories.
+- **Live verification:** rebuilt/redeployed `kizashi-ui`, screenshotted the real Overview page —
+  the new section renders in the correct empty state for the demo tenant (which genuinely has 0
+  events), filling what was previously dead space with content that will show real events the
+  moment any exist.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — straightforward UI content addition, no architectural decision.

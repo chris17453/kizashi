@@ -59,4 +59,30 @@
 </div>
 <p class="muted"><a href="/pipeline">View full pipeline map &rarr;</a></p>
 {% endif %}
+
+<div class="section-title">Recent activity</div>
+{% if recent_events.is_empty() %}
+<div class="empty-state">
+  <div class="empty-icon">&#9672;</div>
+  <p>No recent activity.</p>
+  <p>Events appear here once a trigger fires against analyzed data.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Event Type</th><th>Group Key</th><th>Status</th><th>Occurred At</th></tr>
+  </thead>
+  <tbody>
+    {% for event in recent_events %}
+    <tr>
+      <td>{{ event.event_type }}</td>
+      <td>{{ event.group_key }}</td>
+      <td class="status-{{ event.status }}">{{ event.status }}</td>
+      <td>{{ event.occurred_at }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="muted"><a href="/events">View all events &rarr;</a></p>
+{% endif %}
 {% endblock %}

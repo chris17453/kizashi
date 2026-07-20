@@ -2,6 +2,7 @@
 #[cfg(test)]
 mod overview_handler_test;
 
+use crate::events_client::EventSummary;
 use crate::session_guard::require_session;
 use crate::topology::{build_topology_items, TopologyItem};
 use crate::AppState;
@@ -9,6 +10,10 @@ use askama::Template;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Response};
+
+/// How many of the most recent events show up in the dashboard's "Recent Activity" preview —
+/// a glance, not a replacement for the full paginated Events page it links to.
+const RECENT_ACTIVITY_LIMIT: usize = 5;
 
 #[derive(Template)]
 #[template(path = "overview.html")]
@@ -24,6 +29,10 @@ struct OverviewTemplate {
     /// Compact preview of the same topology `/pipeline` shows in full — turns the dashboard
     /// landing page into something with real content below the KPI row, not just a link list.
     pipeline_items: Vec<TopologyItem>,
+    /// The most recent events (already sorted newest-first by the backend), capped at
+    /// `RECENT_ACTIVITY_LIMIT` — fills the dead space below the pipeline card with real content
+    /// instead of leaving it empty.
+    recent_events: Vec<EventSummary>,
 }
 
 /// GET /overview — the landing dashboard: KPI cards summarizing sensors, ingestion volume,
@@ -73,6 +82,8 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
         None => ("unknown".to_string(), 0, 0),
     };
 
+    let recent_events = events.iter().take(RECENT_ACTIVITY_LIMIT).cloned().collect();
+
     Html(
         OverviewTemplate {
             show_nav: true,
@@ -84,6 +95,7 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
             services_up,
             services_total,
             pipeline_items,
+            recent_events,
         }
         .render()
         .unwrap(),
