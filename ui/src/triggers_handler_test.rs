@@ -122,6 +122,71 @@ async fn renders_the_triggers_table_when_signed_in() {
 }
 
 #[tokio::test]
+async fn filters_by_the_q_query_param_case_insensitively() {
+    let (mut state, session_id) = state_with_session().await;
+    let triggers_client = InMemoryTriggersClient::default();
+    triggers_client.triggers.lock().unwrap().push(TriggerSummary {
+        id: Uuid::new_v4(),
+        name: "high-volume-negative".to_string(),
+        event_type_match: "sentiment".to_string(),
+        enabled: true,
+    });
+    triggers_client.triggers.lock().unwrap().push(TriggerSummary {
+        id: Uuid::new_v4(),
+        name: "urgent-ticket".to_string(),
+        event_type_match: "ticket".to_string(),
+        enabled: true,
+    });
+    state.triggers_client = Arc::new(triggers_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers?q=URGENT")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("urgent-ticket"));
+    assert!(!body.contains("high-volume-negative"));
+}
+
+#[tokio::test]
+async fn shows_a_no_match_empty_state_for_an_unmatched_query() {
+    let (mut state, session_id) = state_with_session().await;
+    let triggers_client = InMemoryTriggersClient::default();
+    triggers_client.triggers.lock().unwrap().push(TriggerSummary {
+        id: Uuid::new_v4(),
+        name: "high-volume-negative".to_string(),
+        event_type_match: "sentiment".to_string(),
+        enabled: true,
+    });
+    state.triggers_client = Arc::new(triggers_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/triggers?q=nonexistent")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No triggers on this page match"));
+}
+
+#[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id) = state_with_session().await;
 
