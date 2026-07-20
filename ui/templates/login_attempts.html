@@ -7,10 +7,21 @@ here. This only covers local username/password logins; SSO logins are your ident
 responsibility to monitor.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
+<form class="inline" method="get" action="/security/login-attempts" style="margin-bottom:1rem;">
+  <label for="q">Search</label>
+  <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by username&hellip;">
+  <button type="submit">Search</button>
+  {% if !q.is_empty() %}<a href="/security/login-attempts" class="btn-link">Clear</a>{% endif %}
+</form>
+
 {% if attempts.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#128272;</div>
+  {% if q.is_empty() %}
   <p>No recent login attempts.</p>
+  {% else %}
+  <p>No login attempts match &ldquo;{{ q }}&rdquo;.</p>
+  {% endif %}
 </div>
 {% else %}
 <p class="muted">{{ failed_count }} failed attempt(s) shown below.</p>
@@ -35,5 +46,8 @@ responsibility to monitor.</p>
     {% endfor %}
   </tbody>
 </table>
+{% if let Some(before) = next_before %}
+<p><a href="/security/login-attempts?before={{ before }}">Load older &rarr;</a></p>
+{% endif %}
 {% endif %}
 {% endblock %}

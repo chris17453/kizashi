@@ -29,10 +29,15 @@ pub enum LoginAttemptsClientError {
 /// boundary as `UsersClient`.
 #[async_trait]
 pub trait LoginAttemptsClient: Send + Sync {
+    /// `before` is the same exclusive keyset-pagination cursor
+    /// `LoginAttemptRepository::list_recent` (auth-service) already implements server-side --
+    /// pass the oldest `attempted_at` seen so far to page back through a busy tenant's history
+    /// instead of only ever seeing the newest page (ADR-0063).
     async fn list_recent(
         &self,
         tenant_id: Uuid,
         role: Role,
+        before: Option<DateTime<Utc>>,
     ) -> Result<Vec<LoginAttempt>, LoginAttemptsClientError>;
 }
 
@@ -53,12 +58,17 @@ impl LoginAttemptsClient for HttpLoginAttemptsClient {
         &self,
         tenant_id: Uuid,
         role: Role,
+        before: Option<DateTime<Utc>>,
     ) -> Result<Vec<LoginAttempt>, LoginAttemptsClientError> {
-        let response = self
+        let mut request = self
             .client
             .get(format!("{}/v1/auth/local/login-attempts", self.auth_service_url))
             .header("x-tenant-id", tenant_id.to_string())
-            .header("x-role", role.to_string())
+            .header("x-role", role.to_string());
+        if let Some(before) = before {
+            request = request.query(&[("before", before.to_rfc3339())]);
+        }
+        let response = request
             .send()
             .await
             .map_err(|e| LoginAttemptsClientError::Unreachable(e.to_string()))?;

@@ -4114,3 +4114,24 @@ architectural decision.
   allow-listed warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
+
+## [2026-07-20] feature/0073-login-attempts-pagination-and-search — Login attempts pagination and search
+- **Type:** feature
+- **Branch:** feature/0073-login-attempts-pagination-and-search
+- **Summary:** Closes the highest-impact remaining UI/UX audit finding: Login Attempts is
+  naturally high-volume but had neither search nor pagination, permanently capped at the
+  backend's default page (50 rows) with no way to see further back. Extended
+  `LoginAttemptsClient::list_recent` to accept the same `before` cursor `/audit-log`'s "Load
+  older" link already uses; `GET /security/login-attempts` now accepts `?before=` (shows "Load
+  older" when a full page returns) and `?q=` (in-handler username filter, same pattern as
+  ADR-0062). Documented the resulting caveat (search filters only the currently-fetched page,
+  doesn't compose with pagination in one request) rather than silently shipping it as if it were
+  a full server-side search.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 391 passed (5 new: search filter,
+  full-page-shows-Load-older, partial-page-hides-it, `before` cursor honored, HTTP client passes
+  `before` as a query param). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
+  --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. `cargo
+  deny check`/`cargo audit` — same pre-existing allow-listed warnings as prior entries, no new
+  issues.
+- **PR:** pending
+- **ADR:** docs/adr/0063-login-attempts-pagination-and-search.md

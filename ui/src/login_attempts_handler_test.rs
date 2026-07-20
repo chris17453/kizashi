@@ -84,16 +84,29 @@ async fn state_with(
 }
 
 async fn get_page(state: AppState, session_id: &str) -> axum::http::Response<Body> {
+    get_page_at(state, session_id, "/security/login-attempts").await
+}
+
+async fn get_page_at(state: AppState, session_id: &str, uri: &str) -> axum::http::Response<Body> {
     router(state)
         .oneshot(
             Request::builder()
-                .uri("/security/login-attempts")
+                .uri(uri)
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap()
+}
+
+fn attempt(username: &str, success: bool) -> LoginAttempt {
+    LoginAttempt {
+        username: username.to_string(),
+        success,
+        reason: "wrong_password".to_string(),
+        attempted_at: chrono::Utc::now(),
+    }
 }
 
 #[tokio::test]
@@ -173,4 +186,73 @@ async fn redirects_to_login_when_not_signed_in() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[tokio::test]
+async fn filters_by_the_q_query_param_case_insensitively() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let client = InMemoryLoginAttemptsClient {
+        attempts: Mutex::new(vec![attempt("bob", false), attempt("carol", false)]),
+    };
+    let state = state_with(store, Arc::new(client)).await;
+
+    let response = get_page_at(state, &session_id, "/security/login-attempts?q=BOB").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("bob"));
+    assert!(!body.contains("carol"));
+}
+
+#[tokio::test]
+async fn shows_a_load_older_link_when_a_full_page_is_returned() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let full_page: Vec<LoginAttempt> =
+        (0..DEFAULT_LIMIT).map(|i| attempt(&format!("user-{i}"), false)).collect();
+    let client = InMemoryLoginAttemptsClient { attempts: Mutex::new(full_page) };
+    let state = state_with(store, Arc::new(client)).await;
+
+    let response = get_page(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Load older"));
+}
+
+#[tokio::test]
+async fn does_not_show_a_load_older_link_for_a_partial_page() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let client = InMemoryLoginAttemptsClient { attempts: Mutex::new(vec![attempt("bob", false)]) };
+    let state = state_with(store, Arc::new(client)).await;
+
+    let response = get_page(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("Load older"));
+}
+
+#[tokio::test]
+async fn honors_the_before_query_param_as_the_starting_cursor() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let mut newer = attempt("newer-user", false);
+    newer.attempted_at = "2026-07-19T00:00:00Z".parse().unwrap();
+    let mut older = attempt("older-user", false);
+    older.attempted_at = "2026-07-17T00:00:00Z".parse().unwrap();
+    let client = InMemoryLoginAttemptsClient { attempts: Mutex::new(vec![newer, older]) };
+    let state = state_with(store, Arc::new(client)).await;
+
+    let response =
+        get_page_at(state, &session_id, "/security/login-attempts?before=2026-07-18T00:00:00Z")
+            .await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("older-user"));
+    assert!(!body.contains("newer-user"));
 }

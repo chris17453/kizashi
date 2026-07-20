@@ -135,17 +135,20 @@ pub async fn get_compliance_report(State(state): State<AppState>, headers: Heade
     let recent_admin_activity_count =
         recent_admin_activity_count(&state, session.tenant_id, &mut errors).await;
 
-    let failed_login_count_7d =
-        match state.login_attempts_client.list_recent(session.tenant_id, session.role).await {
-            Ok(attempts) => {
-                let cutoff = Utc::now() - Duration::days(7);
-                attempts.iter().filter(|a| !a.success && a.attempted_at >= cutoff).count()
-            }
-            Err(e) => {
-                errors.push(format!("login attempts: {e}"));
-                0
-            }
-        };
+    let failed_login_count_7d = match state
+        .login_attempts_client
+        .list_recent(session.tenant_id, session.role, None)
+        .await
+    {
+        Ok(attempts) => {
+            let cutoff = Utc::now() - Duration::days(7);
+            attempts.iter().filter(|a| !a.success && a.attempted_at >= cutoff).count()
+        }
+        Err(e) => {
+            errors.push(format!("login attempts: {e}"));
+            0
+        }
+    };
 
     let (mut last_backup_status, mut last_backup_at, mut recent_backup_failure_count) =
         (None, None, 0);
