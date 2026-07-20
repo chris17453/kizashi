@@ -70,6 +70,19 @@ pub trait AuditLogReader: Send + Sync {
         tenant_id: Uuid,
         entity_id: Uuid,
     ) -> Result<Vec<AuditLogEntry>, AuditLogError>;
+
+    /// Chronological, cross-entity audit trail for `GET /v1/audit-log` (no `entity_id` — the
+    /// general "show me every admin action in the last N days" SOC2/ISO27001 view, as opposed to
+    /// `list_for_entity`'s single-entity history). Most-recent-first (DESC), deliberately the
+    /// opposite order of `list_for_entity`'s ASC, since operators reviewing a trail want the
+    /// newest activity first. `before` is an exclusive cursor for simple keyset pagination: pass
+    /// the `changed_at` of the last row seen to fetch the next page.
+    async fn list_recent(
+        &self,
+        tenant_id: Uuid,
+        limit: i64,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogError>;
 }
 
 pub struct PostgresAuditLogReader {
@@ -129,6 +142,46 @@ impl AuditLogReader for PostgresAuditLogReader {
         .bind(entity_id)
         .fetch_all(&self.pool)
         .await
+        .map_err(|e| AuditLogError::Backend(e.to_string()))?;
+
+        Ok(rows.into_iter().map(row_to_entry).collect())
+    }
+
+    async fn list_recent(
+        &self,
+        tenant_id: Uuid,
+        limit: i64,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogError> {
+        let rows: Vec<AuditRow> = match before {
+            Some(before) => sqlx::query_as(
+                r#"
+                SELECT id, tenant_id, entity_type, entity_id, change_type, actor, before, after, changed_at
+                FROM retention_audit_log
+                WHERE tenant_id = $1 AND changed_at < $2
+                ORDER BY changed_at DESC
+                LIMIT $3
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(before)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await,
+            None => sqlx::query_as(
+                r#"
+                SELECT id, tenant_id, entity_type, entity_id, change_type, actor, before, after, changed_at
+                FROM retention_audit_log
+                WHERE tenant_id = $1
+                ORDER BY changed_at DESC
+                LIMIT $2
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await,
+        }
         .map_err(|e| AuditLogError::Backend(e.to_string()))?;
 
         Ok(rows.into_iter().map(row_to_entry).collect())

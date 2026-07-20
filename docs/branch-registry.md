@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0055         |
+| feature       | `feature/` | 0056         |
 | fix           | `fix/`     | 0010         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -90,3 +90,4 @@ manually created branches.
 | 0007 | `fix/0007-rbac-audit-fixes` | fix | 2026-07-19 | open | pending | |
 | 0008 | `fix/0008-tenant-isolation-and-cookie-security` | fix | 2026-07-19 | open | pending | |
 | 0009 | `fix/0009-internal-secret-header-trust-gap` | fix | 2026-07-19 | open | pending | |
+| 0055 | `feature/0055-global-audit-log-page` | feature | 2026-07-20 | open | pending | |

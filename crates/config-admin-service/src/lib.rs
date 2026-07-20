@@ -31,8 +31,8 @@ pub use audit_log::{
     PostgresAuditLogReader,
 };
 pub use handlers::{
-    create_mapping, create_trigger, get_audit_log, get_mapping, get_trigger, list_mappings,
-    list_triggers, update_mapping, update_trigger, AdminState,
+    create_mapping, create_trigger, get_audit_log, get_mapping, get_recent_audit_log, get_trigger,
+    list_mappings, list_triggers, update_mapping, update_trigger, AdminState,
 };
 pub use health::healthz;
 pub use internal_secret::require_internal_secret;
@@ -75,6 +75,7 @@ pub fn build_router(
         .route("/v1/trigger-definitions/:id", get(get_trigger).put(update_trigger))
         .route("/v1/normalization-mappings", post(create_mapping).get(list_mappings))
         .route("/v1/normalization-mappings/:id", get(get_mapping).put(update_mapping))
+        .route("/v1/audit-log", get(get_recent_audit_log))
         .route("/v1/audit-log/:entity_id", get(get_audit_log))
         .with_state(state);
 

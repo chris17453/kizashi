@@ -2,6 +2,10 @@
 #[cfg(test)]
 mod handlers_test;
 
+#[path = "audit_log_handlers_test.rs"]
+#[cfg(test)]
+mod audit_log_handlers_test;
+
 use crate::audit_log::AuditLogReader;
 use crate::mapping_publisher::MappingPublisher;
 use crate::normalization_mapping_repository::{
@@ -324,6 +328,42 @@ pub async fn get_audit_log(
         Err((status, msg)) => return error_response(status, msg),
     };
     match state.audit_reader.list_for_entity(tenant_id, entity_id).await {
+        Ok(entries) => Json(entries).into_response(),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+fn default_recent_audit_log_limit() -> u32 {
+    50
+}
+
+/// Callers can ask for more, but never get an unbounded query — a large tenant's audit table
+/// could otherwise turn one request into a full table scan back to day one.
+const MAX_RECENT_AUDIT_LOG_LIMIT: u32 = 200;
+
+#[derive(Debug, serde::Deserialize)]
+pub struct RecentAuditLogQuery {
+    #[serde(default = "default_recent_audit_log_limit")]
+    pub limit: u32,
+    #[serde(default)]
+    pub before: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// GET /v1/audit-log — the chronological, cross-entity audit feed CLAUDE.md §5 / SOC2-style
+/// compliance review needs ("show me every admin action in the last N days"), as opposed to
+/// `get_audit_log`'s single-entity history. Deliberately no role check (read-only, same
+/// convention as the entity-scoped endpoint) — only `X-Tenant-Id` scoping.
+pub async fn get_recent_audit_log(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Query(query): Query<RecentAuditLogQuery>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let limit = query.limit.min(MAX_RECENT_AUDIT_LOG_LIMIT) as i64;
+    match state.audit_reader.list_recent(tenant_id, limit, query.before).await {
         Ok(entries) => Json(entries).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }

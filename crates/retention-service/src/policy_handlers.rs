@@ -8,9 +8,10 @@ mod policy_handlers_test;
 use crate::ops_handlers::has_valid_internal_secret;
 use crate::retention_policy::{RetentionPolicy, RetentionPolicyRepositoryError};
 use crate::AppState;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
+use chrono::{DateTime, Utc};
 use common::Role;
 #[cfg(test)]
 use std::sync::Arc;
@@ -228,6 +229,42 @@ pub async fn get_audit_log(
         Err((status, msg)) => return error_response(status, msg),
     };
     match state.audit_reader.list_for_entity(tenant_id, entity_id).await {
+        Ok(entries) => Json(entries).into_response(),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+const DEFAULT_RECENT_AUDIT_LOG_LIMIT: i64 = 50;
+const MAX_RECENT_AUDIT_LOG_LIMIT: i64 = 200;
+
+#[derive(serde::Deserialize)]
+pub struct RecentAuditLogParams {
+    limit: Option<u32>,
+    before: Option<DateTime<Utc>>,
+}
+
+/// GET /v1/audit-log (no `entity_id` segment — axum disambiguates it from
+/// `/v1/audit-log/:entity_id` fine) — the general, cross-entity chronological audit trail a
+/// SOC2/ISO27001 auditor expects ("show me every admin action in the last N days"), as opposed
+/// to `get_audit_log`'s single-entity history. Cursor-paginated via `before`; most-recent-first.
+pub async fn get_recent_audit_log(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(params): Query<RecentAuditLogParams>,
+) -> Response {
+    if let Some(response) = require_internal_secret(&state, &headers) {
+        return response;
+    }
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let limit = params
+        .limit
+        .map(|l| l as i64)
+        .unwrap_or(DEFAULT_RECENT_AUDIT_LOG_LIMIT)
+        .min(MAX_RECENT_AUDIT_LOG_LIMIT);
+    match state.audit_reader.list_recent(tenant_id, limit, params.before).await {
         Ok(entries) => Json(entries).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }

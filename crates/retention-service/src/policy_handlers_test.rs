@@ -23,8 +23,34 @@ pub(crate) fn router(state: AppState) -> Router {
             "/v1/retention-policies/:id",
             get(get_policy).put(update_policy).delete(delete_policy),
         )
+        .route("/v1/audit-log", get(get_recent_audit_log))
         .route("/v1/audit-log/:entity_id", get(get_audit_log))
         .with_state(state)
+}
+
+/// Minimal percent-encoding for an RFC3339 timestamp used as a query-string value in tests —
+/// `:` and `+` are reserved/special in a query string (`+` decodes to a space), so an unescaped
+/// `2024-01-01T00:00:00+00:00` would otherwise be mangled before axum's `Query` extractor ever
+/// sees it.
+pub(crate) fn url_encode_rfc3339(value: &str) -> String {
+    value.replace(':', "%3A").replace('+', "%2B")
+}
+
+pub(crate) fn sample_audit_entry(
+    tenant_id: Uuid,
+    changed_at: chrono::DateTime<Utc>,
+) -> crate::audit_log::AuditLogEntry {
+    crate::audit_log::AuditLogEntry {
+        id: Uuid::new_v4(),
+        tenant_id,
+        entity_type: "retention_policy".to_string(),
+        entity_id: Uuid::new_v4(),
+        change_type: crate::audit_log::ChangeType::Created,
+        actor: tenant_id.to_string(),
+        before: None,
+        after: serde_json::json!({}),
+        changed_at,
+    }
 }
 
 pub(crate) fn sample_policy(tenant_id: Uuid) -> RetentionPolicy {
@@ -291,6 +317,113 @@ async fn get_audit_log_requires_tenant_header() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn get_recent_audit_log_returns_entries_for_tenant_most_recent_first() {
+    let tenant_id = Uuid::new_v4();
+    let reader = InMemoryAuditLogReader::default();
+    let now = Utc::now();
+    let older = sample_audit_entry(tenant_id, now - chrono::Duration::seconds(10));
+    let newer = sample_audit_entry(tenant_id, now);
+    reader.entries.lock().unwrap().push(older.clone());
+    reader.entries.lock().unwrap().push(newer.clone());
+    // A different tenant's entry must never leak into this tenant's trail.
+    reader.entries.lock().unwrap().push(sample_audit_entry(Uuid::new_v4(), now));
+    let mut state = default_state();
+    state.audit_reader = Arc::new(reader);
+
+    let response =
+        send(router(state), "GET", "/v1/audit-log".to_string(), Some(tenant_id), None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let entries: Vec<serde_json::Value> = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0]["id"], serde_json::json!(newer.id));
+    assert_eq!(entries[1]["id"], serde_json::json!(older.id));
+}
+
+#[tokio::test]
+async fn get_recent_audit_log_honors_a_small_limit() {
+    let tenant_id = Uuid::new_v4();
+    let reader = InMemoryAuditLogReader::default();
+    let now = Utc::now();
+    for i in 0..5 {
+        reader
+            .entries
+            .lock()
+            .unwrap()
+            .push(sample_audit_entry(tenant_id, now - chrono::Duration::seconds(i)));
+    }
+    let mut state = default_state();
+    state.audit_reader = Arc::new(reader);
+
+    let response =
+        send(router(state), "GET", "/v1/audit-log?limit=2".to_string(), Some(tenant_id), None)
+            .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let entries: Vec<serde_json::Value> = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(entries.len(), 2);
+}
+
+#[tokio::test]
+async fn get_recent_audit_log_before_cursor_excludes_entries_at_or_after() {
+    let tenant_id = Uuid::new_v4();
+    let reader = InMemoryAuditLogReader::default();
+    let now = Utc::now();
+    let old = sample_audit_entry(tenant_id, now - chrono::Duration::seconds(20));
+    let cursor_entry = sample_audit_entry(tenant_id, now - chrono::Duration::seconds(10));
+    let new = sample_audit_entry(tenant_id, now);
+    reader.entries.lock().unwrap().push(old.clone());
+    reader.entries.lock().unwrap().push(cursor_entry.clone());
+    reader.entries.lock().unwrap().push(new.clone());
+    let mut state = default_state();
+    state.audit_reader = Arc::new(reader);
+
+    let before = url_encode_rfc3339(&cursor_entry.changed_at.to_rfc3339());
+    let response =
+        send(router(state), "GET", format!("/v1/audit-log?before={before}"), Some(tenant_id), None)
+            .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let entries: Vec<serde_json::Value> = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0]["id"], serde_json::json!(old.id));
+}
+
+#[tokio::test]
+async fn get_recent_audit_log_never_returns_another_tenants_entries() {
+    let tenant_id = Uuid::new_v4();
+    let other_tenant_id = Uuid::new_v4();
+    let reader = InMemoryAuditLogReader::default();
+    reader.entries.lock().unwrap().push(sample_audit_entry(other_tenant_id, Utc::now()));
+    let mut state = default_state();
+    state.audit_reader = Arc::new(reader);
+
+    let response =
+        send(router(state), "GET", "/v1/audit-log".to_string(), Some(tenant_id), None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let entries: Vec<serde_json::Value> = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(entries.len(), 0);
+}
+
+#[tokio::test]
+async fn get_recent_audit_log_requires_tenant_header() {
+    let response =
+        send(router(default_state()), "GET", "/v1/audit-log".to_string(), None, None).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn get_recent_audit_log_returns_500_on_backend_failure() {
+    let mut state = default_state();
+    state.audit_reader = Arc::new(FailingAuditLogReader);
+
+    let response =
+        send(router(state), "GET", "/v1/audit-log".to_string(), Some(Uuid::new_v4()), None).await;
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[tokio::test]

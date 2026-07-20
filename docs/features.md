@@ -3638,3 +3638,28 @@ architectural decision.
   check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
 - **PR:** pending
 - **ADR:** docs/adr/0044-internal-service-secret-for-header-trusted-endpoints.md
+
+## [2026-07-20] feature/0055-global-audit-log-page — Global, browsable audit log page
+- **Type:** feature
+- **Branch:** feature/0055-global-audit-log-page
+- **Summary:** Adds a new `GET /v1/audit-log` list endpoint (distinct from the existing
+  entity-scoped `GET /v1/audit-log/:entity_id`) to config-admin-service, auth-service, and
+  retention-service, each backed by a new `AuditLogReader::list_recent` trait method against the
+  existing audit tables (no schema change), with `limit`/`before` cursor pagination. The Console
+  UI gets a new `/audit-log` page that merges all three services' recent activity, sorted
+  most-recent-first, with a "load older" link — closing the gap where the audit trail could only
+  be browsed by already knowing which specific entity to look up, a baseline enterprise/SOC2-style
+  compliance expectation ("show me every admin action recently"). New nav entry between Users and
+  Platform Health.
+- **Tests:** `cargo test -p config-admin-service --lib` (100 passed, incl. 6 new
+  `get_recent_audit_log_*` tests); `cargo test -p auth-service --lib` (94 passed, incl. tenant
+  scoping, ordering, cursor, and internal-secret-gate tests); `cargo test -p retention-service
+  --lib` (66 passed); `cargo test -p kizashi-ui --lib` (293 passed, incl. 5 new
+  `recent_audit_log_handler` tests covering merge/sort-across-services, empty state, partial
+  backend failure, and load-older pagination, plus 3 new `audit_log_client` HTTP tests). Full
+  workspace gate green: `cargo build --workspace`, `cargo test --workspace --all-features`
+  against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures),
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all
+  --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
+- **PR:** pending
+- **ADR:** docs/adr/0045-global-audit-log-page.md

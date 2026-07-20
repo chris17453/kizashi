@@ -44,6 +44,7 @@ mod logout_handler;
 mod normalization_mappings_handler;
 mod overview_handler;
 mod pipeline_handler;
+mod recent_audit_log_handler;
 mod record_journey_handler;
 mod reports_handler;
 mod retention_policies_handler;
@@ -116,6 +117,7 @@ pub use logout_handler::get_logout;
 pub use normalization_mappings_handler::{get_normalization_mappings, post_normalization_mapping};
 pub use overview_handler::get_overview;
 pub use pipeline_handler::get_pipeline;
+pub use recent_audit_log_handler::get_recent_audit_log;
 pub use record_journey_handler::get_record_journey;
 pub use reports_handler::get_reports;
 pub use retention_policies_handler::{
@@ -208,6 +210,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/users", get(get_users).post(post_users))
         .route("/users/:id/role", axum::routing::post(post_update_user_role))
         .route("/users/:id/delete", axum::routing::post(post_delete_user))
+        .route("/audit-log", get(get_recent_audit_log))
         .route("/audit-log/:service/:entity_id", get(get_entity_audit_log))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
