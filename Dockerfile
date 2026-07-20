@@ -32,8 +32,15 @@ ARG INSTALL_DOCKER_CLI=false
 # without adding Docker's apt repo/GPG key for what amounts to one binary.
 ARG DOCKER_CLI_VERSION=26.1.4
 ARG INSTALL_POSTGRES_CLIENT=false
+# Debian bookworm's own apt repo ships postgresql-client-15 -- one major version behind
+# docker-compose's `postgres:16-alpine`, and `pg_dump` refuses to dump a server newer than
+# itself ("aborting because of server version mismatch"), which made backup-service's very
+# first live run fail outright (fix/0011). Pull `postgresql-client-16` from the official PGDG
+# apt repo instead, so the client always matches the server's major version this compose file
+# actually runs.
+ARG POSTGRES_CLIENT_MAJOR=16
 ARG RUN_AS_USER=kizashi
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
     && if [ "$INSTALL_DOCKER_CLI" = "true" ]; then \
          curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz" \
            -o /tmp/docker-cli.tgz \
@@ -43,7 +50,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
          && chmod +x /usr/local/bin/docker; \
        fi \
     && if [ "$INSTALL_POSTGRES_CLIENT" = "true" ]; then \
-         apt-get install -y --no-install-recommends postgresql-client; \
+         curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+           | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
+         && echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+           > /etc/apt/sources.list.d/pgdg.list \
+         && apt-get update \
+         && apt-get install -y --no-install-recommends "postgresql-client-${POSTGRES_CLIENT_MAJOR}"; \
        fi \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --uid 1000 kizashi
