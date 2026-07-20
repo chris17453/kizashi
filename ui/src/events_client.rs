@@ -47,11 +47,16 @@ pub enum EventsClientError {
 /// bearer token — the same trust boundary any other Query Gateway client uses.
 #[async_trait]
 pub trait EventsClient: Send + Sync {
+    /// `since`/`until`, when present, scope the search to an occurred-at date range -- the
+    /// backend (`dashboard-api`'s `ListEventsQuery`) has accepted these since the Events query
+    /// API was built; only forwarding them here.
     async fn list_events(
         &self,
         bearer_token: &str,
         limit: u32,
         offset: u32,
+        since: Option<chrono::DateTime<chrono::Utc>>,
+        until: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<EventsPage, EventsClientError>;
 
     /// Lists the Events whose `record_ids` contain `record_id` — the record→event lineage
@@ -89,11 +94,20 @@ impl EventsClient for HttpEventsClient {
         bearer_token: &str,
         limit: u32,
         offset: u32,
+        since: Option<chrono::DateTime<chrono::Utc>>,
+        until: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<EventsPage, EventsClientError> {
+        let mut params = vec![("limit", limit.to_string()), ("offset", offset.to_string())];
+        if let Some(since) = since {
+            params.push(("since", since.to_rfc3339()));
+        }
+        if let Some(until) = until {
+            params.push(("until", until.to_rfc3339()));
+        }
         let response = self
             .client
             .get(format!("{}/v1/events", self.query_gateway_url))
-            .query(&[("limit", limit.to_string()), ("offset", offset.to_string())])
+            .query(&params)
             .bearer_auth(bearer_token)
             .send()
             .await

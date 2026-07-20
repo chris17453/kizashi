@@ -4567,3 +4567,20 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0085-data-viewer-csv-export.md
+
+## [2026-07-20] feature/0088-events-page-date-range-filtering — Events page date-range filtering
+- **Type:** feature
+- **Branch:** feature/0088-events-page-date-range-filtering
+- **Summary:** Closes another "data explorer" completeness gap: the Events page had no way to
+  scope a search to a specific incident window. `dashboard-api` already accepted `since`/`until`
+  on `GET /v1/events`; the UI never forwarded them. Added `from`/`to` date fields to the search
+  form, threaded through `EventsClient::list_events`'s new `since`/`until` params (forwarded by
+  `HttpEventsClient` via reqwest's own query encoding) and through the sort-header links and
+  pagination forms, same pattern already used for `q`/`sort`/`dir` on this page.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 442 passed (4 new: `parse_date_range` start/end-
+  of-day and empty/unparseable handling, prefill-from-query-string, HTTP client forwards
+  `since`/`until` as query params against a real stub server). `cargo build --workspace` clean.
+  `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
+  --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0086-events-page-date-range-filtering.md
