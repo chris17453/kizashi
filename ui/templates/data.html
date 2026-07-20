@@ -20,7 +20,12 @@
     <h2>Search</h2>
     <form class="inline" method="get" action="/data">
       <label for="connector_id">Connector ID</label>
-      <input type="text" id="connector_id" name="connector_id" value="{{ query.connector_id }}" placeholder="zendesk">
+      <input type="text" id="connector_id" name="connector_id" value="{{ query.connector_id }}" placeholder="zendesk" list="sensor-names" autocomplete="off">
+      <datalist id="sensor-names">
+        {% for name in sensor_names %}
+        <option value="{{ name }}">
+        {% endfor %}
+      </datalist>
       <label for="source_type">Source type</label>
       <select id="source_type" name="source_type">
         <option value="" {% if query.source_type.is_empty() %}selected{% endif %}>Any</option>

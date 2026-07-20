@@ -312,17 +312,26 @@ services:
       EGRESS_GATEWAY_URL: http://egress-gateway:8080
       TRIGGER_ENGINE_URL: http://trigger-engine:8080
     ports: ["8093:8080"]
+    # service_started, not service_healthy: the Console UI calls these over HTTP per-request
+    # and already renders per-page/per-widget error states when a backend is unreachable (see
+    # the status pill styles in layout.html). Requiring every one of these to pass its own
+    # healthcheck before the UI container even starts made the *entire* Console UI unable to
+    # (re)start whenever any single backend deep in the chain (e.g. analysis-service, several
+    # hops away via trigger-engine/action-executor) was transiently unhealthy — a cascading
+    # single-point-of-failure discovered live when analysis-service's health flapped during an
+    # incident and took the whole UI down with it. service_started only waits for the container
+    # process to begin, preserving sane startup ordering without the hard block.
     depends_on:
-      auth-service: { condition: service_healthy }
-      query-gateway: { condition: service_healthy }
-      config-admin-service: { condition: service_healthy }
-      observability: { condition: service_healthy }
-      ingestion-service: { condition: service_healthy }
-      ingestion-gateway: { condition: service_healthy }
-      action-executor: { condition: service_healthy }
-      retention-service: { condition: service_healthy }
-      egress-gateway: { condition: service_healthy }
-      trigger-engine: { condition: service_healthy }
+      auth-service: { condition: service_started }
+      query-gateway: { condition: service_started }
+      config-admin-service: { condition: service_started }
+      observability: { condition: service_started }
+      ingestion-service: { condition: service_started }
+      ingestion-gateway: { condition: service_started }
+      action-executor: { condition: service_started }
+      retention-service: { condition: service_started }
+      egress-gateway: { condition: service_started }
+      trigger-engine: { condition: service_started }
     healthcheck: *healthz
 
   # --- Connectors --------------------------------------------------------------------------

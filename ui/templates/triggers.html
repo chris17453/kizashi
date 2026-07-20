@@ -25,54 +25,67 @@
       <input type="number" id="window_seconds" name="window_seconds" value="3600" min="1" required>
 
       <label for="condition_shape">Condition</label>
-      <select id="condition_shape" name="condition_shape">
+      <select id="condition_shape" name="condition_shape" onchange="kizashiUpdateTriggerConditionFields()">
         <option value="threshold_over_window">Field crosses a threshold</option>
         <option value="count_over_window">At least N matching events in the window</option>
         <option value="correlated_over_window">Combine multiple sources (any event types, e.g. email + chat + a ticket)</option>
       </select>
 
-      <label for="field">Field name (for "crosses a threshold")</label>
-      <input type="text" id="field" name="field" placeholder="same as event type to match, usually">
-      <label for="threshold">Threshold value</label>
-      <input type="number" step="any" id="threshold" name="threshold" placeholder="5">
-      <label for="direction">Direction</label>
-      <select id="direction" name="direction">
-        <option value="above">Above</option>
-        <option value="below">Below</option>
-      </select>
+      <div id="threshold-fields">
+        <label for="field">Field name (for "crosses a threshold")</label>
+        <input type="text" id="field" name="field" placeholder="same as event type to match, usually">
+        <label for="threshold">Threshold value</label>
+        <input type="number" step="any" id="threshold" name="threshold" placeholder="5">
+        <label for="direction">Direction</label>
+        <select id="direction" name="direction">
+          <option value="above">Above</option>
+          <option value="below">Below</option>
+        </select>
+      </div>
 
-      <label for="count">Count (for "at least N matching events")</label>
-      <input type="number" id="count" name="count" min="1" placeholder="3">
+      <div id="count-fields" style="display:none">
+        <label for="count">Count (for "at least N matching events")</label>
+        <input type="number" id="count" name="count" min="1" placeholder="3">
+      </div>
 
-      <label>Correlated sources (for "combine multiple sources") — any event types; every one
-        listed needs its own minimum count within the window before this trigger fires</label>
-      <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem">
-        <input type="text" name="correlated_event_type_1" placeholder="event type, e.g. sentiment_drop_email">
-        <input type="number" name="correlated_min_count_1" min="1" placeholder="min count" style="width:6em">
+      <div id="correlated-fields" style="display:none">
+        <label>Correlated sources (for "combine multiple sources") — any event types; every one
+          listed needs its own minimum count within the window before this trigger fires</label>
+        <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem">
+          <input type="text" name="correlated_event_type_1" placeholder="event type, e.g. sentiment_drop_email">
+          <input type="number" name="correlated_min_count_1" min="1" placeholder="min count" style="width:8em">
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem">
+          <input type="text" name="correlated_event_type_2" placeholder="event type, e.g. unresolved_chat">
+          <input type="number" name="correlated_min_count_2" min="1" placeholder="min count" style="width:8em">
+        </div>
+        <div id="correlated-row-3" style="display:none; gap:0.5rem; margin-bottom:0.5rem">
+          <input type="text" name="correlated_event_type_3" placeholder="event type (another source)">
+          <input type="number" name="correlated_min_count_3" min="1" placeholder="min count" style="width:8em">
+        </div>
+        <div id="correlated-row-4" style="display:none; gap:0.5rem; margin-bottom:0.5rem">
+          <input type="text" name="correlated_event_type_4" placeholder="event type (another source)">
+          <input type="number" name="correlated_min_count_4" min="1" placeholder="min count" style="width:8em">
+        </div>
+        <div id="correlated-row-5" style="display:none; gap:0.5rem; margin-bottom:0.5rem">
+          <input type="text" name="correlated_event_type_5" placeholder="event type (another source)">
+          <input type="number" name="correlated_min_count_5" min="1" placeholder="min count" style="width:8em">
+        </div>
+        <div id="correlated-row-6" style="display:none; gap:0.5rem; margin-bottom:0.5rem">
+          <input type="text" name="correlated_event_type_6" placeholder="event type (another source)">
+          <input type="number" name="correlated_min_count_6" min="1" placeholder="min count" style="width:8em">
+        </div>
+        <button type="button" id="add-correlated-row-btn" class="btn">+ Add another source</button>
       </div>
-      <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem">
-        <input type="text" name="correlated_event_type_2" placeholder="event type, e.g. unresolved_chat">
-        <input type="number" name="correlated_min_count_2" min="1" placeholder="min count" style="width:6em">
-      </div>
-      <div id="correlated-row-3" style="display:none; gap:0.5rem; margin-bottom:0.5rem">
-        <input type="text" name="correlated_event_type_3" placeholder="event type (another source)">
-        <input type="number" name="correlated_min_count_3" min="1" placeholder="min count" style="width:6em">
-      </div>
-      <div id="correlated-row-4" style="display:none; gap:0.5rem; margin-bottom:0.5rem">
-        <input type="text" name="correlated_event_type_4" placeholder="event type (another source)">
-        <input type="number" name="correlated_min_count_4" min="1" placeholder="min count" style="width:6em">
-      </div>
-      <div id="correlated-row-5" style="display:none; gap:0.5rem; margin-bottom:0.5rem">
-        <input type="text" name="correlated_event_type_5" placeholder="event type (another source)">
-        <input type="number" name="correlated_min_count_5" min="1" placeholder="min count" style="width:6em">
-      </div>
-      <div id="correlated-row-6" style="display:none; gap:0.5rem; margin-bottom:0.5rem">
-        <input type="text" name="correlated_event_type_6" placeholder="event type (another source)">
-        <input type="number" name="correlated_min_count_6" min="1" placeholder="min count" style="width:6em">
-      </div>
-      <button type="button" id="add-correlated-row-btn" class="btn">+ Add another source</button>
       <script>
+        function kizashiUpdateTriggerConditionFields() {
+          var shape = document.getElementById("condition_shape").value;
+          document.getElementById("threshold-fields").style.display = shape === "threshold_over_window" ? "block" : "none";
+          document.getElementById("count-fields").style.display = shape === "count_over_window" ? "block" : "none";
+          document.getElementById("correlated-fields").style.display = shape === "correlated_over_window" ? "block" : "none";
+        }
         (function () {
+          kizashiUpdateTriggerConditionFields();
           var nextRow = 3;
           var btn = document.getElementById("add-correlated-row-btn");
           btn.addEventListener("click", function () {

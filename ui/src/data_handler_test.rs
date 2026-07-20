@@ -106,6 +106,37 @@ async fn renders_search_results_when_signed_in() {
 }
 
 #[tokio::test]
+async fn offers_registered_sensor_names_as_a_datalist_for_the_connector_id_field() {
+    let (mut state, session_id) = state_with_session().await;
+    let sensors_client = Arc::new(InMemorySensorsClient::default());
+    sensors_client.sensors.lock().unwrap().push(common::Sensor::new(
+        Uuid::new_v4(),
+        "zendesk",
+        "support-poller",
+        serde_json::json!({}),
+    ));
+    state.sensors_client = sensors_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/data")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(r#"<datalist id="sensor-names">"#));
+    assert!(body.contains(r#"<option value="support-poller">"#));
+    assert!(body.contains(r#"list="sensor-names""#));
+}
+
+#[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id) = state_with_session().await;
 

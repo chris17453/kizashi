@@ -3214,3 +3214,38 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — direct correction to ADR-0037's stated thresholds/assumptions, not a new
   architectural decision.
+
+## [2026-07-20] feature/0051-ui-polish-sensor-picker-and-trigger-form — Console UI availability fix + sensor-picker/trigger-form usability
+- **Type:** fix
+- **Branch:** feature/0051-ui-polish-sensor-picker-and-trigger-form
+- **Summary:** Prompted by direct user feedback that the Console UI was unusable. Live audit
+  (headless-Chrome screenshots of every nav page, not just template reading) found the actual
+  root cause: `kizashi-kizashi-ui-1` was sitting in Docker's `Created` state, never started,
+  because `docker-compose.yml` required `service_healthy` on ten backends including a chain
+  through `trigger-engine` → `analysis-service` — when analysis-service went unhealthy during
+  this session's earlier incident, the whole UI became impossible to (re)start. Changed
+  `kizashi-ui`'s `depends_on` conditions to `service_started` so one backend's transient health
+  doesn't take the entire operator-facing UI offline. Also fixed two real usability gaps found
+  during the same audit: the Data Viewer's Connector ID field was free-text-only with no way to
+  pick from actually-registered Sensors (now an `<input list>` + `<datalist>` populated from
+  `SensorsClient::list_sensors`, capped at 500, still free-text-capable); and the trigger-
+  creation form rendered every field for every condition shape simultaneously with no dynamic
+  show/hide, unlike the AI Analysis page which already solved this correctly — now mirrors that
+  same JS pattern.
+- **Tests:** `cargo test -p kizashi-ui` — new test
+  `offers_registered_sensor_names_as_a_datalist_for_the_connector_id_field` passes, all 18
+  existing `triggers_handler` tests unaffected (pure template change), 242 total kizashi-ui
+  tests passing (up from 241). `cargo test --workspace --all-features` (full real-infra stack)
+  — every test binary passed, 0 failed. `cargo clippy --workspace --all-targets --all-features
+  -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny check` / `cargo
+  audit` — clean, same 3 pre-existing allow-listed advisories.
+- **Live verification:** rebuilt/redeployed `kizashi-ui`. Confirmed via `docker ps` the
+  container was previously `Created` (never running) and is now actually `Up`/healthy.
+  Registered a real test sensor via the Console UI, confirmed via curl+headless-Chrome that its
+  name appears in the Connector ID datalist; confirmed via screenshot that the trigger form now
+  shows only the threshold-field group by default and toggles correctly via the Condition
+  dropdown. Test sensor cleaned up afterward.
+- **Follow-up:** this audit was not exhaustive — see ADR-0038's Consequences section for what's
+  still open (SSO/auth-provider config UI, further per-page polish).
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0038](../docs/adr/0038-console-ui-availability-and-usability-fixes.md)
