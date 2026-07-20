@@ -3,7 +3,7 @@
 mod analysis_config_handlers_test;
 
 use crate::analysis_config_publisher::AnalysisConfigPublisher;
-use crate::analysis_config_repository::{AnalysisConfigRepository, AnalysisConfigRepositoryError};
+use crate::analysis_config_repository::AnalysisConfigRepository;
 use crate::handlers::{require_operator, tenant_id_from_headers, username_from_headers};
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
@@ -105,9 +105,7 @@ pub async fn get_analysis_config(
 
     match state.repository.get(tenant_id).await {
         Ok(config) => Json(config.map(AnalysisConfigView::from)).into_response(),
-        Err(AnalysisConfigRepositoryError::Backend(e)) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e)
-        }
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }
 
@@ -140,9 +138,7 @@ pub async fn put_analysis_config(
         Some(explicit) => explicit,
         None => match state.repository.get(tenant_id).await {
             Ok(existing) => existing.and_then(|c| c.api_key),
-            Err(AnalysisConfigRepositoryError::Backend(e)) => {
-                return error_response(StatusCode::INTERNAL_SERVER_ERROR, e)
-            }
+            Err(e) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         },
     };
 
@@ -158,8 +154,6 @@ pub async fn put_analysis_config(
             }
             Json(saved).into_response()
         }
-        Err(AnalysisConfigRepositoryError::Backend(e)) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e)
-        }
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }
