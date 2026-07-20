@@ -52,6 +52,7 @@ fn state_with_user(user: LocalUser) -> (AuthState, Arc<InMemoryLocalUserReposito
         ),
         mfa_challenge_repository: Arc::new(InMemoryMfaChallengeRepository::default()),
             login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
+            session_audit_writer: Arc::new(crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default()),
     };
     (state, repo)
 }

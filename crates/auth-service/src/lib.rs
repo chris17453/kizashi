@@ -23,6 +23,7 @@ mod oidc_handler;
 mod password;
 mod password_change_handler;
 mod password_policy;
+mod session_audit_writer;
 mod session_client;
 mod tenant_branding_repository;
 mod tenant_repository;
@@ -60,6 +61,9 @@ pub use oidc_handler::{authorize, callback, AuthorizeResponse, OidcCallbackReque
 pub use password::{hash_password, verify_password, PasswordError};
 pub use password_change_handler::{post_change_password, ChangePasswordRequest};
 pub use password_policy::{validate_password_strength, PasswordPolicyError};
+pub use session_audit_writer::{
+    PostgresSessionAuditWriter, SessionAuditWriter, SessionAuditWriterError,
+};
 pub use session_client::{HttpSessionClient, SessionClient, SessionClientError};
 pub use tenant_branding_repository::{
     PostgresTenantBrandingRepository, TenantBranding, TenantBrandingRepository,
@@ -68,7 +72,8 @@ pub use tenant_branding_repository::{
 pub use tenant_repository::{PostgresTenantRepository, TenantRepository, TenantRepositoryError};
 pub use user_handlers::{
     create_user, delete_user, get_password_policy, get_recent_audit_log, get_user_audit_log,
-    list_users, update_user_role, CreateUserRequest, RecentAuditLogQuery, UpdateUserRoleRequest,
+    list_users, post_session_revoked_audit, update_user_role, CreateUserRequest,
+    RecentAuditLogQuery, SessionRevokedRequest, UpdateUserRoleRequest,
 };
 
 use axum::routing::{get, post, put};
@@ -112,6 +117,10 @@ pub fn build_router(state: AuthState, internal_secret: String) -> Router {
         // segment — axum disambiguates this exact path from the `:entity_id` one above by
         // shape). Same protected group so it inherits the `X-Internal-Secret` gate below.
         .route("/v1/audit-log", get(get_recent_audit_log))
+        // Records a Console UI session revocation (ADR-0101) -- Console UI's session store has
+        // no database of its own, so this is the durable audit trail for that action, not a
+        // repository method wrapping a row mutation in this service's own tables.
+        .route("/v1/audit-log/session-revoked", post(post_session_revoked_audit))
         // Self-service MFA management -- reached only via an already-authenticated Console UI
         // session (the caller manages their own second factor, identified by X-Username same as
         // every other protected route), unlike /mfa/challenge above.

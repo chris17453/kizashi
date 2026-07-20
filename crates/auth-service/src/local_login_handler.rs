@@ -8,6 +8,7 @@ use crate::login_attempt_repository::{LoginAttempt, LoginAttemptRepository};
 use crate::mfa_repository::MfaChallengeRepository;
 use crate::oidc_handler::OidcClients;
 use crate::password::verify_password;
+use crate::session_audit_writer::SessionAuditWriter;
 use crate::session_client::SessionClient;
 use crate::tenant_branding_repository::TenantBrandingRepository;
 use crate::tenant_repository::TenantRepository;
@@ -27,6 +28,7 @@ pub struct AuthState {
     pub audit_log_reader: Arc<dyn AuditLogReader>,
     pub mfa_challenge_repository: Arc<dyn MfaChallengeRepository>,
     pub login_attempt_repository: Arc<dyn LoginAttemptRepository>,
+    pub session_audit_writer: Arc<dyn SessionAuditWriter>,
 }
 
 /// Best-effort: a failure to *record* an attempt must never block the login response itself

@@ -4864,3 +4864,32 @@ architectural decision.
   and content-disposition filename.
 - **PR:** #130
 - **ADR:** docs/adr/0100-events-csv-export.md
+
+## [2026-07-20] feature/0101-session-revocation-audit-log — Session revocation audit log
+- **Type:** feature
+- **Branch:** feature/0101-session-revocation-audit-log
+- **Summary:** A tenth UI audit pass, cross-referencing every destructive admin action against
+  its audit-log coverage, found that revoking a session (single or bulk) wrote zero audit
+  entries anywhere — every other destructive admin action does. Console UI's session store has
+  no database of its own (ADR-0014), so this required real backend infrastructure, not just a
+  missing call: a new `SessionAuditWriter` in auth-service writing to the existing
+  `auth_audit_log` table under `entity_type = "session"`, a new `POST
+  /v1/audit-log/session-revoked` endpoint, and a Console UI client method called from both
+  revoke handlers after the in-memory delete succeeds (best-effort, since the two systems have
+  no shared transaction). Sessions gained a per-row "History" link reusing the existing generic
+  `/audit-log/auth/:id` view — no new UI service arm needed.
+- **Tests:** `cargo test -p auth-service --lib` — 157 passed (6 new: `session_audit_writer`
+  reader/writer tests, `post_session_revoked_audit` handler tests). `cargo test -p auth-service
+  --test session_audit_writer_integration_test` against real Postgres — 2 passed (proves the
+  write and the existing immutability trigger both work for this new entity type). `cargo test
+  -p kizashi-ui --lib` — 482 passed (5 new: HTTP client test, 2 handler tests verifying the
+  audit call happens for single/bulk revoke, 1 template test for the History link). `cargo build
+  --workspace`, `cargo clippy -p auth-service/-p kizashi-ui --all-targets --all-features -- -D
+  warnings`, `cargo fmt --all --check` all clean. No new/touched file exceeds 500 lines
+  (`user_handlers_test.rs` was already over before this PR touched it; new tests went in a
+  separate `session_revoked_audit_handler_test.rs` rather than growing it further).
+  Live-verified against the real `watkinslabs` tenant: revoked a session, confirmed a real,
+  immutable `deleted`-type audit row (actor, `revoked_username`) renders at
+  `/audit-log/auth/<session_id>`.
+- **PR:** #131
+- **ADR:** docs/adr/0101-session-revocation-audit-log.md

@@ -50,6 +50,9 @@ fn state_with(
         audit_log_reader: Arc::new(audit),
         mfa_challenge_repository: Arc::new(InMemoryMfaChallengeRepository::default()),
         login_attempt_repository: Arc::new(attempts),
+        session_audit_writer: Arc::new(
+            crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default(),
+        ),
     }
 }
 

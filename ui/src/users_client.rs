@@ -90,6 +90,19 @@ pub trait UsersClient: Send + Sync {
 
     async fn password_policy(&self) -> Result<PasswordPolicySummary, UsersClientError>;
 
+    /// Records that an admin revoked a session (ADR-0101) — Console UI's session store is
+    /// purely in-memory (ADR-0014) and has no audit trail of its own, so this call to Auth
+    /// Service's `POST /v1/audit-log/session-revoked` is the durable record of the action, same
+    /// access boundary as every other admin-only write to Auth Service.
+    async fn record_session_revocation(
+        &self,
+        tenant_id: Uuid,
+        role: Role,
+        actor: &str,
+        session_id: Uuid,
+        revoked_username: &str,
+    ) -> Result<(), UsersClientError>;
+
     /// Self-service password change (ADR-0057) — `POST /v1/auth/local/password`, requires the
     /// caller's own current password (not just an authenticated session), same trust boundary
     /// as `MfaClient::disable`.
@@ -266,6 +279,34 @@ impl UsersClient for HttpUsersClient {
             return Err(rejected_error(response).await);
         }
         response.json().await.map_err(|e| UsersClientError::Unreachable(e.to_string()))
+    }
+
+    async fn record_session_revocation(
+        &self,
+        tenant_id: Uuid,
+        role: Role,
+        actor: &str,
+        session_id: Uuid,
+        revoked_username: &str,
+    ) -> Result<(), UsersClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/audit-log/session-revoked", self.auth_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
+            .header("x-username", actor)
+            .json(&serde_json::json!({
+                "session_id": session_id,
+                "revoked_username": revoked_username,
+            }))
+            .send()
+            .await
+            .map_err(|e| UsersClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(rejected_error(response).await);
+        }
+        Ok(())
     }
 
     async fn change_password(

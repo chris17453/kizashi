@@ -10,6 +10,10 @@ mod user_handlers_audit_actor_test;
 #[cfg(test)]
 mod recent_audit_log_handler_test;
 
+#[path = "session_revoked_audit_handler_test.rs"]
+#[cfg(test)]
+mod session_revoked_audit_handler_test;
+
 use crate::local_login_handler::AuthState;
 use crate::local_user_repository::{LocalUser, LocalUserRepositoryError};
 use crate::password::hash_password;
@@ -308,4 +312,41 @@ pub async fn get_recent_audit_log(
 /// nothing else on this router, actually, but there's no per-tenant variation to leak either.
 pub async fn get_password_policy() -> Response {
     Json(crate::password_policy::summary()).into_response()
+}
+
+#[derive(serde::Deserialize)]
+pub struct SessionRevokedRequest {
+    pub session_id: Uuid,
+    pub revoked_username: String,
+}
+
+/// POST /v1/audit-log/session-revoked — Console UI's session store is purely in-memory
+/// (ADR-0014), so it has no durable trail of its own; this records the fact of a revocation
+/// here instead, under `entity_type = "session"`, closing the gap a tenth UI audit pass found
+/// (every other destructive admin action writes an audit entry, session revoke wrote none).
+/// `Admin`-only, matching `/security/sessions`' own access bar in the Console UI.
+pub async fn post_session_revoked_audit(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Json(req): Json<SessionRevokedRequest>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    if let Some(response) = require_admin(&headers) {
+        return response;
+    }
+    match state
+        .session_audit_writer
+        .record_revocation(tenant_id, &actor, req.session_id, &req.revoked_username)
+        .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
 }

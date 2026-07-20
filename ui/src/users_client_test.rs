@@ -9,6 +9,7 @@ use std::sync::Mutex;
 #[derive(Default)]
 pub struct InMemoryUsersClient {
     pub users: Mutex<Vec<UiUser>>,
+    pub session_revocations: Mutex<Vec<(Uuid, Uuid, String)>>,
 }
 
 #[async_trait]
@@ -113,6 +114,22 @@ impl UsersClient for InMemoryUsersClient {
         }
         Ok(())
     }
+
+    async fn record_session_revocation(
+        &self,
+        tenant_id: Uuid,
+        _role: Role,
+        _actor: &str,
+        session_id: Uuid,
+        revoked_username: &str,
+    ) -> Result<(), UsersClientError> {
+        self.session_revocations.lock().unwrap().push((
+            tenant_id,
+            session_id,
+            revoked_username.to_string(),
+        ));
+        Ok(())
+    }
 }
 
 pub struct FailingUsersClient;
@@ -182,6 +199,17 @@ impl UsersClient for FailingUsersClient {
     ) -> Result<(), UsersClientError> {
         Err(UsersClientError::Unreachable("simulated failure".to_string()))
     }
+
+    async fn record_session_revocation(
+        &self,
+        _tenant_id: Uuid,
+        _role: Role,
+        _actor: &str,
+        _session_id: Uuid,
+        _revoked_username: &str,
+    ) -> Result<(), UsersClientError> {
+        Err(UsersClientError::Unreachable("simulated failure".to_string()))
+    }
 }
 
 async fn spawn_stub_server() -> String {
@@ -244,12 +272,19 @@ async fn spawn_stub_server() -> String {
     async fn change_password_handler() -> axum::http::StatusCode {
         axum::http::StatusCode::OK
     }
+    async fn session_revoked_handler(headers: HeaderMap) -> axum::response::Response {
+        if headers.get("x-username").is_none() {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
+        axum::http::StatusCode::NO_CONTENT.into_response()
+    }
     let app = Router::new()
         .route("/v1/users", get(list_handler).post(create_handler))
         .route("/v1/users/:id", axum::routing::put(update_handler).delete(delete_handler))
         .route("/v1/users/:id/data-subject-export", get(export_handler))
         .route("/v1/auth/local/password-policy", get(password_policy_handler))
-        .route("/v1/auth/local/password", axum::routing::post(change_password_handler));
+        .route("/v1/auth/local/password", axum::routing::post(change_password_handler))
+        .route("/v1/audit-log/session-revoked", axum::routing::post(session_revoked_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -418,4 +453,16 @@ async fn http_client_sends_x_username_header_on_create_user() {
         .unwrap();
 
     assert_eq!(captured.lock().unwrap().as_deref(), Some("carol"));
+}
+
+#[tokio::test]
+async fn http_client_records_a_session_revocation_against_a_real_server() {
+    let url = spawn_stub_server().await;
+    let client = HttpUsersClient::new(reqwest::Client::new(), url);
+
+    let result = client
+        .record_session_revocation(Uuid::new_v4(), Role::Admin, "admin", Uuid::new_v4(), "bob")
+        .await;
+
+    assert!(result.is_ok());
 }
