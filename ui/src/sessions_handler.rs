@@ -128,6 +128,35 @@ pub async fn get_sessions(
     .into_response()
 }
 
+/// Best-effort: session revocation itself has already succeeded by the time this is called, and
+/// the two systems (Console UI's in-memory session store, Auth Service's Postgres-backed audit
+/// log) are different processes with no shared transaction -- a failure to *record* the
+/// revocation must never undo or block the revocation itself (ADR-0101), same "log even if the
+/// audit write fails" philosophy as `record_attempt` in auth-service's own login handler.
+/// Silently skipped if the session id doesn't parse as a `Uuid` (auth-service's audit entity_id
+/// is `Uuid`-typed), which should never happen since `InMemorySessionStore::create` always mints
+/// one, but a malformed id must not panic this best-effort call.
+async fn record_session_revocation_audit(
+    state: &AppState,
+    session: &crate::Session,
+    revoked_session_id: &str,
+    revoked_username: &str,
+) {
+    let Ok(session_id) = revoked_session_id.parse() else {
+        return;
+    };
+    let _ = state
+        .users_client
+        .record_session_revocation(
+            session.tenant_id,
+            session.role,
+            &session.username,
+            session_id,
+            revoked_username,
+        )
+        .await;
+}
+
 /// POST /security/sessions/:id/revoke — force-terminates one session. Only a session already
 /// confirmed to belong to the caller's own tenant (via `list_for_tenant`) is ever deleted, so an
 /// admin can't blind-guess another tenant's session id to log someone else's user out.
@@ -141,14 +170,15 @@ pub async fn post_revoke_session(
         Err(response) => return response,
     };
 
-    let belongs_to_tenant = state
+    let target = state
         .session_store
         .list_for_tenant(session.tenant_id)
         .await
         .into_iter()
-        .any(|(session_id, _)| session_id == id);
-    if belongs_to_tenant {
+        .find(|(session_id, _)| *session_id == id);
+    if let Some((_, target_session)) = target {
         state.session_store.delete(&id).await;
+        record_session_revocation_audit(&state, &session, &id, &target_session.username).await;
     }
 
     Redirect::to("/security/sessions").into_response()
@@ -183,17 +213,13 @@ pub async fn post_bulk_revoke_sessions(
         Err(response) => return response,
     };
 
-    let tenant_session_ids: std::collections::HashSet<String> = state
-        .session_store
-        .list_for_tenant(session.tenant_id)
-        .await
-        .into_iter()
-        .map(|(id, _)| id)
-        .collect();
+    let tenant_sessions: std::collections::HashMap<String, crate::Session> =
+        state.session_store.list_for_tenant(session.tenant_id).await.into_iter().collect();
 
     for id in parse_ids(&body) {
-        if tenant_session_ids.contains(&id) {
+        if let Some(target_session) = tenant_sessions.get(&id) {
             state.session_store.delete(&id).await;
+            record_session_revocation_audit(&state, &session, &id, &target_session.username).await;
         }
     }
 

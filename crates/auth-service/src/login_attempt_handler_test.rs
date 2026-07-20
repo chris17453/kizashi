@@ -31,6 +31,9 @@ fn state_with_repo(repo: Arc<InMemoryLoginAttemptRepository>) -> AuthState {
         ),
         mfa_challenge_repository: Arc::new(InMemoryMfaChallengeRepository::default()),
         login_attempt_repository: repo,
+        session_audit_writer: Arc::new(
+            crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default(),
+        ),
     }
 }
 

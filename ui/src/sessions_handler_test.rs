@@ -295,6 +295,35 @@ async fn revoke_removes_the_target_session() {
 }
 
 #[tokio::test]
+async fn revoke_records_a_session_revocation_audit_entry() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let admin_session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    let target_session_id = store.create(sample_session(tenant_id, Role::Operator, "bob")).await;
+    let mut state = state_with_store(store).await;
+    let users_client = Arc::new(InMemoryUsersClient::default());
+    state.users_client = users_client.clone();
+
+    router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/security/sessions/{target_session_id}/revoke"))
+                .header("cookie", format!("kizashi_session={admin_session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let recorded = users_client.session_revocations.lock().unwrap();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].0, tenant_id);
+    assert_eq!(recorded[0].1.to_string(), target_session_id);
+    assert_eq!(recorded[0].2, "bob");
+}
+
+#[tokio::test]
 async fn revoke_does_not_remove_a_session_belonging_to_a_different_tenant() {
     let store = InMemorySessionStore::default();
     let admin_session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
@@ -342,6 +371,36 @@ async fn bulk_revoke_removes_every_selected_session() {
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert_eq!(state.session_store.get(&bob_id).await, None);
     assert_eq!(state.session_store.get(&carol_id).await, None);
+}
+
+#[tokio::test]
+async fn bulk_revoke_records_an_audit_entry_per_revoked_session() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let admin_session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    let bob_id = store.create(sample_session(tenant_id, Role::Operator, "bob")).await;
+    let carol_id = store.create(sample_session(tenant_id, Role::Operator, "carol")).await;
+    let mut state = state_with_store(store).await;
+    let users_client = Arc::new(InMemoryUsersClient::default());
+    state.users_client = users_client.clone();
+
+    router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/sessions/bulk-revoke")
+                .header("cookie", format!("kizashi_session={admin_session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={bob_id}&ids={carol_id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let recorded = users_client.session_revocations.lock().unwrap();
+    assert_eq!(recorded.len(), 2);
+    assert!(recorded.iter().any(|(_, _, username)| username == "bob"));
+    assert!(recorded.iter().any(|(_, _, username)| username == "carol"));
 }
 
 #[tokio::test]
@@ -408,6 +467,21 @@ async fn shows_bulk_revoke_ui_with_a_checkbox_per_row_excluding_the_current_sess
     assert!(body.contains("bulk-revoke-form"));
     assert!(body.contains(&format!(r#"value="{bob_id}""#)));
     assert!(body.contains("Revoke selected"));
+}
+
+#[tokio::test]
+async fn shows_a_history_link_scoped_to_each_session() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    let bob_id = store.create(sample_session(tenant_id, Role::Operator, "bob")).await;
+    let state = state_with_store(store).await;
+
+    let response = get_page(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(&format!("/audit-log/auth/{bob_id}")));
 }
 
 #[tokio::test]

@@ -46,6 +46,7 @@ async fn correct_credentials_mint_a_session_token() {
         ),
             mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
             login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
+            session_audit_writer: Arc::new(crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default()),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "correct-password"});
@@ -88,6 +89,7 @@ async fn wrong_password_is_rejected_with_401() {
         ),
             mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
             login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
+            session_audit_writer: Arc::new(crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default()),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "wrong-password"});
@@ -120,6 +122,7 @@ async fn unknown_username_is_rejected_with_401_not_404() {
         ),
             mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
             login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
+            session_audit_writer: Arc::new(crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default()),
     };
 
     let body =
@@ -156,6 +159,7 @@ async fn unknown_tenant_name_is_rejected_with_401_not_404() {
         ),
             mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
             login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
+            session_audit_writer: Arc::new(crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default()),
     };
 
     let body = serde_json::json!({"tenant_name": "nonexistent", "username": "alice", "password": "whatever"});
@@ -192,6 +196,7 @@ async fn repository_failure_returns_500() {
         ),
             mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
             login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
+            session_audit_writer: Arc::new(crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default()),
     };
 
     let body =
@@ -224,6 +229,7 @@ async fn tenant_repository_failure_returns_500() {
         ),
             mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
             login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
+            session_audit_writer: Arc::new(crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default()),
     };
 
     let body =
@@ -258,6 +264,7 @@ async fn session_mint_failure_returns_502() {
         ),
             mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
             login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
+            session_audit_writer: Arc::new(crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default()),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "correct-password"});
@@ -293,6 +300,7 @@ async fn correct_credentials_for_an_mfa_enabled_user_returns_a_challenge_not_a_s
         ),
         mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
             login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
+            session_audit_writer: Arc::new(crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default()),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "correct-password"});
@@ -333,6 +341,9 @@ async fn a_successful_login_records_a_successful_attempt() {
         ),
         mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
         login_attempt_repository: login_attempt_repository.clone(),
+        session_audit_writer: Arc::new(
+            crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default(),
+        ),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "correct-password"});
@@ -372,6 +383,9 @@ async fn a_wrong_password_records_a_failed_attempt() {
         ),
         mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
         login_attempt_repository: login_attempt_repository.clone(),
+        session_audit_writer: Arc::new(
+            crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default(),
+        ),
     };
 
     let body = serde_json::json!({"tenant_name": "acme", "username": "alice", "password": "wrong-password"});
@@ -408,6 +422,9 @@ async fn an_unknown_workspace_records_a_failed_attempt_with_no_tenant_id() {
         ),
         mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
         login_attempt_repository: login_attempt_repository.clone(),
+        session_audit_writer: Arc::new(
+            crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default(),
+        ),
     };
 
     let body = serde_json::json!({"tenant_name": "nonexistent", "username": "alice", "password": "whatever"});
@@ -445,6 +462,9 @@ async fn a_login_still_succeeds_even_if_recording_the_attempt_fails() {
         mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
         login_attempt_repository: Arc::new(
             crate::login_attempt_repository::login_attempt_repository_test::FailingLoginAttemptRepository,
+        ),
+        session_audit_writer: Arc::new(
+            crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default(),
         ),
     };
 

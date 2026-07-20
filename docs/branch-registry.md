@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0101         |
+| feature       | `feature/` | 0102         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
@@ -152,3 +152,4 @@ manually created branches.
 | 0098 | `feature/0097-login-attempts-csv-export` | feature | 2026-07-20 | merged | #128 | branch already pushed as feature/0097-login-attempts-csv-export before the collision with feature/0097-egress-allowlist-audit-log (PR #127) was discovered; kept the branch name, bumped this row's number to 0098 per the row-0050 precedent |
 | 0099 | `feature/0097-sessions-bulk-revoke` | feature | 2026-07-20 | merged | #129 | branch already pushed as feature/0097-sessions-bulk-revoke before the 0097 collision was discovered; kept the branch name, bumped this row's number to 0099 per the row-0050 precedent |
 | 0100 | `feature/0097-events-csv-export` | feature | 2026-07-20 | open | #130 | branch already pushed as feature/0097-events-csv-export before the 0097 collision was discovered; kept the branch name, bumped this row's number to 0100 per the row-0050 precedent |
+| 0101 | `feature/0101-session-revocation-audit-log` | feature | 2026-07-20 | open | pending | |
