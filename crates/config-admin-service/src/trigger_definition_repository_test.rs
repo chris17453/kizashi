@@ -17,6 +17,7 @@ impl TriggerDefinitionRepository for InMemoryTriggerDefinitionRepository {
     async fn create(
         &self,
         trigger: TriggerDefinition,
+        _actor: &str,
     ) -> Result<TriggerDefinition, TriggerDefinitionRepositoryError> {
         self.triggers.lock().unwrap().push(trigger.clone());
         Ok(trigger)
@@ -25,6 +26,7 @@ impl TriggerDefinitionRepository for InMemoryTriggerDefinitionRepository {
     async fn update(
         &self,
         trigger: TriggerDefinition,
+        _actor: &str,
     ) -> Result<TriggerDefinition, TriggerDefinitionRepositoryError> {
         let mut triggers = self.triggers.lock().unwrap();
         match triggers.iter_mut().find(|t| t.id == trigger.id && t.tenant_id == trigger.tenant_id) {
@@ -76,6 +78,7 @@ impl TriggerDefinitionRepository for FailingTriggerDefinitionRepository {
     async fn create(
         &self,
         _trigger: TriggerDefinition,
+        _actor: &str,
     ) -> Result<TriggerDefinition, TriggerDefinitionRepositoryError> {
         Err(TriggerDefinitionRepositoryError::Backend("simulated failure".to_string()))
     }
@@ -83,6 +86,7 @@ impl TriggerDefinitionRepository for FailingTriggerDefinitionRepository {
     async fn update(
         &self,
         _trigger: TriggerDefinition,
+        _actor: &str,
     ) -> Result<TriggerDefinition, TriggerDefinitionRepositoryError> {
         Err(TriggerDefinitionRepositoryError::Backend("simulated failure".to_string()))
     }
@@ -124,7 +128,7 @@ async fn create_then_get_round_trips() {
     let tenant_id = Uuid::new_v4();
     let trigger = sample_trigger(tenant_id);
 
-    repo.create(trigger.clone()).await.unwrap();
+    repo.create(trigger.clone(), "test-actor").await.unwrap();
     let found = repo.get(tenant_id, trigger.id).await.unwrap();
     assert_eq!(found, Some(trigger));
 }
@@ -134,7 +138,7 @@ async fn update_of_unknown_trigger_returns_not_found() {
     let repo = InMemoryTriggerDefinitionRepository::default();
     let trigger = sample_trigger(Uuid::new_v4());
 
-    let err = repo.update(trigger).await.unwrap_err();
+    let err = repo.update(trigger, "test-actor").await.unwrap_err();
     assert!(matches!(err, TriggerDefinitionRepositoryError::NotFound(_)));
 }
 
@@ -142,7 +146,7 @@ async fn update_of_unknown_trigger_returns_not_found() {
 async fn list_is_scoped_to_tenant() {
     let tenant_id = Uuid::new_v4();
     let repo = InMemoryTriggerDefinitionRepository::with_trigger(sample_trigger(tenant_id));
-    repo.create(sample_trigger(Uuid::new_v4())).await.unwrap();
+    repo.create(sample_trigger(Uuid::new_v4()), "test-actor").await.unwrap();
 
     let found = repo.list(tenant_id, 25, 0).await.unwrap();
     assert_eq!(found.len(), 1);
@@ -155,7 +159,7 @@ async fn list_respects_limit_and_offset() {
     for name in ["a", "b", "c"] {
         let mut trigger = sample_trigger(tenant_id);
         trigger.name = name.to_string();
-        repo.create(trigger).await.unwrap();
+        repo.create(trigger, "test-actor").await.unwrap();
     }
 
     let found = repo.list(tenant_id, 1, 1).await.unwrap();

@@ -23,10 +23,12 @@ pub trait TriggerDefinitionRepository: Send + Sync {
     async fn create(
         &self,
         trigger: TriggerDefinition,
+        actor: &str,
     ) -> Result<TriggerDefinition, TriggerDefinitionRepositoryError>;
     async fn update(
         &self,
         trigger: TriggerDefinition,
+        actor: &str,
     ) -> Result<TriggerDefinition, TriggerDefinitionRepositoryError>;
     async fn get(
         &self,
@@ -81,6 +83,7 @@ impl TriggerDefinitionRepository for PostgresTriggerDefinitionRepository {
     async fn create(
         &self,
         trigger: TriggerDefinition,
+        actor: &str,
     ) -> Result<TriggerDefinition, TriggerDefinitionRepositoryError> {
         let mut tx = self
             .pool
@@ -115,7 +118,7 @@ impl TriggerDefinitionRepository for PostgresTriggerDefinitionRepository {
                 entity_type: "trigger_definition".to_string(),
                 entity_id: trigger.id,
                 change_type: ChangeType::Created,
-                actor: trigger.tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: None,
                 after: serde_json::to_value(&trigger).unwrap_or_default(),
                 changed_at: chrono::Utc::now(),
@@ -131,6 +134,7 @@ impl TriggerDefinitionRepository for PostgresTriggerDefinitionRepository {
     async fn update(
         &self,
         trigger: TriggerDefinition,
+        actor: &str,
     ) -> Result<TriggerDefinition, TriggerDefinitionRepositoryError> {
         let mut tx = self
             .pool
@@ -179,7 +183,7 @@ impl TriggerDefinitionRepository for PostgresTriggerDefinitionRepository {
                 entity_type: "trigger_definition".to_string(),
                 entity_id: trigger.id,
                 change_type: ChangeType::Updated,
-                actor: trigger.tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: Some(serde_json::to_value(&before).unwrap_or_default()),
                 after: serde_json::to_value(&trigger).unwrap_or_default(),
                 changed_at: chrono::Utc::now(),

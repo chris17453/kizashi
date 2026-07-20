@@ -21,8 +21,8 @@ pub enum SensorRepositoryError {
 /// audit_log row in the same transaction as the entity change.
 #[async_trait]
 pub trait SensorRepository: Send + Sync {
-    async fn create(&self, sensor: Sensor) -> Result<Sensor, SensorRepositoryError>;
-    async fn update(&self, sensor: Sensor) -> Result<Sensor, SensorRepositoryError>;
+    async fn create(&self, sensor: Sensor, actor: &str) -> Result<Sensor, SensorRepositoryError>;
+    async fn update(&self, sensor: Sensor, actor: &str) -> Result<Sensor, SensorRepositoryError>;
     async fn get(&self, tenant_id: Uuid, id: Uuid)
         -> Result<Option<Sensor>, SensorRepositoryError>;
     async fn list(
@@ -31,7 +31,12 @@ pub trait SensorRepository: Send + Sync {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<Sensor>, SensorRepositoryError>;
-    async fn delete(&self, tenant_id: Uuid, id: Uuid) -> Result<(), SensorRepositoryError>;
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        actor: &str,
+    ) -> Result<(), SensorRepositoryError>;
 
     /// Looks up a sensor by its registered `name` — the join key Ingestion Gateway uses to
     /// enforce enabled/disabled status at ingest time (a sensor's `name` is what a deployed
@@ -62,7 +67,7 @@ fn row_to_sensor(row: SensorRow) -> Sensor {
 
 #[async_trait]
 impl SensorRepository for PostgresSensorRepository {
-    async fn create(&self, sensor: Sensor) -> Result<Sensor, SensorRepositoryError> {
+    async fn create(&self, sensor: Sensor, actor: &str) -> Result<Sensor, SensorRepositoryError> {
         let mut tx =
             self.pool.begin().await.map_err(|e| SensorRepositoryError::Backend(e.to_string()))?;
 
@@ -87,7 +92,7 @@ impl SensorRepository for PostgresSensorRepository {
                 entity_type: "agent".to_string(),
                 entity_id: sensor.id,
                 change_type: ChangeType::Created,
-                actor: sensor.tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: None,
                 after: serde_json::to_value(&sensor).unwrap_or_default(),
                 changed_at: chrono::Utc::now(),
@@ -100,7 +105,7 @@ impl SensorRepository for PostgresSensorRepository {
         Ok(sensor)
     }
 
-    async fn update(&self, sensor: Sensor) -> Result<Sensor, SensorRepositoryError> {
+    async fn update(&self, sensor: Sensor, actor: &str) -> Result<Sensor, SensorRepositoryError> {
         let mut tx =
             self.pool.begin().await.map_err(|e| SensorRepositoryError::Backend(e.to_string()))?;
 
@@ -139,7 +144,7 @@ impl SensorRepository for PostgresSensorRepository {
                 entity_type: "agent".to_string(),
                 entity_id: sensor.id,
                 change_type: ChangeType::Updated,
-                actor: sensor.tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: Some(serde_json::to_value(&before).unwrap_or_default()),
                 after: serde_json::to_value(&sensor).unwrap_or_default(),
                 changed_at: chrono::Utc::now(),
@@ -186,7 +191,12 @@ impl SensorRepository for PostgresSensorRepository {
         Ok(rows.into_iter().map(row_to_sensor).collect())
     }
 
-    async fn delete(&self, tenant_id: Uuid, id: Uuid) -> Result<(), SensorRepositoryError> {
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        actor: &str,
+    ) -> Result<(), SensorRepositoryError> {
         let mut tx =
             self.pool.begin().await.map_err(|e| SensorRepositoryError::Backend(e.to_string()))?;
 
@@ -219,7 +229,7 @@ impl SensorRepository for PostgresSensorRepository {
                 entity_type: "agent".to_string(),
                 entity_id: id,
                 change_type: ChangeType::Deleted,
-                actor: tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: Some(serde_json::to_value(&before).unwrap_or_default()),
                 after: serde_json::Value::Null,
                 changed_at: chrono::Utc::now(),

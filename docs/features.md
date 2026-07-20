@@ -3214,3 +3214,37 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — direct correction to ADR-0037's stated thresholds/assumptions, not a new
   architectural decision.
+
+## [2026-07-19] fix/0006-config-admin-service-audit-actor — Config Admin Service audit log records the real actor, not the tenant id
+- **Type:** fix
+- **Branch:** fix/0006-config-admin-service-audit-actor
+- **Summary:** Every audit-log write in `config-admin-service` (sensor, trigger-definition,
+  normalization-mapping, analysis-config repositories) hardcoded `AuditLogEntry.actor` to
+  `tenant_id.to_string()`, which made the audit trail unable to answer "who made this change" —
+  only "which tenant", already a separate column on every row (CLAUDE.md §5). Adds
+  `username_from_headers` (reads `X-Username`, mirroring the existing `X-Tenant-Id`/`X-Role`
+  helpers in `handlers.rs`), threads a new `actor: &str` parameter through every
+  create/update/delete/upsert repository method, and updates every write handler
+  (`sensor_handlers.rs`, `handlers.rs` trigger/mapping handlers, `analysis_config_handlers.rs`)
+  to extract the real caller identity from that header instead. Matches the same
+  `X-Username`/`username_from_headers`/`missing X-Username header` convention used by the
+  sibling fixes landing in auth-service, retention-service, and ingestion-gateway so all four
+  services agree on the wire contract. The UI does not yet send `X-Username` — that lands in a
+  separate PR.
+- **Tests:** `cargo test -p config-admin-service --all-features` (real Postgres +
+  RabbitMQ) — 117 passed, 0 failed, across unit tests (92) and integration test files
+  (`repository_integration_test.rs` 18, `sensor_publisher_integration_test.rs` 2,
+  `trigger_publisher_integration_test.rs` 1, `mapping_publisher_integration_test.rs` 1,
+  `analysis_config_publisher_integration_test.rs` 1, `saved_search_query_repository_integration_test.rs`
+  2). New regression coverage: `create_trigger_records_the_real_actor_not_the_tenant_id` and
+  `sensor_create_update_and_delete_all_record_the_real_actor_not_the_tenant_id` in
+  `repository_integration_test.rs` assert the written `actor` equals the real username and is
+  never equal to `tenant_id.to_string()`, against real Postgres. New handler-level 401 coverage:
+  `create_trigger_requires_username_header`, `create_sensor_requires_username_header`,
+  `put_requires_username_header`. `cargo clippy -p config-admin-service --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo build
+  --workspace --all-targets` — clean (no other crate constructs these repository trait objects
+  directly, confirmed by grep).
+- **PR:** (not yet opened — committed locally for review alongside sibling service fixes)
+- **ADR:** n/a — bug fix restoring already-documented CLAUDE.md §5 behavior, not a new
+  architectural decision.

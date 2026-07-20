@@ -39,6 +39,7 @@ async fn send(
     if let Some(r) = role_header {
         req = req.header("x-role", r);
     }
+    req = req.header("x-username", "test-actor@example.com");
     let body = match body {
         Some(b) => {
             req = req.header("content-type", "application/json");
@@ -175,6 +176,27 @@ async fn put_requires_role_header() {
         Some(serde_json::json!({"prompt": "x"})),
     )
     .await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// Regression coverage for the audit-actor bug (CLAUDE.md §5): `X-Username` is required here
+/// too, since `put_analysis_config` writes an audit_log row on every upsert.
+#[tokio::test]
+async fn put_requires_username_header() {
+    let tenant_id = Uuid::new_v4();
+    let response = router(default_state())
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/v1/analysis-config")
+                .header("content-type", "application/json")
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "operator")
+                .body(Body::from(serde_json::json!({"prompt": "x"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
