@@ -66,7 +66,7 @@
       <td>{{ user.username }}</td>
       <td>
         <form class="inline" method="post" action="/users/{{ user.id }}/role" style="display:inline">
-          <select name="role" onchange="this.form.submit()">
+          <select name="role" onchange="this.form.submit()" aria-label="Role for {{ user.username }}">
             <option value="viewer" {% if user.role_str == "viewer" %}selected{% endif %}>Viewer</option>
             <option value="operator" {% if user.role_str == "operator" %}selected{% endif %}>Operator</option>
             <option value="admin" {% if user.role_str == "admin" %}selected{% endif %}>Admin</option>

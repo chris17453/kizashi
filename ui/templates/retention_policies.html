@@ -59,7 +59,7 @@ overrides it.</p>
       <td>
         {% if can_write %}
         <form class="inline" method="post" action="/retention-policies/{{ policy.id }}/edit" style="display:inline">
-          <input type="number" name="ttl_days" min="1" value="{{ policy.ttl_days }}" style="width:5em">
+          <input type="number" name="ttl_days" min="1" value="{{ policy.ttl_days }}" style="width:5em" aria-label="TTL in days for {{ policy.data_class }}">
           <button type="submit" class="btn">Save</button>
         </form>
         {% else %}
