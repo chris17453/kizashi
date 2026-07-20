@@ -4804,5 +4804,5 @@ architectural decision.
   No file exceeds 500 lines. Live-verified against the real `watkinslabs` tenant: saved an
   allowlist change, followed the new "View change history" link, confirmed the real entry
   (actor, `created`, before/after domain lists) renders at `/audit-log/egress/<tenant_id>`.
-- **PR:** pending
+- **PR:** #127
 - **ADR:** docs/adr/0097-egress-allowlist-audit-log.md
