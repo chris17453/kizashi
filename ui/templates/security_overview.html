@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Security Overview</h1>
+<p class="muted">A single-pane-of-glass view of this workspace's security and compliance
+posture — where to start if you're new here or preparing for an audit.</p>
+{% for e in errors %}<p class="error">{{ e }}</p>{% endfor %}
+
+<div class="panel">
+  <h2>Access</h2>
+  <table>
+    <tbody>
+      <tr><td>Active sessions</td><td>{{ active_session_count }}</td><td><a href="/security/sessions">Manage &rarr;</a></td></tr>
+      <tr><td>Admins</td><td>{{ admin_count }}</td><td rowspan="3"><a href="/users">Manage &rarr;</a></td></tr>
+      <tr><td>Operators</td><td>{{ operator_count }}</td></tr>
+      <tr><td>Viewers</td><td>{{ viewer_count }}</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Activity</h2>
+  <table>
+    <tbody>
+      <tr><td>Admin actions in the last 7 days</td><td>{{ recent_activity_count }}</td><td><a href="/audit-log">View &rarr;</a></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Data lifecycle</h2>
+  <table>
+    <tbody>
+      <tr><td>Retention policies</td><td>{{ retention_enabled_count }} enabled / {{ retention_policy_count }} total</td><td><a href="/retention-policies">Manage &rarr;</a></td></tr>
+      <tr>
+        <td>Egress allowlist</td>
+        <td>
+          {% if egress_domain_count == 0 %}
+          <span class="error" style="display:inline; padding:0.15rem 0.5rem; margin:0;">no restrictions configured</span>
+          {% else %}
+          {{ egress_domain_count }} domain(s)
+          {% endif %}
+        </td>
+        <td><a href="/egress-allowlist">Manage &rarr;</a></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}

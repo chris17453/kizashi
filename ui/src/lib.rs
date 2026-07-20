@@ -49,6 +49,7 @@ mod record_journey_handler;
 mod reports_handler;
 mod retention_policies_handler;
 mod root_handler;
+mod security_overview_handler;
 mod sensor_detail_handler;
 mod sensor_script_handler;
 mod sensors_handler;
@@ -126,6 +127,7 @@ pub use retention_policies_handler::{
     post_retention_policies, post_toggle_retention_policy,
 };
 pub use root_handler::get_root;
+pub use security_overview_handler::get_security_overview;
 pub use sensor_detail_handler::get_sensor_detail;
 pub use sensor_script_handler::{get_generate_form, get_generate_select, post_generate_script};
 pub use sensors_handler::{get_sensors, post_delete_sensor, post_sensors, post_toggle_sensor};
@@ -214,6 +216,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/users/:id/delete", axum::routing::post(post_delete_user))
         .route("/audit-log", get(get_recent_audit_log))
         .route("/audit-log/:service/:entity_id", get(get_entity_audit_log))
+        .route("/security", get(get_security_overview))
         .route("/security/sessions", get(get_sessions))
         .route("/security/sessions/:id/revoke", axum::routing::post(post_revoke_session))
         .route("/reports", get(get_reports))

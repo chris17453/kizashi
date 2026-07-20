@@ -53,6 +53,11 @@
     }
     nav a:hover .nav-icon, nav a.active .nav-icon { color: var(--accent); }
     nav .nav-divider { height: 1px; background: var(--border); margin: 0.7rem 1rem; }
+    nav .nav-section {
+      margin: 1rem 1rem 0.3rem; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--text-dim); opacity: 0.7;
+    }
+    nav .nav-section:first-of-type { margin-top: 0.3rem; }
     main { flex: 1; padding: 2rem 2.5rem; }
     h1 { font-size: 1.5rem; margin-top: 0; margin-bottom: 1.2rem; font-weight: 600; }
     table {
@@ -352,22 +357,32 @@
       <span class="brand-name">Kizashi</span>
     </div>
     <a href="/overview"><span class="nav-icon">&#9638;</span> Overview</a>
+
+    <div class="nav-section">Data &amp; Pipeline</div>
     <a href="/sensors"><span class="nav-icon">&#11041;</span> Sensors</a>
     <a href="/data"><span class="nav-icon">&#9636;</span> Data</a>
     <a href="/events"><span class="nav-icon">&#9672;</span> Events</a>
     <a href="/pipeline"><span class="nav-icon">&#8853;</span> Pipeline Map</a>
+    <a href="/reports"><span class="nav-icon">&#9637;</span> Reports</a>
+
+    <div class="nav-section">Configuration</div>
     <a href="/triggers"><span class="nav-icon">&#9881;</span> Triggers</a>
     <a href="/normalization-mappings"><span class="nav-icon">&#8646;</span> Field Mappings</a>
     <a href="/retention-policies"><span class="nav-icon">&#9202;</span> Data Retention</a>
     <a href="/egress-allowlist"><span class="nav-icon">&#9888;</span> Egress Allowlist</a>
     <a href="/analysis-config"><span class="nav-icon">&#10022;</span> AI Analysis</a>
-    <a href="/reports"><span class="nav-icon">&#9637;</span> Reports</a>
     <a href="/api-keys"><span class="nav-icon">&#9877;</span> API Keys</a>
+
+    <div class="nav-section">Security &amp; Compliance</div>
+    <a href="/security"><span class="nav-icon">&#128737;</span> Security Overview</a>
     <a href="/users"><span class="nav-icon">&#128100;</span> Users</a>
     <a href="/audit-log"><span class="nav-icon">&#128220;</span> Audit Log</a>
     <a href="/security/sessions"><span class="nav-icon">&#128274;</span> Active Sessions</a>
+
+    <div class="nav-section">Platform</div>
     <a href="/health"><span class="nav-icon">&#9680;</span> Platform Health</a>
     <a href="/branding"><span class="nav-icon">&#127912;</span> Branding</a>
+
     <div class="nav-divider"></div>
     <a href="/logout"><span class="nav-icon">&#9099;</span> Log out</a>
   </nav>
