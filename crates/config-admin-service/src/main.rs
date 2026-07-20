@@ -1,9 +1,10 @@
 use config_admin_service::{
-    build_router, AdminState, AnalysisConfigState, PostgresAnalysisConfigRepository,
-    PostgresAuditLogReader, PostgresNormalizationMappingRepository,
-    PostgresSavedSearchQueryRepository, PostgresSensorRepository,
-    PostgresTriggerDefinitionRepository, RabbitMqAnalysisConfigPublisher, RabbitMqMappingPublisher,
-    RabbitMqSensorPublisher, RabbitMqTriggerPublisher, SavedSearchQueryState, SensorState,
+    build_router, AdminState, AnalysisConfigState, ApiKeyEncryptor,
+    PostgresAnalysisConfigRepository, PostgresAuditLogReader,
+    PostgresNormalizationMappingRepository, PostgresSavedSearchQueryRepository,
+    PostgresSensorRepository, PostgresTriggerDefinitionRepository, RabbitMqAnalysisConfigPublisher,
+    RabbitMqMappingPublisher, RabbitMqSensorPublisher, RabbitMqTriggerPublisher,
+    SavedSearchQueryState, SensorState,
 };
 use std::sync::Arc;
 
@@ -16,6 +17,12 @@ async fn main() {
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
     let internal_secret =
         std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
+    let config_encryption_key =
+        std::env::var("CONFIG_ENCRYPTION_KEY").expect("CONFIG_ENCRYPTION_KEY must be set");
+    let api_key_encryptor = Arc::new(
+        ApiKeyEncryptor::from_base64(&config_encryption_key)
+            .expect("CONFIG_ENCRYPTION_KEY must be a base64-encoded 32-byte key"),
+    );
 
     let pool = common::connect_with_schema(&database_url, "config_admin_service")
         .await
@@ -64,7 +71,10 @@ async fn main() {
         sensor_publisher: Arc::new(sensor_publisher),
     };
     let analysis_config_state = AnalysisConfigState {
-        repository: Arc::new(PostgresAnalysisConfigRepository::new(pool.clone())),
+        repository: Arc::new(PostgresAnalysisConfigRepository::new(
+            pool.clone(),
+            api_key_encryptor,
+        )),
         publisher: Arc::new(analysis_config_publisher),
     };
     let saved_search_query_state = SavedSearchQueryState {

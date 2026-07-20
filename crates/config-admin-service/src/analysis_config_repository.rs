@@ -3,8 +3,10 @@
 pub(crate) mod analysis_config_repository_test;
 
 use crate::audit_log::{record_audit_entry, AuditLogEntry, ChangeType};
+use crate::encryption::ApiKeyEncryptor;
 use async_trait::async_trait;
 use common::AnalysisConfig;
+use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -12,6 +14,8 @@ use uuid::Uuid;
 pub enum AnalysisConfigRepositoryError {
     #[error("storage backend error: {0}")]
     Backend(String),
+    #[error("failed to encrypt api_key: {0}")]
+    Encryption(#[from] crate::encryption::EncryptionError),
 }
 
 /// Upsert-only CRUD for AnalysisConfig (ADR-0019, extended by ADR-0031's provider/model/
@@ -37,11 +41,12 @@ pub trait AnalysisConfigRepository: Send + Sync {
 
 pub struct PostgresAnalysisConfigRepository {
     pool: sqlx::PgPool,
+    encryptor: Arc<ApiKeyEncryptor>,
 }
 
 impl PostgresAnalysisConfigRepository {
-    pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+    pub fn new(pool: sqlx::PgPool, encryptor: Arc<ApiKeyEncryptor>) -> Self {
+        Self { pool, encryptor }
     }
 }
 
@@ -55,13 +60,20 @@ type AnalysisConfigRow = (
     Option<String>,
 );
 
-fn row_to_config(row: AnalysisConfigRow) -> AnalysisConfig {
+/// `api_key` is stored AES-256-GCM-encrypted (ADR-0058); decrypts it back to plaintext here so
+/// every caller of this repository (analysis-service's outbound calls, the audit-log redaction
+/// above) keeps working against the same `AnalysisConfig` shape as before encryption existed.
+fn row_to_config(
+    row: AnalysisConfigRow,
+    encryptor: &ApiKeyEncryptor,
+) -> Result<AnalysisConfig, AnalysisConfigRepositoryError> {
     let (tenant_id, prompt, updated_at, provider, model, endpoint, api_key) = row;
     let provider = match provider.as_str() {
         "openai_compatible" => common::AnalysisProvider::OpenAiCompatible,
         _ => common::AnalysisProvider::AzureFoundry,
     };
-    AnalysisConfig { tenant_id, prompt, provider, model, endpoint, api_key, updated_at }
+    let api_key = api_key.map(|encrypted| encryptor.decrypt(&encrypted)).transpose()?;
+    Ok(AnalysisConfig { tenant_id, prompt, provider, model, endpoint, api_key, updated_at })
 }
 
 fn provider_str(provider: common::AnalysisProvider) -> &'static str {
@@ -103,7 +115,10 @@ impl AnalysisConfigRepository for PostgresAnalysisConfigRepository {
         .fetch_optional(&mut *tx)
         .await
         .map_err(|e| AnalysisConfigRepositoryError::Backend(e.to_string()))?;
-        let before = existing.map(row_to_config);
+        let before = existing.map(|row| row_to_config(row, &self.encryptor)).transpose()?;
+
+        let encrypted_api_key =
+            config.api_key.as_deref().map(|k| self.encryptor.encrypt(k)).transpose()?;
 
         sqlx::query(
             r#"
@@ -124,7 +139,7 @@ impl AnalysisConfigRepository for PostgresAnalysisConfigRepository {
         .bind(provider_str(config.provider))
         .bind(&config.model)
         .bind(&config.endpoint)
-        .bind(&config.api_key)
+        .bind(&encrypted_api_key)
         .execute(&mut *tx)
         .await
         .map_err(|e| AnalysisConfigRepositoryError::Backend(e.to_string()))?;
@@ -165,6 +180,6 @@ impl AnalysisConfigRepository for PostgresAnalysisConfigRepository {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| AnalysisConfigRepositoryError::Backend(e.to_string()))?;
-        Ok(row.map(row_to_config))
+        row.map(|row| row_to_config(row, &self.encryptor)).transpose()
     }
 }

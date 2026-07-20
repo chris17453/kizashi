@@ -20,6 +20,8 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 sqlx = { workspace = true }
 lapin = { workspace = true }
+aes-gcm = { workspace = true }
+base64 = { workspace = true }
 
 [dev-dependencies]
 tower = { workspace = true }

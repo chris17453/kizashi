@@ -6,13 +6,18 @@
 
 use common::{AnalysisConfig, Sensor, TriggerCondition};
 use config_admin_service::{
-    AnalysisConfigRepository, AuditLogReader, ChangeType, NormalizationMappingRepository,
-    PostgresAnalysisConfigRepository, PostgresAuditLogReader,
+    AnalysisConfigRepository, ApiKeyEncryptor, AuditLogReader, ChangeType,
+    NormalizationMappingRepository, PostgresAnalysisConfigRepository, PostgresAuditLogReader,
     PostgresNormalizationMappingRepository, PostgresSensorRepository,
     PostgresTriggerDefinitionRepository, SensorRepository, TriggerDefinitionRepository,
 };
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use uuid::Uuid;
+
+fn test_encryptor() -> Arc<ApiKeyEncryptor> {
+    Arc::new(ApiKeyEncryptor::new([3u8; 32]))
+}
 
 async fn test_pool() -> sqlx::PgPool {
     let database_url =
@@ -184,7 +189,7 @@ async fn create_mapping_writes_a_created_audit_row_in_the_same_transaction() {
 #[tokio::test]
 async fn upsert_analysis_config_writes_created_then_updated_audit_rows_against_real_postgres() {
     let pool = test_pool().await;
-    let repo = PostgresAnalysisConfigRepository::new(pool.clone());
+    let repo = PostgresAnalysisConfigRepository::new(pool.clone(), test_encryptor());
     let audit_reader = PostgresAuditLogReader::new(pool.clone());
     let tenant_id = Uuid::new_v4();
 
@@ -205,6 +210,30 @@ async fn upsert_analysis_config_writes_created_then_updated_audit_rows_against_r
     assert_eq!(entries[0].change_type, ChangeType::Created);
     assert_eq!(entries[1].change_type, ChangeType::Updated);
     assert_eq!(entries[0].entity_type, "analysis_config");
+}
+
+#[tokio::test]
+async fn api_key_is_stored_encrypted_at_rest_and_decrypted_on_read() {
+    let pool = test_pool().await;
+    let repo = PostgresAnalysisConfigRepository::new(pool.clone(), test_encryptor());
+    let tenant_id = Uuid::new_v4();
+
+    let mut config = AnalysisConfig::new(tenant_id, "look for urgent tickets");
+    config.api_key = Some("sk-a-very-real-secret-api-key".to_string());
+    repo.upsert(config, "operator@example.com").await.unwrap();
+
+    let (stored_api_key,): (Option<String>,) =
+        sqlx::query_as("SELECT api_key FROM analysis_configs WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let stored_api_key = stored_api_key.expect("api_key column should be set");
+    assert_ne!(stored_api_key, "sk-a-very-real-secret-api-key");
+    assert!(!stored_api_key.contains("sk-a-very-real-secret-api-key"));
+
+    let found = repo.get(tenant_id).await.unwrap().unwrap();
+    assert_eq!(found.api_key.as_deref(), Some("sk-a-very-real-secret-api-key"));
 }
 
 // --- Tenant isolation (CLAUDE.md §5: "every query path must be tested for tenant isolation,
@@ -360,7 +389,7 @@ async fn find_by_name_never_crosses_tenant_boundaries_even_with_a_matching_name(
 #[tokio::test]
 async fn an_analysis_config_owned_by_one_tenant_is_invisible_to_get_from_a_different_tenant() {
     let pool = test_pool().await;
-    let repo = PostgresAnalysisConfigRepository::new(pool.clone());
+    let repo = PostgresAnalysisConfigRepository::new(pool.clone(), test_encryptor());
     let tenant_a = Uuid::new_v4();
     let tenant_b = Uuid::new_v4();
     repo.upsert(AnalysisConfig::new(tenant_a, "tenant a's prompt"), "operator@example.com")

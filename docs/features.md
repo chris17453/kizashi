@@ -3959,3 +3959,28 @@ architectural decision.
   allow-listed warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0057-self-service-password-change.md
+
+## [2026-07-20] feature/0066-analysis-config-api-key-encryption — Analysis config API key encryption at rest
+- **Type:** feature
+- **Branch:** feature/0066-analysis-config-api-key-encryption
+- **Summary:** Closes a gap ADR-0031 flagged when it shipped: `analysis_configs.api_key` (a
+  tenant's AI provider credential) was stored in plaintext in Postgres — ADR-0050 closed the
+  *display* half (Console UI/audit log never show the real key) but not the at-rest storage
+  itself. New `ApiKeyEncryptor` (AES-256-GCM, key from `CONFIG_ENCRYPTION_KEY`) encrypts the
+  column on every write and decrypts on every read inside
+  `PostgresAnalysisConfigRepository` — no other code changes, since every caller (analysis-
+  service's outbound provider calls, the existing audit-log redaction) keeps working against the
+  same plaintext `Option<String>` shape. No schema migration needed (ciphertext fits the
+  existing TEXT column). `docker-compose.yml`/`.env.example` require the new env var with no
+  default, matching `AWS_SECRET_ACCESS_KEY`'s existing fail-loudly convention.
+- **Tests:** `cargo test -p config-admin-service --lib` — 112 passed (7 new `encryption` unit
+  tests: round-trip, ciphertext never contains plaintext, nonces differ per encryption, wrong
+  key fails, tampered ciphertext fails, base64 key parsing success/failure). `cargo test -p
+  config-admin-service --tests` (full env incl. RabbitMQ) — all integration suites passing,
+  including 1 new real-Postgres test confirming the raw `api_key` column value is neither equal
+  to nor contains the plaintext, and that `get()` still returns the correct decrypted value.
+  `cargo build --workspace` clean. `cargo clippy -p config-admin-service --all-targets
+  --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. `cargo deny check`/
+  `cargo audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0058-analysis-config-api-key-encryption-at-rest.md

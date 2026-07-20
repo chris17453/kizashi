@@ -6,6 +6,7 @@ mod analysis_config_handlers;
 mod analysis_config_publisher;
 mod analysis_config_repository;
 mod audit_log;
+mod encryption;
 mod handlers;
 mod health;
 mod internal_secret;
@@ -30,6 +31,7 @@ pub use audit_log::{
     record_audit_entry, AuditLogEntry, AuditLogError, AuditLogReader, ChangeType,
     PostgresAuditLogReader,
 };
+pub use encryption::{ApiKeyEncryptor, EncryptionError};
 pub use handlers::{
     create_mapping, create_trigger, get_audit_log, get_mapping, get_recent_audit_log, get_trigger,
     list_mappings, list_triggers, update_mapping, update_trigger, AdminState,

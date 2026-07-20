@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0066         |
+| feature       | `feature/` | 0067         |
 | fix           | `fix/`     | 0012         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -103,3 +103,4 @@ manually created branches.
 | 0011 | `fix/0011-pg-dump-version-mismatch` | fix | 2026-07-20 | open | pending | |
 | 0064 | `feature/0064-compliance-report-generation` | feature | 2026-07-20 | open | pending | |
 | 0065 | `feature/0065-self-service-password-change` | feature | 2026-07-20 | open | pending | |
+| 0066 | `feature/0066-analysis-config-api-key-encryption` | feature | 2026-07-20 | open | pending | |
