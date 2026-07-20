@@ -4893,3 +4893,27 @@ architectural decision.
   `/audit-log/auth/<session_id>`.
 - **PR:** #131
 - **ADR:** docs/adr/0101-session-revocation-audit-log.md
+
+## [2026-07-20] feature/0102-scrub-audit-log-error-responses — Scrub audit log error responses
+- **Type:** feature
+- **Branch:** feature/0102-scrub-audit-log-error-responses
+- **Summary:** An eleventh audit pass, widened to backend error-handling consistency, found
+  three `auth-service` handlers (`get_user_audit_log`, `get_recent_audit_log`,
+  `post_session_revoked_audit` — the last introduced in the immediately prior PR) passed raw
+  backend error text straight into the HTTP response, unlike `user_error_response`'s established
+  log-and-scrub pattern used by create/update/delete user. All three now log the real error via
+  `tracing::error!` and return the same generic message `user_error_response` already uses. A
+  second finding from the same pass (config-admin-service/retention-service's tenant-mismatch
+  responses) was investigated and found to be a false positive — those checks compare the
+  request body's tenant_id against the header before any entity lookup, so 403 is correct there;
+  no change made.
+- **Tests:** `cargo test -p auth-service --lib` — 160 passed (3 new:
+  `get_user_audit_log_backend_failure_does_not_leak_the_raw_error`,
+  `get_recent_audit_log_backend_failure_does_not_leak_the_raw_error`,
+  `post_session_revoked_audit_backend_failure_does_not_leak_the_raw_error`). `cargo build
+  --workspace`, `cargo clippy -p auth-service --all-targets --all-features -- -D warnings`,
+  `cargo fmt --all --check` all clean. No file exceeds 500 lines. Live-verified against the real
+  `watkinslabs` tenant: confirmed the normal (non-error) path for `/audit-log` still works after
+  redeploy.
+- **PR:** #132
+- **ADR:** docs/adr/0102-scrub-audit-log-error-responses.md
