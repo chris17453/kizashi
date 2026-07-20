@@ -142,6 +142,126 @@ async fn post_saves_an_openai_compatible_provider_config() {
     assert!(body.contains("http://localhost:11434/v1"));
 }
 
+/// RBAC-fix regression coverage: leaving the API key field blank on a follow-up save must not
+/// wipe a previously-configured key, since the page can never show the real key to leave in
+/// place — see `AnalysisConfigInput::api_key`'s tri-state doc comment.
+#[tokio::test]
+async fn post_with_a_blank_api_key_field_preserves_a_previously_configured_key() {
+    let (state, session_id, tenant_id) = state_with_session(common::Role::Operator).await;
+    let app = router(state.clone());
+
+    app.oneshot(
+        Request::builder()
+            .method("POST")
+            .uri("/analysis-config")
+            .header("cookie", format!("kizashi_session={session_id}"))
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(Body::from("prompt=first&provider=openai_compatible&api_key=keep-me"))
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/analysis-config")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("prompt=second&provider=openai_compatible"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let stored = state
+        .analysis_config_client
+        .get_analysis_config(tenant_id)
+        .await
+        .unwrap()
+        .expect("config should exist");
+    assert_eq!(stored.api_key, Some("keep-me".to_string()));
+}
+
+/// Checking "clear the configured API key" explicitly removes it, even though a blank field
+/// alone no longer does.
+#[tokio::test]
+async fn post_with_clear_api_key_checked_removes_a_previously_configured_key() {
+    let (state, session_id, tenant_id) = state_with_session(common::Role::Operator).await;
+    let app = router(state.clone());
+
+    app.oneshot(
+        Request::builder()
+            .method("POST")
+            .uri("/analysis-config")
+            .header("cookie", format!("kizashi_session={session_id}"))
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(Body::from("prompt=first&provider=openai_compatible&api_key=clear-me"))
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/analysis-config")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("prompt=second&provider=openai_compatible&clear_api_key=true"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let stored = state
+        .analysis_config_client
+        .get_analysis_config(tenant_id)
+        .await
+        .unwrap()
+        .expect("config should exist");
+    assert_eq!(stored.api_key, None);
+}
+
+/// The rendered page never echoes a real API key back into the form, but does tell the operator
+/// one is already configured so they know a blank field isn't the same as "no key set".
+#[tokio::test]
+async fn get_page_never_shows_the_real_api_key_but_flags_it_as_configured() {
+    let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
+
+    router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/analysis-config")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("prompt=x&provider=openai_compatible&api_key=top-secret-value"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/analysis-config")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("top-secret-value"));
+    assert!(body.contains("already configured"));
+}
+
 #[tokio::test]
 async fn post_rejects_a_viewer_role() {
     let (state, session_id, _tenant_id) = state_with_session(common::Role::Viewer).await;

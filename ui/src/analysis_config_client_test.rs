@@ -29,12 +29,19 @@ impl AnalysisConfigClient for InMemoryAnalysisConfigClient {
         if !role.at_least(Role::Operator) {
             return Err(AnalysisConfigClientError::Rejected(403));
         }
+        let existing_api_key =
+            self.configs.lock().unwrap().get(&tenant_id).and_then(|c| c.api_key.clone());
+        let api_key = match input.api_key {
+            Some(explicit) => explicit.map(str::to_string),
+            None => existing_api_key,
+        };
         let view = AnalysisConfigView {
             prompt: input.prompt.to_string(),
             provider: input.provider,
             model: input.model.map(str::to_string),
             endpoint: input.endpoint.map(str::to_string),
-            api_key: input.api_key.map(str::to_string),
+            api_key_configured: api_key.is_some(),
+            api_key,
         };
         self.configs.lock().unwrap().insert(tenant_id, view.clone());
         Ok(view)

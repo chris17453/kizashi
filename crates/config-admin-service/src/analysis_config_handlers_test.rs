@@ -248,3 +248,134 @@ async fn get_returns_500_on_backend_failure() {
     let response = send(router(state), "GET", Some(Uuid::new_v4()), None, None).await;
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
+
+/// RBAC audit fix: GET /v1/analysis-config must never expose the real `api_key`, to *any*
+/// caller — including Viewer, the lowest role tier, and even a request with no role header at
+/// all (this endpoint never gated on role in the first place, which is exactly how a Viewer
+/// could read it). Only `api_key_configured` may reveal that a key exists.
+#[tokio::test]
+async fn get_never_returns_the_real_api_key_regardless_of_caller_role() {
+    let state = default_state();
+    let tenant_id = Uuid::new_v4();
+    send(
+        router(state.clone()),
+        "PUT",
+        Some(tenant_id),
+        Some("operator"),
+        Some(serde_json::json!({
+            "prompt": "flag urgent issues",
+            "provider": "openai_compatible",
+            "api_key": "super-secret-key",
+        })),
+    )
+    .await;
+
+    for role in [None, Some("viewer"), Some("operator"), Some("admin")] {
+        let response = send(router(state.clone()), "GET", Some(tenant_id), role, None).await;
+        assert_eq!(response.status(), StatusCode::OK, "role {role:?}");
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(
+            !body.to_string().contains("super-secret-key"),
+            "role {role:?} leaked the api_key: {body}"
+        );
+        assert_eq!(body["api_key"], serde_json::Value::Null, "role {role:?}");
+        assert_eq!(body["api_key_configured"], serde_json::json!(true), "role {role:?}");
+    }
+}
+
+#[tokio::test]
+async fn get_reports_api_key_not_configured_when_none_was_ever_set() {
+    let state = default_state();
+    let tenant_id = Uuid::new_v4();
+    send(
+        router(state.clone()),
+        "PUT",
+        Some(tenant_id),
+        Some("operator"),
+        Some(serde_json::json!({"prompt": "no key here"})),
+    )
+    .await;
+
+    let response = send(router(state), "GET", Some(tenant_id), Some("viewer"), None).await;
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["api_key"], serde_json::Value::Null);
+    assert_eq!(body["api_key_configured"], serde_json::json!(false));
+}
+
+/// The write path is unaffected by the read-side redaction: PUT still stores and echoes back
+/// the real key to the operator who just submitted it.
+#[tokio::test]
+async fn put_still_returns_the_real_api_key_to_the_submitting_operator() {
+    let state = default_state();
+    let tenant_id = Uuid::new_v4();
+    let response = send(
+        router(state),
+        "PUT",
+        Some(tenant_id),
+        Some("operator"),
+        Some(serde_json::json!({"prompt": "x", "api_key": "the-real-key"})),
+    )
+    .await;
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let config: AnalysisConfig = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(config.api_key, Some("the-real-key".to_string()));
+}
+
+/// A PUT that omits `api_key` entirely (which is all a form fed by the now-redacted GET
+/// response can ever do) must not clear a previously-configured key — only an explicit
+/// `api_key: null` clears it.
+#[tokio::test]
+async fn put_without_api_key_field_preserves_the_existing_key() {
+    let state = default_state();
+    let tenant_id = Uuid::new_v4();
+    send(
+        router(state.clone()),
+        "PUT",
+        Some(tenant_id),
+        Some("operator"),
+        Some(serde_json::json!({"prompt": "first", "api_key": "keep-me"})),
+    )
+    .await;
+
+    let response = send(
+        router(state.clone()),
+        "PUT",
+        Some(tenant_id),
+        Some("operator"),
+        Some(serde_json::json!({"prompt": "second"})),
+    )
+    .await;
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let config: AnalysisConfig = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(config.prompt, "second");
+    assert_eq!(config.api_key, Some("keep-me".to_string()));
+}
+
+/// An explicit `api_key: null` is still how a caller clears a previously-configured key.
+#[tokio::test]
+async fn put_with_explicit_null_api_key_clears_it() {
+    let state = default_state();
+    let tenant_id = Uuid::new_v4();
+    send(
+        router(state.clone()),
+        "PUT",
+        Some(tenant_id),
+        Some("operator"),
+        Some(serde_json::json!({"prompt": "first", "api_key": "clear-me"})),
+    )
+    .await;
+
+    let response = send(
+        router(state.clone()),
+        "PUT",
+        Some(tenant_id),
+        Some("operator"),
+        Some(serde_json::json!({"prompt": "second", "api_key": null})),
+    )
+    .await;
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let config: AnalysisConfig = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(config.api_key, None);
+}

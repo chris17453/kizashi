@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0058         |
+| feature       | `feature/` | 0059         |
 | fix           | `fix/`     | 0011         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -94,3 +94,4 @@ manually created branches.
 | 0056 | `feature/0056-active-sessions-management` | feature | 2026-07-20 | open | pending | |
 | 0057 | `feature/0057-security-overview-dashboard` | feature | 2026-07-20 | open | pending | |
 | 0010 | `fix/0010-disabled-button-visual-state` | fix | 2026-07-20 | open | pending | |
+| 0058 | `feature/0058-permissions-reference-and-csv-export` | feature | 2026-07-20 | open | pending | |
