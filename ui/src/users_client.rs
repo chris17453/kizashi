@@ -42,6 +42,7 @@ pub trait UsersClient: Send + Sync {
         username: &str,
         password: &str,
         new_user_role: Role,
+        actor: &str,
     ) -> Result<UiUser, UsersClientError>;
 
     async fn update_user_role(
@@ -50,6 +51,7 @@ pub trait UsersClient: Send + Sync {
         role: Role,
         id: Uuid,
         new_role: Role,
+        actor: &str,
     ) -> Result<UiUser, UsersClientError>;
 
     async fn delete_user(
@@ -57,6 +59,7 @@ pub trait UsersClient: Send + Sync {
         tenant_id: Uuid,
         role: Role,
         id: Uuid,
+        actor: &str,
     ) -> Result<(), UsersClientError>;
 }
 
@@ -100,12 +103,14 @@ impl UsersClient for HttpUsersClient {
         username: &str,
         password: &str,
         new_user_role: Role,
+        actor: &str,
     ) -> Result<UiUser, UsersClientError> {
         let response = self
             .client
             .post(format!("{}/v1/users", self.auth_service_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(&serde_json::json!({
                 "username": username,
                 "password": password,
@@ -127,12 +132,14 @@ impl UsersClient for HttpUsersClient {
         role: Role,
         id: Uuid,
         new_role: Role,
+        actor: &str,
     ) -> Result<UiUser, UsersClientError> {
         let response = self
             .client
             .put(format!("{}/v1/users/{id}", self.auth_service_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(&serde_json::json!({ "role": new_role }))
             .send()
             .await
@@ -149,12 +156,14 @@ impl UsersClient for HttpUsersClient {
         tenant_id: Uuid,
         role: Role,
         id: Uuid,
+        actor: &str,
     ) -> Result<(), UsersClientError> {
         let response = self
             .client
             .delete(format!("{}/v1/users/{id}", self.auth_service_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .send()
             .await
             .map_err(|e| UsersClientError::Unreachable(e.to_string()))?;

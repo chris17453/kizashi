@@ -119,7 +119,14 @@ pub async fn post_users(
 
     if let Err(e) = state
         .users_client
-        .create_user(session.tenant_id, session.role, &form.username, &form.password, form.role)
+        .create_user(
+            session.tenant_id,
+            session.role,
+            &form.username,
+            &form.password,
+            form.role,
+            &session.username,
+        )
         .await
     {
         return rerender_with_error(&state, &session, e.to_string()).await;
@@ -144,8 +151,10 @@ pub async fn post_update_user_role(
         Err(response) => return response,
     };
 
-    if let Err(e) =
-        state.users_client.update_user_role(session.tenant_id, session.role, id, form.role).await
+    if let Err(e) = state
+        .users_client
+        .update_user_role(session.tenant_id, session.role, id, form.role, &session.username)
+        .await
     {
         return rerender_with_error(&state, &session, e.to_string()).await;
     }
@@ -163,6 +172,9 @@ pub async fn post_delete_user(
         Err(response) => return response,
     };
 
-    let _ = state.users_client.delete_user(session.tenant_id, session.role, id).await;
+    let _ = state
+        .users_client
+        .delete_user(session.tenant_id, session.role, id, &session.username)
+        .await;
     Redirect::to("/users").into_response()
 }

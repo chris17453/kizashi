@@ -37,6 +37,7 @@ pub trait EgressAllowlistClient: Send + Sync {
         tenant_id: Uuid,
         role: Role,
         domains: Vec<String>,
+        actor: &str,
     ) -> Result<Vec<String>, EgressAllowlistClientError>;
 }
 
@@ -76,12 +77,14 @@ impl EgressAllowlistClient for HttpEgressAllowlistClient {
         tenant_id: Uuid,
         role: Role,
         domains: Vec<String>,
+        actor: &str,
     ) -> Result<Vec<String>, EgressAllowlistClientError> {
         let response = self
             .client
             .put(format!("{}/v1/allowlist", self.egress_gateway_url))
             .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
+            .header("x-username", actor)
             .json(&serde_json::json!({"domains": domains}))
             .send()
             .await

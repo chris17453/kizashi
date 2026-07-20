@@ -35,6 +35,7 @@ impl UsersClient for InMemoryUsersClient {
         username: &str,
         _password: &str,
         new_user_role: Role,
+        _actor: &str,
     ) -> Result<UiUser, UsersClientError> {
         let user = UiUser {
             id: Uuid::new_v4(),
@@ -52,6 +53,7 @@ impl UsersClient for InMemoryUsersClient {
         _role: Role,
         id: Uuid,
         new_role: Role,
+        _actor: &str,
     ) -> Result<UiUser, UsersClientError> {
         let mut users = self.users.lock().unwrap();
         let user = users
@@ -67,6 +69,7 @@ impl UsersClient for InMemoryUsersClient {
         tenant_id: Uuid,
         _role: Role,
         id: Uuid,
+        _actor: &str,
     ) -> Result<(), UsersClientError> {
         self.users.lock().unwrap().retain(|u| !(u.id == id && u.tenant_id == tenant_id));
         Ok(())
@@ -92,6 +95,7 @@ impl UsersClient for FailingUsersClient {
         _username: &str,
         _password: &str,
         _new_user_role: Role,
+        _actor: &str,
     ) -> Result<UiUser, UsersClientError> {
         Err(UsersClientError::Unreachable("simulated failure".to_string()))
     }
@@ -102,6 +106,7 @@ impl UsersClient for FailingUsersClient {
         _role: Role,
         _id: Uuid,
         _new_role: Role,
+        _actor: &str,
     ) -> Result<UiUser, UsersClientError> {
         Err(UsersClientError::Unreachable("simulated failure".to_string()))
     }
@@ -111,6 +116,7 @@ impl UsersClient for FailingUsersClient {
         _tenant_id: Uuid,
         _role: Role,
         _id: Uuid,
+        _actor: &str,
     ) -> Result<(), UsersClientError> {
         Err(UsersClientError::Unreachable("simulated failure".to_string()))
     }
@@ -130,8 +136,12 @@ async fn spawn_stub_server() -> String {
         .into_response()
     }
     async fn create_handler(
+        headers: HeaderMap,
         JsonExtractor(body): JsonExtractor<serde_json::Value>,
     ) -> axum::response::Response {
+        if headers.get("x-username").is_none() {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
         (
             axum::http::StatusCode::CREATED,
             Json(serde_json::json!({
@@ -185,7 +195,7 @@ async fn http_client_creates_a_user_against_a_real_server() {
     let client = HttpUsersClient::new(reqwest::Client::new(), url);
 
     let user = client
-        .create_user(Uuid::new_v4(), Role::Admin, "bob", "a-real-password", Role::Operator)
+        .create_user(Uuid::new_v4(), Role::Admin, "bob", "a-real-password", Role::Operator, "alice")
         .await
         .unwrap();
 
@@ -199,7 +209,7 @@ async fn http_client_updates_a_users_role_against_a_real_server() {
     let client = HttpUsersClient::new(reqwest::Client::new(), url);
 
     let user = client
-        .update_user_role(Uuid::new_v4(), Role::Admin, Uuid::new_v4(), Role::Admin)
+        .update_user_role(Uuid::new_v4(), Role::Admin, Uuid::new_v4(), Role::Admin, "alice")
         .await
         .unwrap();
 
@@ -211,7 +221,7 @@ async fn http_client_deletes_a_user_against_a_real_server() {
     let url = spawn_stub_server().await;
     let client = HttpUsersClient::new(reqwest::Client::new(), url);
 
-    client.delete_user(Uuid::new_v4(), Role::Admin, Uuid::new_v4()).await.unwrap();
+    client.delete_user(Uuid::new_v4(), Role::Admin, Uuid::new_v4(), "alice").await.unwrap();
 }
 
 #[tokio::test]
@@ -219,4 +229,49 @@ async fn http_client_returns_unreachable_when_server_is_down() {
     let client = HttpUsersClient::new(reqwest::Client::new(), "http://127.0.0.1:1".to_string());
     let err = client.list_users(Uuid::new_v4(), Role::Admin).await.unwrap_err();
     assert!(matches!(err, UsersClientError::Unreachable(_)));
+}
+
+#[tokio::test]
+async fn http_client_sends_x_username_header_on_create_user() {
+    use std::sync::Arc;
+
+    let captured: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let captured_for_handler = captured.clone();
+
+    async fn create_handler(
+        axum::extract::State(captured): axum::extract::State<Arc<Mutex<Option<String>>>>,
+        headers: HeaderMap,
+        JsonExtractor(body): JsonExtractor<serde_json::Value>,
+    ) -> axum::response::Response {
+        *captured.lock().unwrap() =
+            headers.get("x-username").and_then(|v| v.to_str().ok()).map(str::to_string);
+        (
+            axum::http::StatusCode::CREATED,
+            Json(serde_json::json!({
+                "id": "11111111-1111-1111-1111-111111111111",
+                "tenant_id": "22222222-2222-2222-2222-222222222222",
+                "username": body["username"],
+                "role": body["role"]
+            })),
+        )
+            .into_response()
+    }
+
+    let app = Router::new()
+        .route("/v1/users", axum::routing::post(create_handler))
+        .with_state(captured_for_handler);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let url = format!("http://{addr}");
+
+    let client = HttpUsersClient::new(reqwest::Client::new(), url);
+    client
+        .create_user(Uuid::new_v4(), Role::Admin, "bob", "a-real-password", Role::Operator, "carol")
+        .await
+        .unwrap();
+
+    assert_eq!(captured.lock().unwrap().as_deref(), Some("carol"));
 }

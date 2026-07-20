@@ -3249,3 +3249,28 @@ architectural decision.
   still open (SSO/auth-provider config UI, further per-page polish).
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0038](../docs/adr/0038-console-ui-availability-and-usability-fixes.md)
+
+## [2026-07-19] fix/0006-ui-actor-header-batch2 — Console UI sends `X-Username` on API-keys/egress-allowlist/users/retention-policy writes
+- **Type:** fix
+- **Branch:** fix/0006-ui-actor-header-batch2
+- **Summary:** Compliance defect (CLAUDE.md §5): audit-log entries recorded the tenant, never
+  the real acting user. This is the Console UI half of the fix — `ApiKeysClient`,
+  `EgressAllowlistClient`, `UsersClient`, and `RetentionPoliciesClient`'s mutating methods
+  (`create_api_key`/`revoke_api_key`, `put_allowlist`, `create_user`/`update_user_role`/
+  `delete_user`, `create_policy`/`update_policy`/`delete_policy`) now take a trailing
+  `actor: &str` parameter and send it as the `x-username` header alongside the existing
+  `x-tenant-id`/`x-role` headers, matching the codebase's lowercase header convention. Every
+  call site in `api_keys_handler.rs`, `egress_allowlist_handler.rs`, `users_handler.rs`,
+  `retention_policies_handler.rs`, and `sensor_script_handler.rs` (the auto-generated-API-key
+  path) now passes `&session.username` from the authenticated `Session`. Backend services
+  (auth-service, config-admin-service, retention-service, ingestion-gateway) reading this header
+  and using it as the real audit-log actor are a parallel, separate change.
+- **Tests:** `cargo test -p kizashi-ui --all-features` — 244 passed, 0 failed (up from prior
+  count; added `http_client_sends_x_username_header_on_create` in
+  `api_keys_client_test.rs` and `http_client_sends_x_username_header_on_create_user` in
+  `users_client_test.rs`, each spinning a real axum stub server and asserting the exact
+  `x-username` header value received). `cargo clippy -p kizashi-ui --all-targets --all-features
+  -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo build --workspace
+  --all-targets` — clean.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a
