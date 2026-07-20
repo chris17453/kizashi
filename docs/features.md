@@ -5010,5 +5010,5 @@ architectural decision.
   moved a message back through the pipeline, which failed against its actually-stale trigger
   reference and correctly re-dead-lettered — proving both the happy path and the "still broken"
   path work as designed. Auth also verified (401 with no/wrong secret).
-- **PR:** pending
+- **PR:** #136
 - **ADR:** docs/adr/0106-dead-letter-queue-visibility-and-replay.md
