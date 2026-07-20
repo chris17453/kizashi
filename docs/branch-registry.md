@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0064         |
-| fix           | `fix/`     | 0011         |
+| fix           | `fix/`     | 0012         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
 | chore         | `chore/`   | 0004         |
@@ -100,3 +100,4 @@ manually created branches.
 | 0061 | `feature/0061-login-attempt-anomaly-alerting` | feature | 2026-07-20 | open | pending | |
 | 0062 | `feature/0062-data-subject-rights-export-and-delete` | feature | 2026-07-20 | open | pending | |
 | 0063 | `feature/0063-backup-service-and-dr-visibility` | feature | 2026-07-20 | open | pending | |
+| 0011 | `fix/0011-pg-dump-version-mismatch` | fix | 2026-07-20 | open | pending | |

@@ -3886,3 +3886,26 @@ architectural decision.
   and `cargo audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0055-backup-service-and-dr-visibility.md
+
+## [2026-07-20] fix/0011-pg-dump-version-mismatch — Fix pg_dump/server major-version mismatch in backup-service
+- **Type:** fix
+- **Branch:** fix/0011-pg-dump-version-mismatch
+- **Summary:** Live-verifying feature/0063 immediately after deploy surfaced a real failure:
+  every triggered backup failed with `pg_dump: error: aborting because of server version
+  mismatch` — Debian bookworm's default apt repo ships `postgresql-client-15`, one major version
+  behind `docker-compose.yml`'s `postgres:16-alpine`, and `pg_dump` refuses to dump a server
+  newer than itself. This was flagged as a *possible* future risk in ADR-0055's Consequences
+  section but actually hit on the very first live run, not just a hypothetical drift. Fixed by
+  pulling `postgresql-client-16` from the official PGDG apt repo (`apt.postgresql.org`) instead
+  of Debian's own, so the client always matches the major version `docker-compose.yml` actually
+  runs. Confirmed via `docker run --entrypoint pg_dump kizashi-backup-service --version` (now
+  16.14, matching the server's 16.13/16.14) and a real triggered backup succeeding
+  (`size_bytes: 5872812`, visible in MinIO via `mc ls` and on the `/security/backups` Console UI
+  page).
+- **Tests:** No new automated test (the failure mode is "the installed apt package version" —
+  not something a unit/integration test running inside the already-built image can catch; the
+  verification that matters here is the live one performed and recorded above). `cargo build
+  --workspace`, `cargo clippy -p backup-service --all-targets --all-features -- -D warnings`,
+  `cargo fmt --all --check` all still clean (Dockerfile-only change, no Rust source touched).
+- **PR:** pending
+- **ADR:** n/a (implementation detail of ADR-0055, not a new architectural decision)
