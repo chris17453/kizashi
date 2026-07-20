@@ -19,8 +19,11 @@ pub struct UiUser {
 pub enum UsersClientError {
     #[error("auth service unreachable: {0}")]
     Unreachable(String),
-    #[error("auth service rejected the request: HTTP {0}")]
-    Rejected(u16),
+    /// `message` is the backend's own `{"error": "..."}` body when present (e.g. a password
+    /// policy rejection) -- surfacing it lets an admin see *why* a create/update was rejected
+    /// instead of just an HTTP status code, ADR-0052.
+    #[error("auth service rejected the request: HTTP {status}: {message}")]
+    Rejected { status: u16, message: String },
 }
 
 /// User management/role-assignment (ADR-0016 follow-up: the "assign role to another user"
@@ -63,6 +66,22 @@ pub trait UsersClient: Send + Sync {
     ) -> Result<(), UsersClientError>;
 }
 
+/// Reads the backend's `{"error": "..."}` body when present, falling back to a generic message
+/// if the response isn't JSON-shaped that way (e.g. a proxy/gateway error page).
+async fn rejected_error(response: reqwest::Response) -> UsersClientError {
+    let status = response.status().as_u16();
+    #[derive(serde::Deserialize)]
+    struct ErrorBody {
+        error: String,
+    }
+    let message = response
+        .json::<ErrorBody>()
+        .await
+        .map(|body| body.error)
+        .unwrap_or_else(|_| "no further detail available".to_string());
+    UsersClientError::Rejected { status, message }
+}
+
 pub struct HttpUsersClient {
     client: reqwest::Client,
     auth_service_url: String,
@@ -91,7 +110,7 @@ impl UsersClient for HttpUsersClient {
             .map_err(|e| UsersClientError::Unreachable(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(UsersClientError::Rejected(response.status().as_u16()));
+            return Err(rejected_error(response).await);
         }
         response.json().await.map_err(|e| UsersClientError::Unreachable(e.to_string()))
     }
@@ -121,7 +140,7 @@ impl UsersClient for HttpUsersClient {
             .map_err(|e| UsersClientError::Unreachable(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(UsersClientError::Rejected(response.status().as_u16()));
+            return Err(rejected_error(response).await);
         }
         response.json().await.map_err(|e| UsersClientError::Unreachable(e.to_string()))
     }
@@ -146,7 +165,7 @@ impl UsersClient for HttpUsersClient {
             .map_err(|e| UsersClientError::Unreachable(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(UsersClientError::Rejected(response.status().as_u16()));
+            return Err(rejected_error(response).await);
         }
         response.json().await.map_err(|e| UsersClientError::Unreachable(e.to_string()))
     }
@@ -169,7 +188,7 @@ impl UsersClient for HttpUsersClient {
             .map_err(|e| UsersClientError::Unreachable(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(UsersClientError::Rejected(response.status().as_u16()));
+            return Err(rejected_error(response).await);
         }
         Ok(())
     }

@@ -3774,3 +3774,24 @@ architectural decision.
   unchanged -- no new advisories from the new dependency).
 - **PR:** pending
 - **ADR:** docs/adr/0051-totp-multi-factor-authentication.md
+
+## [2026-07-20] feature/0060-password-policy-enforcement — Password policy enforcement
+- **Type:** feature
+- **Branch:** feature/0060-password-policy-enforcement
+- **Summary:** Closes another gap from the ADR-0051 compliance rubric: `create_user` (the only
+  path that ever sets a password) previously had no length/strength check at all. Adds
+  `validate_password_strength` (min 12 chars, max 128, must not equal the username, rejects a
+  small known-weak blocklist), enforced server-side with a specific rejection reason. Along the
+  way, fixed a real UX gap: the Console UI's `UsersClientError::Rejected` only carried an HTTP
+  status code, not the backend's actual error message, so an admin would have seen "HTTP 400"
+  with no explanation — now surfaces the real reason. Users page form gained a matching
+  `minlength` hint.
+- **Tests:** `cargo test -p auth-service --lib` (128 passed, incl. 9 new `password_policy` unit
+  tests and 3 new `create_user` rejection tests); `cargo test -p kizashi-ui --lib` (342 passed,
+  incl. a new test proving the backend's error message round-trips through the client). Full
+  workspace gate green: `cargo build --workspace`, `cargo test --workspace --all-features`
+  against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (111 test binaries, 0 failures),
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all
+  --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
+- **PR:** pending
+- **ADR:** docs/adr/0052-password-policy-enforcement.md

@@ -18,6 +18,7 @@ mod mfa_repository;
 mod oidc_client;
 mod oidc_handler;
 mod password;
+mod password_policy;
 mod session_client;
 mod tenant_branding_repository;
 mod tenant_repository;
@@ -47,6 +48,7 @@ pub use oidc_client::{
 };
 pub use oidc_handler::{authorize, callback, AuthorizeResponse, OidcCallbackRequest, OidcClients};
 pub use password::{hash_password, verify_password, PasswordError};
+pub use password_policy::{validate_password_strength, PasswordPolicyError};
 pub use session_client::{HttpSessionClient, SessionClient, SessionClientError};
 pub use tenant_branding_repository::{
     PostgresTenantBrandingRepository, TenantBranding, TenantBrandingRepository,

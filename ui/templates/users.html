@@ -13,7 +13,8 @@
     <input type="text" id="username" name="username" required>
 
     <label for="password">Password</label>
-    <input type="password" id="password" name="password" required>
+    <input type="password" id="password" name="password" minlength="12" required>
+    <p class="muted" style="font-size:0.8em; margin-top:0.2rem;">At least 12 characters. Must not match the username or a commonly used password.</p>
 
     <label for="role">Role</label>
     <select id="role" name="role" required>

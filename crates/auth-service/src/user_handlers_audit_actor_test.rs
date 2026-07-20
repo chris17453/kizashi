@@ -18,7 +18,7 @@ async fn create_user_requires_a_username_header() {
         Some(tenant_id),
         Some("admin"),
         None,
-        Some(serde_json::json!({"username": "bob", "password": "hunter2pass", "role": "operator"})),
+        Some(serde_json::json!({"username": "bob", "password": "hunter2pass-is-long-enough", "role": "operator"})),
     )
     .await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -93,7 +93,7 @@ async fn create_user_threads_the_real_username_through_as_the_audit_actor() {
         Some(tenant_id),
         Some("admin"),
         Some("carol-the-admin"),
-        Some(serde_json::json!({"username": "bob", "password": "hunter2pass", "role": "operator"})),
+        Some(serde_json::json!({"username": "bob", "password": "hunter2pass-is-long-enough", "role": "operator"})),
     )
     .await;
     assert_eq!(response.status(), StatusCode::CREATED);
