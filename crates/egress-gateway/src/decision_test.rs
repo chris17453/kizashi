@@ -32,7 +32,7 @@ async fn allows_and_logs_when_no_allowlist_is_configured() {
 async fn denies_when_the_tenant_has_an_allowlist_that_excludes_the_host() {
     let (deps, _audit_log) = deps_with_audit_log();
     deps.allowlist_repository
-        .set_domains("tenant-a", vec!["zendesk.com".to_string()])
+        .set_domains("tenant-a", vec!["zendesk.com".to_string()], "test-actor")
         .await
         .unwrap();
     let identity = Some(CallerIdentity {
@@ -50,7 +50,7 @@ async fn denies_when_the_tenant_has_an_allowlist_that_excludes_the_host() {
 async fn allows_when_the_host_matches_the_tenants_allowlist() {
     let (deps, _audit_log) = deps_with_audit_log();
     deps.allowlist_repository
-        .set_domains("tenant-a", vec!["zendesk.com".to_string()])
+        .set_domains("tenant-a", vec!["zendesk.com".to_string()], "test-actor")
         .await
         .unwrap();
     let identity = Some(CallerIdentity {
@@ -91,7 +91,7 @@ async fn every_decision_writes_exactly_one_audit_entry() {
 async fn a_denied_decision_is_logged_as_not_allowed() {
     let (deps, audit_log) = deps_with_audit_log();
     deps.allowlist_repository
-        .set_domains("tenant-a", vec!["zendesk.com".to_string()])
+        .set_domains("tenant-a", vec!["zendesk.com".to_string()], "test-actor")
         .await
         .unwrap();
     let identity = Some(CallerIdentity {

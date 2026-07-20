@@ -217,6 +217,10 @@ pub struct AppState {
     /// three (see `IngestionGatewayApiKeyAuditLogClient`'s doc comment), so it isn't just
     /// another `HttpAuditLogClient` pointed at a different base URL.
     pub ingestion_audit_log_client: Arc<dyn AuditLogClient>,
+    /// `egress-gateway`'s per-tenant allowlist audit trail. Matches the shared
+    /// `GET /v1/audit-log/:entity_id` shape (ADR-0097), so it reuses `HttpAuditLogClient` like
+    /// the config/retention/auth trio above, just pointed at `egress-gateway`.
+    pub egress_audit_log_client: Arc<dyn AuditLogClient>,
     /// The ingestion-gateway URL a *deployed connector* should point at — not necessarily
     /// reachable from inside this container (e.g. a customer-hosted connector polling in from
     /// outside the platform's own network), so it's a separate, operator-configurable value

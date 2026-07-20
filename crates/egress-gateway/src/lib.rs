@@ -4,6 +4,7 @@
 //! optional per-tenant domain allowlist — without decrypting/inspecting HTTPS traffic itself.
 
 mod allowlist;
+mod allowlist_audit_log;
 mod audit_log;
 mod decision;
 mod health;
@@ -12,6 +13,10 @@ mod target;
 
 pub use allowlist::{
     is_host_allowed, AllowlistError, AllowlistRepository, PostgresAllowlistRepository,
+};
+pub use allowlist_audit_log::{
+    AllowlistAuditLogEntry, AllowlistAuditLogError, AllowlistAuditLogReader, AllowlistChangeType,
+    PostgresAllowlistAuditLogReader,
 };
 pub use audit_log::{AuditLogEntry, AuditLogError, AuditLogRepository, PostgresAuditLogRepository};
 pub use decision::{decide, Decision, ProxyDeps};

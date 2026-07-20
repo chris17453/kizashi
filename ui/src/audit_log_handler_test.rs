@@ -68,6 +68,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         retention_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         auth_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         ingestion_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
+        egress_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         users_client: Arc::new(
             crate::users_client::users_client_test::InMemoryUsersClient::default(),
         ),
@@ -183,6 +184,33 @@ async fn shows_entries_from_the_ingestion_client_for_the_ingestion_service() {
         .oneshot(
             Request::builder()
                 .uri(format!("/audit-log/ingestion/{entity_id}"))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("created"));
+    assert!(body.contains("high-volume"));
+}
+
+#[tokio::test]
+async fn shows_entries_from_the_egress_client_for_the_egress_service() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
+    let entity_id = Uuid::new_v4();
+    let egress_client = Arc::new(InMemoryAuditLogClient::default());
+    egress_client.entries.lock().unwrap().insert(entity_id, vec![sample_entry(entity_id)]);
+    let mut state = state;
+    state.egress_audit_log_client = egress_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/audit-log/egress/{entity_id}"))
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),

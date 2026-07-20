@@ -50,7 +50,8 @@ struct AuditLogTemplate {
 /// GET /audit-log/:service/:entity_id — the immutable audit trail CLAUDE.md §5 requires for
 /// every admin/config mutation. `:service` selects which backend owns the entity (`config`:
 /// triggers/mappings/agents/analysis-config, `retention`: retention policies, `auth`: users/
-/// tenant branding, or `ingestion`: API keys) — every write page already writes to this trail
+/// tenant branding, `ingestion`: API keys, or `egress`: the tenant egress allowlist) — every
+/// write page already writes to this trail
 /// via `record_audit_entry`, but until now
 /// nothing in the Console UI could read it back.
 pub async fn get_audit_log(
@@ -69,6 +70,7 @@ pub async fn get_audit_log(
         "retention" => &state.retention_audit_log_client,
         "auth" => &state.auth_audit_log_client,
         "ingestion" => &state.ingestion_audit_log_client,
+        "egress" => &state.egress_audit_log_client,
         _ => {
             return Html(
                 AuditLogTemplate {

@@ -76,6 +76,9 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
         ingestion_audit_log_client: Arc::new(
             crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default(),
         ),
+        egress_audit_log_client: Arc::new(
+            crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient::default(),
+        ),
         users_client: Arc::new(
             crate::users_client::users_client_test::InMemoryUsersClient::default(),
         ),
@@ -109,6 +112,27 @@ async fn shows_an_empty_allowlist_by_default() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("no restriction") || body.contains("Egress"));
+}
+
+#[tokio::test]
+async fn shows_a_link_to_the_audit_history_scoped_to_the_tenant() {
+    let (state, session_id, tenant_id) = state_with_session(common::Role::Admin).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/egress-allowlist")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(&format!("/audit-log/egress/{tenant_id}")));
 }
 
 #[tokio::test]

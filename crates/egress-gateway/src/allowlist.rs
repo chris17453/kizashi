@@ -2,8 +2,12 @@
 #[cfg(test)]
 pub(crate) mod allowlist_test;
 
+use crate::allowlist_audit_log::{
+    record_allowlist_audit_entry, AllowlistAuditLogEntry, AllowlistChangeType,
+};
 use async_trait::async_trait;
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum AllowlistError {
@@ -19,10 +23,14 @@ pub trait AllowlistRepository: Send + Sync {
     /// Empty result means "no allowlist configured" — every destination is allowed
     /// (ADR-0021: opt-in restriction, not default-deny).
     async fn get_domains(&self, tenant_id: &str) -> Result<Vec<String>, AllowlistError>;
+    /// `actor` is written to `allowlist_audit_log` in the same transaction as the domain
+    /// change (CLAUDE.md §5 — every mutable config entity ships with an audit-log write;
+    /// this one had none until ADR-0097).
     async fn set_domains(
         &self,
         tenant_id: &str,
         domains: Vec<String>,
+        actor: &str,
     ) -> Result<(), AllowlistError>;
 }
 
@@ -63,7 +71,26 @@ impl AllowlistRepository for PostgresAllowlistRepository {
         &self,
         tenant_id: &str,
         domains: Vec<String>,
+        actor: &str,
     ) -> Result<(), AllowlistError> {
+        let tenant_uuid = Uuid::parse_str(tenant_id)
+            .map_err(|e| AllowlistError::Backend(format!("tenant_id is not a valid UUID: {e}")))?;
+
+        let mut tx = self.pool.begin().await.map_err(|e| AllowlistError::Backend(e.to_string()))?;
+
+        let existing: Option<(Vec<String>,)> =
+            sqlx::query_as("SELECT domains FROM tenant_allowlists WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| AllowlistError::Backend(e.to_string()))?;
+        let before = existing.map(|(domains,)| domains);
+        let change_type = if before.is_some() {
+            AllowlistChangeType::Updated
+        } else {
+            AllowlistChangeType::Created
+        };
+
         sqlx::query(
             r#"
             INSERT INTO tenant_allowlists (tenant_id, domains)
@@ -73,9 +100,28 @@ impl AllowlistRepository for PostgresAllowlistRepository {
         )
         .bind(tenant_id)
         .bind(&domains)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| AllowlistError::Backend(e.to_string()))?;
+
+        record_allowlist_audit_entry(
+            &mut tx,
+            &AllowlistAuditLogEntry {
+                id: Uuid::new_v4(),
+                tenant_id: tenant_uuid,
+                entity_type: "egress_allowlist".to_string(),
+                entity_id: tenant_uuid,
+                change_type,
+                actor: actor.to_string(),
+                before: before.map(|d| serde_json::json!({"domains": d})),
+                after: serde_json::json!({"domains": domains}),
+                changed_at: chrono::Utc::now(),
+            },
+        )
+        .await
+        .map_err(|e| AllowlistError::Backend(e.to_string()))?;
+
+        tx.commit().await.map_err(|e| AllowlistError::Backend(e.to_string()))?;
         Ok(())
     }
 }
