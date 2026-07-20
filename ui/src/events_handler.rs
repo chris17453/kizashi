@@ -18,6 +18,47 @@ fn default_page() -> i64 {
 pub struct EventsQuery {
     #[serde(default = "default_page")]
     pub page: i64,
+    #[serde(default)]
+    pub q: String,
+    #[serde(default)]
+    pub sort: String,
+    #[serde(default)]
+    pub dir: String,
+}
+
+/// Case-insensitive substring match across event_type/group_key/status -- same shape as the
+/// other list-page searches (ADR-0062). Like Triggers (ADR-0066), `list_events` is
+/// server-paginated, so this only filters the *current page's* already-fetched events, not the
+/// tenant's full event history.
+fn matches_query(event: &EventSummary, q: &str) -> bool {
+    if q.is_empty() {
+        return true;
+    }
+    let q = q.to_lowercase();
+    event.event_type.to_lowercase().contains(&q)
+        || event.group_key.to_lowercase().contains(&q)
+        || event.status.to_lowercase().contains(&q)
+}
+
+/// Same shape as Triggers' sortable columns (ADR-0070), applied after the search filter and,
+/// like search, only reordering the current page. `list_events` already returns most-recent
+/// first, so an unset `sort` keeps that existing default.
+fn sort_rows(rows: &mut [EventSummary], sort: &str, dir: &str) {
+    match sort {
+        "event_type" => rows.sort_by_key(|e| e.event_type.to_lowercase()),
+        "group_key" => rows.sort_by_key(|e| e.group_key.to_lowercase()),
+        "status" => rows.sort_by_key(|e| e.status.to_lowercase()),
+        _ => {
+            rows.sort_by_key(|e| std::cmp::Reverse(e.occurred_at));
+            if dir == "asc" {
+                rows.reverse();
+            }
+            return;
+        }
+    }
+    if dir == "desc" {
+        rows.reverse();
+    }
 }
 
 /// One bar in the events-over-time chart — `height_pct` is pre-computed server-side (relative
@@ -50,6 +91,9 @@ struct EventsTemplate {
     page: i64,
     has_more: bool,
     error: Option<String>,
+    q: String,
+    sort: String,
+    dir: String,
 }
 
 pub async fn get_events(
@@ -81,19 +125,27 @@ pub async fn get_events(
         .list_events(&session.bearer_token, DEFAULT_PAGE_SIZE as u32, offset)
         .await
     {
-        Ok(result) => Html(
-            EventsTemplate {
-                show_nav: true,
-                events: result.events,
-                chart_bars,
-                page,
-                has_more: result.has_more,
-                error: None,
-            }
-            .render()
-            .unwrap(),
-        )
-        .into_response(),
+        Ok(result) => {
+            let mut events: Vec<EventSummary> =
+                result.events.into_iter().filter(|e| matches_query(e, &query.q)).collect();
+            sort_rows(&mut events, &query.sort, &query.dir);
+            Html(
+                EventsTemplate {
+                    show_nav: true,
+                    events,
+                    chart_bars,
+                    page,
+                    has_more: result.has_more,
+                    error: None,
+                    q: query.q,
+                    sort: query.sort,
+                    dir: query.dir,
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response()
+        }
         Err(e) => Html(
             EventsTemplate {
                 show_nav: true,
@@ -102,6 +154,9 @@ pub async fn get_events(
                 page,
                 has_more: false,
                 error: Some(e.to_string()),
+                q: query.q,
+                sort: query.sort,
+                dir: query.dir,
             }
             .render()
             .unwrap(),

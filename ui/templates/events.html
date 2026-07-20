@@ -18,17 +18,51 @@
 </div>
 {% endif %}
 
+<form class="inline" method="get" action="/events" style="margin-bottom:1rem;">
+  <label for="q">Search</label>
+  <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by type, group, or status&hellip;">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="dir" value="{{ dir }}">
+  <button type="submit">Search</button>
+  {% if !q.is_empty() %}<a href="/events" class="btn-link">Clear</a>{% endif %}
+</form>
+
 {% if events.is_empty() && page == 0 && !has_more %}
 <div class="empty-state">
   <div class="empty-icon">&#9672;</div>
+  {% if q.is_empty() %}
   <p>No events recorded yet for this tenant.</p>
   <p>Events appear here once a trigger fires against analyzed data — check
   <a href="/pipeline">Pipeline Map</a> to see whether records are flowing.</p>
+  {% else %}
+  <p>No events on this page match &ldquo;{{ q }}&rdquo;.</p>
+  {% endif %}
 </div>
 {% else %}
 <table>
   <thead>
-    <tr><th>Event Type</th><th>Group Key</th><th>Status</th><th>Occurred At</th></tr>
+    <tr>
+      <th>
+        <a href="/events?q={{ q }}&sort=event_type&dir={% if sort == "event_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Event Type{% if sort == "event_type" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th>
+        <a href="/events?q={{ q }}&sort=group_key&dir={% if sort == "group_key" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Group Key{% if sort == "group_key" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th>
+        <a href="/events?q={{ q }}&sort=status&dir={% if sort == "status" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Status{% if sort == "status" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th>
+        <a href="/events?q={{ q }}&sort=occurred_at&dir={% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %}desc{% else %}asc{% endif %}{% else %}desc{% endif %}">
+          Occurred At{% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %} &#9650;{% else %} &#9660;{% endif %}{% endif %}
+        </a>
+      </th>
+    </tr>
   </thead>
   <tbody>
     {% for event in events %}
@@ -45,6 +79,9 @@
 <div class="pagination">
   {% if page > 0 %}
   <form method="get" action="/events" class="pagination-form">
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="dir" value="{{ dir }}">
     <input type="hidden" name="page" value="{{ page - 1 }}">
     <button type="submit" class="btn">&larr; Previous</button>
   </form>
@@ -52,6 +89,9 @@
   <span class="muted">Page {{ page + 1 }}</span>
   {% if has_more %}
   <form method="get" action="/events" class="pagination-form">
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="dir" value="{{ dir }}">
     <input type="hidden" name="page" value="{{ page + 1 }}">
     <button type="submit" class="btn">Next &rarr;</button>
   </form>
