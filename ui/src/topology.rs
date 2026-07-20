@@ -35,8 +35,16 @@ pub(crate) const CRITICAL_BACKLOG_THRESHOLD: u64 = 50;
 /// rather than left for a template to zip/index, since Askama's expression grammar makes
 /// index arithmetic (`edges[loop.index0 - 1]`) fragile to get right.
 pub(crate) enum TopologyItem {
-    Stage { label: &'static str, status: String },
-    Edge { label: &'static str, messages: Option<u64>, severity: &'static str },
+    Stage {
+        label: &'static str,
+        status: String,
+    },
+    Edge {
+        label: &'static str,
+        messages: Option<u64>,
+        severity: &'static str,
+        severity_label: &'static str,
+    },
 }
 
 pub(crate) fn severity_for(messages: u64) -> &'static str {
@@ -46,6 +54,19 @@ pub(crate) fn severity_for(messages: u64) -> &'static str {
         "warn"
     } else {
         "critical"
+    }
+}
+
+/// A visible word for `severity`, matching the legend's wording -- severity is otherwise
+/// conveyed only by `edge-line`'s color, unreadable to a color-blind user or in a
+/// contrast-stripped view. Computed here (not compared as a string in the template) since
+/// Askama's `==` against a `&'static str` field doesn't type-check cleanly.
+pub(crate) fn severity_label(severity: &str) -> &'static str {
+    match severity {
+        "ok" => "empty",
+        "warn" => "building",
+        "critical" => "critical",
+        _ => "unknown",
     }
 }
 
@@ -67,7 +88,7 @@ pub(crate) fn build_topology_items(
     let edge_for = |key: &str, label: &'static str| -> TopologyItem {
         let messages = depths.iter().find(|d| d.stage == key).map(|d| d.messages);
         let severity = messages.map(severity_for).unwrap_or("unknown");
-        TopologyItem::Edge { label, messages, severity }
+        TopologyItem::Edge { label, messages, severity, severity_label: severity_label(severity) }
     };
 
     let mut items = Vec::with_capacity(PIPELINE_STAGES.len() + PIPELINE_EDGES.len());

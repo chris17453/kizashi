@@ -54,6 +54,14 @@ fn severity_thresholds_are_ok_warn_critical() {
 }
 
 #[test]
+fn severity_label_gives_a_visible_word_for_each_severity() {
+    assert_eq!(severity_label("ok"), "empty");
+    assert_eq!(severity_label("warn"), "building");
+    assert_eq!(severity_label("critical"), "critical");
+    assert_eq!(severity_label("unknown"), "unknown");
+}
+
+#[test]
 fn an_edge_with_no_backlog_data_is_marked_unknown() {
     let health = health_with(vec![]);
     let items = build_topology_items(&health, &[]);

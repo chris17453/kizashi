@@ -4356,3 +4356,18 @@ architectural decision.
   --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0073-table-header-scope-attributes.md
+
+## [2026-07-20] fix/0015-pipeline-map-severity-text-label — Pipeline Map edge severity gets a visible text label
+- **Type:** fix
+- **Branch:** fix/0014-pipeline-map-severity-text-label (numbering race, see branch-registry.md)
+- **Summary:** Closes another accessibility gap from a fresh audit: Pipeline Map (and its
+  Overview dashboard preview) conveyed queue backlog severity purely through the edge line's
+  color, with visible text showing only the numeric queue count. Every topology edge now
+  carries a `severity_label` ("empty"/"building"/"critical"/"unknown"), computed once in Rust
+  and rendered as `(label)` next to the edge in both templates, matching the existing color
+  legend's wording — so severity no longer depends on color perception alone.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 418 passed (1 new: `severity_label` maps every
+  severity to its visible word). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
+  --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0074-pipeline-map-severity-text-label.md
