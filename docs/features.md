@@ -4982,5 +4982,5 @@ architectural decision.
   real stack: rebuilt/redeployed all three services, confirmed they start healthy (dead-letter
   queue declaration would fail startup otherwise) and confirmed via RabbitMQ's management API
   that all three new dead-letter queues exist alongside the pre-existing one.
-- **PR:** pending
+- **PR:** #135
 - **ADR:** docs/adr/0105-retry-cap-and-dead-letter-for-pipeline-consumers.md
