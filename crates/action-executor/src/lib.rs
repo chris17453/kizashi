@@ -8,6 +8,7 @@ mod execution_repository;
 mod graph_send_mail_action_dispatcher;
 mod health;
 mod process_event;
+mod retry;
 mod routing_action_dispatcher;
 mod smtp_action_dispatcher;
 mod teams_alert_action_dispatcher;
@@ -22,6 +23,9 @@ pub use execution_repository::{
 pub use graph_send_mail_action_dispatcher::GraphSendMailActionDispatcher;
 pub use health::build_router as health_router;
 pub use process_event::{process_event, ActionDeps, ProcessError};
+pub use retry::{
+    retry_count, should_dead_letter, with_incremented_retry_count, MAX_RETRIES, RETRY_COUNT_HEADER,
+};
 pub use routing_action_dispatcher::RoutingActionDispatcher;
 pub use smtp_action_dispatcher::SmtpActionDispatcher;
 pub use teams_alert_action_dispatcher::TeamsAlertActionDispatcher;

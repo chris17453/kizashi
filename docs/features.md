@@ -4960,3 +4960,27 @@ architectural decision.
   clean.
 - **PR:** #134
 - **ADR:** docs/adr/0104-action-executions-immutability-trigger.md
+
+## [2026-07-20] feature/0105-retry-cap-dead-letter-pipeline-consumers — Retry cap and dead-letter for pipeline consumers
+- **Type:** feature
+- **Branch:** feature/0105-retry-cap-dead-letter-pipeline-consumers
+- **Summary:** A fourteenth audit pass found analysis-service was the only one of the four
+  record-pipeline consumers (record.ingested → record.normalized → record.analyzed →
+  event.created) with a retry cap and dead-letter queue — normalization-service, trigger-engine,
+  and action-executor all unconditionally `nack(requeue: true)` on failure with no cap, so a
+  permanently-failing message could be redelivered forever, blocking the rest of that queue.
+  Replicates analysis-service's `retry.rs` module (retry-count header, MAX_RETRIES=5,
+  dead-letter after exceeding it) into all three, each with its own header name and dead-letter
+  queue. The two config-sync consumers (mapping.changed, trigger.changed) were left untouched —
+  different, low-cardinality risk profile.
+- **Tests:** `cargo test -p normalization-service --lib` — 23 passed (5 new retry unit tests).
+  `cargo test -p trigger-engine --lib` — 49 passed (5 new). `cargo test -p action-executor
+  --lib` — 57 passed (5 new). Same unit-test bar analysis-service's own retry.rs uses — no
+  RabbitMQ dead-letter integration test exists for any of the four services, so none was added
+  here either, for consistency. `cargo build --workspace`, `cargo clippy` clean across all three
+  crates, `cargo fmt --all --check` clean. No file exceeds 500 lines. Live-verified against the
+  real stack: rebuilt/redeployed all three services, confirmed they start healthy (dead-letter
+  queue declaration would fail startup otherwise) and confirmed via RabbitMQ's management API
+  that all three new dead-letter queues exist alongside the pre-existing one.
+- **PR:** pending
+- **ADR:** docs/adr/0105-retry-cap-and-dead-letter-for-pipeline-consumers.md

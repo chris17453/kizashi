@@ -10,6 +10,7 @@ mod event_store;
 mod health;
 mod internal_secret;
 mod process_analyzed_record;
+mod retry;
 mod signal_repository;
 mod trigger_repository;
 
@@ -21,6 +22,9 @@ pub use event_store::{ClickHouseEventStore, EventStore, EventStoreError};
 pub use health::build_router as health_router;
 pub use process_analyzed_record::{
     evaluate_trigger, process_analyzed_record, ProcessError, TriggerDeps,
+};
+pub use retry::{
+    retry_count, should_dead_letter, with_incremented_retry_count, MAX_RETRIES, RETRY_COUNT_HEADER,
 };
 pub use signal_repository::{
     AnalyzedSignal, PostgresSignalRepository, SignalRepository, SignalRepositoryError,

@@ -1,16 +1,18 @@
 use futures_util::StreamExt;
 use lapin::options::{
-    BasicAckOptions, BasicConsumeOptions, BasicNackOptions, QueueBindOptions, QueueDeclareOptions,
+    BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions, QueueBindOptions,
+    QueueDeclareOptions,
 };
 use lapin::types::FieldTable;
 use normalization_service::{
-    health_router, process_normalization, source_type_key, HttpRecordClient, NormalizationDeps,
-    PostgresMappingRepository, RabbitMqEventPublisher, MAPPING_CHANGED_EXCHANGE,
-    RECORD_INGESTED_EXCHANGE,
+    health_router, process_normalization, retry_count, should_dead_letter, source_type_key,
+    with_incremented_retry_count, HttpRecordClient, NormalizationDeps, PostgresMappingRepository,
+    RabbitMqEventPublisher, MAPPING_CHANGED_EXCHANGE, RECORD_INGESTED_EXCHANGE,
 };
 use std::sync::Arc;
 
 const QUEUE_NAME: &str = "normalization-service.record.ingested";
+const DEAD_LETTER_QUEUE_NAME: &str = "normalization-service.record.ingested.dead";
 const MAPPING_CHANGED_QUEUE_NAME: &str = "normalization-service.mapping.changed";
 
 #[tokio::main]
@@ -62,6 +64,14 @@ async fn main() {
         )
         .await
         .expect("failed to declare queue");
+    consume_channel
+        .queue_declare(
+            DEAD_LETTER_QUEUE_NAME,
+            QueueDeclareOptions { durable: true, ..Default::default() },
+            FieldTable::default(),
+        )
+        .await
+        .expect("failed to declare dead-letter queue");
     consume_channel
         .queue_bind(
             QUEUE_NAME,
@@ -193,9 +203,37 @@ async fn main() {
                 let _ = delivery.ack(BasicAckOptions::default()).await;
             }
             Err(e) => {
-                tracing::error!(record_id = %record.id, error = %e, "normalization failed, requeueing");
-                let _ =
-                    delivery.nack(BasicNackOptions { requeue: true, ..Default::default() }).await;
+                let headers = delivery.properties.headers().as_ref();
+                if should_dead_letter(headers) {
+                    tracing::error!(
+                        record_id = %record.id,
+                        error = %e,
+                        retries = retry_count(headers),
+                        "message exceeded max retries, dead-lettering"
+                    );
+                    let _ = consume_channel
+                        .basic_publish(
+                            "",
+                            DEAD_LETTER_QUEUE_NAME,
+                            BasicPublishOptions::default(),
+                            &delivery.data,
+                            delivery.properties.clone(),
+                        )
+                        .await;
+                } else {
+                    tracing::error!(record_id = %record.id, error = %e, "normalization failed, requeueing");
+                    let next_headers = with_incremented_retry_count(headers);
+                    let _ = consume_channel
+                        .basic_publish(
+                            "",
+                            QUEUE_NAME,
+                            BasicPublishOptions::default(),
+                            &delivery.data,
+                            delivery.properties.clone().with_headers(next_headers),
+                        )
+                        .await;
+                }
+                let _ = delivery.ack(BasicAckOptions::default()).await;
             }
         }
     }
