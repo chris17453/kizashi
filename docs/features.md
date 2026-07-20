@@ -3663,3 +3663,25 @@ architectural decision.
   --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
 - **PR:** pending
 - **ADR:** docs/adr/0045-global-audit-log-page.md
+
+## [2026-07-20] feature/0056-active-sessions-management — Active sessions management page
+- **Type:** feature
+- **Branch:** feature/0056-active-sessions-management
+- **Summary:** Adds a `GET /security/sessions` admin page listing every active session for the
+  tenant (username, role, sign-in time, current-session flag) and `POST
+  /security/sessions/:id/revoke` to force-terminate one — a standard enterprise-security control
+  (e.g. logging out a departed employee or a suspected-compromised session) that didn't exist
+  before. Extends `Session` with `created_at` and `SessionStore` with `list_for_tenant`, entirely
+  within the Console UI's existing in-memory session store (ADR-0014) — no new backend service or
+  schema. Revoke only ever deletes a session already confirmed to belong to the caller's own
+  tenant. New nav entry between Audit Log and Platform Health.
+- **Tests:** `cargo test -p kizashi-ui --lib` (302 passed, incl. 2 new `session` store tests for
+  `list_for_tenant` and 7 new `sessions_handler` tests: empty state, tenant scoping, non-admin
+  forbidden, login redirect, revoke removes target, revoke rejects cross-tenant, revoke requires
+  admin). Full workspace gate green: `cargo build --workspace`, `cargo test --workspace
+  --all-features` against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0
+  failures), `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt
+  --all --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories,
+  unchanged).
+- **PR:** pending
+- **ADR:** docs/adr/0046-active-sessions-management-page.md

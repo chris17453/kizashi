@@ -31,6 +31,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
             tenant_id,
             username: "alice".to_string(),
             role: common::Role::Admin,
+            created_at: chrono::Utc::now(),
         })
         .await;
     let state = AppState {
@@ -82,6 +83,7 @@ async fn viewer_role_does_not_see_create_form_or_revoke_buttons() {
             tenant_id,
             username: "viewer-alice".to_string(),
             role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
         })
         .await;
 
@@ -119,6 +121,7 @@ async fn operator_role_sees_create_form_and_revoke_buttons() {
             tenant_id,
             username: "operator-alice".to_string(),
             role: common::Role::Operator,
+            created_at: chrono::Utc::now(),
         })
         .await;
 
@@ -212,6 +215,7 @@ async fn post_api_keys_is_rejected_for_a_viewer() {
             tenant_id,
             username: "viewer-alice".to_string(),
             role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
         })
         .await;
 
@@ -272,6 +276,7 @@ async fn post_revoke_api_key_is_rejected_for_a_viewer() {
             tenant_id,
             username: "viewer-alice".to_string(),
             role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
         })
         .await;
 

@@ -27,6 +27,7 @@ async fn state_with_session() -> (AppState, String) {
             tenant_id: Uuid::new_v4(),
             username: "alice".to_string(),
             role: common::Role::Admin,
+            created_at: chrono::Utc::now(),
         })
         .await;
     let state = AppState {

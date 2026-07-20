@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Active Sessions</h1>
+<p class="muted">Every browser currently signed in to this workspace. Revoking a session forces
+that login out immediately, without changing the user's password — use this if someone left the
+team or you suspect a session was compromised. This list only reflects logins started on this
+Console UI instance (ADR-0046).</p>
+
+{% if sessions.is_empty() %}
+<div class="empty-state">
+  <div class="empty-icon">&#128274;</div>
+  <p>No active sessions.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr><th>User</th><th>Role</th><th>Signed in</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for s in sessions %}
+    <tr>
+      <td>{{ s.username }}{% if s.is_current %} <span class="muted">(this session)</span>{% endif %}</td>
+      <td>{{ s.role_str }}</td>
+      <td>{{ s.created_at }}</td>
+      <td>
+        <form class="inline" method="post" action="/security/sessions/{{ s.id }}/revoke" style="display:inline">
+          <button type="submit" class="btn-danger" {% if s.is_current %}disabled title="use Log out instead of revoking your own session"{% endif %}>Revoke</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

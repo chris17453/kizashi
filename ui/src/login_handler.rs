@@ -91,7 +91,13 @@ pub async fn post_login(State(state): State<AppState>, Form(form): Form<LoginFor
         Err(_) => return login_error("Invalid workspace, username, or password"),
     };
 
-    let session = Session { bearer_token, tenant_id, username: form.username, role };
+    let session = Session {
+        bearer_token,
+        tenant_id,
+        username: form.username,
+        role,
+        created_at: chrono::Utc::now(),
+    };
     let session_id = state.session_store.create(session).await;
 
     let secure = crate::cookie_secure_suffix(crate::cookie_secure());

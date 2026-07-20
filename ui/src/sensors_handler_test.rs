@@ -33,6 +33,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
             tenant_id,
             username: "alice".to_string(),
             role: common::Role::Admin,
+            created_at: chrono::Utc::now(),
         })
         .await;
     let state = AppState {
@@ -93,6 +94,7 @@ async fn viewer_role_does_not_see_register_form_or_write_buttons() {
             tenant_id,
             username: "viewer-alice".to_string(),
             role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
         })
         .await;
 
@@ -140,6 +142,7 @@ async fn operator_role_sees_register_form_and_write_buttons() {
             tenant_id,
             username: "operator-alice".to_string(),
             role: common::Role::Operator,
+            created_at: chrono::Utc::now(),
         })
         .await;
 
@@ -309,6 +312,7 @@ async fn post_sensors_is_rejected_for_a_viewer() {
             tenant_id,
             username: "viewer-alice".to_string(),
             role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
         })
         .await;
 
@@ -384,6 +388,7 @@ async fn post_delete_sensor_is_rejected_for_a_viewer() {
             tenant_id,
             username: "viewer-alice".to_string(),
             role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
         })
         .await;
 
@@ -462,6 +467,7 @@ async fn post_toggle_sensor_is_rejected_for_a_viewer() {
             tenant_id,
             username: "viewer-alice".to_string(),
             role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
         })
         .await;
 
