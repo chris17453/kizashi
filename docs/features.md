@@ -4806,3 +4806,21 @@ architectural decision.
   (actor, `created`, before/after domain lists) renders at `/audit-log/egress/<tenant_id>`.
 - **PR:** #127
 - **ADR:** docs/adr/0097-egress-allowlist-audit-log.md
+
+## [2026-07-20] feature/0097-login-attempts-csv-export — Login Attempts CSV export
+- **Type:** feature
+- **Branch:** feature/0097-login-attempts-csv-export
+- **Summary:** The eighth UI audit pass's second finding: Login Attempts was the only
+  enterprise-compliance security page missing a CSV export, unlike Audit Log and Data. Adds
+  `GET /security/login-attempts/export.csv` (Admin-only), looping the existing paginated
+  `list_recent` client call up to 10 pages, same bounded-pagination shape as
+  `recent_audit_log_handler`'s export (ADR-0049). A "Download CSV" link was added above the
+  search form.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 472 passed (2 new:
+  `export_csv_returns_every_attempt_as_csv`, `export_csv_requires_admin_role`). `cargo build
+  --workspace`, `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`, `cargo
+  fmt --all --check` all clean. No file exceeds 500 lines. Live-verified against the real
+  `watkinslabs` tenant: downloaded the CSV and confirmed it contains real login-attempt rows
+  with the correct header and content-disposition filename.
+- **PR:** #128
+- **ADR:** docs/adr/0098-login-attempts-csv-export.md

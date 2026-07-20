@@ -6,6 +6,7 @@ successful or not — a brute-force pattern or a specific account under repeated
 here. This only covers local username/password logins; SSO logins are your identity provider's
 responsibility to monitor.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+<p><a href="/security/login-attempts/export.csv" class="btn-link">Download CSV &#8595;</a></p>
 
 <form class="inline" method="get" action="/security/login-attempts" style="margin-bottom:1rem;">
   <label for="q">Search</label>

@@ -34,7 +34,10 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/security/login-attempts", get(get_login_attempts)).with_state(state)
+    Router::new()
+        .route("/security/login-attempts", get(get_login_attempts))
+        .route("/security/login-attempts/export.csv", get(get_login_attempts_export_csv))
+        .with_state(state)
 }
 
 fn sample_session(tenant_id: Uuid, role: Role, username: &str) -> Session {
@@ -257,4 +260,55 @@ async fn honors_the_before_query_param_as_the_starting_cursor() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("older-user"));
     assert!(!body.contains("newer-user"));
+}
+
+#[tokio::test]
+async fn export_csv_returns_every_attempt_as_csv() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let client = InMemoryLoginAttemptsClient {
+        attempts: Mutex::new(vec![attempt("bob", false), attempt("carol", true)]),
+    };
+    let state = state_with(store, Arc::new(client)).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/security/login-attempts/export.csv")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers().get("content-type").unwrap().to_str().unwrap(), "text/csv");
+    let disposition = response.headers().get("content-disposition").unwrap().to_str().unwrap();
+    assert!(disposition.contains("login-attempts-"));
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.starts_with("attempted_at,username,success,reason\n"));
+    assert!(body.contains("bob"));
+    assert!(body.contains("carol"));
+}
+
+#[tokio::test]
+async fn export_csv_requires_admin_role() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Operator, "alice")).await;
+    let state = state_with(store, Arc::new(InMemoryLoginAttemptsClient::default())).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/security/login-attempts/export.csv")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }

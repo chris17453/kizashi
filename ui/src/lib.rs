@@ -141,6 +141,7 @@ pub use events_handler::get_events;
 pub use health_handler::get_health;
 pub use healthz::healthz;
 pub use login_attempts_handler::get_login_attempts as get_login_attempts_page;
+pub use login_attempts_handler::get_login_attempts_export_csv;
 pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
 pub use mfa_login_handler::{get_mfa_challenge, post_mfa_challenge as post_mfa_login_challenge};
@@ -286,6 +287,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/security/password", get(get_password_settings).post(post_password_settings))
         .route("/security/sessions", get(get_sessions))
         .route("/security/login-attempts", get(get_login_attempts_page))
+        .route("/security/login-attempts/export.csv", get(get_login_attempts_export_csv))
         .route("/security/backups", get(get_backups))
         .route("/security/compliance-report", get(get_compliance_report))
         .route("/security/sessions/:id/revoke", axum::routing::post(post_revoke_session))

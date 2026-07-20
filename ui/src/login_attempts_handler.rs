@@ -136,3 +136,82 @@ pub async fn get_login_attempts(
         .into_response(),
     }
 }
+
+/// Successive pages fetched per export, each requesting `DEFAULT_LIMIT` rows -- bounds the
+/// export to `CSV_MAX_PAGES * DEFAULT_LIMIT` rows worst case rather than looping until the
+/// tenant's history is exhausted, same shape as `recent_audit_log_handler`'s CSV export
+/// (ADR-0049).
+const CSV_MAX_PAGES: usize = 10;
+
+fn csv_escape(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+/// GET /security/login-attempts/export.csv — a compliance-export of the same feed
+/// `get_login_attempts` shows, paginated internally up to `CSV_MAX_PAGES` pages so a single
+/// request can produce a genuinely useful export rather than just the one page the HTML view
+/// shows. `Admin`-only, matching the HTML page's access bar.
+pub async fn get_login_attempts_export_csv(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    let session = match require_admin_session(&state, &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+
+    let mut all_rows: Vec<LoginAttemptRow> = Vec::new();
+    let mut before = None;
+    for _ in 0..CSV_MAX_PAGES {
+        let page = match state
+            .login_attempts_client
+            .list_recent(session.tenant_id, session.role, before)
+            .await
+        {
+            Ok(page) => page,
+            Err(e) => {
+                return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                    .into_response()
+            }
+        };
+        if page.is_empty() {
+            break;
+        }
+        before = page.last().map(|a| a.attempted_at);
+        all_rows.extend(page.into_iter().map(|a| LoginAttemptRow {
+            username: a.username,
+            success: a.success,
+            reason: a.reason,
+            attempted_at: a.attempted_at,
+        }));
+        if all_rows.len() < DEFAULT_LIMIT {
+            break;
+        }
+    }
+
+    let mut csv = String::from("attempted_at,username,success,reason\n");
+    for row in &all_rows {
+        csv.push_str(&format!(
+            "{},{},{},{}\n",
+            row.attempted_at.to_rfc3339(),
+            csv_escape(&row.username),
+            row.success,
+            csv_escape(&row.reason),
+        ));
+    }
+
+    let mut resp_headers = axum::http::HeaderMap::new();
+    resp_headers.insert(axum::http::header::CONTENT_TYPE, "text/csv".parse().unwrap());
+    resp_headers.insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        format!("attachment; filename=\"login-attempts-{}.csv\"", session.tenant_id)
+            .parse()
+            .unwrap(),
+    );
+
+    (resp_headers, csv).into_response()
+}
