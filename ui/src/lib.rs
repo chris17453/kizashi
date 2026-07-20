@@ -11,6 +11,7 @@ mod auth_client;
 mod backlog_client;
 mod backup_status_client;
 mod branding_client;
+mod branding_middleware;
 mod connector_field_catalog;
 mod cookie_security;
 mod egress_allowlist_client;
@@ -82,6 +83,7 @@ pub use backup_status_client::{
     BackupRun, BackupStatusClient, BackupStatusClientError, HttpBackupStatusClient,
 };
 pub use branding_client::{Branding, BrandingClient, BrandingClientError, HttpBrandingClient};
+pub use branding_middleware::apply_branding;
 pub use cookie_security::{cookie_secure, cookie_secure_suffix};
 pub use egress_allowlist_client::{
     EgressAllowlistClient, EgressAllowlistClientError, HttpEgressAllowlistClient,
@@ -211,6 +213,7 @@ pub struct AppState {
 }
 
 pub fn build_router(state: AppState) -> Router {
+    let branding_state = state.clone();
     Router::new()
         .route("/", get(get_root))
         .route("/healthz", get(healthz))
@@ -272,4 +275,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/data/:id/journey", get(get_record_journey))
         .route("/static/charts.js", get(get_charts_js))
         .with_state(state)
+        // Applies tenant branding (ADR-0059) to every already-rendered authenticated page by
+        // rewriting the response body, not per-handler template fields -- see
+        // `branding_middleware.rs`'s doc comment for why. Layered last so it wraps every route
+        // above uniformly, including ones added in the future.
+        .layer(axum::middleware::from_fn_with_state(branding_state, apply_branding))
 }

@@ -3984,3 +3984,24 @@ architectural decision.
   `cargo audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0058-analysis-config-api-key-encryption-at-rest.md
+
+## [2026-07-20] feature/0067-nav-wide-tenant-branding — Nav-wide tenant branding
+- **Type:** feature
+- **Branch:** feature/0067-nav-wide-tenant-branding
+- **Summary:** Closes a gap ADR-0041 flagged and explicitly deferred when it shipped: white-label
+  branding (product name, accent color) only applied to the login page, not any authenticated
+  page. Rather than thread a `branding` field through ~30 independent Askama template structs
+  (the "much larger, separate mechanical change" ADR-0041 called out), added one router-wide
+  middleware (`ui/src/branding_middleware.rs`, layered once in `build_router`) that rewrites the
+  rendered HTML of every `200 OK` authenticated page response: replaces the nav header's fixed
+  `Kizashi` product-name span and the `--accent` CSS variable when the session's tenant has
+  branding configured, no-ops otherwise. `logo_url` still isn't wired into the nav (no existing
+  slot for it); noted as a follow-up, not silently expanded into this change.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 376 passed (6 new: pure-function rewrite/escape/
+  no-op unit tests, plus end-to-end middleware tests — rewrites when branded, leaves unchanged
+  with no session cookie, leaves unchanged when the tenant has no branding configured). `cargo
+  build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
+  warnings` clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same
+  pre-existing allow-listed warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0059-nav-wide-tenant-branding.md
