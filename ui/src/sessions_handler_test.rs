@@ -79,10 +79,14 @@ async fn state_with_store(session_store: InMemorySessionStore) -> AppState {
 }
 
 async fn get_page(state: AppState, session_id: &str) -> axum::http::Response<Body> {
+    get_page_at(state, session_id, "/security/sessions").await
+}
+
+async fn get_page_at(state: AppState, session_id: &str, uri: &str) -> axum::http::Response<Body> {
     router(state)
         .oneshot(
             Request::builder()
-                .uri("/security/sessions")
+                .uri(uri)
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -121,6 +125,38 @@ async fn only_lists_sessions_for_the_callers_own_tenant() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("alice"));
     assert!(!body.contains("bob-other-tenant"));
+}
+
+#[tokio::test]
+async fn filters_by_the_q_query_param_case_insensitively() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    store.create(sample_session(tenant_id, Role::Operator, "bob")).await;
+    let state = state_with_store(store).await;
+
+    let response = get_page_at(state, &session_id, "/security/sessions?q=ALICE").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("alice"));
+    assert!(!body.contains("bob"));
+}
+
+#[tokio::test]
+async fn shows_a_no_match_empty_state_for_an_unmatched_query() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    let state = state_with_store(store).await;
+
+    let response =
+        get_page_at(state, &session_id, "/security/sessions?q=nobody-matches-this").await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No sessions match"));
 }
 
 #[tokio::test]

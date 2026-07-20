@@ -5,7 +5,7 @@ mod sessions_handler_test;
 use crate::session_guard::{require_session, session_cookie_value};
 use crate::AppState;
 use askama::Template;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use chrono::{DateTime, Utc};
@@ -19,11 +19,26 @@ struct SessionRow {
     is_current: bool,
 }
 
+#[derive(serde::Deserialize, Default)]
+pub struct SessionsQuery {
+    #[serde(default)]
+    q: String,
+}
+
+/// Case-insensitive substring match on username -- same in-handler-filter shape as the Users
+/// and API Keys pages (ADR-0062): the session store's `list_for_tenant` has no search parameter
+/// of its own, and a tenant's active-session count is realistically small enough to filter
+/// after the fetch.
+fn matches_query(row: &SessionRow, q: &str) -> bool {
+    q.is_empty() || row.username.to_lowercase().contains(&q.to_lowercase())
+}
+
 #[derive(Template)]
 #[template(path = "sessions.html")]
 struct SessionsTemplate {
     show_nav: bool,
     sessions: Vec<SessionRow>,
+    q: String,
 }
 
 async fn require_admin_session(
@@ -42,7 +57,11 @@ async fn require_admin_session(
 /// holds a live login -- e.g. after an employee leaves, or to investigate a suspected
 /// compromised account. `Admin`-only, matching `/users`' access bar (ADR-0016 follow-up):
 /// seeing every session in the tenant (not just your own) is a step above ordinary write access.
-pub async fn get_sessions(State(state): State<AppState>, headers: HeaderMap) -> Response {
+pub async fn get_sessions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<SessionsQuery>,
+) -> Response {
     let session = match require_admin_session(&state, &headers).await {
         Ok(session) => session,
         Err(response) => return response,
@@ -61,10 +80,12 @@ pub async fn get_sessions(State(state): State<AppState>, headers: HeaderMap) -> 
             role_str: s.role.to_string(),
             created_at: s.created_at,
         })
+        .filter(|row| matches_query(row, &query.q))
         .collect();
     sessions.sort_by_key(|s| std::cmp::Reverse(s.created_at));
 
-    Html(SessionsTemplate { show_nav: true, sessions }.render().unwrap()).into_response()
+    Html(SessionsTemplate { show_nav: true, sessions, q: query.q }.render().unwrap())
+        .into_response()
 }
 
 /// POST /security/sessions/:id/revoke — force-terminates one session. Only a session already
