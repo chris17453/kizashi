@@ -8,6 +8,7 @@ mod lib_test;
 
 mod audit_log;
 mod branding_handler;
+mod data_subject_handler;
 mod health;
 mod internal_secret;
 mod local_login_handler;
@@ -30,6 +31,7 @@ pub use audit_log::{
     AuditLogEntry, AuditLogError, AuditLogReader, ChangeType, PostgresAuditLogReader,
 };
 pub use branding_handler::{get_branding, get_branding_by_id, put_branding};
+pub use data_subject_handler::get_data_subject_export;
 pub use health::build_router as health_router;
 pub use internal_secret::require_internal_secret;
 pub use local_login_handler::{
@@ -118,6 +120,9 @@ pub fn build_router(state: AuthState, internal_secret: String) -> Router {
         // Admin-only tenant-wide security telemetry (ADR-0053) -- same access bar as /v1/users,
         // a step above the self-service MFA routes above it.
         .route("/v1/auth/local/login-attempts", get(get_login_attempts))
+        // Data subject export (ADR-0054) -- Admin-only, same bar as /v1/users since it's
+        // reachable by user id in the same URL family.
+        .route("/v1/users/:id/data-subject-export", get(get_data_subject_export))
         .with_state(state)
         .layer(axum::middleware::from_fn_with_state(internal_secret, require_internal_secret));
 

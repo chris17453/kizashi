@@ -41,6 +41,15 @@ pub trait LoginAttemptRepository: Send + Sync {
         limit: i64,
         before: Option<DateTime<Utc>>,
     ) -> Result<Vec<LoginAttempt>, LoginAttemptRepositoryError>;
+
+    /// Every attempt recorded against this exact username, across all time -- the data-subject
+    /// export path (ADR-0054) needs "everything about this account," not a recency-bounded page.
+    /// `username` isn't a foreign key to `local_users.id` (a deleted account's username can still
+    /// have historical rows), so this is a plain string match, not a tenant-scoped join.
+    async fn list_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Vec<LoginAttempt>, LoginAttemptRepositoryError>;
 }
 
 pub struct PostgresLoginAttemptRepository {
@@ -102,6 +111,21 @@ impl LoginAttemptRepository for PostgresLoginAttemptRepository {
             .fetch_all(&self.pool)
             .await
         }
+        .map_err(|e| LoginAttemptRepositoryError::Backend(e.to_string()))?;
+
+        Ok(rows.into_iter().map(row_to_attempt).collect())
+    }
+
+    async fn list_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Vec<LoginAttempt>, LoginAttemptRepositoryError> {
+        let rows: Vec<AttemptRow> = sqlx::query_as(
+            "SELECT id, tenant_id, username, success, reason, attempted_at FROM login_attempts WHERE username = $1 ORDER BY attempted_at DESC",
+        )
+        .bind(username)
+        .fetch_all(&self.pool)
+        .await
         .map_err(|e| LoginAttemptRepositoryError::Backend(e.to_string()))?;
 
         Ok(rows.into_iter().map(row_to_attempt).collect())

@@ -47,6 +47,22 @@ async fn record_then_list_recent_round_trips_against_real_postgres() {
 }
 
 #[tokio::test]
+async fn list_by_username_finds_every_attempt_across_tenants_against_real_postgres() {
+    let pool = test_pool().await;
+    let repo = PostgresLoginAttemptRepository::new(pool);
+    let unique_username = format!("carol-{}", Uuid::new_v4());
+
+    repo.record(&sample_attempt(Some(Uuid::new_v4()), &unique_username, false)).await.unwrap();
+    repo.record(&sample_attempt(Some(Uuid::new_v4()), &unique_username, true)).await.unwrap();
+    repo.record(&sample_attempt(Some(Uuid::new_v4()), "someone-else", false)).await.unwrap();
+
+    let found = repo.list_by_username(&unique_username).await.unwrap();
+
+    assert_eq!(found.len(), 2);
+    assert!(found.iter().all(|a| a.username == unique_username));
+}
+
+#[tokio::test]
 async fn a_record_with_no_tenant_id_persists_as_null() {
     let pool = test_pool().await;
     let repo = PostgresLoginAttemptRepository::new(pool);

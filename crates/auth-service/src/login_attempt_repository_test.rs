@@ -32,6 +32,20 @@ impl LoginAttemptRepository for InMemoryLoginAttemptRepository {
         matching.truncate(limit as usize);
         Ok(matching)
     }
+
+    async fn list_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Vec<LoginAttempt>, LoginAttemptRepositoryError> {
+        Ok(self
+            .attempts
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|a| a.username == username)
+            .cloned()
+            .collect())
+    }
 }
 
 pub struct FailingLoginAttemptRepository;
@@ -47,6 +61,13 @@ impl LoginAttemptRepository for FailingLoginAttemptRepository {
         _tenant_id: Uuid,
         _limit: i64,
         _before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<LoginAttempt>, LoginAttemptRepositoryError> {
+        Err(LoginAttemptRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn list_by_username(
+        &self,
+        _username: &str,
     ) -> Result<Vec<LoginAttempt>, LoginAttemptRepositoryError> {
         Err(LoginAttemptRepositoryError::Backend("simulated failure".to_string()))
     }
@@ -87,4 +108,18 @@ async fn list_recent_honors_the_limit() {
     let found = repo.list_recent(tenant_id, 2, None).await.unwrap();
 
     assert_eq!(found.len(), 2);
+}
+
+#[tokio::test]
+async fn list_by_username_only_returns_attempts_for_that_exact_username() {
+    let repo = InMemoryLoginAttemptRepository::default();
+    let tenant_id = Uuid::new_v4();
+    repo.record(&sample_attempt(Some(tenant_id), "alice", false)).await.unwrap();
+    repo.record(&sample_attempt(Some(tenant_id), "alice", true)).await.unwrap();
+    repo.record(&sample_attempt(Some(tenant_id), "bob", false)).await.unwrap();
+
+    let found = repo.list_by_username("alice").await.unwrap();
+
+    assert_eq!(found.len(), 2);
+    assert!(found.iter().all(|a| a.username == "alice"));
 }
