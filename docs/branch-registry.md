@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0086         |
+| feature       | `feature/` | 0087         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
@@ -135,3 +135,4 @@ manually created branches.
 | 0020 | `fix/0020-overview-dashboard-surfaces-backend-errors` | fix | 2026-07-20 | open | pending | |
 | 0085 | `feature/0085-data-viewer-date-range-and-normalization-filters` | feature | 2026-07-20 | open | pending | |
 | 0021 | `fix/0021-auth-service-error-message-leak-fix` | fix | 2026-07-20 | open | pending | |
+| 0086 | `feature/0086-events-page-links-to-record-journey` | feature | 2026-07-20 | open | pending | |

@@ -87,7 +87,8 @@ async fn spawn_stub_server(expected_token: &'static str) -> String {
                 "event_type": "sentiment_spike",
                 "group_key": "customer-42",
                 "status": "open",
-                "occurred_at": "2026-07-18T00:00:00Z"
+                "occurred_at": "2026-07-18T00:00:00Z",
+                "record_ids": ["22222222-2222-2222-2222-222222222222"]
             }],
             "has_more": false
         }))
@@ -121,6 +122,10 @@ async fn http_client_lists_events_against_a_real_server() {
     assert_eq!(page.events.len(), 1);
     assert_eq!(page.events[0].event_type, "sentiment_spike");
     assert_eq!(page.events[0].status, "open");
+    assert_eq!(
+        page.events[0].record_ids,
+        vec![Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap()]
+    );
     assert!(!page.has_more);
 }
 

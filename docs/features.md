@@ -4529,3 +4529,21 @@ architectural decision.
   --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0083-auth-service-error-message-leak-fix.md
+
+## [2026-07-20] feature/0086-events-page-links-to-record-journey — Events page links directly to each event's contributing record journey
+- **Type:** feature
+- **Branch:** feature/0086-events-page-links-to-record-journey
+- **Summary:** Closes the practical half of "Record Journey has no standalone search entry
+  point" (fourth audit pass): the Events page was a dead end for tracing an anomalous event back
+  to its source records, even though the backend's `Event::record_ids` and `GET /v1/events`
+  response already carried exactly that data — the UI's `EventSummary` just never deserialized
+  it. Now does, and the Events table gets a trailing column linking straight to
+  `/data/:id/journey` for each contributing record (single link for the common one-record case,
+  numbered links for correlated-trigger events with multiple, a dash for events with none). Pure
+  UI wiring, no backend change.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 435 passed (4 new: single-record link, multi-
+  record numbered links, empty-record-ids dash, and the HTTP client deserializing `record_ids`
+  from the wire response). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
+  --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0084-events-page-links-to-record-journey.md
