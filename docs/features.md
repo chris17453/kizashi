@@ -3685,3 +3685,23 @@ architectural decision.
   unchanged).
 - **PR:** pending
 - **ADR:** docs/adr/0046-active-sessions-management-page.md
+
+## [2026-07-20] feature/0057-security-overview-dashboard — Security overview dashboard and nav grouping
+- **Type:** feature
+- **Branch:** feature/0057-security-overview-dashboard
+- **Summary:** Adds `GET /security`, a single-pane-of-glass dashboard aggregating active session
+  count, admin activity in the last 7 days, RBAC role distribution, retention policy coverage,
+  and egress allowlist size — each linking to its own detail page. Pure aggregation of existing
+  clients (no new backend endpoints or schema). Also reorganizes the Console UI nav (26 links)
+  into four labelled sections (Data & Pipeline, Configuration, Security & Compliance, Platform)
+  via a new `.nav-section` heading style, closing the "flat, ungrouped nav" gap flagged in
+  ADR-0045.
+- **Tests:** `cargo test -p kizashi-ui --lib` (309 passed, incl. 7 new
+  `security_overview_handler` tests: zero-state, session counting, 7-day activity filtering, RBAC
+  distribution, retention coverage, empty-allowlist warning, login redirect). Full workspace gate
+  green: `cargo build --workspace`, `cargo test --workspace --all-features` against real
+  Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures), `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all --check`, `cargo deny
+  check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
+- **PR:** pending
+- **ADR:** docs/adr/0047-security-overview-dashboard-and-nav-grouping.md
