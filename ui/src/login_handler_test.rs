@@ -21,6 +21,7 @@ pub(crate) fn default_state() -> AppState {
     AppState {
         session_store: Arc::new(InMemorySessionStore::default()),
         auth_client: Arc::new(InMemoryAuthClient::default()),
+        branding_client: Arc::new(crate::branding_client::branding_client_test::InMemoryBrandingClient::default()),
         oidc_client: Arc::new(crate::oidc_client::oidc_client_test::InMemoryOidcClient::default()),
         pending_oidc_flow_store: Arc::new(crate::pending_oidc_flow::InMemoryPendingOidcFlowStore::default()),
         events_client: Arc::new(InMemoryEventsClient::default()),
@@ -59,6 +60,48 @@ async fn get_login_renders_the_form() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("Sign in"));
+}
+
+#[tokio::test]
+async fn get_login_with_a_tenant_name_applies_that_workspaces_branding() {
+    let mut state = default_state();
+    let branding_client =
+        Arc::new(crate::branding_client::branding_client_test::InMemoryBrandingClient::default());
+    *branding_client.branding.lock().unwrap() = Some(crate::branding_client::Branding {
+        product_name: Some("Acme Signals".to_string()),
+        logo_url: Some("https://acme.example.com/logo.png".to_string()),
+        accent_color: Some("#ff6600".to_string()),
+    });
+    state.branding_client = branding_client;
+
+    let response = router(state)
+        .oneshot(Request::builder().uri("/login?tenant_name=acme").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Acme Signals"));
+    assert!(body.contains("https://acme.example.com/logo.png"));
+    assert!(body.contains("#ff6600"));
+}
+
+#[tokio::test]
+async fn get_login_falls_back_to_defaults_when_the_workspace_has_no_branding() {
+    let state = default_state();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder().uri("/login?tenant_name=nonexistent").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Kizashi"));
 }
 
 #[tokio::test]

@@ -3,6 +3,7 @@
 //! internal API rather than writing into its token table directly (spec §2 principle 1).
 
 mod audit_log;
+mod branding_handler;
 mod health;
 mod local_login_handler;
 mod local_user_repository;
@@ -10,12 +11,14 @@ mod oidc_client;
 mod oidc_handler;
 mod password;
 mod session_client;
+mod tenant_branding_repository;
 mod tenant_repository;
 mod user_handlers;
 
 pub use audit_log::{
     AuditLogEntry, AuditLogError, AuditLogReader, ChangeType, PostgresAuditLogReader,
 };
+pub use branding_handler::{get_branding, get_branding_by_id, put_branding};
 pub use health::build_router as health_router;
 pub use local_login_handler::{local_login, AuthState, LocalLoginRequest, LoginResponse};
 pub use local_user_repository::{
@@ -27,6 +30,10 @@ pub use oidc_client::{
 pub use oidc_handler::{authorize, callback, AuthorizeResponse, OidcCallbackRequest, OidcClients};
 pub use password::{hash_password, verify_password, PasswordError};
 pub use session_client::{HttpSessionClient, SessionClient, SessionClientError};
+pub use tenant_branding_repository::{
+    PostgresTenantBrandingRepository, TenantBranding, TenantBrandingRepository,
+    TenantBrandingRepositoryError,
+};
 pub use tenant_repository::{PostgresTenantRepository, TenantRepository, TenantRepositoryError};
 pub use user_handlers::{
     create_user, delete_user, get_user_audit_log, list_users, update_user_role, CreateUserRequest,
@@ -43,6 +50,12 @@ pub fn build_router(state: AuthState) -> Router {
         .route("/v1/auth/oidc/:provider/callback", post(callback))
         .route("/v1/users", post(create_user).get(list_users))
         .route("/v1/users/:id", put(update_user_role).delete(delete_user))
+        // `:name` is a workspace name for GET (login page, unauthenticated), a tenant_id UUID
+        // for PUT (admin-only save) — axum only requires the path *segment name* to agree
+        // across methods on the same route, not the extracted type, so each handler parses it
+        // into whatever it actually needs.
+        .route("/v1/tenants/:name/branding", get(get_branding).put(put_branding))
+        .route("/v1/tenants/id/:id/branding", get(get_branding_by_id))
         // Same shape as config-admin-service's/retention-service's `GET
         // /v1/audit-log/:entity_id` (Console UI's `AuditLogClient` is written once against
         // that shared shape and reused for every backend that owns an audited entity type).

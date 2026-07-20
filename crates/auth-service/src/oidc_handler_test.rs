@@ -27,6 +27,7 @@ fn state_with_provider(
     AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::default()),
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", Uuid::new_v4())),
+        tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
         session_client,
         oidc_clients,
         audit_log_reader: Arc::new(

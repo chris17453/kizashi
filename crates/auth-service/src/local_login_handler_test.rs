@@ -36,6 +36,7 @@ async fn correct_credentials_mint_a_session_token() {
     let state = AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::with_user(user)),
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
+        tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
         session_client: session_client.clone(),
         oidc_clients: std::collections::HashMap::new(),
         audit_log_reader: Arc::new(
@@ -75,6 +76,7 @@ async fn wrong_password_is_rejected_with_401() {
     let state = AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::with_user(user)),
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
+        tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
         session_client: Arc::new(InMemorySessionClient::default()),
         oidc_clients: std::collections::HashMap::new(),
         audit_log_reader: Arc::new(
@@ -104,6 +106,7 @@ async fn unknown_username_is_rejected_with_401_not_404() {
     let state = AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::default()),
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
+        tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
         session_client: Arc::new(InMemorySessionClient::default()),
         oidc_clients: std::collections::HashMap::new(),
         audit_log_reader: Arc::new(
@@ -137,6 +140,7 @@ async fn unknown_tenant_name_is_rejected_with_401_not_404() {
     let state = AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::default()),
         tenant_repository: Arc::new(InMemoryTenantRepository::default()),
+        tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
         session_client: Arc::new(InMemorySessionClient::default()),
         oidc_clients: std::collections::HashMap::new(),
         audit_log_reader: Arc::new(
@@ -170,6 +174,7 @@ async fn repository_failure_returns_500() {
     let state = AuthState {
         local_user_repository: Arc::new(FailingLocalUserRepository),
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
+        tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
         session_client: Arc::new(InMemorySessionClient::default()),
         oidc_clients: std::collections::HashMap::new(),
         audit_log_reader: Arc::new(
@@ -199,6 +204,7 @@ async fn tenant_repository_failure_returns_500() {
     let state = AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::default()),
         tenant_repository: Arc::new(FailingTenantRepository),
+        tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
         session_client: Arc::new(InMemorySessionClient::default()),
         oidc_clients: std::collections::HashMap::new(),
         audit_log_reader: Arc::new(
@@ -230,6 +236,7 @@ async fn session_mint_failure_returns_502() {
     let state = AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::with_user(user)),
         tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id)),
+        tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
         session_client: Arc::new(FailingSessionClient),
         oidc_clients: std::collections::HashMap::new(),
         audit_log_reader: Arc::new(

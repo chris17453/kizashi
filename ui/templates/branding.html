@@ -1,0 +1,50 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Branding</h1>
+<p class="muted">White-label this workspace's Console UI — product name, logo, and accent
+color. Applies to the login page and takes effect immediately; existing signed-in sessions pick
+it up on next page load.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if saved %}<p class="status-up">Saved.</p>{% endif %}
+
+<div class="form-row">
+  <div class="panel">
+    <h2>White-label settings</h2>
+    {% if can_write %}
+    <form class="inline" method="post" action="/branding">
+      <label for="product_name">Product name</label>
+      <input type="text" id="product_name" name="product_name" value="{{ product_name }}" placeholder="Kizashi">
+      <label for="logo_url">Logo URL</label>
+      <input type="text" id="logo_url" name="logo_url" value="{{ logo_url }}" placeholder="https://example.com/logo.svg">
+      <label for="accent_color">Accent color</label>
+      <input type="text" id="accent_color" name="accent_color" value="{{ accent_color }}" placeholder="#22d3ee">
+      <button type="submit">Save</button>
+    </form>
+    {% else %}
+    <p class="muted">Your role can't edit branding.</p>
+    <dl>
+      <dt class="muted">Product name</dt>
+      <dd>{% if product_name.is_empty() %}<span class="muted">(platform default)</span>{% else %}{{ product_name }}{% endif %}</dd>
+      <dt class="muted">Logo URL</dt>
+      <dd>{% if logo_url.is_empty() %}<span class="muted">(platform default)</span>{% else %}{{ logo_url }}{% endif %}</dd>
+      <dt class="muted">Accent color</dt>
+      <dd>{% if accent_color.is_empty() %}<span class="muted">(platform default)</span>{% else %}{{ accent_color }}{% endif %}</dd>
+    </dl>
+    {% endif %}
+  </div>
+  <div class="info-panel">
+    <h2>How this works</h2>
+    <ul>
+      <li>Every field is optional — leaving one blank uses the platform default (product name
+        "Kizashi", the default diamond mark, the default accent color), it never renders
+        broken.</li>
+      <li>The login page loads branding for whichever workspace name is in the "Workspace"
+        field as soon as you tab away from it, so an operator can preview it before signing
+        in.</li>
+      <li>Only Admins can change these — it's a workspace-wide identity change, not a
+        per-user preference.</li>
+      <li>Every save is written to an immutable audit log for compliance review.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
