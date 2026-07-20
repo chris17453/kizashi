@@ -180,6 +180,22 @@ async fn list_policies_rejects_missing_internal_secret_even_with_valid_headers()
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
+/// Same regression coverage as `list_policies_rejects_missing_internal_secret_even_with_valid_headers`
+/// but for the new `GET /v1/audit-log` route — a valid `X-Tenant-Id` alone must not be enough.
+#[tokio::test]
+async fn get_recent_audit_log_rejects_missing_internal_secret_even_with_valid_headers() {
+    let tenant_id = Uuid::new_v4();
+    let response = send_raw(
+        router(default_state()),
+        "GET",
+        "/v1/audit-log".to_string(),
+        &[("x-tenant-id", tenant_id.to_string())],
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
 /// `/healthz` must stay reachable with zero headers — it's the plain liveness/readiness probe,
 /// not a caller-authenticated route, so the internal-secret gate must not touch it.
 #[tokio::test]

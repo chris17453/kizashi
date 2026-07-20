@@ -22,6 +22,26 @@ impl AuditLogReader for InMemoryAuditLogReader {
             .cloned()
             .collect())
     }
+
+    async fn list_recent(
+        &self,
+        tenant_id: Uuid,
+        limit: i64,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogError> {
+        let mut matching: Vec<AuditLogEntry> = self
+            .entries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| e.tenant_id == tenant_id)
+            .filter(|e| before.is_none_or(|before| e.changed_at < before))
+            .cloned()
+            .collect();
+        matching.sort_by_key(|e| std::cmp::Reverse(e.changed_at));
+        matching.truncate(limit.max(0) as usize);
+        Ok(matching)
+    }
 }
 
 pub struct FailingAuditLogReader;
@@ -32,6 +52,15 @@ impl AuditLogReader for FailingAuditLogReader {
         &self,
         _tenant_id: Uuid,
         _entity_id: Uuid,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogError> {
+        Err(AuditLogError::Backend("simulated failure".to_string()))
+    }
+
+    async fn list_recent(
+        &self,
+        _tenant_id: Uuid,
+        _limit: i64,
+        _before: Option<DateTime<Utc>>,
     ) -> Result<Vec<AuditLogEntry>, AuditLogError> {
         Err(AuditLogError::Backend("simulated failure".to_string()))
     }

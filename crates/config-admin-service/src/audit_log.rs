@@ -21,7 +21,7 @@ pub enum ChangeType {
     Deleted,
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AuditLogEntry {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -77,6 +77,18 @@ pub trait AuditLogReader: Send + Sync {
         &self,
         tenant_id: Uuid,
         entity_id: Uuid,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogError>;
+
+    /// Most-recent-first feed of every audit entry for a tenant, across all entities — the
+    /// general "show me every admin action in the last N days" compliance view, as opposed to
+    /// `list_for_entity`'s single-entity history. `before` is an exclusive cursor on
+    /// `changed_at` for simple keyset pagination: pass the `changed_at` of the last entry from
+    /// the previous page to fetch the next one.
+    async fn list_recent(
+        &self,
+        tenant_id: Uuid,
+        limit: i64,
+        before: Option<DateTime<Utc>>,
     ) -> Result<Vec<AuditLogEntry>, AuditLogError>;
 }
 
@@ -137,6 +149,50 @@ impl AuditLogReader for PostgresAuditLogReader {
         .bind(entity_id)
         .fetch_all(&self.pool)
         .await
+        .map_err(|e| AuditLogError::Backend(e.to_string()))?;
+
+        Ok(rows.into_iter().map(row_to_entry).collect())
+    }
+
+    async fn list_recent(
+        &self,
+        tenant_id: Uuid,
+        limit: i64,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogError> {
+        // Two query variants rather than a COALESCE sentinel: `changed_at` is a real timestamp
+        // column with no safe "infinite future" sentinel value to coalesce against, and the
+        // branch is cheap since both variants share everything but the extra `before` predicate.
+        let rows: Vec<AuditRow> = if let Some(before) = before {
+            sqlx::query_as(
+                r#"
+                SELECT id, tenant_id, entity_type, entity_id, change_type, actor, before, after, changed_at
+                FROM config_audit_log
+                WHERE tenant_id = $1 AND changed_at < $2
+                ORDER BY changed_at DESC
+                LIMIT $3
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(before)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+        } else {
+            sqlx::query_as(
+                r#"
+                SELECT id, tenant_id, entity_type, entity_id, change_type, actor, before, after, changed_at
+                FROM config_audit_log
+                WHERE tenant_id = $1
+                ORDER BY changed_at DESC
+                LIMIT $2
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+        }
         .map_err(|e| AuditLogError::Backend(e.to_string()))?;
 
         Ok(rows.into_iter().map(row_to_entry).collect())

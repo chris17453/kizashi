@@ -1,5 +1,5 @@
 use super::*;
-use crate::audit_log::audit_log_test::{FailingAuditLogReader, InMemoryAuditLogReader};
+use crate::audit_log::audit_log_test::InMemoryAuditLogReader;
 use crate::mapping_publisher::mapping_publisher_test::InMemoryMappingPublisher;
 use crate::normalization_mapping_repository::normalization_mapping_repository_test::{
     FailingNormalizationMappingRepository, InMemoryNormalizationMappingRepository,
@@ -12,7 +12,6 @@ use axum::body::Body;
 use axum::http::Request;
 use axum::routing::{get, post};
 use axum::Router;
-use chrono::Utc;
 use common::TriggerCondition;
 use std::collections::BTreeMap;
 use tower::ServiceExt;
@@ -458,64 +457,6 @@ async fn full_mapping_crud_round_trip() {
     assert_eq!(update.status(), StatusCode::OK);
 }
 
-#[tokio::test]
-async fn get_audit_log_returns_entries_scoped_to_tenant_and_entity() {
-    let tenant_id = Uuid::new_v4();
-    let entity_id = Uuid::new_v4();
-    let reader = InMemoryAuditLogReader::default();
-    reader.entries.lock().unwrap().push(crate::audit_log::AuditLogEntry {
-        id: Uuid::new_v4(),
-        tenant_id,
-        entity_type: "trigger_definition".to_string(),
-        entity_id,
-        change_type: crate::audit_log::ChangeType::Created,
-        actor: tenant_id.to_string(),
-        before: None,
-        after: serde_json::json!({}),
-        changed_at: Utc::now(),
-    });
-    let state = AdminState {
-        trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
-        mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
-        audit_reader: Arc::new(reader),
-        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
-        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
-    };
-
-    let response =
-        send(router(state), "GET", format!("/v1/audit-log/{entity_id}"), Some(tenant_id), None)
-            .await;
-    assert_eq!(response.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let entries: Vec<serde_json::Value> = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(entries.len(), 1);
-}
-
-#[tokio::test]
-async fn get_audit_log_returns_500_on_backend_failure() {
-    let state = AdminState {
-        trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
-        mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
-        audit_reader: Arc::new(FailingAuditLogReader),
-        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
-        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
-    };
-
-    let response = send(
-        router(state),
-        "GET",
-        format!("/v1/audit-log/{}", Uuid::new_v4()),
-        Some(Uuid::new_v4()),
-        None,
-    )
-    .await;
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-}
-
-#[tokio::test]
-async fn get_audit_log_requires_tenant_header() {
-    let state = default_state();
-    let response =
-        send(router(state), "GET", format!("/v1/audit-log/{}", Uuid::new_v4()), None, None).await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
+// get_audit_log / get_recent_audit_log handler tests live in `audit_log_handlers_test.rs` —
+// this file was already at the 500-line limit (CLAUDE.md §0.6), so the audit-log-specific
+// handler tests get their own file rather than pushing this one further over.

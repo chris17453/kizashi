@@ -42,6 +42,17 @@ pub trait AuditLogClient: Send + Sync {
         tenant_id: Uuid,
         entity_id: Uuid,
     ) -> Result<Vec<AuditLogEntry>, AuditLogClientError>;
+
+    /// Most-recent-first activity feed across every entity for the tenant (ADR-0045) — powers
+    /// the global `/audit-log` page, distinct from `list_for_entity`'s single-entity history.
+    /// `before` is a cursor (the `changed_at` of the oldest entry already shown) for "load
+    /// older" pagination; `None` starts from the most recent entry.
+    async fn list_recent(
+        &self,
+        tenant_id: Uuid,
+        limit: u32,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogClientError>;
 }
 
 pub struct HttpAuditLogClient {
@@ -69,6 +80,29 @@ impl AuditLogClient for HttpAuditLogClient {
             .send()
             .await
             .map_err(|e| AuditLogClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(AuditLogClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| AuditLogClientError::Unreachable(e.to_string()))
+    }
+
+    async fn list_recent(
+        &self,
+        tenant_id: Uuid,
+        limit: u32,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogClientError> {
+        let mut request = self
+            .client
+            .get(format!("{}/v1/audit-log", self.base_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .query(&[("limit", limit.to_string())]);
+        if let Some(before) = before {
+            request = request.query(&[("before", before.to_rfc3339())]);
+        }
+        let response =
+            request.send().await.map_err(|e| AuditLogClientError::Unreachable(e.to_string()))?;
 
         if !response.status().is_success() {
             return Err(AuditLogClientError::Rejected(response.status().as_u16()));

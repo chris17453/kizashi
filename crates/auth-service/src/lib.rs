@@ -42,8 +42,8 @@ pub use tenant_branding_repository::{
 };
 pub use tenant_repository::{PostgresTenantRepository, TenantRepository, TenantRepositoryError};
 pub use user_handlers::{
-    create_user, delete_user, get_user_audit_log, list_users, update_user_role, CreateUserRequest,
-    UpdateUserRoleRequest,
+    create_user, delete_user, get_recent_audit_log, get_user_audit_log, list_users,
+    update_user_role, CreateUserRequest, RecentAuditLogQuery, UpdateUserRoleRequest,
 };
 
 use axum::routing::{get, post, put};
@@ -79,6 +79,10 @@ pub fn build_router(state: AuthState, internal_secret: String) -> Router {
         // /v1/audit-log/:entity_id` (Console UI's `AuditLogClient` is written once against
         // that shared shape and reused for every backend that owns an audited entity type).
         .route("/v1/audit-log/:entity_id", get(get_user_audit_log))
+        // General, chronological "recent activity" trail across all entities (no entity_id
+        // segment — axum disambiguates this exact path from the `:entity_id` one above by
+        // shape). Same protected group so it inherits the `X-Internal-Secret` gate below.
+        .route("/v1/audit-log", get(get_recent_audit_log))
         .with_state(state)
         .layer(axum::middleware::from_fn_with_state(internal_secret, require_internal_secret));
 

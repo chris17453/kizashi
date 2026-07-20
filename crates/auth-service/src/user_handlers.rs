@@ -6,14 +6,25 @@ pub(crate) mod user_handlers_test;
 #[cfg(test)]
 mod user_handlers_audit_actor_test;
 
+#[path = "recent_audit_log_handler_test.rs"]
+#[cfg(test)]
+mod recent_audit_log_handler_test;
+
 use crate::local_login_handler::AuthState;
 use crate::local_user_repository::{LocalUser, LocalUserRepositoryError};
 use crate::password::hash_password;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
+use chrono::{DateTime, Utc};
 use common::Role;
 use uuid::Uuid;
+
+/// Default and max page size for `GET /v1/audit-log` — small enough to keep a compliance
+/// reviewer's page snappy, generous enough that a max-out request still needs only a handful of
+/// pages to page back through a busy tenant's history.
+const DEFAULT_RECENT_AUDIT_LOG_LIMIT: u32 = 50;
+const MAX_RECENT_AUDIT_LOG_LIMIT: u32 = 200;
 
 #[derive(serde::Serialize)]
 struct ErrorBody {
@@ -241,6 +252,33 @@ pub async fn get_user_audit_log(
         Err((status, msg)) => return error_response(status, msg),
     };
     match state.audit_log_reader.list_for_entity(tenant_id, id).await {
+        Ok(entries) => Json(entries).into_response(),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct RecentAuditLogQuery {
+    pub limit: Option<u32>,
+    pub before: Option<DateTime<Utc>>,
+}
+
+/// `GET /v1/audit-log` — the general, chronological "show me every admin action in the last N
+/// days" trail (SOC2/ISO27001-style expectation) that `get_user_audit_log` above can't answer
+/// since it requires already knowing an entity's UUID. Read-only, so no `require_admin` gate:
+/// same convention as the entity-scoped endpoint, any authenticated tenant member may view it.
+pub async fn get_recent_audit_log(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Query(query): Query<RecentAuditLogQuery>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let limit =
+        query.limit.unwrap_or(DEFAULT_RECENT_AUDIT_LOG_LIMIT).min(MAX_RECENT_AUDIT_LOG_LIMIT);
+    match state.audit_log_reader.list_recent(tenant_id, limit as i64, query.before).await {
         Ok(entries) => Json(entries).into_response(),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }

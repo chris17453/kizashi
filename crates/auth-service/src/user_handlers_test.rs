@@ -33,7 +33,7 @@ pub(crate) fn default_state() -> AuthState {
     }
 }
 
-async fn send(
+pub(crate) async fn send(
     app: Router,
     method: &str,
     uri: String,

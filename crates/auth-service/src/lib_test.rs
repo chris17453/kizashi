@@ -54,6 +54,30 @@ async fn put_branding_without_internal_secret_is_rejected() {
 }
 
 #[tokio::test]
+async fn recent_audit_log_without_internal_secret_is_rejected() {
+    let tenant_id = Uuid::new_v4();
+    let app = build_router(test_state(), TEST_SECRET.to_string());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/audit-log")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Blocked at the gate, before `get_recent_audit_log` ever runs — proves the new
+    // entity-id-less route landed in the protected router group, not the public one.
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(body.as_ref(), b"invalid internal secret");
+}
+
+#[tokio::test]
 async fn local_login_still_works_with_zero_internal_secret_header() {
     let app = build_router(test_state(), TEST_SECRET.to_string());
 
