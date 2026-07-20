@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0073         |
+| feature       | `feature/` | 0074         |
 | fix           | `fix/`     | 0012         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -111,3 +111,4 @@ manually created branches.
 | 0004 | `chore/0004-docker-build-cache-mounts` | chore | 2026-07-20 | open | pending | |
 | 0071 | `feature/0071-api-keys-page-search` | feature | 2026-07-20 | open | pending | |
 | 0072 | `feature/0072-sessions-page-search` | feature | 2026-07-20 | open | pending | |
+| 0073 | `feature/0073-login-attempts-pagination-and-search` | feature | 2026-07-20 | open | pending | |
