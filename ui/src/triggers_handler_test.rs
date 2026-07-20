@@ -119,6 +119,10 @@ async fn renders_the_triggers_table_when_signed_in() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("high-volume-negative"));
+    assert!(
+        body.contains(r#"scope="col""#),
+        "table headers should carry scope=\"col\" for screen readers"
+    );
 }
 
 #[tokio::test]

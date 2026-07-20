@@ -4339,3 +4339,20 @@ architectural decision.
   clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0072-events-page-search-and-sort.md
+
+## [2026-07-20] fix/0014-table-header-scope-attributes — Table header scope="col" attributes sitewide
+- **Type:** fix
+- **Branch:** fix/0014-table-header-scope-attributes
+- **Summary:** Closes a sitewide accessibility gap from a fresh audit: zero `<th scope="col">`
+  usage anywhere across the Console UI's 18 templates with a `<table>`. Every plain `<th>` in
+  every list-page template is now `<th scope="col">` (17 templates changed; `security_overview
+  .html`'s label/value tables have no header row, correctly excluded) so screen readers can
+  reliably associate a data cell with its column header. Mechanical, markup-only change — no
+  behavior change, sortable-column header links unaffected structurally.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 417 passed (0 broken by the markup change; 3
+  existing tests on Users/Triggers/Events extended with a `scope="col"` spot-check rather than
+  one new test per template for a single sitewide convention). `cargo build --workspace` clean.
+  `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt
+  --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0073-table-header-scope-attributes.md

@@ -42,22 +42,22 @@
 <table>
   <thead>
     <tr>
-      <th>
+      <th scope="col">
         <a href="/events?q={{ q }}&sort=event_type&dir={% if sort == "event_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Event Type{% if sort == "event_type" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
-      <th>
+      <th scope="col">
         <a href="/events?q={{ q }}&sort=group_key&dir={% if sort == "group_key" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Group Key{% if sort == "group_key" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
-      <th>
+      <th scope="col">
         <a href="/events?q={{ q }}&sort=status&dir={% if sort == "status" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Status{% if sort == "status" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
-      <th>
+      <th scope="col">
         <a href="/events?q={{ q }}&sort=occurred_at&dir={% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %}desc{% else %}asc{% endif %}{% else %}desc{% endif %}">
           Occurred At{% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %} &#9650;{% else %} &#9660;{% endif %}{% endif %}
         </a>

@@ -50,7 +50,7 @@ overrides it.</p>
 {% else %}
 <table>
   <thead>
-    <tr><th>Data Class</th><th>TTL (days)</th><th>Status</th>{% if can_write %}<th></th>{% endif %}<th></th></tr>
+    <tr><th scope="col">Data Class</th><th scope="col">TTL (days)</th><th scope="col">Status</th>{% if can_write %}<th scope="col"></th>{% endif %}<th scope="col"></th></tr>
   </thead>
   <tbody>
     {% for policy in policies %}

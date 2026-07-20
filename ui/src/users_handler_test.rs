@@ -125,6 +125,10 @@ async fn get_users_marks_the_current_users_remove_button_with_an_accessible_labe
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains(r#"aria-label="Remove -- you can't remove yourself""#));
+    assert!(
+        body.contains(r#"scope="col""#),
+        "table headers should carry scope=\"col\" for screen readers"
+    );
 }
 
 #[tokio::test]
