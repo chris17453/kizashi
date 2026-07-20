@@ -23,6 +23,10 @@ struct SessionRow {
 pub struct SessionsQuery {
     #[serde(default)]
     q: String,
+    #[serde(default)]
+    sort: String,
+    #[serde(default)]
+    dir: String,
 }
 
 /// Case-insensitive substring match on username -- same in-handler-filter shape as the Users
@@ -33,12 +37,35 @@ fn matches_query(row: &SessionRow, q: &str) -> bool {
     q.is_empty() || row.username.to_lowercase().contains(&q.to_lowercase())
 }
 
+/// Same shape as the Users page's sortable columns (ADR-0064), applied after the search filter
+/// so search and sort compose. Unset `sort` keeps this page's original default -- most
+/// recently signed-in first -- rather than switching to ascending-by-username like Users, since
+/// "who signed in most recently" is the more useful default for a security-review page.
+fn sort_rows(rows: &mut [SessionRow], sort: &str, dir: &str) {
+    match sort {
+        "username" => rows.sort_by_key(|s| s.username.to_lowercase()),
+        "role" => rows.sort_by_key(|s| s.role_str.clone()),
+        _ => {
+            rows.sort_by_key(|s| std::cmp::Reverse(s.created_at));
+            if dir == "asc" {
+                rows.reverse();
+            }
+            return;
+        }
+    }
+    if dir == "desc" {
+        rows.reverse();
+    }
+}
+
 #[derive(Template)]
 #[template(path = "sessions.html")]
 struct SessionsTemplate {
     show_nav: bool,
     sessions: Vec<SessionRow>,
     q: String,
+    sort: String,
+    dir: String,
 }
 
 async fn require_admin_session(
@@ -82,10 +109,14 @@ pub async fn get_sessions(
         })
         .filter(|row| matches_query(row, &query.q))
         .collect();
-    sessions.sort_by_key(|s| std::cmp::Reverse(s.created_at));
+    sort_rows(&mut sessions, &query.sort, &query.dir);
 
-    Html(SessionsTemplate { show_nav: true, sessions, q: query.q }.render().unwrap())
-        .into_response()
+    Html(
+        SessionsTemplate { show_nav: true, sessions, q: query.q, sort: query.sort, dir: query.dir }
+            .render()
+            .unwrap(),
+    )
+    .into_response()
 }
 
 /// POST /security/sessions/:id/revoke — force-terminates one session. Only a session already

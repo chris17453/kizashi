@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0078         |
+| feature       | `feature/` | 0079         |
 | fix           | `fix/`     | 0014         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -118,3 +118,4 @@ manually created branches.
 | 0012 | `fix/0012-disable-toggle-confirm-danger` | fix | 2026-07-20 | open | pending | |
 | 0077 | `feature/0077-triggers-page-search` | feature | 2026-07-20 | open | pending | |
 | 0013 | `fix/0013-disabled-button-accessible-labels` | fix | 2026-07-20 | open | pending | |
+| 0078 | `feature/0078-sessions-page-sortable-columns` | feature | 2026-07-20 | open | pending | |

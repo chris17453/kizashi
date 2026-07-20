@@ -128,6 +128,60 @@ async fn marks_the_callers_own_revoke_button_with_an_accessible_label() {
 }
 
 #[tokio::test]
+async fn sorts_by_username_ascending_when_sort_param_is_set() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = store.create(sample_session(tenant_id, Role::Admin, "zoe")).await;
+    store.create(sample_session(tenant_id, Role::Operator, "alice")).await;
+    let state = state_with_store(store).await;
+
+    let response = get_page_at(state, &session_id, "/security/sessions?sort=username").await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    let alice_pos = body.find("alice").unwrap();
+    let zoe_pos = body.find("zoe").unwrap();
+    assert!(alice_pos < zoe_pos);
+}
+
+#[tokio::test]
+async fn sorts_by_username_descending_when_dir_is_desc() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = store.create(sample_session(tenant_id, Role::Admin, "zoe")).await;
+    store.create(sample_session(tenant_id, Role::Operator, "alice")).await;
+    let state = state_with_store(store).await;
+
+    let response =
+        get_page_at(state, &session_id, "/security/sessions?sort=username&dir=desc").await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    let alice_pos = body.find("alice").unwrap();
+    let zoe_pos = body.find("zoe").unwrap();
+    assert!(zoe_pos < alice_pos);
+}
+
+#[tokio::test]
+async fn defaults_to_most_recently_signed_in_first_when_sort_is_unset() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    // The caller's own session is created first here so it's the *older* one -- "bob" signs
+    // in after, so "bob" should render first under the unset-sort default (newest first).
+    let session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    store.create(sample_session(tenant_id, Role::Operator, "bob")).await;
+    let state = state_with_store(store).await;
+
+    let response = get_page(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    let alice_pos = body.find("alice").unwrap();
+    let bob_pos = body.find("bob").unwrap();
+    assert!(bob_pos < alice_pos);
+}
+
+#[tokio::test]
 async fn only_lists_sessions_for_the_callers_own_tenant() {
     let store = InMemorySessionStore::default();
     let tenant_a = Uuid::new_v4();
