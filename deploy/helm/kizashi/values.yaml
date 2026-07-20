@@ -1,0 +1,329 @@
+# Default values for the kizashi chart.
+# This mirrors docker-compose.yml's application-service topology (see that file and
+# ./Dockerfile at the repo root for the source of truth this chart tracks). It intentionally
+# does NOT stand up postgres/rabbitmq/clickhouse/minio themselves — see README.md for why and
+# what to point at instead.
+
+# -- Image settings shared by every app-service/connector/scheduler container. Each service's
+# image repository is `<registry>/<bin>` where <bin> is the same name passed to the shared
+# root Dockerfile's `--build-arg BIN=<bin>` (see each entry under `services`/`connectors`
+# below). Point `registry` at wherever your CI publishes those 20-odd images.
+image:
+  registry: ghcr.io/yourorg/kizashi
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# -- Namespace-wide default resource shape. Deliberately small (v1 chart, not sized for real
+# load) — override globally here or per-service via `services.<name>.resources`.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+# -- Every app pod gets `envFrom: [secretRef: <secretName>, configMapRef: <fullname>-config]`
+# in addition to its own per-service `env:` entries (BIND_ADDR, inter-service URLs). Injecting
+# the full shared Secret/ConfigMap into every pod trades least-privilege for simplicity, which
+# is an explicit v1 scope call — see README.md "Not included" section.
+secretName: ""    # defaults to "<fullname>-secrets" when empty, see _helpers.tpl
+
+# -- Controls whether this chart renders templates/secret.yaml (populated from `secrets:`
+# below, all placeholders) or expects the operator to have already created a Secret named
+# `secretName` (or the default "<fullname>-secrets") out-of-band, e.g. via External Secrets
+# Operator / sealed-secrets / a manual `kubectl create secret`. Production installs should set
+# this to false and supply real values through their own secret-management pipeline — do NOT
+# ship real credentials through `--set` or a committed values file.
+secret:
+  create: true
+
+# -- Placeholder values for every credential/secret env var docker-compose.yml wires up. Every
+# value here is a non-functional placeholder ("changeme", empty string) precisely so nothing
+# resembling a real credential is ever committed. Override via `-f my-values.yaml` or
+# `--set secrets.xxx=...` (prefer a values file kept out of git, or --set-file from a secret
+# store, over inline --set for anything sensitive).
+secrets:
+  DATABASE_URL: "postgres://kizashi:changeme@postgres:5432/kizashi"
+  RABBITMQ_URL: "amqp://kizashi:changeme@rabbitmq:5672/%2f"
+  RABBITMQ_MANAGEMENT_URL: "http://kizashi:changeme@rabbitmq:15672"
+  CLICKHOUSE_URL: "http://kizashi:changeme@clickhouse:8123"
+  AWS_ACCESS_KEY_ID: "kizashi"
+  AWS_SECRET_ACCESS_KEY: "changeme"
+  INTERNAL_API_SECRET: "changeme-in-production"
+  CONFIG_ENCRYPTION_KEY: "changeme-32-byte-key-in-production"
+  ENTRA_TENANT_ID: ""
+  ENTRA_CLIENT_ID: ""
+  ENTRA_CLIENT_SECRET: ""
+  ENTRA_REDIRECT_URL: ""
+  AZURE_AI_FOUNDRY_ENDPOINT: ""
+  AZURE_AI_FOUNDRY_API_KEY: ""
+  # v1 simplification carried over from docker-compose (see agent-scheduler's comment in
+  # docker-compose.yml / crates/agent-scheduler/src/invoker.rs): one platform-wide ingestion
+  # gateway API key for every scheduled connector, not a per-Agent key lookup.
+  AGENT_SCHEDULER_INGESTION_GATEWAY_API_KEY: ""
+
+# -- Shared, non-secret env rendered into a single ConfigMap and injected into every app pod
+# via envFrom. Mirrors the plain (non-${...:?required}) environment defaults docker-compose.yml
+# sets for retention-service/backup-service/kizashi-ui/agent-scheduler/the two scheduler
+# sidecars. Override per-environment as needed (e.g. point S3_ENDPOINT_URL at real S3 instead
+# of an in-cluster MinIO).
+sharedEnv:
+  AWS_REGION: "us-east-1"
+  S3_ENDPOINT_URL: "http://minio:9000"
+  AWS_S3_BUCKET: "kizashi-archive"
+  BACKUP_S3_BUCKET: "kizashi-backups"
+  COOKIE_SECURE: "false"
+  SESSION_IDLE_TIMEOUT_MINUTES: "30"
+  RETENTION_SWEEP_INTERVAL_SECONDS: "3600"
+  BACKUP_INTERVAL_SECONDS: "86400"
+  # ADR-0020's docker-socket-shelling pattern (see agent-scheduler below) doesn't translate
+  # cleanly to Kubernetes — DOCKER_IMAGE_PREFIX/DOCKER_NETWORK are carried over verbatim from
+  # docker-compose for now as a known limitation, not a working k8s-native scheduling path.
+  # See README.md "Known limitations" before enabling agent-scheduler in a real cluster.
+  DOCKER_IMAGE_PREFIX: "kizashi"
+  DOCKER_NETWORK: "kizashi_default"
+  # Public (browser-facing) URL for the ingestion gateway — must be overridden to a real
+  # Ingress/LoadBalancer hostname; localhost is only correct for port-forwarded local testing.
+  INGESTION_GATEWAY_PUBLIC_URL: "http://localhost:8081"
+
+# -- One entry per long-running, HTTP-serving application service from docker-compose.yml.
+# `bin` is the exact --build-arg BIN value the root Dockerfile builds; the image repository is
+# `<image.registry>/<bin>:<image.tag>`. Every service listens on 0.0.0.0:8080 internally
+# (BIND_ADDR is always set to that in `env` below) and exposes GET /healthz, used for both the
+# readinessProbe and livenessProbe. `env` values are evaluated with Helm's `tpl` function
+# against the chart's root context, so `{{ include "kizashi.fullname" $ }}` etc. resolve to
+# real in-cluster service DNS names, matching the compose-network service-name URLs
+# docker-compose.yml uses today (e.g. INGESTION_SERVICE_URL: http://ingestion-service:8080).
+#
+# NOTE on startup ordering (see scripts/run-local.sh): ingestion-service must declare its
+# RabbitMQ exchange before normalization-service (and so on down the ingestion -> normalization
+# -> analysis -> trigger-engine -> action-executor chain) binds a queue to it. This chart does
+# NOT replicate that ordering via initContainers (over-engineering for a v1 chart) — instead
+# every service should retry its AMQP connection/queue-bind on startup (already required for
+# pods to survive a RabbitMQ restart) and readinessProbe on /healthz gates traffic, not startup
+# order. On a cold cluster start you may see a few consumer pods restart/backoff once before the
+# chain settles; that's expected and self-heals.
+services:
+  ingestion-service:
+    bin: ingestion-service
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+
+  normalization-service:
+    bin: normalization-service
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      INGESTION_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-ingestion-service:8080'
+
+  analysis-service:
+    bin: analysis-service
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+
+  trigger-engine:
+    bin: trigger-engine
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+
+  action-executor:
+    bin: action-executor
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      TRIGGER_ENGINE_URL: 'http://{{ include "kizashi.fullname" $ }}-trigger-engine:8080'
+
+  # ADR-0020: shells out to `docker run` against the host's Docker socket. Mounting
+  # /var/run/docker.sock into a pod is a real security/portability concession (breaks on
+  # managed clusters without a Docker-based container runtime, e.g. containerd-only nodes;
+  # grants effective node-root). Carried over as-is to mirror docker-compose's shape per this
+  # task's scope — see README.md "Known limitations" for the recommended follow-up (a
+  # Kubernetes Jobs-API-native invoker instead of shelling to `docker run`).
+  agent-scheduler:
+    bin: agent-scheduler
+    port: 8080
+    replicas: 1
+    runAsRoot: true
+    dockerSocket: true
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      INGESTION_GATEWAY_URL: 'http://{{ include "kizashi.fullname" $ }}-ingestion-gateway:8080'
+
+  dashboard-api:
+    bin: dashboard-api
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+
+  # ADR-0021: forward proxy. Serves both its own HTTP API (8080, /healthz) and the CONNECT
+  # proxy listener (3128) other services can opt into via EGRESS_PROXY_URL — hence the extra
+  # container/Service port.
+  egress-gateway:
+    bin: egress-gateway
+    port: 8080
+    replicas: 1
+    extraPorts:
+      - name: proxy
+        port: 3128
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      PROXY_BIND_ADDR: "0.0.0.0:3128"
+
+  config-admin-service:
+    bin: config-admin-service
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+
+  ingestion-gateway:
+    bin: ingestion-gateway
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      INGESTION_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-ingestion-service:8080'
+      CONFIG_ADMIN_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-config-admin-service:8080'
+
+  query-gateway:
+    bin: query-gateway
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      DASHBOARD_API_URL: 'http://{{ include "kizashi.fullname" $ }}-dashboard-api:8080'
+
+  retention-service:
+    bin: retention-service
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      INGESTION_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-ingestion-service:8080'
+
+  backup-service:
+    bin: backup-service
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+
+  auth-service:
+    bin: auth-service
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      QUERY_GATEWAY_URL: 'http://{{ include "kizashi.fullname" $ }}-query-gateway:8080'
+
+  observability:
+    bin: observability
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      SERVICE_REGISTRY: >-
+        ingestion-gateway=http://{{ include "kizashi.fullname" $ }}-ingestion-gateway:8080,
+        ingestion-service=http://{{ include "kizashi.fullname" $ }}-ingestion-service:8080,
+        query-gateway=http://{{ include "kizashi.fullname" $ }}-query-gateway:8080,
+        dashboard-api=http://{{ include "kizashi.fullname" $ }}-dashboard-api:8080,
+        normalization-service=http://{{ include "kizashi.fullname" $ }}-normalization-service:8080,
+        analysis-service=http://{{ include "kizashi.fullname" $ }}-analysis-service:8080,
+        trigger-engine=http://{{ include "kizashi.fullname" $ }}-trigger-engine:8080,
+        action-executor=http://{{ include "kizashi.fullname" $ }}-action-executor:8080,
+        auth-service=http://{{ include "kizashi.fullname" $ }}-auth-service:8080,
+        config-admin-service=http://{{ include "kizashi.fullname" $ }}-config-admin-service:8080,
+        retention-service=http://{{ include "kizashi.fullname" $ }}-retention-service:8080
+
+  kizashi-ui:
+    bin: kizashi-ui
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      AUTH_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-auth-service:8080'
+      QUERY_GATEWAY_URL: 'http://{{ include "kizashi.fullname" $ }}-query-gateway:8080'
+      CONFIG_ADMIN_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-config-admin-service:8080'
+      OBSERVABILITY_URL: 'http://{{ include "kizashi.fullname" $ }}-observability:8080'
+      INGESTION_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-ingestion-service:8080'
+      INGESTION_GATEWAY_URL: 'http://{{ include "kizashi.fullname" $ }}-ingestion-gateway:8080'
+      ACTION_EXECUTOR_URL: 'http://{{ include "kizashi.fullname" $ }}-action-executor:8080'
+      RETENTION_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-retention-service:8080'
+      BACKUP_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-backup-service:8080'
+      EGRESS_GATEWAY_URL: 'http://{{ include "kizashi.fullname" $ }}-egress-gateway:8080'
+      TRIGGER_ENGINE_URL: 'http://{{ include "kizashi.fullname" $ }}-trigger-engine:8080'
+
+# -- The two "sweep/backup on an interval" sidecars docker-compose.yml runs as
+# `image: alpine:3.20` + a `while true; do curl ...; sleep N; done` loop (see the ADR-0011
+# point 5 / ADR-0055 comments in docker-compose.yml). They already loop internally rather than
+# being one-shot processes, so the k8s-native equivalent of "the same container, running in
+# k8s" is a low-replica Deployment, NOT a CronJob — a CronJob would need the command rewritten
+# to a one-shot `curl` invocation, which is a bigger behavioral change than this v1 chart makes.
+# Rendered by templates/deployment-schedulers.yaml. See README.md for the judgment call.
+schedulers:
+  retention-sweep-scheduler:
+    targetUrl: 'http://{{ include "kizashi.fullname" $ }}-retention-service:8080/v1/sweep'
+    intervalEnvVar: RETENTION_SWEEP_INTERVAL_SECONDS
+  backup-scheduler:
+    targetUrl: 'http://{{ include "kizashi.fullname" $ }}-backup-service:8080/v1/backup/run'
+    intervalEnvVar: BACKUP_INTERVAL_SECONDS
+
+schedulerImage:
+  repository: alpine
+  tag: "3.20"
+
+# -- One-shot pollers under crates/connectors (the `connectors` profile in docker-compose.yml —
+# kept out of a default `docker compose up`, run explicitly with per-tenant credentials). This
+# IS the right shape for a Kubernetes CronJob: each run is a bounded, one-shot process against
+# a specific tenant's source. Every connector is rendered `suspend: true` by default (see
+# templates/cronjob-connectors.yaml) because none of them has real per-tenant
+# credentials/TENANT_ID/schedule yet — an operator must override `connectors.<name>.suspend`,
+# `.schedule`, and `.env` (TENANT_ID plus whatever source-specific vars that connector needs,
+# e.g. GENERIC_SOURCE_URL) per tenant before enabling one. Values here are deliberately inert
+# placeholders, not working defaults.
+connectors:
+  generic-connector:
+    bin: connector-generic
+    schedule: "0 * * * *"
+    suspend: true
+    env: {}
+  sql-connector:
+    bin: connector-sql
+    schedule: "0 * * * *"
+    suspend: true
+    env: {}
+  zendesk-connector:
+    bin: connector-zendesk
+    schedule: "0 * * * *"
+    suspend: true
+    env: {}
+  graph-mail-connector:
+    bin: connector-graph-mail
+    schedule: "*/15 * * * *"
+    suspend: true
+    env: {}
+  graph-teams-connector:
+    bin: connector-graph-teams
+    schedule: "*/15 * * * *"
+    suspend: true
+    env: {}
+  fabric-connector:
+    bin: connector-fabric
+    schedule: "0 * * * *"
+    suspend: true
+    env: {}
+  imap-connector:
+    bin: connector-imap
+    schedule: "*/15 * * * *"
+    suspend: true
+    env: {}

@@ -1,0 +1,15 @@
+apiVersion: v2
+name: kizashi
+description: >-
+  Kizashi platform — basic Kubernetes chart mirroring docker-compose.yml's application-service
+  topology (Deployment + Service per app service, ConfigMap for shared env, CronJob for
+  one-shot connector pollers). Not a production-grade chart: no HPA, PodDisruptionBudget,
+  NetworkPolicy, or Ingress/TLS — see README.md for what's intentionally out of scope.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kizashi
+home: https://github.com/watkinslabs/kizashi
+maintainers:
+  - name: Kizashi Engineering

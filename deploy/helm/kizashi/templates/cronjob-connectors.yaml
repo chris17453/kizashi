@@ -1,0 +1,56 @@
+{{- /*
+Connectors under crates/connectors run as the docker-compose "connectors" profile: one-shot
+processes, kept out of a default `docker compose up`, run explicitly per tenant with real
+credentials (see docker-compose.yml's generic-connector comment). That's exactly the CronJob
+shape — each run is a bounded, one-shot job against one tenant's source, unlike the
+sweep/backup sidecars in deployment-schedulers.yaml which loop internally and stay Deployments.
+Every connector here is suspended by default (values.yaml connectors.<name>.suspend: true)
+because none has real per-tenant TENANT_ID/credentials/schedule yet.
+*/ -}}
+{{- $root := . -}}
+{{- range $name, $conn := .Values.connectors }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "kizashi.fullname" $root }}-{{ $name }}
+  labels:
+    {{- include "kizashi.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  schedule: {{ $conn.schedule | quote }}
+  suspend: {{ $conn.suspend | default true }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "kizashi.selectorLabels" $root | nindent 12 }}
+            app.kubernetes.io/component: {{ $name }}
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+          containers:
+            - name: {{ $name }}
+              image: "{{ $root.Values.image.registry }}/{{ $conn.bin }}:{{ $root.Values.image.tag }}"
+              imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+              envFrom:
+                - secretRef:
+                    name: {{ include "kizashi.secretName" $root }}
+                - configMapRef:
+                    name: {{ include "kizashi.configMapName" $root }}
+              env:
+                - name: INGESTION_GATEWAY_URL
+                  value: 'http://{{ include "kizashi.fullname" $root }}-ingestion-gateway:8080'
+                {{- range $key, $value := $conn.env }}
+                - name: {{ $key }}
+                  value: {{ tpl (toString $value) $root | quote }}
+                {{- end }}
+              resources:
+                {{- toYaml ($conn.resources | default $root.Values.resources) | nindent 16 }}
+---
+{{- end }}
