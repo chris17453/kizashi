@@ -73,6 +73,25 @@ impl UsersClient for InMemoryUsersClient {
         self.users.lock().unwrap().retain(|u| !(u.id == id && u.tenant_id == tenant_id));
         Ok(())
     }
+
+    async fn export_user_data(
+        &self,
+        tenant_id: Uuid,
+        _role: Role,
+        id: Uuid,
+    ) -> Result<Vec<u8>, UsersClientError> {
+        let users = self.users.lock().unwrap();
+        let user = users.iter().find(|u| u.id == id && u.tenant_id == tenant_id).ok_or(
+            UsersClientError::Rejected { status: 404, message: "no such user".to_string() },
+        )?;
+        Ok(serde_json::json!({
+            "user": {"id": user.id, "username": user.username, "role": user.role},
+            "audit_log": [],
+            "login_attempts": []
+        })
+        .to_string()
+        .into_bytes())
+    }
 }
 
 pub struct FailingUsersClient;
@@ -117,6 +136,15 @@ impl UsersClient for FailingUsersClient {
         _id: Uuid,
         _actor: &str,
     ) -> Result<(), UsersClientError> {
+        Err(UsersClientError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn export_user_data(
+        &self,
+        _tenant_id: Uuid,
+        _role: Role,
+        _id: Uuid,
+    ) -> Result<Vec<u8>, UsersClientError> {
         Err(UsersClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -166,9 +194,18 @@ async fn spawn_stub_server() -> String {
     async fn delete_handler() -> axum::http::StatusCode {
         axum::http::StatusCode::NO_CONTENT
     }
+    async fn export_handler() -> axum::response::Response {
+        Json(serde_json::json!({
+            "user": {"id": "11111111-1111-1111-1111-111111111111", "username": "alice"},
+            "audit_log": [],
+            "login_attempts": []
+        }))
+        .into_response()
+    }
     let app = Router::new()
         .route("/v1/users", get(list_handler).post(create_handler))
-        .route("/v1/users/:id", axum::routing::put(update_handler).delete(delete_handler));
+        .route("/v1/users/:id", axum::routing::put(update_handler).delete(delete_handler))
+        .route("/v1/users/:id/data-subject-export", get(export_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -252,6 +289,17 @@ async fn http_client_deletes_a_user_against_a_real_server() {
     let client = HttpUsersClient::new(reqwest::Client::new(), url);
 
     client.delete_user(Uuid::new_v4(), Role::Admin, Uuid::new_v4(), "alice").await.unwrap();
+}
+
+#[tokio::test]
+async fn http_client_exports_a_users_data_subject_record_against_a_real_server() {
+    let url = spawn_stub_server().await;
+    let client = HttpUsersClient::new(reqwest::Client::new(), url);
+
+    let bytes = client.export_user_data(Uuid::new_v4(), Role::Admin, Uuid::new_v4()).await.unwrap();
+
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["user"]["username"], "alice");
 }
 
 #[tokio::test]

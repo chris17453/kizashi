@@ -178,3 +178,25 @@ pub async fn post_delete_user(
         .await;
     Redirect::to("/users").into_response()
 }
+
+/// GET /users/:id/export — a downloadable data-subject export (ADR-0054): the account record,
+/// its audit trail, and its login attempts, as returned verbatim by Auth Service.
+pub async fn get_export_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let session = match require_admin_session(&state, &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+
+    match state.users_client.export_user_data(session.tenant_id, session.role, id).await {
+        Ok(bytes) => {
+            let disposition = format!("attachment; filename=\"user-{id}-export.json\"");
+            ([("content-type", "application/json"), ("content-disposition", &disposition)], bytes)
+                .into_response()
+        }
+        Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+    }
+}

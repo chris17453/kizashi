@@ -3825,3 +3825,33 @@ architectural decision.
   crates this feature actually touches were fully verified.
 - **PR:** pending
 - **ADR:** docs/adr/0053-login-attempt-anomaly-alerting.md
+
+## [2026-07-20] feature/0062-data-subject-rights-export-and-delete — Data subject rights (export/delete)
+- **Type:** feature
+- **Branch:** feature/0062-data-subject-rights-export-and-delete
+- **Summary:** Closes another gap from the ADR-0051 compliance rubric: no way to answer a
+  GDPR/CCPA-style "export/delete everything about this person" request. Scoped explicitly to
+  local user accounts and directly-attributable records (account row, its audit trail, its login
+  attempts) — ingested ticket/email content has no reliable identity index and is out of scope
+  for v1 (documented, not silently dropped). New Admin-only, tenant-scoped `GET
+  /v1/users/:id/data-subject-export` (auth-service) aggregating the account + `auth_audit_log`
+  entries + `login_attempts` rows into one JSON document; new `LoginAttemptRepository::
+  list_by_username`. Console UI gained an "Export data" download link per row on `/users`
+  (`GET /users/:id/export`, served as a `Content-Disposition: attachment` JSON download). Delete
+  reuses the existing `DELETE /v1/users/:id` (no new endpoint) — the append-only
+  `login_attempts`/`auth_audit_log` rows intentionally aren't scrubbed on account deletion, since
+  weakening the DB-level immutability trigger to allow identity-scoped deletes would undermine
+  the audit trail's core guarantee; this trade-off is documented in the ADR rather than left
+  implicit.
+- **Tests:** `cargo test -p auth-service --lib` — 143 passed (4 new `data_subject_handler` tests:
+  admin can export, non-admin forbidden, unknown id is 404, cross-tenant id is 404; 1 new
+  `list_by_username` repository test). `cargo test -p auth-service --test
+  login_attempt_integration_test` — 5 passed (1 new: `list_by_username` against real Postgres).
+  `cargo test -p kizashi-ui --lib` — 352 passed (2 new `users_handler` tests: download attachment
+  succeeds for admin, forbidden for operator; 1 new `users_client` HTTP test). `cargo build
+  --workspace` clean. `cargo clippy -p auth-service --all-targets --all-features -- -D warnings`
+  and `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` both clean. `cargo
+  fmt --all --check` clean. `cargo deny check` and `cargo audit` — same pre-existing allow-listed
+  warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0054-data-subject-rights-export-and-delete.md

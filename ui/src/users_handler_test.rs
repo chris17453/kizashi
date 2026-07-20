@@ -26,6 +26,7 @@ fn router(state: AppState) -> Router {
         .route("/users", get(get_users).post(post_users))
         .route("/users/:id/role", post(post_update_user_role))
         .route("/users/:id/delete", post(post_delete_user))
+        .route("/users/:id/export", get(get_export_user))
         .with_state(state)
 }
 
@@ -250,6 +251,52 @@ async fn post_delete_user_is_forbidden_for_an_operator() {
             Request::builder()
                 .method("POST")
                 .uri(format!("/users/{}/delete", Uuid::new_v4()))
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn get_export_user_downloads_a_json_attachment_for_an_admin() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    let created = state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "bob", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/users/{}/export", created.id))
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get("content-disposition").unwrap(),
+        &format!("attachment; filename=\"user-{}-export.json\"", created.id)
+    );
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["user"]["username"], "bob");
+}
+
+#[tokio::test]
+async fn get_export_user_is_forbidden_for_an_operator() {
+    let (state, session_id, _) = state_with_session(Role::Operator).await;
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/users/{}/export", Uuid::new_v4()))
                 .header("cookie", cookie(&session_id))
                 .body(Body::empty())
                 .unwrap(),

@@ -152,7 +152,9 @@ pub use sessions_handler::{get_sessions, post_revoke_session};
 pub use sso_login_handler::{get_sso_callback, get_sso_login};
 pub use static_assets::get_charts_js;
 pub use triggers_handler::{get_triggers, post_trigger};
-pub use users_handler::{get_users, post_delete_user, post_update_user_role, post_users};
+pub use users_handler::{
+    get_export_user, get_users, post_delete_user, post_update_user_role, post_users,
+};
 
 use axum::routing::get;
 use axum::Router;
@@ -234,6 +236,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/users", get(get_users).post(post_users))
         .route("/users/:id/role", axum::routing::post(post_update_user_role))
         .route("/users/:id/delete", axum::routing::post(post_delete_user))
+        .route("/users/:id/export", get(get_export_user))
         .route("/audit-log", get(get_recent_audit_log))
         .route("/audit-log/export.csv", get(get_recent_audit_log_csv))
         .route("/audit-log/:service/:entity_id", get(get_entity_audit_log))

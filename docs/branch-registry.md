@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0062         |
+| feature       | `feature/` | 0063         |
 | fix           | `fix/`     | 0011         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -98,3 +98,4 @@ manually created branches.
 | 0059 | `feature/0059-totp-multi-factor-authentication` | feature | 2026-07-20 | open | pending | |
 | 0060 | `feature/0060-password-policy-enforcement` | feature | 2026-07-20 | open | pending | |
 | 0061 | `feature/0061-login-attempt-anomaly-alerting` | feature | 2026-07-20 | open | pending | |
+| 0062 | `feature/0062-data-subject-rights-export-and-delete` | feature | 2026-07-20 | open | pending | |

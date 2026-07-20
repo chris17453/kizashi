@@ -64,6 +64,17 @@ pub trait UsersClient: Send + Sync {
         id: Uuid,
         actor: &str,
     ) -> Result<(), UsersClientError>;
+
+    /// Data subject export (ADR-0054) — the raw JSON body from Auth Service's
+    /// `GET /v1/users/:id/data-subject-export` (account record, its audit trail, and its login
+    /// attempts), passed through as bytes rather than re-modeled here, since the Console UI only
+    /// needs to hand it to the admin as a downloadable file.
+    async fn export_user_data(
+        &self,
+        tenant_id: Uuid,
+        role: Role,
+        id: Uuid,
+    ) -> Result<Vec<u8>, UsersClientError>;
 }
 
 /// Reads the backend's `{"error": "..."}` body when present, falling back to a generic message
@@ -191,5 +202,30 @@ impl UsersClient for HttpUsersClient {
             return Err(rejected_error(response).await);
         }
         Ok(())
+    }
+
+    async fn export_user_data(
+        &self,
+        tenant_id: Uuid,
+        role: Role,
+        id: Uuid,
+    ) -> Result<Vec<u8>, UsersClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/users/{id}/data-subject-export", self.auth_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
+            .send()
+            .await
+            .map_err(|e| UsersClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(rejected_error(response).await);
+        }
+        response
+            .bytes()
+            .await
+            .map(|b| b.to_vec())
+            .map_err(|e| UsersClientError::Unreachable(e.to_string()))
     }
 }
