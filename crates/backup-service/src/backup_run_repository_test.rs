@@ -56,8 +56,15 @@ impl BackupRunRepository for InMemoryBackupRunRepository {
         Ok(())
     }
 
-    async fn list_recent(&self, limit: i64) -> Result<Vec<BackupRun>, BackupRunRepositoryError> {
+    async fn list_recent(
+        &self,
+        limit: i64,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<BackupRun>, BackupRunRepositoryError> {
         let mut runs = self.runs.lock().unwrap().clone();
+        if let Some(before) = before {
+            runs.retain(|r| r.started_at < before);
+        }
         runs.sort_by_key(|r| std::cmp::Reverse(r.started_at));
         runs.truncate(limit as usize);
         Ok(runs)
@@ -95,7 +102,11 @@ impl BackupRunRepository for FailingBackupRunRepository {
         Err(BackupRunRepositoryError::Backend("simulated failure".to_string()))
     }
 
-    async fn list_recent(&self, _limit: i64) -> Result<Vec<BackupRun>, BackupRunRepositoryError> {
+    async fn list_recent(
+        &self,
+        _limit: i64,
+        _before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<BackupRun>, BackupRunRepositoryError> {
         Err(BackupRunRepositoryError::Backend("simulated failure".to_string()))
     }
 }
@@ -108,7 +119,7 @@ async fn start_then_complete_updates_the_same_run() {
 
     repo.complete(id, Utc::now(), 4096).await.unwrap();
 
-    let runs = repo.list_recent(10).await.unwrap();
+    let runs = repo.list_recent(10, None).await.unwrap();
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].status, BackupRunStatus::Success);
     assert_eq!(runs[0].size_bytes, Some(4096));
@@ -122,7 +133,7 @@ async fn start_then_fail_records_the_error() {
 
     repo.fail(id, Utc::now(), "pg_dump exited with status 1").await.unwrap();
 
-    let runs = repo.list_recent(10).await.unwrap();
+    let runs = repo.list_recent(10, None).await.unwrap();
     assert_eq!(runs[0].status, BackupRunStatus::Failed);
     assert_eq!(runs[0].error.as_deref(), Some("pg_dump exited with status 1"));
 }
@@ -134,7 +145,21 @@ async fn list_recent_is_most_recent_first_and_honors_the_limit() {
         repo.start(Uuid::new_v4(), Utc::now(), "postgres").await.unwrap();
     }
 
-    let runs = repo.list_recent(2).await.unwrap();
+    let runs = repo.list_recent(2, None).await.unwrap();
 
     assert_eq!(runs.len(), 2);
+}
+
+#[tokio::test]
+async fn list_recent_with_before_excludes_runs_at_or_after_the_cursor() {
+    let repo = InMemoryBackupRunRepository::default();
+    let older = "2026-07-01T00:00:00Z".parse().unwrap();
+    let newer = "2026-07-15T00:00:00Z".parse().unwrap();
+    repo.start(Uuid::new_v4(), older, "postgres").await.unwrap();
+    repo.start(Uuid::new_v4(), newer, "postgres").await.unwrap();
+
+    let runs = repo.list_recent(10, Some(newer)).await.unwrap();
+
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].started_at, older);
 }

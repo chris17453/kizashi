@@ -84,10 +84,14 @@ async fn state_with(
 }
 
 async fn get_page(state: AppState, session_id: &str) -> axum::http::Response<Body> {
+    get_page_at(state, session_id, "/security/backups").await
+}
+
+async fn get_page_at(state: AppState, session_id: &str, uri: &str) -> axum::http::Response<Body> {
     router(state)
         .oneshot(
             Request::builder()
-                .uri("/security/backups")
+                .uri(uri)
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -119,6 +123,101 @@ async fn admin_can_view_backup_status() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("postgres/test.dump"));
     assert!(body.contains("Success"));
+}
+
+#[tokio::test]
+async fn shows_a_load_older_link_when_a_full_page_is_returned() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Role::Admin)).await;
+    let runs = (0..20)
+        .map(|i| BackupRun {
+            started_at: chrono::Utc::now() - chrono::Duration::days(i),
+            completed_at: Some(chrono::Utc::now()),
+            status: "success".to_string(),
+            target: format!("postgres/{i}.dump"),
+            size_bytes: Some(4096),
+            error: None,
+        })
+        .collect();
+    let client = InMemoryBackupStatusClient { runs: std::sync::Mutex::new(runs) };
+    let state = state_with(store, Arc::new(client)).await;
+
+    let response = get_page(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("/security/backups?before="));
+    // The cursor's rendered offset (`+00:00`) must be percent-encoded, not left as a raw `+` --
+    // an unencoded `+` in a query string is decoded as a space by `serde_urlencoded`/the
+    // application/x-www-form-urlencoded convention axum's Query extractor follows, corrupting
+    // the timestamp on click. Assert against the actual link text, not the whole body, since
+    // an unrelated `+` could appear elsewhere on the page.
+    let link_start = body.find("/security/backups?before=").unwrap();
+    let link_end = body[link_start..].find('"').unwrap() + link_start;
+    assert!(
+        !body[link_start..link_end].contains('+'),
+        "Load older link must not contain a raw '+': {}",
+        &body[link_start..link_end]
+    );
+}
+
+#[tokio::test]
+async fn no_load_older_link_when_fewer_than_a_full_page_is_returned() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Role::Admin)).await;
+    let client = InMemoryBackupStatusClient {
+        runs: std::sync::Mutex::new(vec![BackupRun {
+            started_at: chrono::Utc::now(),
+            completed_at: Some(chrono::Utc::now()),
+            status: "success".to_string(),
+            target: "postgres/test.dump".to_string(),
+            size_bytes: Some(4096),
+            error: None,
+        }]),
+    };
+    let state = state_with(store, Arc::new(client)).await;
+
+    let response = get_page(state, &session_id).await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("Load older"));
+}
+
+#[tokio::test]
+async fn before_query_param_is_forwarded_to_the_client() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Role::Admin)).await;
+    let cutoff: chrono::DateTime<chrono::Utc> = "2026-07-18T00:00:00Z".parse().unwrap();
+    let client = InMemoryBackupStatusClient {
+        runs: std::sync::Mutex::new(vec![
+            BackupRun {
+                started_at: cutoff - chrono::Duration::days(1),
+                completed_at: Some(cutoff),
+                status: "success".to_string(),
+                target: "postgres/older.dump".to_string(),
+                size_bytes: Some(4096),
+                error: None,
+            },
+            BackupRun {
+                started_at: cutoff,
+                completed_at: Some(cutoff),
+                status: "success".to_string(),
+                target: "postgres/newer.dump".to_string(),
+                size_bytes: Some(4096),
+                error: None,
+            },
+        ]),
+    };
+    let state = state_with(store, Arc::new(client)).await;
+
+    let response =
+        get_page_at(state, &session_id, "/security/backups?before=2026-07-18T00:00:00Z").await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("postgres/older.dump"));
+    assert!(!body.contains("postgres/newer.dump"));
 }
 
 #[tokio::test]

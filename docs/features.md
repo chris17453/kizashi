@@ -4386,3 +4386,23 @@ architectural decision.
   clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0075-inline-edit-input-accessible-names.md
+
+## [2026-07-20] feature/0083-backups-pagination-and-cursor-urlencoding-fix — Backups page pagination, and a cursor URL-encoding bug fix
+- **Type:** feature
+- **Branch:** feature/0083-backups-pagination-and-cursor-urlencoding-fix
+- **Summary:** Closes the last item from a fresh audit: Backups had no pagination, capped at the
+  first 20 runs forever. `BackupRunRepository::list_recent` gained a `before` cursor (same
+  exclusive-keyset shape as Login Attempts/the audit log), threaded through
+  `GET /v1/backup/status`, the UI client, and `GET /security/backups`'s new "Load older" link.
+  While building it, found and fixed a real already-shipped bug: every existing `?before=`
+  "Load older" link (Login Attempts, global Audit Log's HTML page and CSV link) rendered a raw
+  unencoded `+00:00` UTC offset into the href, which `serde_urlencoded` decodes as a space,
+  corrupting the timestamp on click. Fixed sitewide with Askama's built-in `|urlencode` filter.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 423 passed. `cargo test -p backup-service --lib`
+  — 16 passed. `cargo test -p backup-service --test backup_run_repository_integration_test`
+  (real Postgres) — 3 passed, including a new `before`-cursor test. New tests assert the
+  rendered "Load older" link contains no raw `+`, proving the encoding fix, not just its
+  presence. `cargo build --workspace` clean. `cargo clippy -p kizashi-ui -p backup-service
+  --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0076-backups-pagination-and-cursor-urlencoding-fix.md

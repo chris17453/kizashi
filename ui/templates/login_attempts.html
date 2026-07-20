@@ -47,7 +47,7 @@ responsibility to monitor.</p>
   </tbody>
 </table>
 {% if let Some(before) = next_before %}
-<p><a href="/security/login-attempts?before={{ before }}">Load older &rarr;</a></p>
+<p><a href="/security/login-attempts?before={{ before|urlencode }}">Load older &rarr;</a></p>
 {% endif %}
 {% endif %}
 {% endblock %}

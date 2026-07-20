@@ -29,9 +29,12 @@ pub enum BackupStatusClientError {
 /// every other write-path/ops client (ADR-0010).
 #[async_trait]
 pub trait BackupStatusClient: Send + Sync {
+    /// `before`, when present, only returns runs started strictly earlier than that timestamp
+    /// -- same exclusive keyset cursor Login Attempts/the global Audit Log use (ADR-0063).
     async fn list_recent(
         &self,
         role: common::Role,
+        before: Option<DateTime<Utc>>,
     ) -> Result<Vec<BackupRun>, BackupStatusClientError>;
 }
 
@@ -51,11 +54,16 @@ impl BackupStatusClient for HttpBackupStatusClient {
     async fn list_recent(
         &self,
         role: common::Role,
+        before: Option<DateTime<Utc>>,
     ) -> Result<Vec<BackupRun>, BackupStatusClientError> {
-        let response = self
+        let mut request = self
             .client
             .get(format!("{}/v1/backup/status", self.backup_service_url))
-            .header("x-role", role.to_string())
+            .header("x-role", role.to_string());
+        if let Some(before) = before {
+            request = request.query(&[("before", before.to_rfc3339())]);
+        }
+        let response = request
             .send()
             .await
             .map_err(|e| BackupStatusClientError::Unreachable(e.to_string()))?;

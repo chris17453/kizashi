@@ -37,5 +37,8 @@ application data.</p>
     {% endfor %}
   </tbody>
 </table>
+{% if let Some(before) = next_before %}
+<p><a href="/security/backups?before={{ before|urlencode }}">Load older &rarr;</a></p>
+{% endif %}
 {% endif %}
 {% endblock %}
