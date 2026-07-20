@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0084         |
-| fix           | `fix/`     | 0019         |
+| fix           | `fix/`     | 0020         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
 | chore         | `chore/`   | 0005         |
@@ -130,3 +130,4 @@ manually created branches.
 | 0083 | `feature/0083-backups-pagination-and-cursor-urlencoding-fix` | feature | 2026-07-20 | open | pending | |
 | 0017 | `fix/0017-local-test-database-isolation` | fix | 2026-07-20 | open | pending | |
 | 0018 | `fix/0018-permissions-reference-stale-rows` | fix | 2026-07-20 | open | pending | |
+| 0019 | `fix/0019-search-term-url-encoding-fix` | fix | 2026-07-20 | open | pending | |

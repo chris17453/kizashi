@@ -45,7 +45,7 @@ full before/after diff.</p>
 </table>
 {% if let Some(before) = next_before %}
 <p>
-  <a href="/audit-log?q={{ q }}&before={{ before|urlencode }}">Load older &rarr;</a>
+  <a href="/audit-log?q={{ q|urlencode }}&before={{ before|urlencode }}">Load older &rarr;</a>
   &middot;
   <a href="/audit-log/export.csv?before={{ before|urlencode }}" class="btn-link">Download CSV from here &#8595;</a>
 </p>

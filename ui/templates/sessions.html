@@ -27,17 +27,17 @@ Console UI instance (ADR-0046).</p>
   <thead>
     <tr>
       <th scope="col">
-        <a href="/security/sessions?q={{ q }}&sort=username&dir={% if sort == "username" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/security/sessions?q={{ q|urlencode }}&sort=username&dir={% if sort == "username" && dir != "desc" %}desc{% else %}asc{% endif %}">
           User{% if sort == "username" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/security/sessions?q={{ q }}&sort=role&dir={% if sort == "role" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/security/sessions?q={{ q|urlencode }}&sort=role&dir={% if sort == "role" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Role{% if sort == "role" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/security/sessions?q={{ q }}&sort=created_at&dir={% if sort == "created_at" || sort.is_empty() %}{% if dir == "asc" %}desc{% else %}asc{% endif %}{% else %}desc{% endif %}">
+        <a href="/security/sessions?q={{ q|urlencode }}&sort=created_at&dir={% if sort == "created_at" || sort.is_empty() %}{% if dir == "asc" %}desc{% else %}asc{% endif %}{% else %}desc{% endif %}">
           Signed in{% if sort == "created_at" || sort.is_empty() %}{% if dir == "asc" %} &#9650;{% else %} &#9660;{% endif %}{% endif %}
         </a>
       </th>

@@ -148,17 +148,17 @@
   <thead>
     <tr>
       <th scope="col">
-        <a href="/triggers?q={{ q }}&sort=name&dir={% if sort == "name" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/triggers?q={{ q|urlencode }}&sort=name&dir={% if sort == "name" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Name{% if sort == "name" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/triggers?q={{ q }}&sort=event_type_match&dir={% if sort == "event_type_match" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/triggers?q={{ q|urlencode }}&sort=event_type_match&dir={% if sort == "event_type_match" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Event Type Match{% if sort == "event_type_match" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/triggers?q={{ q }}&sort=enabled&dir={% if sort == "enabled" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/triggers?q={{ q|urlencode }}&sort=enabled&dir={% if sort == "enabled" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Enabled{% if sort == "enabled" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>

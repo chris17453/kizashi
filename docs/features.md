@@ -4443,3 +4443,20 @@ architectural decision.
   --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0078-permissions-reference-stale-rows.md
+
+## [2026-07-20] fix/0019-search-term-url-encoding-fix — Fix unencoded search-term URL-encoding in sort/pagination links
+- **Type:** fix
+- **Branch:** fix/0019-search-term-url-encoding-fix
+- **Summary:** A third audit pass found the same bug class as ADR-0076's `before`-cursor fix:
+  every sort-column header and "Load older" href across Users, Sessions, Triggers, Events, and
+  the global Audit Log spliced the raw `q` search term into a query string unencoded, so a
+  search containing `&` or `#` would corrupt the `sort`/`dir`/`before` values that follow it.
+  Notably found right next to `before|urlencode` on the same `recent_audit_log.html` line — the
+  earlier fix was applied to one parameter without checking the adjacent one. All 13 occurrences
+  now use Askama's `|urlencode` filter.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 424 passed (1 new: asserts a sort-header link
+  containing `&` in the search term is actually percent-encoded, not just present). `cargo
+  build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
+  warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0079-search-term-url-encoding-fix.md
