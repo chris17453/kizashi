@@ -198,10 +198,14 @@ async fn redirects_to_login_when_not_signed_in() {
 }
 
 async fn get_csv(state: AppState, session_id: &str) -> axum::http::Response<Body> {
+    get_csv_at(state, session_id, "/audit-log/export.csv").await
+}
+
+async fn get_csv_at(state: AppState, session_id: &str, uri: &str) -> axum::http::Response<Body> {
     router(state)
         .oneshot(
             Request::builder()
-                .uri("/audit-log/export.csv")
+                .uri(uri)
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -256,6 +260,60 @@ async fn csv_export_escapes_a_comma_in_a_field() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("\"actor, with a comma\""));
+}
+
+#[tokio::test]
+async fn csv_export_honors_the_before_query_param_as_the_starting_cursor() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let config_client = Arc::new(InMemoryAuditLogClient::default());
+    *config_client.recent.lock().unwrap() = vec![
+        entry("newer-actor", "2026-07-19T00:00:00Z"),
+        entry("older-actor", "2026-07-17T00:00:00Z"),
+    ];
+    state.config_audit_log_client = config_client;
+
+    let response =
+        get_csv_at(state, &session_id, "/audit-log/export.csv?before=2026-07-18T00:00:00Z").await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("older-actor"));
+    assert!(!body.contains("newer-actor"));
+}
+
+#[tokio::test]
+async fn csv_export_sets_x_next_before_header_when_more_history_remains() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let config_client = Arc::new(InMemoryAuditLogClient::default());
+    // CSV_MAX_PAGES * CSV_PAGE_LIMIT rows guarantees every page fetched in the export loop is a
+    // full page, so the loop runs out of iterations rather than hitting a natural empty page --
+    // exactly the "there might be more" case the X-Next-Before header exists for.
+    let base = "2026-01-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap();
+    let seeded: Vec<AuditLogEntry> = (0..(CSV_MAX_PAGES * CSV_PAGE_LIMIT as usize))
+        .map(|i| {
+            let mut e = entry("bulk-actor", "2026-01-01T00:00:00Z");
+            e.changed_at = base - chrono::Duration::seconds(i as i64);
+            e
+        })
+        .collect();
+    *config_client.recent.lock().unwrap() = seeded;
+    state.config_audit_log_client = config_client;
+
+    let response = get_csv(state, &session_id).await;
+
+    assert!(response.headers().get("x-next-before").is_some());
+}
+
+#[tokio::test]
+async fn csv_export_has_no_x_next_before_header_when_history_is_fully_exported() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let config_client = Arc::new(InMemoryAuditLogClient::default());
+    *config_client.recent.lock().unwrap() = vec![entry("only-actor", "2026-07-18T00:00:00Z")];
+    state.config_audit_log_client = config_client;
+
+    let response = get_csv(state, &session_id).await;
+
+    assert!(response.headers().get("x-next-before").is_none());
 }
 
 #[tokio::test]

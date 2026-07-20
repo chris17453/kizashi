@@ -117,13 +117,23 @@ fn csv_escape(value: &str) -> String {
     }
 }
 
+#[derive(serde::Deserialize)]
+pub struct CsvExportQuery {
+    before: Option<DateTime<Utc>>,
+}
+
 /// GET /audit-log/export.csv — a compliance-report export of the same merged feed
-/// `get_recent_audit_log` shows, paginated internally (not by the caller) up to
-/// `CSV_MAX_PAGES` pages per source so a single request can produce a genuinely useful export
-/// instead of just the one page the HTML view shows (ADR-0049).
+/// `get_recent_audit_log` shows, paginated internally (not by the caller within one request) up
+/// to `CSV_MAX_PAGES` pages per source so a single request can produce a genuinely useful export
+/// instead of just the one page the HTML view shows (ADR-0049). Accepts the same `?before=`
+/// cursor the HTML page's "Load older" link uses, so a tenant with more than `CSV_MAX_PAGES *
+/// CSV_PAGE_LIMIT * 3` (6000) rows of history isn't capped at the first page forever -- a
+/// second export request with `?before=<the last row's changed_at>` continues where the first
+/// left off, same cursor semantics as `list_recent` itself (ADR-0058 follow-up).
 pub async fn get_recent_audit_log_csv(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<CsvExportQuery>,
 ) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(session) => session,
@@ -131,11 +141,13 @@ pub async fn get_recent_audit_log_csv(
     };
 
     let mut all_rows: Vec<(&'static str, AuditLogEntry)> = Vec::new();
-    let mut before = None;
+    let mut before = query.before;
+    let mut exhausted = false;
     for _ in 0..CSV_MAX_PAGES {
         let (page, _errors) =
             fetch_merged_page(&state, session.tenant_id, before, CSV_PAGE_LIMIT).await;
         if page.is_empty() {
+            exhausted = true;
             break;
         }
         before = page.last().map(|(_, e)| e.changed_at);
@@ -155,15 +167,24 @@ pub async fn get_recent_audit_log_csv(
         ));
     }
 
-    (
-        [
-            (axum::http::header::CONTENT_TYPE, "text/csv".to_string()),
-            (
-                axum::http::header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"audit-log-{}.csv\"", session.tenant_id),
-            ),
-        ],
-        csv,
-    )
-        .into_response()
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(axum::http::header::CONTENT_TYPE, "text/csv".parse().unwrap());
+    headers.insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        format!("attachment; filename=\"audit-log-{}.csv\"", session.tenant_id).parse().unwrap(),
+    );
+    // Not `exhausted` means the loop ran out of iterations while at least one source still had
+    // more rows to give -- there may be more history beyond what this export contains, so
+    // surface the continuation cursor rather than silently truncating (CLAUDE.md's "no silent
+    // caps").
+    if !exhausted {
+        if let Some(next_before) = before {
+            headers.insert(
+                axum::http::HeaderName::from_static("x-next-before"),
+                next_before.to_rfc3339().parse().unwrap(),
+            );
+        }
+    }
+
+    (headers, csv).into_response()
 }
