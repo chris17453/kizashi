@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0058         |
-| fix           | `fix/`     | 0010         |
+| fix           | `fix/`     | 0011         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
 | chore         | `chore/`   | 0004         |
@@ -93,3 +93,4 @@ manually created branches.
 | 0055 | `feature/0055-global-audit-log-page` | feature | 2026-07-20 | open | pending | |
 | 0056 | `feature/0056-active-sessions-management` | feature | 2026-07-20 | open | pending | |
 | 0057 | `feature/0057-security-overview-dashboard` | feature | 2026-07-20 | open | pending | |
+| 0010 | `fix/0010-disabled-button-visual-state` | fix | 2026-07-20 | open | pending | |

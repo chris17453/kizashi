@@ -3705,3 +3705,20 @@ architectural decision.
   check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
 - **PR:** pending
 - **ADR:** docs/adr/0047-security-overview-dashboard-and-nav-grouping.md
+
+## [2026-07-20] fix/0010-disabled-button-visual-state — Disabled buttons now look disabled
+- **Type:** fix
+- **Branch:** fix/0010-disabled-button-visual-state
+- **Summary:** Found via visual review of the new Active Sessions page (headless-Chrome
+  screenshot, not just passing tests): buttons rendered with the HTML `disabled` attribute (e.g.
+  "Revoke" on the caller's own session, "Remove" on the caller's own user row) were functionally
+  disabled but visually identical to an enabled button — same solid accent/danger color, same
+  cursor, no indication a click would do nothing. Adds a `:disabled` style rule (dimmed opacity,
+  `not-allowed` cursor, neutral background) affecting every disabled button across the Console UI,
+  not just the two pages that surfaced it.
+- **Tests:** `cargo test -p kizashi-ui --lib` (309 passed, unchanged — CSS-only change, no
+  behavioral test coverage needed/added); `cargo clippy --workspace --all-targets --all-features
+  -- -D warnings`, `cargo fmt --all --check`, `cargo build --workspace` all green. Live-verified
+  via headless-Chrome screenshot of the rendered `/security/sessions` page before and after.
+- **PR:** pending
+- **ADR:** n/a
