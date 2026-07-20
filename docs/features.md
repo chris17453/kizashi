@@ -4494,3 +4494,21 @@ architectural decision.
   clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0081-overview-dashboard-surfaces-backend-errors.md
+
+## [2026-07-20] feature/0085-data-viewer-date-range-and-normalization-filters — Data Viewer date-range and normalization-status filters
+- **Type:** feature
+- **Branch:** feature/0085-data-viewer-date-range-and-normalization-filters
+- **Summary:** Closes a pure UI-wiring gap from a fourth audit pass: the Data Viewer's search
+  form never exposed `from`/`to`/`normalized` filters, even though Ingestion Service's
+  `search_records` endpoint has accepted them since the search API was built. `RecordSearchFilter`
+  gains `from`/`to: Option<DateTime<Utc>>` and `normalized: Option<bool>`; the query-string
+  `DataSearchQuery` keeps them as plain strings (`<input type="date">` submits `YYYY-MM-DD`,
+  not a timestamp) and `parse_date_range` treats `from` as start-of-day, `to` as end-of-day, so
+  a range is fully inclusive of both endpoints. Also captured in saved searches.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 432 passed (5 new: `parse_date_range`'s
+  start/end-of-day and empty/unparseable behavior, the HTTP client forwarding `from`/`to`/
+  `normalized` as query params, and the handler prefilling both from the query string). `cargo
+  build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
+  warnings` clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0082-data-viewer-date-range-and-normalization-filters.md

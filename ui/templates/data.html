@@ -44,6 +44,16 @@
       <input type="text" id="email_from" name="email_from" value="{{ query.email_from }}" placeholder="alice@example.com">
       <label for="attachment_filename">Attachment filename</label>
       <input type="text" id="attachment_filename" name="attachment_filename" value="{{ query.attachment_filename }}" placeholder="invoice.pdf">
+      <label for="from">Ingested from</label>
+      <input type="date" id="from" name="from" value="{{ query.from }}">
+      <label for="to">Ingested to</label>
+      <input type="date" id="to" name="to" value="{{ query.to }}">
+      <label for="normalized">Normalization status</label>
+      <select id="normalized" name="normalized">
+        <option value="" {% if query.normalized.is_empty() %}selected{% endif %}>Any</option>
+        <option value="true" {% if query.normalized == "true" %}selected{% endif %}>Normalized only</option>
+        <option value="false" {% if query.normalized == "false" %}selected{% endif %}>Not yet normalized</option>
+      </select>
       <button type="submit">Search</button>
     </form>
     <form class="inline" method="post" action="/data/saved-searches" style="margin-top:1rem">
@@ -53,6 +63,9 @@
       <input type="hidden" name="subject" value="{{ query.subject }}">
       <input type="hidden" name="email_from" value="{{ query.email_from }}">
       <input type="hidden" name="attachment_filename" value="{{ query.attachment_filename }}">
+      <input type="hidden" name="from" value="{{ query.from }}">
+      <input type="hidden" name="to" value="{{ query.to }}">
+      <input type="hidden" name="normalized" value="{{ query.normalized }}">
       <label for="save_search_name">Save this search as</label>
       <input type="text" id="save_search_name" name="name" placeholder="urgent tickets" required>
       <button type="submit" class="btn">Save search</button>
@@ -120,6 +133,9 @@
     <input type="hidden" name="subject" value="{{ query.subject }}">
     <input type="hidden" name="email_from" value="{{ query.email_from }}">
     <input type="hidden" name="attachment_filename" value="{{ query.attachment_filename }}">
+    <input type="hidden" name="from" value="{{ query.from }}">
+    <input type="hidden" name="to" value="{{ query.to }}">
+    <input type="hidden" name="normalized" value="{{ query.normalized }}">
     <input type="hidden" name="page" value="{{ page - 1 }}">
     <button type="submit" class="btn">&larr; Previous</button>
   </form>
@@ -133,6 +149,9 @@
     <input type="hidden" name="subject" value="{{ query.subject }}">
     <input type="hidden" name="email_from" value="{{ query.email_from }}">
     <input type="hidden" name="attachment_filename" value="{{ query.attachment_filename }}">
+    <input type="hidden" name="from" value="{{ query.from }}">
+    <input type="hidden" name="to" value="{{ query.to }}">
+    <input type="hidden" name="normalized" value="{{ query.normalized }}">
     <input type="hidden" name="page" value="{{ page + 1 }}">
     <button type="submit" class="btn">Next &rarr;</button>
   </form>

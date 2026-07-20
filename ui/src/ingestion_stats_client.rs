@@ -40,6 +40,15 @@ pub struct RecordSearchFilter {
     pub subject: Option<String>,
     pub email_from: Option<String>,
     pub attachment_filename: Option<String>,
+    /// Inclusive start of an ingested-at date range -- an investigator scoping a search to a
+    /// specific incident window, matching Ingestion Service's `SearchRecordsQuery::from`.
+    pub from: Option<DateTime<Utc>>,
+    /// Inclusive end of an ingested-at date range.
+    pub to: Option<DateTime<Utc>>,
+    /// `Some(false)` finds only records with no `normalized_payload` yet -- the same "what's
+    /// left to normalize" query `POST /data/reprocess` already answers server-side, now
+    /// filterable directly. `Some(true)` finds only normalized records. `None` doesn't filter.
+    pub normalized: Option<bool>,
     pub limit: i64,
     pub offset: i64,
 }
@@ -53,6 +62,9 @@ impl Default for RecordSearchFilter {
             subject: None,
             email_from: None,
             attachment_filename: None,
+            from: None,
+            to: None,
+            normalized: None,
             limit: DEFAULT_PAGE_SIZE,
             offset: 0,
         }
@@ -199,6 +211,15 @@ impl IngestionStatsClient for HttpIngestionStatsClient {
             if !attachment_filename.is_empty() {
                 params.push(("attachment_filename", attachment_filename.clone()));
             }
+        }
+        if let Some(from) = &filter.from {
+            params.push(("from", from.to_rfc3339()));
+        }
+        if let Some(to) = &filter.to {
+            params.push(("to", to.to_rfc3339()));
+        }
+        if let Some(normalized) = filter.normalized {
+            params.push(("normalized", normalized.to_string()));
         }
 
         let response = self
