@@ -21,7 +21,18 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY . .
-RUN cargo build --release --bin "${BIN}" \
+# BuildKit cache mounts for the cargo registry/git cache and the workspace's target/ dir --
+# without these, every single `docker build` recompiled the ENTIRE dependency tree (aws-sdk-s3,
+# sqlx, tokio, hundreds of crates) from zero, every time, regardless of how small the actual
+# source change was (`COPY . .` invalidates Docker's own layer cache on any change, and nothing
+# was persisting cargo's own incremental artifacts across builds). These mounts persist across
+# `docker build` invocations (keyed by target path, shared by every BIN this Dockerfile builds
+# since they're all one Cargo workspace), so only the changed crate(s) actually recompile after
+# the first build.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --bin "${BIN}" \
     && cp "target/release/${BIN}" /tmp/service
 
 FROM debian:bookworm-slim

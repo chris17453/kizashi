@@ -16,7 +16,7 @@ manually created branches.
 | fix           | `fix/`     | 0012         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
-| chore         | `chore/`   | 0004         |
+| chore         | `chore/`   | 0005         |
 
 ## Branch log (append-only, newest last)
 
@@ -108,3 +108,4 @@ manually created branches.
 | 0068 | `feature/0068-audit-log-csv-export-pagination` | feature | 2026-07-20 | open | pending | |
 | 0069 | `feature/0069-destructive-action-confirmation` | feature | 2026-07-20 | open | pending | |
 | 0070 | `feature/0070-users-page-search` | feature | 2026-07-20 | open | pending | |
+| 0004 | `chore/0004-docker-build-cache-mounts` | chore | 2026-07-20 | open | pending | |
