@@ -58,13 +58,29 @@
   {% endif %}
 </div>
 {% else %}
+{% if can_write %}
+<!-- Declared empty and referenced by `form="bulk-revoke-form"` on each checkbox/button below,
+     rather than physically wrapping the table -- HTML forms can't nest, and each row also needs
+     its own single-key revoke form. -->
+<form id="bulk-revoke-form" method="post" action="/api-keys/bulk-revoke"></form>
+{% endif %}
 <table>
   <thead>
-    <tr><th>Label</th><th>Created</th><th>Status</th><th></th></tr>
+    <tr>
+      {% if can_write %}<th></th>{% endif %}
+      <th>Label</th><th>Created</th><th>Status</th><th></th>
+    </tr>
   </thead>
   <tbody>
     {% for key in keys %}
     <tr>
+      {% if can_write %}
+      <td>
+        {% if key.revoked_at.is_none() %}
+        <input type="checkbox" name="ids" value="{{ key.id }}" form="bulk-revoke-form" aria-label="Select {{ key.label }} for bulk revoke">
+        {% endif %}
+      </td>
+      {% endif %}
       <td>{{ key.label }}</td>
       <td>{{ key.created_at }}</td>
       {% if let Some(revoked) = key.revoked_at %}
@@ -84,5 +100,8 @@
     {% endfor %}
   </tbody>
 </table>
+{% if can_write %}
+<p><button type="submit" form="bulk-revoke-form" class="btn-danger">Revoke selected</button></p>
+{% endif %}
 {% endif %}
 {% endblock %}

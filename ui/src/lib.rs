@@ -124,7 +124,9 @@ pub use triggers_client::{
 pub use users_client::{HttpUsersClient, UiUser, UsersClient, UsersClientError};
 
 pub use analysis_config_handler::{get_analysis_config_page, post_analysis_config};
-pub use api_keys_handler::{get_api_keys, post_api_keys, post_revoke_api_key};
+pub use api_keys_handler::{
+    get_api_keys, post_api_keys, post_bulk_revoke_api_keys, post_revoke_api_key,
+};
 pub use audit_log_handler::get_audit_log as get_entity_audit_log;
 pub use backup_status_handler::get_backups;
 pub use branding_handler::{get_branding_page, post_branding};
@@ -237,6 +239,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/sensors/:id/toggle", axum::routing::post(post_toggle_sensor))
         .route("/api-keys", get(get_api_keys).post(post_api_keys))
         .route("/api-keys/:id/revoke", axum::routing::post(post_revoke_api_key))
+        .route("/api-keys/bulk-revoke", axum::routing::post(post_bulk_revoke_api_keys))
         .route("/analysis-config", get(get_analysis_config_page).post(post_analysis_config))
         .route(
             "/normalization-mappings",

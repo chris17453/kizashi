@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0076         |
+| feature       | `feature/` | 0077         |
 | fix           | `fix/`     | 0012         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
@@ -114,3 +114,4 @@ manually created branches.
 | 0073 | `feature/0073-login-attempts-pagination-and-search` | feature | 2026-07-20 | open | pending | |
 | 0074 | `feature/0074-normalization-mappings-search` | feature | 2026-07-20 | open | pending | |
 | 0075 | `feature/0075-users-page-sortable-columns` | feature | 2026-07-20 | open | pending | |
+| 0076 | `feature/0076-api-keys-bulk-revoke` | feature | 2026-07-20 | open | pending | |

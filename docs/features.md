@@ -4170,3 +4170,21 @@ architectural decision.
   audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0064-users-page-sortable-columns.md
+
+## [2026-07-20] feature/0076-api-keys-bulk-revoke — API Keys bulk revoke
+- **Type:** feature
+- **Branch:** feature/0076-api-keys-bulk-revoke
+- **Summary:** Closes another UI/UX audit finding: no list page anywhere supported a bulk action.
+  `POST /api-keys/bulk-revoke` accepts one or more selected `ids` (checkbox per active row) and
+  loops over the existing single-item `ApiKeysClient::revoke_api_key` call for each. Template
+  uses an empty out-of-table `<form id="bulk-revoke-form">` referenced via the HTML5 `form=`
+  attribute on checkboxes/button, since forms cannot nest and each row still has its own
+  single-revoke form. RBAC-gated identically to single-revoke (Operator+, hidden in template for
+  Viewer, 403 server-side otherwise).
+- **Tests:** `cargo test -p kizashi-ui --lib` — 399 passed (3 new: revokes every selected key,
+  no-op on empty selection, 403 for a Viewer). `cargo build --workspace` clean. `cargo clippy -p
+  kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check`
+  clean. `cargo deny check`/`cargo audit` — same pre-existing allow-listed warnings as prior
+  entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0065-api-keys-bulk-revoke.md
