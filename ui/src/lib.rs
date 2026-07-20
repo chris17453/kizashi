@@ -17,6 +17,7 @@ mod events_client;
 mod execution_client;
 mod health_client;
 mod ingestion_stats_client;
+mod login_attempts_client;
 mod mfa_client;
 mod normalization_mappings_client;
 mod oidc_client;
@@ -40,6 +41,7 @@ mod egress_allowlist_handler;
 mod events_handler;
 mod health_handler;
 mod healthz;
+mod login_attempts_handler;
 mod login_handler;
 mod logout_handler;
 mod mfa_login_handler;
@@ -88,6 +90,9 @@ pub use ingestion_stats_client::{
     ConnectorStatSummary, HttpIngestionStatsClient, IngestionStatsClient,
     IngestionStatsClientError, RecordSearchFilter, RecordSummary,
 };
+pub use login_attempts_client::{
+    HttpLoginAttemptsClient, LoginAttempt, LoginAttemptsClient, LoginAttemptsClientError,
+};
 pub use mfa_client::{HttpMfaClient, MfaClient, MfaClientError, MfaEnrollment};
 pub use normalization_mappings_client::{
     HttpNormalizationMappingsClient, NormalizationMappingsClient, NormalizationMappingsClientError,
@@ -119,6 +124,7 @@ pub use egress_allowlist_handler::{get_egress_allowlist, post_egress_allowlist};
 pub use events_handler::get_events;
 pub use health_handler::get_health;
 pub use healthz::healthz;
+pub use login_attempts_handler::get_login_attempts as get_login_attempts_page;
 pub use login_handler::{get_login, post_login};
 pub use logout_handler::get_logout;
 pub use mfa_login_handler::{get_mfa_challenge, post_mfa_challenge as post_mfa_login_challenge};
@@ -175,6 +181,7 @@ pub struct AppState {
     pub retention_policies_client: Arc<dyn RetentionPoliciesClient>,
     pub egress_allowlist_client: Arc<dyn EgressAllowlistClient>,
     pub users_client: Arc<dyn UsersClient>,
+    pub login_attempts_client: Arc<dyn LoginAttemptsClient>,
     pub saved_search_queries_client: Arc<dyn SavedSearchQueriesClient>,
     /// All three fields hold an `Arc<dyn AuditLogClient>` built from the *same*
     /// `HttpAuditLogClient` implementation, just constructed with a different backend base
@@ -237,6 +244,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/security/mfa/verify", axum::routing::post(post_mfa_settings_verify))
         .route("/security/mfa/disable", axum::routing::post(post_mfa_settings_disable))
         .route("/security/sessions", get(get_sessions))
+        .route("/security/login-attempts", get(get_login_attempts_page))
         .route("/security/sessions/:id/revoke", axum::routing::post(post_revoke_session))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))

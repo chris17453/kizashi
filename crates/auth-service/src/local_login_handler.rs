@@ -4,6 +4,7 @@ mod local_login_handler_test;
 
 use crate::audit_log::AuditLogReader;
 use crate::local_user_repository::LocalUserRepository;
+use crate::login_attempt_repository::{LoginAttempt, LoginAttemptRepository};
 use crate::mfa_repository::MfaChallengeRepository;
 use crate::oidc_handler::OidcClients;
 use crate::password::verify_password;
@@ -25,6 +26,31 @@ pub struct AuthState {
     pub oidc_clients: OidcClients,
     pub audit_log_reader: Arc<dyn AuditLogReader>,
     pub mfa_challenge_repository: Arc<dyn MfaChallengeRepository>,
+    pub login_attempt_repository: Arc<dyn LoginAttemptRepository>,
+}
+
+/// Best-effort: a failure to *record* an attempt must never block the login response itself
+/// (the DB write is a side channel, not part of the auth decision) -- logged and swallowed.
+/// `pub(crate)` so `mfa_handler::post_mfa_challenge` can record the second half of an MFA-gated
+/// login the same way.
+pub(crate) async fn record_attempt(
+    state: &AuthState,
+    tenant_id: Option<Uuid>,
+    username: &str,
+    success: bool,
+    reason: &str,
+) {
+    let attempt = LoginAttempt {
+        id: Uuid::new_v4(),
+        tenant_id,
+        username: username.to_string(),
+        success,
+        reason: reason.to_string(),
+        attempted_at: chrono::Utc::now(),
+    };
+    if let Err(e) = state.login_attempt_repository.record(&attempt).await {
+        tracing::error!(error = %e, "failed to record login attempt");
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -108,6 +134,14 @@ pub async fn local_login(
     };
 
     if !authenticated {
+        let reason = if tenant_id.is_none() {
+            "unknown_workspace"
+        } else if user.is_none() {
+            "unknown_username"
+        } else {
+            "wrong_password"
+        };
+        record_attempt(&state, tenant_id, &req.username, false, reason).await;
         return error_response(
             StatusCode::UNAUTHORIZED,
             "invalid workspace, username, or password",
@@ -116,6 +150,14 @@ pub async fn local_login(
     let user = user.expect("authenticated implies user is Some");
 
     if user.mfa_enabled {
+        record_attempt(
+            &state,
+            Some(user.tenant_id),
+            &req.username,
+            true,
+            "password_ok_mfa_pending",
+        )
+        .await;
         return match state.mfa_challenge_repository.create(user.id, user.tenant_id).await {
             Ok(challenge_token) => {
                 Json(MfaRequiredResponse { mfa_required: true, challenge_token }).into_response()
@@ -125,13 +167,16 @@ pub async fn local_login(
     }
 
     match state.session_client.mint_session(user.tenant_id, user.role, "local-login").await {
-        Ok(token) => Json(LoginResponse {
-            token,
-            tenant_id: user.tenant_id,
-            role: user.role,
-            username: None,
-        })
-        .into_response(),
+        Ok(token) => {
+            record_attempt(&state, Some(user.tenant_id), &req.username, true, "success").await;
+            Json(LoginResponse {
+                token,
+                tenant_id: user.tenant_id,
+                role: user.role,
+                username: None,
+            })
+            .into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "session mint failed");
             error_response(StatusCode::BAD_GATEWAY, "failed to establish session")

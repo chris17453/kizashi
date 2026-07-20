@@ -12,6 +12,8 @@ mod health;
 mod internal_secret;
 mod local_login_handler;
 mod local_user_repository;
+mod login_attempt_handler;
+mod login_attempt_repository;
 mod mfa;
 mod mfa_handler;
 mod mfa_repository;
@@ -35,6 +37,11 @@ pub use local_login_handler::{
 };
 pub use local_user_repository::{
     LocalUser, LocalUserRepository, LocalUserRepositoryError, PostgresLocalUserRepository,
+};
+pub use login_attempt_handler::{get_login_attempts, LoginAttemptQuery};
+pub use login_attempt_repository::{
+    LoginAttempt, LoginAttemptRepository, LoginAttemptRepositoryError,
+    PostgresLoginAttemptRepository,
 };
 pub use mfa_handler::{
     get_mfa_status, post_mfa_challenge, post_mfa_disable, post_mfa_enroll, post_mfa_verify,
@@ -108,6 +115,9 @@ pub fn build_router(state: AuthState, internal_secret: String) -> Router {
         .route("/v1/auth/local/mfa/enroll", post(post_mfa_enroll))
         .route("/v1/auth/local/mfa/verify", post(post_mfa_verify))
         .route("/v1/auth/local/mfa/disable", post(post_mfa_disable))
+        // Admin-only tenant-wide security telemetry (ADR-0053) -- same access bar as /v1/users,
+        // a step above the self-service MFA routes above it.
+        .route("/v1/auth/local/login-attempts", get(get_login_attempts))
         .with_state(state)
         .layer(axum::middleware::from_fn_with_state(internal_secret, require_internal_secret));
 

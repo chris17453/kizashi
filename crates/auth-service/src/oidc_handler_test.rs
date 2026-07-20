@@ -36,6 +36,7 @@ fn state_with_provider(
         mfa_challenge_repository: Arc::new(
             crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default(),
         ),
+            login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
     }
 }
 

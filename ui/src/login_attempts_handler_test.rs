@@ -11,14 +11,17 @@ use crate::execution_client::execution_client_test::InMemoryExecutionClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
-use crate::mfa_client::mfa_client_test::InMemoryMfaClient;
+use crate::login_attempts_client::login_attempts_client_test::{
+    FailingLoginAttemptsClient, InMemoryLoginAttemptsClient,
+};
+use crate::login_attempts_client::{LoginAttempt, LoginAttemptsClient};
 use crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient;
 use crate::oidc_client::oidc_client_test::InMemoryOidcClient;
 use crate::pending_oidc_flow::InMemoryPendingOidcFlowStore;
 use crate::retention_policies_client::retention_policies_client_test::InMemoryRetentionPoliciesClient;
 use crate::saved_search_queries_client::saved_search_queries_client_test::InMemorySavedSearchQueriesClient;
 use crate::sensors_client::sensors_client_test::InMemorySensorsClient;
-use crate::session::InMemorySessionStore;
+use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use crate::users_client::users_client_test::InMemoryUsersClient;
 use axum::body::Body;
@@ -26,18 +29,30 @@ use axum::http::{Request, StatusCode};
 use axum::routing::get;
 use axum::Router;
 use std::sync::Arc;
+use std::sync::Mutex;
 use tower::ServiceExt;
 use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new()
-        .route("/login/mfa", get(get_mfa_challenge).post(post_mfa_challenge))
-        .with_state(state)
+    Router::new().route("/security/login-attempts", get(get_login_attempts)).with_state(state)
 }
 
-fn state_with_mfa_client(mfa_client: InMemoryMfaClient) -> AppState {
+fn sample_session(tenant_id: Uuid, role: Role, username: &str) -> Session {
+    Session {
+        bearer_token: "tok".to_string(),
+        tenant_id,
+        username: username.to_string(),
+        role,
+        created_at: chrono::Utc::now(),
+    }
+}
+
+async fn state_with(
+    session_store: InMemorySessionStore,
+    login_attempts_client: Arc<dyn LoginAttemptsClient>,
+) -> AppState {
     AppState {
-        session_store: Arc::new(InMemorySessionStore::default()),
+        session_store: Arc::new(session_store),
         auth_client: Arc::new(InMemoryAuthClient::default()),
         branding_client: Arc::new(InMemoryBrandingClient::default()),
         oidc_client: Arc::new(InMemoryOidcClient::default()),
@@ -61,111 +76,100 @@ fn state_with_mfa_client(mfa_client: InMemoryMfaClient) -> AppState {
         auth_audit_log_client: Arc::new(InMemoryAuditLogClient::default()),
         users_client: Arc::new(InMemoryUsersClient::default()),
         saved_search_queries_client: Arc::new(InMemorySavedSearchQueriesClient::default()),
-        mfa_client: Arc::new(mfa_client),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
-            login_attempts_client: Arc::new(crate::login_attempts_client::login_attempts_client_test::InMemoryLoginAttemptsClient::default()),
+        mfa_client: Arc::new(crate::mfa_client::mfa_client_test::InMemoryMfaClient::default()),
+        login_attempts_client,
     }
 }
 
-#[tokio::test]
-async fn get_redirects_to_login_when_the_challenge_cookie_is_missing() {
-    let state = state_with_mfa_client(InMemoryMfaClient::default());
-
-    let response = router(state)
-        .oneshot(Request::builder().uri("/login/mfa").body(Body::empty()).unwrap())
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    assert_eq!(response.headers().get("location").unwrap(), "/login");
-}
-
-#[tokio::test]
-async fn get_renders_the_code_form_when_the_challenge_cookie_is_present() {
-    let state = state_with_mfa_client(InMemoryMfaClient::default());
-
-    let response = router(state)
+async fn get_page(state: AppState, session_id: &str) -> axum::http::Response<Body> {
+    router(state)
         .oneshot(
             Request::builder()
-                .uri("/login/mfa")
-                .header("cookie", "kizashi_mfa_challenge=some-token")
+                .uri("/security/login-attempts")
+                .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
+        .unwrap()
 }
 
 #[tokio::test]
-async fn post_with_the_correct_code_establishes_a_session() {
-    let mfa_client = InMemoryMfaClient::default();
-    let tenant_id = Uuid::new_v4();
-    *mfa_client.challenge_result.lock().unwrap() =
-        Some(("issued-token".to_string(), tenant_id, common::Role::Operator));
-    let state = state_with_mfa_client(mfa_client);
+async fn admin_can_view_login_attempts() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let client = InMemoryLoginAttemptsClient {
+        attempts: Mutex::new(vec![LoginAttempt {
+            username: "bob".to_string(),
+            success: false,
+            reason: "wrong_password".to_string(),
+            attempted_at: chrono::Utc::now(),
+        }]),
+    };
+    let state = state_with(store, Arc::new(client)).await;
 
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/login/mfa")
-                .header("content-type", "application/x-www-form-urlencoded")
-                .header("cookie", "kizashi_mfa_challenge=valid-token; kizashi_mfa_username=alice")
-                .body(Body::from("code=123456"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    assert_eq!(response.headers().get("location").unwrap(), "/overview");
-    let cookies: Vec<_> = response.headers().get_all("set-cookie").iter().collect();
-    assert!(cookies.iter().any(|c| c.to_str().unwrap().starts_with("kizashi_session=")));
-    assert!(cookies.iter().any(|c| c.to_str().unwrap().starts_with("kizashi_mfa_challenge=; ")));
-}
-
-#[tokio::test]
-async fn post_with_the_wrong_code_shows_an_error_and_does_not_establish_a_session() {
-    let state = state_with_mfa_client(InMemoryMfaClient::default());
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/login/mfa")
-                .header("content-type", "application/x-www-form-urlencoded")
-                .header("cookie", "kizashi_mfa_challenge=valid-token; kizashi_mfa_username=alice")
-                .body(Body::from("code=000000"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = get_page(state, &session_id).await;
 
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(response.headers().get("set-cookie").is_none());
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Invalid or expired code"));
+    assert!(body.contains("bob"));
+    assert!(body.contains("wrong_password"));
+    assert!(body.contains("1 failed attempt"));
 }
 
 #[tokio::test]
-async fn post_without_a_challenge_cookie_redirects_to_login() {
-    let state = state_with_mfa_client(InMemoryMfaClient::default());
+async fn shows_an_empty_state_with_no_attempts() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let state = state_with(store, Arc::new(InMemoryLoginAttemptsClient::default())).await;
+
+    let response = get_page(state, &session_id).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No recent login attempts"));
+}
+
+#[tokio::test]
+async fn shows_an_error_when_the_backend_is_unreachable() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let state = state_with(store, Arc::new(FailingLoginAttemptsClient)).await;
+
+    let response = get_page(state, &session_id).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("simulated failure"));
+}
+
+#[tokio::test]
+async fn non_admin_gets_forbidden() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Operator, "alice")).await;
+    let state = state_with(store, Arc::new(InMemoryLoginAttemptsClient::default())).await;
+
+    let response = get_page(state, &session_id).await;
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn redirects_to_login_when_not_signed_in() {
+    let state = state_with(
+        InMemorySessionStore::default(),
+        Arc::new(InMemoryLoginAttemptsClient::default()),
+    )
+    .await;
 
     let response = router(state)
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/login/mfa")
-                .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from("code=123456"))
-                .unwrap(),
-        )
+        .oneshot(Request::builder().uri("/security/login-attempts").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    assert_eq!(response.headers().get("location").unwrap(), "/login");
 }

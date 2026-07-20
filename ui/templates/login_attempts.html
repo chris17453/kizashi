@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Login Attempts</h1>
+<p class="muted">Every recent local-login and two-factor challenge attempt for this workspace,
+successful or not — a brute-force pattern or a specific account under repeated attack shows up
+here. This only covers local username/password logins; SSO logins are your identity provider's
+responsibility to monitor.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if attempts.is_empty() %}
+<div class="empty-state">
+  <div class="empty-icon">&#128272;</div>
+  <p>No recent login attempts.</p>
+</div>
+{% else %}
+<p class="muted">{{ failed_count }} failed attempt(s) shown below.</p>
+<table>
+  <thead>
+    <tr><th>When</th><th>Username</th><th>Result</th><th>Reason</th></tr>
+  </thead>
+  <tbody>
+    {% for a in attempts %}
+    <tr>
+      <td>{{ a.attempted_at }}</td>
+      <td><code>{{ a.username }}</code></td>
+      <td>
+        {% if a.success %}
+        <span class="status-up">Success</span>
+        {% else %}
+        <span class="status-down">Failed</span>
+        {% endif %}
+      </td>
+      <td>{{ a.reason }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
