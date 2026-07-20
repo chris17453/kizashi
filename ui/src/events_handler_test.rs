@@ -15,7 +15,10 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/events", get(get_events)).with_state(state)
+    Router::new()
+        .route("/events", get(get_events))
+        .route("/events/export.csv", get(get_events_export_csv))
+        .with_state(state)
 }
 
 async fn state_with_session() -> (AppState, String) {
@@ -231,4 +234,52 @@ fn parse_date_range_leaves_an_empty_or_unparseable_side_as_none() {
     let (from, to) = parse_date_range("", "not-a-date");
     assert!(from.is_none());
     assert!(to.is_none());
+}
+
+#[tokio::test]
+async fn export_csv_returns_every_event_as_csv() {
+    let (mut state, session_id) = state_with_session().await;
+    let events_client = InMemoryEventsClient::default();
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "sentiment_spike".to_string(),
+        group_key: "customer-42".to_string(),
+        status: "open".to_string(),
+        occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+        record_ids: vec![],
+    });
+    state.events_client = Arc::new(events_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events/export.csv")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers().get("content-type").unwrap().to_str().unwrap(), "text/csv");
+    let disposition = response.headers().get("content-disposition").unwrap().to_str().unwrap();
+    assert!(disposition.contains("events-"));
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.starts_with("occurred_at,event_type,group_key,status\n"));
+    assert!(body.contains("sentiment_spike"));
+    assert!(body.contains("customer-42"));
+}
+
+#[tokio::test]
+async fn export_csv_requires_a_session() {
+    let (state, _session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(Request::builder().uri("/events/export.csv").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
 }

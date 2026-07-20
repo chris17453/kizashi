@@ -137,7 +137,7 @@ pub use data_handler::{
     get_data, get_data_export_csv, post_delete_saved_search, post_reprocess, post_save_search,
 };
 pub use egress_allowlist_handler::{get_egress_allowlist, post_egress_allowlist};
-pub use events_handler::get_events;
+pub use events_handler::{get_events, get_events_export_csv};
 pub use health_handler::get_health;
 pub use healthz::healthz;
 pub use login_attempts_handler::get_login_attempts as get_login_attempts_page;
@@ -240,6 +240,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/login/sso/callback", get(get_sso_callback))
         .route("/logout", get(get_logout))
         .route("/events", get(get_events))
+        .route("/events/export.csv", get(get_events_export_csv))
         .route("/triggers", get(get_triggers).post(post_trigger))
         .route("/health", get(get_health))
         .route("/branding", get(get_branding_page).post(post_branding))

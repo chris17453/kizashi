@@ -213,3 +213,80 @@ pub async fn get_events(
         .into_response(),
     }
 }
+
+/// Successive pages fetched per export, each requesting `DEFAULT_PAGE_SIZE` rows -- bounds the
+/// export to `CSV_MAX_PAGES * DEFAULT_PAGE_SIZE` rows worst case rather than looping until the
+/// tenant's history is exhausted, same shape as `data_handler`'s and `login_attempts_handler`'s
+/// CSV exports (ADR-0049).
+const CSV_MAX_PAGES: usize = 10;
+
+fn csv_escape(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+/// GET /events/export.csv — a compliance-export of the same feed `get_events` shows, honoring
+/// the same `?from=`/`?to=` date-range filter, paginated internally up to `CSV_MAX_PAGES` pages
+/// so a single request can produce a genuinely useful export rather than just the one page the
+/// HTML view shows.
+pub async fn get_events_export_csv(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<EventsQuery>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+
+    let (filter_since, filter_until) = parse_date_range(&query.from, &query.to);
+    let mut all_events: Vec<EventSummary> = Vec::new();
+    for i in 0..CSV_MAX_PAGES {
+        let offset = (i as u32) * (DEFAULT_PAGE_SIZE as u32);
+        let page = match state
+            .events_client
+            .list_events(
+                &session.bearer_token,
+                DEFAULT_PAGE_SIZE as u32,
+                offset,
+                filter_since,
+                filter_until,
+            )
+            .await
+        {
+            Ok(page) => page,
+            Err(e) => {
+                return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                    .into_response()
+            }
+        };
+        let has_more = page.has_more;
+        all_events.extend(page.events);
+        if !has_more {
+            break;
+        }
+    }
+
+    let mut csv = String::from("occurred_at,event_type,group_key,status\n");
+    for event in &all_events {
+        csv.push_str(&format!(
+            "{},{},{},{}\n",
+            event.occurred_at.to_rfc3339(),
+            csv_escape(&event.event_type),
+            csv_escape(&event.group_key),
+            csv_escape(&event.status),
+        ));
+    }
+
+    let mut resp_headers = axum::http::HeaderMap::new();
+    resp_headers.insert(axum::http::header::CONTENT_TYPE, "text/csv".parse().unwrap());
+    resp_headers.insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        format!("attachment; filename=\"events-{}.csv\"", session.tenant_id).parse().unwrap(),
+    );
+
+    (resp_headers, csv).into_response()
+}
