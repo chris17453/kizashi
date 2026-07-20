@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0098         |
+| feature       | `feature/` | 0099         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
@@ -148,4 +148,5 @@ manually created branches.
 | 0094 | `feature/0094-api-key-audit-history-link` | feature | 2026-07-20 | merged | #124 | renamed from feature/0093 before push to avoid colliding with the still-open feature/0093-confirm-destructive-actions (PR #123) |
 | 0095 | `feature/0095-sensors-bulk-delete-and-sessions-confirm` | feature | 2026-07-20 | merged | #125 | renamed from feature/0094 before push to avoid colliding with the still-open feature/0094-api-key-audit-history-link (PR #124) |
 | 0096 | `feature/0096-users-and-retention-policies-bulk-delete` | feature | 2026-07-20 | open | pending | renamed from feature/0095 before push to avoid colliding with the still-open feature/0095-sensors-bulk-delete-and-sessions-confirm (PR #125) |
-| 0097 | `feature/0097-egress-allowlist-audit-log` | feature | 2026-07-20 | open | pending | |
+| 0097 | `feature/0097-egress-allowlist-audit-log` | feature | 2026-07-20 | merged | #127 | |
+| 0098 | `feature/0097-login-attempts-csv-export` | feature | 2026-07-20 | open | #128 | branch already pushed as feature/0097-login-attempts-csv-export before the collision with feature/0097-egress-allowlist-audit-log (PR #127) was discovered; kept the branch name, bumped this row's number to 0098 per the row-0050 precedent |
