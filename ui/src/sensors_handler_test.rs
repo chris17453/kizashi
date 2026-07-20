@@ -263,6 +263,38 @@ async fn get_sensors_renders_the_sensors_table_when_signed_in() {
 }
 
 #[tokio::test]
+async fn get_sensors_remove_button_asks_for_confirmation_before_submitting() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "test-actor",
+            tenant_id,
+            "zendesk",
+            "support-poller",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/sensors")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("onsubmit=\"return confirm("));
+}
+
+#[tokio::test]
 async fn get_sensors_filters_by_the_q_query_param_case_insensitively() {
     let (state, session_id, tenant_id) = state_with_session().await;
     state

@@ -4695,3 +4695,22 @@ architectural decision.
   the real tenant id and both resolve to a working audit-log page (200 OK).
 - **PR:** pending
 - **ADR:** docs/adr/0092-branding-and-analysis-config-audit-history-links.md
+
+## [2026-07-20] feature/0093-confirm-destructive-actions — Confirmation prompt on destructive actions
+- **Type:** feature
+- **Branch:** feature/0093-confirm-destructive-actions
+- **Summary:** Closes the final flagged sixth-audit-pass gap: no destructive action (Delete
+  User, Delete Sensor, Delete Retention Policy, Revoke/bulk-revoke API Key) asked for
+  confirmation before submitting. Each destructive form gained a plain `onsubmit="return
+  confirm(...)"`, the smallest possible JS, consistent with the existing no-JS-by-default stance
+  (ADR-0014's precedent already used inline `onchange` on `analysis_config.html`). Messages are
+  deliberately generic rather than interpolating entity names, since Askama HTML-escapes but
+  doesn't JS-escape, and embedding untrusted strings in an inline JS attribute risks a broken/
+  injected confirm() call.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 453 passed (4 new: one per affected page,
+  asserting the rendered form carries `onsubmit="return confirm("`). `cargo build --workspace`
+  clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo
+  fmt --all --check` clean. No file exceeds 500 lines. Live-verified against the real
+  `watkinslabs` tenant: Users/API Keys/Sensors pages all render the confirmation attribute.
+- **PR:** pending
+- **ADR:** docs/adr/0093-confirm-destructive-actions.md

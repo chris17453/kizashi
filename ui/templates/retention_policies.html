@@ -76,7 +76,7 @@ overrides it.</p>
         <form class="inline" method="post" action="/retention-policies/{{ policy.id }}/toggle" style="display:inline">
           <button type="submit" class="{% if policy.enabled %}btn-danger{% else %}btn{% endif %}">{% if policy.enabled %}Disable{% else %}Enable{% endif %}</button>
         </form>
-        <form class="inline" method="post" action="/retention-policies/{{ policy.id }}/delete" style="display:inline">
+        <form class="inline" method="post" action="/retention-policies/{{ policy.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this retention policy? This cannot be undone.');">
           <button type="submit" class="btn-danger">Remove</button>
         </form>
       </td>

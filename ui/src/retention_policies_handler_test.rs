@@ -124,6 +124,37 @@ async fn the_inline_ttl_input_carries_an_accessible_label() {
 }
 
 #[tokio::test]
+async fn get_remove_button_asks_for_confirmation_before_submitting() {
+    let (mut state, session_id, tenant_id) = state_with_session(common::Role::Admin).await;
+    let policies_client = InMemoryRetentionPoliciesClient::default();
+    policies_client.policies.lock().unwrap().push(
+        crate::retention_policies_client::RetentionPolicy {
+            id: Uuid::new_v4(),
+            tenant_id,
+            data_class: crate::retention_policies_client::DataClass::Raw,
+            ttl_days: 90,
+            enabled: true,
+        },
+    );
+    state.retention_policies_client = Arc::new(policies_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/retention-policies")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("onsubmit=\"return confirm("));
+}
+
+#[tokio::test]
 async fn shows_an_empty_state_with_no_policies_configured() {
     let (state, session_id, _tenant_id) = state_with_session(common::Role::Admin).await;
 
