@@ -127,6 +127,7 @@ async fn renders_events_and_their_executions() {
         group_key: "zendesk:ticket".to_string(),
         status: "open".to_string(),
         occurred_at: chrono::Utc::now(),
+        record_ids: vec![],
     });
     state.events_client = events_client;
 
@@ -185,6 +186,7 @@ async fn renders_event_with_no_executions_when_execution_client_fails() {
         group_key: "zendesk:ticket".to_string(),
         status: "open".to_string(),
         occurred_at: chrono::Utc::now(),
+        record_ids: vec![],
     });
     state.events_client = events_client;
     state.execution_client = Arc::new(FailingExecutionClient);
@@ -263,6 +265,7 @@ async fn journey_shows_latency_between_ingest_event_and_execution() {
         group_key: "zendesk:ticket".to_string(),
         status: "open".to_string(),
         occurred_at,
+        record_ids: vec![],
     });
     state.events_client = events_client;
 

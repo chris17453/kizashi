@@ -89,6 +89,7 @@ async fn renders_connector_stats_and_event_counts_when_signed_in() {
         group_key: "cust-1".to_string(),
         status: "open".to_string(),
         occurred_at: chrono::Utc::now(),
+        record_ids: vec![],
     });
     state.events_client = events_client;
 

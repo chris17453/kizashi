@@ -154,6 +154,7 @@ async fn shows_the_five_most_recent_events_as_recent_activity() {
                 group_key: format!("group-{i}"),
                 status: "open".to_string(),
                 occurred_at: chrono::Utc::now(),
+                record_ids: vec![],
             });
         }
     }

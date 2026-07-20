@@ -13,6 +13,14 @@ pub struct EventSummary {
     pub group_key: String,
     pub status: String,
     pub occurred_at: chrono::DateTime<chrono::Utc>,
+    /// The `RawRecord` ids whose analyzed signals satisfied the trigger that produced this
+    /// event -- already present on the backend's `common::Event` and returned by `GET
+    /// /v1/events` as-is, just never deserialized here until now. Lets the Events page link
+    /// straight to a contributing record's journey view instead of being a dead end an
+    /// investigator can only reach if they already have a record id in hand. `#[serde(default)]`
+    /// since it's empty for events predating this field on the backend.
+    #[serde(default)]
+    pub record_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

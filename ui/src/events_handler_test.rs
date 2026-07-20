@@ -96,6 +96,7 @@ async fn renders_the_events_table_when_signed_in() {
         group_key: "customer-42".to_string(),
         status: "open".to_string(),
         occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+        record_ids: vec![],
     });
     state.events_client = Arc::new(events_client);
 
@@ -122,6 +123,101 @@ async fn renders_the_events_table_when_signed_in() {
 }
 
 #[tokio::test]
+async fn an_event_with_one_contributing_record_links_straight_to_its_journey() {
+    let (mut state, session_id) = state_with_session().await;
+    let record_id = Uuid::new_v4();
+    let events_client = InMemoryEventsClient::default();
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "sentiment_spike".to_string(),
+        group_key: "customer-42".to_string(),
+        status: "open".to_string(),
+        occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+        record_ids: vec![record_id],
+    });
+    state.events_client = Arc::new(events_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(&format!("/data/{record_id}/journey")));
+    assert!(body.contains("View journey"));
+}
+
+#[tokio::test]
+async fn an_event_with_multiple_contributing_records_links_to_each_journey() {
+    let (mut state, session_id) = state_with_session().await;
+    let record_a = Uuid::new_v4();
+    let record_b = Uuid::new_v4();
+    let events_client = InMemoryEventsClient::default();
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "correlated_spike".to_string(),
+        group_key: "customer-42".to_string(),
+        status: "open".to_string(),
+        occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+        record_ids: vec![record_a, record_b],
+    });
+    state.events_client = Arc::new(events_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(&format!("/data/{record_a}/journey")));
+    assert!(body.contains(&format!("/data/{record_b}/journey")));
+}
+
+#[tokio::test]
+async fn an_event_with_no_contributing_records_shows_a_dash_not_a_broken_link() {
+    let (mut state, session_id) = state_with_session().await;
+    let events_client = InMemoryEventsClient::default();
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "legacy_event".to_string(),
+        group_key: "customer-42".to_string(),
+        status: "open".to_string(),
+        occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+        record_ids: vec![],
+    });
+    state.events_client = Arc::new(events_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("/journey\""));
+}
+
+#[tokio::test]
 async fn filters_by_the_q_query_param_case_insensitively() {
     let (mut state, session_id) = state_with_session().await;
     let events_client = InMemoryEventsClient::default();
@@ -131,6 +227,7 @@ async fn filters_by_the_q_query_param_case_insensitively() {
         group_key: "customer-42".to_string(),
         status: "open".to_string(),
         occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+        record_ids: vec![],
     });
     events_client.events.lock().unwrap().push(EventSummary {
         id: Uuid::new_v4(),
@@ -138,6 +235,7 @@ async fn filters_by_the_q_query_param_case_insensitively() {
         group_key: "customer-99".to_string(),
         status: "resolved".to_string(),
         occurred_at: "2026-07-19T00:00:00Z".parse().unwrap(),
+        record_ids: vec![],
     });
     state.events_client = Arc::new(events_client);
 
@@ -169,6 +267,7 @@ async fn shows_a_no_match_empty_state_for_an_unmatched_query() {
         group_key: "customer-42".to_string(),
         status: "open".to_string(),
         occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+        record_ids: vec![],
     });
     state.events_client = Arc::new(events_client);
 
@@ -198,6 +297,7 @@ async fn sorts_by_event_type_ascending_when_sort_param_is_set() {
         group_key: "g1".to_string(),
         status: "open".to_string(),
         occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+        record_ids: vec![],
     });
     events_client.events.lock().unwrap().push(EventSummary {
         id: Uuid::new_v4(),
@@ -205,6 +305,7 @@ async fn sorts_by_event_type_ascending_when_sort_param_is_set() {
         group_key: "g2".to_string(),
         status: "open".to_string(),
         occurred_at: "2026-07-19T00:00:00Z".parse().unwrap(),
+        record_ids: vec![],
     });
     state.events_client = Arc::new(events_client);
 

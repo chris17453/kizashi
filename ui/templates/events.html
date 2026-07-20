@@ -62,6 +62,7 @@
           Occurred At{% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %} &#9650;{% else %} &#9660;{% endif %}{% endif %}
         </a>
       </th>
+      <th scope="col"></th>
     </tr>
   </thead>
   <tbody>
@@ -71,6 +72,17 @@
       <td>{{ event.group_key }}</td>
       <td class="status-{{ event.status }}">{{ event.status }}</td>
       <td>{{ event.occurred_at }}</td>
+      <td>
+        {% if event.record_ids.is_empty() %}
+        <span class="muted">&mdash;</span>
+        {% else if event.record_ids.len() == 1 %}
+        <a href="/data/{{ event.record_ids[0] }}/journey">View journey</a>
+        {% else %}
+        {% for record_id in event.record_ids %}
+        <a href="/data/{{ record_id }}/journey">Journey {{ loop.index }}</a>{% if !loop.last %}, {% endif %}
+        {% endfor %}
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>
