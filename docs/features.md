@@ -4023,3 +4023,23 @@ architectural decision.
   issues.
 - **PR:** pending
 - **ADR:** docs/adr/0060-audit-log-csv-export-pagination.md
+
+## [2026-07-20] feature/0069-destructive-action-confirmation — Destructive action confirmation
+- **Type:** feature
+- **Branch:** feature/0069-destructive-action-confirmation
+- **Summary:** A UI/UX audit found every destructive control across the Console UI (Revoke API
+  key, Remove user, Revoke session, Remove retention policy, Remove sensor, Disable MFA, Remove
+  saved search — 7 pages) submitted immediately on click with zero confirmation. New
+  `ui/static/confirm-danger.js` (served via `GET /static/confirm-danger.js`, same
+  `include_str!`-embedded pattern as `charts.js`), included once in `layout.html`: listens for
+  `submit` events, checks `event.submitter` for the `.btn-danger` class every destructive button
+  already carried, and shows a native `confirm()` dialog before allowing the submission through.
+  Zero per-page template/handler changes needed — purely additive, and covers any future
+  `.btn-danger` button automatically.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 380 passed (1 new: `GET
+  /static/confirm-danger.js` returns the right content-type and contains the expected selector).
+  `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features --
+  -D warnings` clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same
+  pre-existing allow-listed warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0061-destructive-action-confirmation.md
