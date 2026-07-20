@@ -162,6 +162,63 @@ async fn get_users_shows_backend_error() {
 }
 
 #[tokio::test]
+async fn get_users_filters_by_the_q_query_param_case_insensitively() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "alice-ops", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "bob-viewer", "pw", Role::Viewer, "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/users?q=ALICE")
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    assert!(text.contains("alice-ops"));
+    assert!(!text.contains("bob-viewer"));
+}
+
+#[tokio::test]
+async fn get_users_shows_a_no_match_empty_state_for_an_unmatched_query() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "alice-ops", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/users?q=nobody-matches-this")
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    assert!(text.contains("No users match"));
+}
+
+#[tokio::test]
 async fn post_users_creates_a_user_and_redirects() {
     let (state, session_id, _) = state_with_session(Role::Admin).await;
     let response = router(state)
