@@ -4204,3 +4204,19 @@ architectural decision.
   warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0061-destructive-action-confirmation.md (same pattern, no new decision to record)
+
+## [2026-07-20] feature/0077-triggers-page-search — Triggers page search
+- **Type:** feature
+- **Branch:** feature/0077-triggers-page-search
+- **Summary:** Closes another UI/UX audit finding: Triggers had pagination but no search. `GET
+  /triggers` now accepts `?q=` and filters the current page's fetched triggers by a
+  case-insensitive `name` substring match. Since `list_triggers` is server-paginated (unlike
+  Users/API Keys), this only searches the current page, not the tenant's full trigger set — an
+  explicitly documented limitation (ADR-0066), same shape as ADR-0063's Login Attempts caveat.
+  `q` carries through the Previous/Next links so paging preserves the search term.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 401 passed (2 new: case-insensitive name filter
+  match, "no triggers on this page match" empty state for an unmatched query). `cargo build
+  --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
+  clean. `cargo fmt --all --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0066-triggers-page-search.md

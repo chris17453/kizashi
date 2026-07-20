@@ -26,6 +26,17 @@ pub struct TriggersQuery {
     pub test_trigger_id: Option<Uuid>,
     #[serde(default)]
     pub test_group_key: Option<String>,
+    #[serde(default)]
+    pub q: String,
+}
+
+/// Case-insensitive substring match on name -- same shape as Users/API Keys search (ADR-0062),
+/// but unlike those pages, `list_triggers` is server-paginated (ADR-0025's `limit`/`offset`),
+/// so this only filters the *current page's* already-fetched triggers, not the tenant's full
+/// set -- the same accepted "doesn't compose with pagination in one request" caveat ADR-0063
+/// documented for Login Attempts, not a full server-side search.
+fn matches_query(trigger: &TriggerSummary, q: &str) -> bool {
+    q.is_empty() || trigger.name.to_lowercase().contains(&q.to_lowercase())
 }
 
 struct TestResultView {
@@ -45,6 +56,7 @@ struct TriggersTemplate {
     error: Option<String>,
     form_error: Option<String>,
     test_result: Option<TestResultView>,
+    q: String,
 }
 
 pub async fn get_triggers(
@@ -81,13 +93,18 @@ pub async fn get_triggers(
         Ok(result) => Html(
             TriggersTemplate {
                 show_nav: true,
-                triggers: result.triggers,
+                triggers: result
+                    .triggers
+                    .into_iter()
+                    .filter(|t| matches_query(t, &query.q))
+                    .collect(),
                 page,
                 has_more: result.has_more,
                 can_write,
                 error: None,
                 form_error: None,
                 test_result,
+                q: query.q,
             }
             .render()
             .unwrap(),
@@ -103,6 +120,7 @@ pub async fn get_triggers(
                 error: Some(e.to_string()),
                 form_error: None,
                 test_result,
+                q: query.q,
             }
             .render()
             .unwrap(),
@@ -262,6 +280,7 @@ pub async fn post_trigger(
                     error: None,
                     form_error: Some(msg.to_string()),
                     test_result: None,
+                    q: String::new(),
                 }
                 .render()
                 .unwrap(),
@@ -315,6 +334,7 @@ pub async fn post_trigger(
                     error: None,
                     form_error: Some(e.to_string()),
                     test_result: None,
+                    q: String::new(),
                 }
                 .render()
                 .unwrap(),
