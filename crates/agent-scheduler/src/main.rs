@@ -1,8 +1,8 @@
 use agent_scheduler::{
-    health_router, AgentRepository, DockerInvoker, Invoker, PostgresAgentRepository,
-    AGENT_CHANGED_EXCHANGE,
+    health_router, DockerInvoker, Invoker, PostgresSensorRepository, SensorRepository,
+    SENSOR_CHANGED_EXCHANGE,
 };
-use common::AgentChangeEvent;
+use common::SensorChangeEvent;
 use futures_util::StreamExt;
 use lapin::options::{
     BasicAckOptions, BasicConsumeOptions, BasicNackOptions, ExchangeDeclareOptions,
@@ -13,7 +13,7 @@ use lapin::ExchangeKind;
 use std::sync::Arc;
 use std::time::Duration;
 
-const QUEUE_NAME: &str = "agent-scheduler.agent.changed";
+const QUEUE_NAME: &str = "agent-scheduler.sensor.changed";
 const DEFAULT_POLL_INTERVAL_SECONDS: i64 = 300;
 
 fn tick_interval() -> Duration {
@@ -69,7 +69,8 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
-    let agent_repository: Arc<dyn AgentRepository> = Arc::new(PostgresAgentRepository::new(pool));
+    let sensor_repository: Arc<dyn SensorRepository> =
+        Arc::new(PostgresSensorRepository::new(pool));
     let invoker: Arc<dyn Invoker> = Arc::new(DockerInvoker::new(
         docker_image_prefix,
         docker_network,
@@ -84,13 +85,13 @@ async fn main() {
     let channel = connection.create_channel().await.expect("failed to open channel");
     channel
         .exchange_declare(
-            AGENT_CHANGED_EXCHANGE,
+            SENSOR_CHANGED_EXCHANGE,
             ExchangeKind::Fanout,
             ExchangeDeclareOptions { durable: true, ..Default::default() },
             FieldTable::default(),
         )
         .await
-        .expect("failed to declare agent.changed exchange");
+        .expect("failed to declare sensor.changed exchange");
     channel
         .queue_declare(
             QUEUE_NAME,
@@ -102,7 +103,7 @@ async fn main() {
     channel
         .queue_bind(
             QUEUE_NAME,
-            AGENT_CHANGED_EXCHANGE,
+            SENSOR_CHANGED_EXCHANGE,
             "",
             QueueBindOptions::default(),
             FieldTable::default(),
@@ -120,39 +121,39 @@ async fn main() {
         .await
         .expect("failed to start consumer");
 
-    let sync_repository = agent_repository.clone();
+    let sync_repository = sensor_repository.clone();
     tokio::spawn(async move {
-        tracing::info!("agent-scheduler consuming agent.changed");
+        tracing::info!("agent-scheduler consuming sensor.changed");
         while let Some(delivery) = consumer.next().await {
             let delivery = match delivery {
                 Ok(d) => d,
                 Err(e) => {
-                    tracing::error!(error = %e, "agent.changed consumer delivery error");
+                    tracing::error!(error = %e, "sensor.changed consumer delivery error");
                     continue;
                 }
             };
 
-            let event: AgentChangeEvent = match serde_json::from_slice(&delivery.data) {
+            let event: SensorChangeEvent = match serde_json::from_slice(&delivery.data) {
                 Ok(e) => e,
                 Err(e) => {
-                    tracing::error!(error = %e, "failed to deserialize agent.changed message, dropping");
+                    tracing::error!(error = %e, "failed to deserialize sensor.changed message, dropping");
                     let _ = delivery.ack(BasicAckOptions::default()).await;
                     continue;
                 }
             };
 
             let result = match &event {
-                AgentChangeEvent::Upserted(agent) => sync_repository.upsert(agent.clone()).await,
-                AgentChangeEvent::Deleted { id, .. } => sync_repository.delete(*id).await,
+                SensorChangeEvent::Upserted(sensor) => sync_repository.upsert(sensor.clone()).await,
+                SensorChangeEvent::Deleted { id, .. } => sync_repository.delete(*id).await,
             };
 
             match result {
                 Ok(()) => {
-                    tracing::info!("synced agent.changed");
+                    tracing::info!("synced sensor.changed");
                     let _ = delivery.ack(BasicAckOptions::default()).await;
                 }
                 Err(e) => {
-                    tracing::error!(error = %e, "failed to sync agent, requeueing");
+                    tracing::error!(error = %e, "failed to sync sensor, requeueing");
                     let _ = delivery
                         .nack(BasicNackOptions { requeue: true, ..Default::default() })
                         .await;
@@ -165,17 +166,17 @@ async fn main() {
         let mut ticker = tokio::time::interval(tick_interval());
         loop {
             ticker.tick().await;
-            let enabled = match agent_repository.list_enabled().await {
-                Ok(agents) => agents,
+            let enabled = match sensor_repository.list_enabled().await {
+                Ok(sensors) => sensors,
                 Err(e) => {
-                    tracing::error!(error = %e, "failed to list enabled agents");
+                    tracing::error!(error = %e, "failed to list enabled sensors");
                     continue;
                 }
             };
 
             let now = chrono::Utc::now();
             for stored in enabled {
-                let interval = poll_interval_seconds(&stored.agent.config);
+                let interval = poll_interval_seconds(&stored.sensor.config);
                 let due = match stored.last_polled_at {
                     None => true,
                     Some(last) => (now - last).num_seconds() >= interval,
@@ -184,20 +185,21 @@ async fn main() {
                     continue;
                 }
 
-                tracing::info!(agent_id = %stored.agent.id, name = %stored.agent.name, "invoking due agent");
+                tracing::info!(sensor_id = %stored.sensor.id, name = %stored.sensor.name, "invoking due sensor");
                 let checkpoint = match invoker
-                    .invoke(&stored.agent, stored.last_checkpoint.clone())
+                    .invoke(&stored.sensor, stored.last_checkpoint.clone())
                     .await
                 {
                     Ok(checkpoint) => checkpoint,
                     Err(e) => {
-                        tracing::error!(agent_id = %stored.agent.id, error = %e, "agent invocation failed");
+                        tracing::error!(sensor_id = %stored.sensor.id, error = %e, "sensor invocation failed");
                         None
                     }
                 };
-                if let Err(e) = agent_repository.mark_polled(stored.agent.id, now, checkpoint).await
+                if let Err(e) =
+                    sensor_repository.mark_polled(stored.sensor.id, now, checkpoint).await
                 {
-                    tracing::error!(agent_id = %stored.agent.id, error = %e, "failed to record poll timestamp");
+                    tracing::error!(sensor_id = %stored.sensor.id, error = %e, "failed to record poll timestamp");
                 }
             }
         }

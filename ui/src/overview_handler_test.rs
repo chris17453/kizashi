@@ -1,11 +1,11 @@
 use super::*;
-use crate::agents_client::agents_client_test::InMemoryAgentsClient;
-use crate::agents_client::AgentsClient;
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::{PlatformHealthSummary, ServiceHealthSummary};
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
+use crate::sensors_client::sensors_client_test::InMemorySensorsClient;
+use crate::sensors_client::SensorsClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use crate::ConnectorStatSummary;
@@ -41,7 +41,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
-        agents_client: Arc::new(InMemoryAgentsClient::default()),
+        sensors_client: Arc::new(InMemorySensorsClient::default()),
         api_keys_client: Arc::new(
             crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default(),
         ),
@@ -70,9 +70,9 @@ async fn state_with_session() -> (AppState, String, Uuid) {
 async fn renders_kpi_cards_reflecting_real_data_when_signed_in() {
     let (mut state, session_id, tenant_id) = state_with_session().await;
 
-    let agents_client = Arc::new(InMemoryAgentsClient::default());
-    agents_client
-        .register_agent(
+    let sensors_client = Arc::new(InMemorySensorsClient::default());
+    sensors_client
+        .register_sensor(
             Role::Operator,
             tenant_id,
             "zendesk",
@@ -81,11 +81,17 @@ async fn renders_kpi_cards_reflecting_real_data_when_signed_in() {
         )
         .await
         .unwrap();
-    agents_client
-        .register_agent(Role::Operator, tenant_id, "sql", "never-run-agent", serde_json::json!({}))
+    sensors_client
+        .register_sensor(
+            Role::Operator,
+            tenant_id,
+            "sql",
+            "never-run-sensor",
+            serde_json::json!({}),
+        )
         .await
         .unwrap();
-    state.agents_client = agents_client;
+    state.sensors_client = sensors_client;
 
     let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
     stats_client.stats.lock().unwrap().push(ConnectorStatSummary {
@@ -119,7 +125,7 @@ async fn renders_kpi_cards_reflecting_real_data_when_signed_in() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains(">2<")); // agent_count
+    assert!(body.contains(">2<")); // sensor_count
     assert!(body.contains("1 active")); // only support-poller has matching stats
     assert!(body.contains(">42<")); // total_records
     assert!(body.contains("1/2 services up"));

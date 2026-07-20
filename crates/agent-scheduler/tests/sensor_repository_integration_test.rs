@@ -1,9 +1,9 @@
 //! Integration test against real Postgres (CLAUDE.md §2), proving the local `agents` mirror
-//! table (ADR-0020) actually upserts, lists only enabled agents, tracks `last_polled_at`, and
+//! table (ADR-0020) actually upserts, lists only enabled sensors, tracks `last_polled_at`, and
 //! deletes correctly. Requires DATABASE_URL.
 
-use agent_scheduler::{AgentRepository, PostgresAgentRepository};
-use common::Agent;
+use agent_scheduler::{PostgresSensorRepository, SensorRepository};
+use common::Sensor;
 use uuid::Uuid;
 
 async fn test_pool() -> sqlx::PgPool {
@@ -22,13 +22,13 @@ async fn test_pool() -> sqlx::PgPool {
     pool
 }
 
-fn sample_agent(enabled: bool) -> Agent {
-    Agent {
+fn sample_sensor(enabled: bool) -> Sensor {
+    Sensor {
         enabled,
-        ..Agent::new(
+        ..Sensor::new(
             Uuid::new_v4(),
             "zendesk",
-            "integration-test-agent",
+            "integration-test-sensor",
             serde_json::json!({"poll_interval_seconds": 60}),
         )
     }
@@ -37,47 +37,47 @@ fn sample_agent(enabled: bool) -> Agent {
 #[tokio::test]
 async fn upsert_then_list_enabled_round_trips_against_real_postgres() {
     let pool = test_pool().await;
-    let repo = PostgresAgentRepository::new(pool);
-    let agent = sample_agent(true);
+    let repo = PostgresSensorRepository::new(pool);
+    let sensor = sample_sensor(true);
 
-    repo.upsert(agent.clone()).await.unwrap();
+    repo.upsert(sensor.clone()).await.unwrap();
 
     let enabled = repo.list_enabled().await.unwrap();
-    assert!(enabled.iter().any(|a| a.agent.id == agent.id && a.last_polled_at.is_none()));
+    assert!(enabled.iter().any(|a| a.sensor.id == sensor.id && a.last_polled_at.is_none()));
 
-    repo.delete(agent.id).await.unwrap();
+    repo.delete(sensor.id).await.unwrap();
 }
 
 #[tokio::test]
-async fn list_enabled_excludes_disabled_agents_against_real_postgres() {
+async fn list_enabled_excludes_disabled_sensors_against_real_postgres() {
     let pool = test_pool().await;
-    let repo = PostgresAgentRepository::new(pool);
-    let agent = sample_agent(false);
+    let repo = PostgresSensorRepository::new(pool);
+    let sensor = sample_sensor(false);
 
-    repo.upsert(agent.clone()).await.unwrap();
+    repo.upsert(sensor.clone()).await.unwrap();
 
     let enabled = repo.list_enabled().await.unwrap();
-    assert!(!enabled.iter().any(|a| a.agent.id == agent.id));
+    assert!(!enabled.iter().any(|a| a.sensor.id == sensor.id));
 
-    repo.delete(agent.id).await.unwrap();
+    repo.delete(sensor.id).await.unwrap();
 }
 
 #[tokio::test]
 async fn mark_polled_and_delete_work_against_real_postgres() {
     let pool = test_pool().await;
-    let repo = PostgresAgentRepository::new(pool);
-    let agent = sample_agent(true);
-    repo.upsert(agent.clone()).await.unwrap();
+    let repo = PostgresSensorRepository::new(pool);
+    let sensor = sample_sensor(true);
+    repo.upsert(sensor.clone()).await.unwrap();
 
     let now = chrono::Utc::now();
-    repo.mark_polled(agent.id, now, Some("42".to_string())).await.unwrap();
+    repo.mark_polled(sensor.id, now, Some("42".to_string())).await.unwrap();
 
     let enabled = repo.list_enabled().await.unwrap();
-    let found = enabled.iter().find(|a| a.agent.id == agent.id).unwrap();
+    let found = enabled.iter().find(|a| a.sensor.id == sensor.id).unwrap();
     assert!(found.last_polled_at.is_some());
     assert_eq!(found.last_checkpoint, Some("42".to_string()));
 
-    repo.delete(agent.id).await.unwrap();
+    repo.delete(sensor.id).await.unwrap();
     let enabled_after_delete = repo.list_enabled().await.unwrap();
-    assert!(!enabled_after_delete.iter().any(|a| a.agent.id == agent.id));
+    assert!(!enabled_after_delete.iter().any(|a| a.sensor.id == sensor.id));
 }

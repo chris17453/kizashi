@@ -1,6 +1,6 @@
-#[path = "agent_test.rs"]
+#[path = "sensor_test.rs"]
 #[cfg(test)]
-mod agent_test;
+mod sensor_test;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -11,7 +11,7 @@ use uuid::Uuid;
 /// `generic`); `config` is that connector's own JSON config shape, opaque to everything except
 /// the connector binary itself, matching NormalizationMapping's config-over-code convention.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Agent {
+pub struct Sensor {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub connector_type: String,
@@ -20,7 +20,7 @@ pub struct Agent {
     pub enabled: bool,
 }
 
-impl Agent {
+impl Sensor {
     pub fn new(
         tenant_id: Uuid,
         connector_type: impl Into<String>,

@@ -38,7 +38,7 @@ async fn logout_deletes_the_session_and_expires_the_cookie() {
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
-        agents_client: Arc::new(crate::agents_client::agents_client_test::InMemoryAgentsClient::default()),
+        sensors_client: Arc::new(crate::sensors_client::sensors_client_test::InMemorySensorsClient::default()),
         api_keys_client: Arc::new(crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default()),
         backlog_client: Arc::new(crate::backlog_client::backlog_client_test::InMemoryBacklogClient::default()),
         execution_client: std::sync::Arc::new(crate::execution_client::execution_client_test::InMemoryExecutionClient::default()),

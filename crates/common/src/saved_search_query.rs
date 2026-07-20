@@ -8,7 +8,7 @@ use uuid::Uuid;
 /// A tenant-wide bookmark of a `/data` page search filter (spec §7 "saved queries/views",
 /// ADR-0029). `filter` is opaque JSON matching the Console UI's own `RecordSearchFilter` shape
 /// — this crate doesn't need to know its fields, only store/return them, the same config-as-
-/// data convention `Agent.config`/`NormalizationMapping.field_map` already use.
+/// data convention `Sensor.config`/`NormalizationMapping.field_map` already use.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SavedSearchQuery {
     pub id: Uuid,

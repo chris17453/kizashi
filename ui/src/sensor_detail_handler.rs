@@ -1,6 +1,6 @@
-#[path = "agent_detail_handler_test.rs"]
+#[path = "sensor_detail_handler_test.rs"]
 #[cfg(test)]
-mod agent_detail_handler_test;
+mod sensor_detail_handler_test;
 
 use crate::session_guard::require_session;
 use crate::{AppState, RecordSummary};
@@ -8,22 +8,22 @@ use askama::Template;
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Response};
-use common::Agent;
+use common::Sensor;
 use uuid::Uuid;
 
 #[derive(Template)]
-#[template(path = "agent_detail.html")]
-struct AgentDetailTemplate {
+#[template(path = "sensor_detail.html")]
+struct SensorDetailTemplate {
     show_nav: bool,
-    agent: Option<Agent>,
+    sensor: Option<Sensor>,
     records: Vec<RecordSummary>,
     error: Option<String>,
 }
 
-/// GET /agents/:id — the per-agent data drill-down: the agent's own registration plus the
-/// most recent raw records its connector has ingested (matched on `agent.name ==
-/// record.connector_id`, same convention as the Agents list's status column).
-pub async fn get_agent_detail(
+/// GET /sensors/:id — the per-sensor data drill-down: the sensor's own registration plus the
+/// most recent raw records its connector has ingested (matched on `sensor.name ==
+/// record.connector_id`, same convention as the Sensors list's status column).
+pub async fn get_sensor_detail(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
@@ -33,15 +33,15 @@ pub async fn get_agent_detail(
         Err(response) => return response,
     };
 
-    let agent = match state.agents_client.get_agent(session.tenant_id, id).await {
-        Ok(Some(agent)) => agent,
+    let sensor = match state.sensors_client.get_sensor(session.tenant_id, id).await {
+        Ok(Some(sensor)) => sensor,
         Ok(None) => {
             return Html(
-                AgentDetailTemplate {
+                SensorDetailTemplate {
                     show_nav: true,
-                    agent: None,
+                    sensor: None,
                     records: vec![],
-                    error: Some("no agent with that id".to_string()),
+                    error: Some("no sensor with that id".to_string()),
                 }
                 .render()
                 .unwrap(),
@@ -50,9 +50,9 @@ pub async fn get_agent_detail(
         }
         Err(e) => {
             return Html(
-                AgentDetailTemplate {
+                SensorDetailTemplate {
                     show_nav: true,
-                    agent: None,
+                    sensor: None,
                     records: vec![],
                     error: Some(e.to_string()),
                 }
@@ -65,12 +65,12 @@ pub async fn get_agent_detail(
 
     let records = state
         .stats_client
-        .records_by_connector(session.tenant_id, &agent.name)
+        .records_by_connector(session.tenant_id, &sensor.name)
         .await
         .unwrap_or_default();
 
     Html(
-        AgentDetailTemplate { show_nav: true, agent: Some(agent), records, error: None }
+        SensorDetailTemplate { show_nav: true, sensor: Some(sensor), records, error: None }
             .render()
             .unwrap(),
     )

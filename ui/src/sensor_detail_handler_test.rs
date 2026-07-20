@@ -1,10 +1,10 @@
 use super::*;
-use crate::agents_client::agents_client_test::InMemoryAgentsClient;
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
 use crate::health_client::PlatformHealthSummary;
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
+use crate::sensors_client::sensors_client_test::InMemorySensorsClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use axum::body::Body;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/agents/:id", get(get_agent_detail)).with_state(state)
+    Router::new().route("/sensors/:id", get(get_sensor_detail)).with_state(state)
 }
 
 async fn state_with_session() -> (AppState, String, Uuid) {
@@ -38,7 +38,7 @@ async fn state_with_session() -> (AppState, String, Uuid) {
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
-        agents_client: Arc::new(InMemoryAgentsClient::default()),
+        sensors_client: Arc::new(InMemorySensorsClient::default()),
         api_keys_client: Arc::new(
             crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default(),
         ),
@@ -64,11 +64,11 @@ async fn state_with_session() -> (AppState, String, Uuid) {
 }
 
 #[tokio::test]
-async fn renders_the_agent_and_its_records_when_found() {
+async fn renders_the_sensor_and_its_records_when_found() {
     let (mut state, session_id, tenant_id) = state_with_session().await;
-    let agent = state
-        .agents_client
-        .register_agent(
+    let sensor = state
+        .sensors_client
+        .register_sensor(
             Role::Operator,
             tenant_id,
             "zendesk",
@@ -91,7 +91,7 @@ async fn renders_the_agent_and_its_records_when_found() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/agents/{}", agent.id))
+                .uri(format!("/sensors/{}", sensor.id))
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -107,13 +107,13 @@ async fn renders_the_agent_and_its_records_when_found() {
 }
 
 #[tokio::test]
-async fn renders_not_found_for_an_unknown_agent_id() {
+async fn renders_not_found_for_an_unknown_sensor_id() {
     let (state, session_id, _tenant_id) = state_with_session().await;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/agents/{}", Uuid::new_v4()))
+                .uri(format!("/sensors/{}", Uuid::new_v4()))
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -134,7 +134,7 @@ async fn redirects_to_login_when_not_signed_in() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri(format!("/agents/{}", Uuid::new_v4()))
+                .uri(format!("/sensors/{}", Uuid::new_v4()))
                 .body(Body::empty())
                 .unwrap(),
         )

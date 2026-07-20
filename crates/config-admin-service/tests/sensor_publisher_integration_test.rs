@@ -1,8 +1,8 @@
-//! Integration test against real RabbitMQ (CLAUDE.md §2), proving ADR-0020's `agent.changed`
-//! publish actually round-trips an `AgentChangeEvent` over the real bus. Requires RABBITMQ_URL.
+//! Integration test against real RabbitMQ (CLAUDE.md §2), proving ADR-0020's `sensor.changed`
+//! publish actually round-trips an `SensorChangeEvent` over the real bus. Requires RABBITMQ_URL.
 
-use common::{Agent, AgentChangeEvent, AGENT_CHANGED_EXCHANGE};
-use config_admin_service::{AgentPublisher, RabbitMqAgentPublisher};
+use common::{Sensor, SensorChangeEvent, SENSOR_CHANGED_EXCHANGE};
+use config_admin_service::{RabbitMqSensorPublisher, SensorPublisher};
 use futures_util::StreamExt;
 use lapin::options::{BasicAckOptions, BasicConsumeOptions, QueueBindOptions, QueueDeclareOptions};
 use lapin::types::FieldTable;
@@ -20,25 +20,25 @@ async fn test_channel() -> lapin::Channel {
 
 /// The fanout exchange broadcasts every message to every queue bound to it — since this test
 /// binary's two tests can run concurrently and both bind their own queue to the same real
-/// `agent.changed` exchange, either queue can legitimately receive the *other* test's message
+/// `sensor.changed` exchange, either queue can legitimately receive the *other* test's message
 /// too. Loop-consuming until the exact expected event shows up (acking everything along the
 /// way) makes the test robust to that interleaving instead of asserting on whatever arrives
 /// first.
 async fn wait_for_matching_event(
     consumer: &mut lapin::Consumer,
-    expected: &AgentChangeEvent,
-) -> AgentChangeEvent {
+    expected: &SensorChangeEvent,
+) -> SensorChangeEvent {
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         let delivery = tokio::time::timeout(remaining, consumer.next())
             .await
-            .expect("timed out waiting for the expected agent.changed message")
+            .expect("timed out waiting for the expected sensor.changed message")
             .expect("consumer stream ended")
             .expect("delivery error");
         delivery.ack(BasicAckOptions::default()).await.expect("failed to ack");
 
-        let received: AgentChangeEvent = serde_json::from_slice(&delivery.data).unwrap();
+        let received: SensorChangeEvent = serde_json::from_slice(&delivery.data).unwrap();
         if &received == expected {
             return received;
         }
@@ -46,12 +46,12 @@ async fn wait_for_matching_event(
 }
 
 #[tokio::test]
-async fn publishing_an_upserted_agent_round_trips_over_real_rabbitmq() {
+async fn publishing_an_upserted_sensor_round_trips_over_real_rabbitmq() {
     let publish_channel = test_channel().await;
     let consume_channel = test_channel().await;
 
     let publisher =
-        RabbitMqAgentPublisher::new(publish_channel).await.expect("failed to declare exchange");
+        RabbitMqSensorPublisher::new(publish_channel).await.expect("failed to declare exchange");
 
     let queue = consume_channel
         .queue_declare(
@@ -64,7 +64,7 @@ async fn publishing_an_upserted_agent_round_trips_over_real_rabbitmq() {
     consume_channel
         .queue_bind(
             queue.name().as_str(),
-            AGENT_CHANGED_EXCHANGE,
+            SENSOR_CHANGED_EXCHANGE,
             "",
             QueueBindOptions::default(),
             FieldTable::default(),
@@ -74,34 +74,34 @@ async fn publishing_an_upserted_agent_round_trips_over_real_rabbitmq() {
     let mut consumer = consume_channel
         .basic_consume(
             queue.name().as_str(),
-            "agent-publisher-integration-test",
+            "sensor-publisher-integration-test",
             BasicConsumeOptions::default(),
             FieldTable::default(),
         )
         .await
         .expect("failed to start consumer");
 
-    let agent = Agent::new(
+    let sensor = Sensor::new(
         Uuid::new_v4(),
         "zendesk",
-        "integration-test-agent",
+        "integration-test-sensor",
         serde_json::json!({"poll_interval_seconds": 60}),
     );
-    let event = AgentChangeEvent::Upserted(agent);
+    let event = SensorChangeEvent::Upserted(sensor);
 
-    publisher.publish_agent_changed(&event).await.unwrap();
+    publisher.publish_sensor_changed(&event).await.unwrap();
 
     let received = wait_for_matching_event(&mut consumer, &event).await;
     assert_eq!(received, event);
 }
 
 #[tokio::test]
-async fn publishing_a_deleted_agent_round_trips_over_real_rabbitmq() {
+async fn publishing_a_deleted_sensor_round_trips_over_real_rabbitmq() {
     let publish_channel = test_channel().await;
     let consume_channel = test_channel().await;
 
     let publisher =
-        RabbitMqAgentPublisher::new(publish_channel).await.expect("failed to declare exchange");
+        RabbitMqSensorPublisher::new(publish_channel).await.expect("failed to declare exchange");
 
     let queue = consume_channel
         .queue_declare(
@@ -114,7 +114,7 @@ async fn publishing_a_deleted_agent_round_trips_over_real_rabbitmq() {
     consume_channel
         .queue_bind(
             queue.name().as_str(),
-            AGENT_CHANGED_EXCHANGE,
+            SENSOR_CHANGED_EXCHANGE,
             "",
             QueueBindOptions::default(),
             FieldTable::default(),
@@ -124,15 +124,15 @@ async fn publishing_a_deleted_agent_round_trips_over_real_rabbitmq() {
     let mut consumer = consume_channel
         .basic_consume(
             queue.name().as_str(),
-            "agent-publisher-integration-test-delete",
+            "sensor-publisher-integration-test-delete",
             BasicConsumeOptions::default(),
             FieldTable::default(),
         )
         .await
         .expect("failed to start consumer");
 
-    let event = AgentChangeEvent::Deleted { id: Uuid::new_v4(), tenant_id: Uuid::new_v4() };
-    publisher.publish_agent_changed(&event).await.unwrap();
+    let event = SensorChangeEvent::Deleted { id: Uuid::new_v4(), tenant_id: Uuid::new_v4() };
+    publisher.publish_sensor_changed(&event).await.unwrap();
 
     let received = wait_for_matching_event(&mut consumer, &event).await;
     assert_eq!(received, event);

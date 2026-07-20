@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% block content %}
-{% if let Some(a) = agent %}
+{% if let Some(a) = sensor %}
 <h1>{{ a.name }}</h1>
 <p class="muted">{{ a.connector_type }} &middot; {% if a.enabled %}enabled{% else %}disabled{% endif %}</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}

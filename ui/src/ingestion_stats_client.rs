@@ -76,8 +76,8 @@ pub enum IngestionStatsClientError {
 }
 
 /// Reads per-connector ingestion volume/recency and per-connector record listings directly
-/// from Ingestion Service — the data this platform's Agent status/drill-down views are built
-/// on, since there is no separate "agent run" bookkeeping anywhere: a connector's own ingested
+/// from Ingestion Service — the data this platform's Sensor status/drill-down views are built
+/// on, since there is no separate "sensor run" bookkeeping anywhere: a connector's own ingested
 /// records are the ground truth for whether/when it ran.
 #[async_trait]
 pub trait IngestionStatsClient: Send + Sync {

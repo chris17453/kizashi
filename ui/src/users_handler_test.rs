@@ -1,5 +1,4 @@
 use super::*;
-use crate::agents_client::agents_client_test::InMemoryAgentsClient;
 use crate::analysis_config_client::analysis_config_client_test::InMemoryAnalysisConfigClient;
 use crate::audit_log_client::audit_log_client_test::InMemoryAuditLogClient;
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
@@ -11,6 +10,7 @@ use crate::health_client::PlatformHealthSummary;
 use crate::ingestion_stats_client::ingestion_stats_client_test::InMemoryIngestionStatsClient;
 use crate::normalization_mappings_client::normalization_mappings_client_test::InMemoryNormalizationMappingsClient;
 use crate::retention_policies_client::retention_policies_client_test::InMemoryRetentionPoliciesClient;
+use crate::sensors_client::sensors_client_test::InMemorySensorsClient;
 use crate::session::{InMemorySessionStore, Session, SessionStore};
 use crate::triggers_client::triggers_client_test::InMemoryTriggersClient;
 use crate::users_client::users_client_test::{FailingUsersClient, InMemoryUsersClient};
@@ -48,7 +48,7 @@ async fn state_with_session(role: Role) -> (AppState, String, Uuid) {
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
-        agents_client: Arc::new(InMemoryAgentsClient::default()),
+        sensors_client: Arc::new(InMemorySensorsClient::default()),
         api_keys_client: Arc::new(
             crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default(),
         ),

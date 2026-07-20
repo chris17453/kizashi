@@ -9,7 +9,7 @@
     <h2>Register an already-deployed sensor</h2>
     <p class="muted">Adds a catalog entry so status/records show up here. Doesn't deploy anything —
     use "Generate a deploy script" below to actually stand one up.</p>
-    <form class="inline" method="post" action="/agents">
+    <form class="inline" method="post" action="/sensors">
       <label for="connector_type">Connector type</label>
       <select id="connector_type" name="connector_type">
         <option value="zendesk">Zendesk</option>
@@ -31,7 +31,7 @@
     <ul>
       <li>Registering here only adds a catalog entry — it doesn't deploy or run anything.</li>
       <li>To actually stand up a connector, use
-        <a href="/agents/generate">Generate a deploy script &rarr;</a>, which produces a
+        <a href="/sensors/generate">Generate a deploy script &rarr;</a>, which produces a
         ready-to-run Docker/bash/PowerShell command for the connector type you pick.</li>
       <li>The <code>Name</code> field must exactly match the deployed connector's
         <code>CONNECTOR_ID</code> environment variable, or ingested records won't be matched
@@ -43,7 +43,7 @@
 </div>
 {% endif %}
 
-{% if agents.is_empty() && page == 0 && !has_more %}
+{% if sensors.is_empty() && page == 0 && !has_more %}
 <div class="empty-state">
   <div class="empty-icon">&#11041;</div>
   <p>No sensors registered yet for this tenant.</p>
@@ -55,14 +55,14 @@
     <tr><th>Name</th><th>Connector Type</th><th>Status</th><th>Records</th><th>Last Ingested</th><th>Enabled</th><th></th><th></th></tr>
   </thead>
   <tbody>
-    {% for agent in agents %}
+    {% for sensor in sensors %}
     <tr>
-      <td><a href="/agents/{{ agent.id }}">{{ agent.name }}</a></td>
-      <td>{{ agent.connector_type }}</td>
-      {% if let Some(count) = agent.record_count %}
+      <td><a href="/sensors/{{ sensor.id }}">{{ sensor.name }}</a></td>
+      <td>{{ sensor.connector_type }}</td>
+      {% if let Some(count) = sensor.record_count %}
       <td class="status-up">active</td>
       <td>{{ count }}</td>
-      {% if let Some(last) = agent.last_ingested_at %}
+      {% if let Some(last) = sensor.last_ingested_at %}
       <td>{{ last }}</td>
       {% else %}
       <td class="muted">—</td>
@@ -73,21 +73,21 @@
       <td class="muted">—</td>
       {% endif %}
       <td>
-        <span class="pill {% if agent.enabled %}pill-up{% else %}pill-muted{% endif %}">
-          {% if agent.enabled %}enabled{% else %}disabled{% endif %}
+        <span class="pill {% if sensor.enabled %}pill-up{% else %}pill-muted{% endif %}">
+          {% if sensor.enabled %}enabled{% else %}disabled{% endif %}
         </span>
       </td>
       <td>
         {% if can_write %}
-        <form class="inline" method="post" action="/agents/{{ agent.id }}/toggle" style="display:inline">
-          <button type="submit" class="btn">{% if agent.enabled %}Disable{% else %}Enable{% endif %}</button>
+        <form class="inline" method="post" action="/sensors/{{ sensor.id }}/toggle" style="display:inline">
+          <button type="submit" class="btn">{% if sensor.enabled %}Disable{% else %}Enable{% endif %}</button>
         </form>
-        <form class="inline" method="post" action="/agents/{{ agent.id }}/delete" style="display:inline">
+        <form class="inline" method="post" action="/sensors/{{ sensor.id }}/delete" style="display:inline">
           <button type="submit" class="btn-danger">Remove</button>
         </form>
         {% endif %}
       </td>
-      <td><a href="/audit-log/config/{{ agent.id }}">History</a></td>
+      <td><a href="/audit-log/config/{{ sensor.id }}">History</a></td>
     </tr>
     {% endfor %}
   </tbody>
@@ -95,14 +95,14 @@
 
 <div class="pagination">
   {% if page > 0 %}
-  <form method="get" action="/agents" class="pagination-form">
+  <form method="get" action="/sensors" class="pagination-form">
     <input type="hidden" name="page" value="{{ page - 1 }}">
     <button type="submit" class="btn">&larr; Previous</button>
   </form>
   {% endif %}
   <span class="muted">Page {{ page + 1 }}</span>
   {% if has_more %}
-  <form method="get" action="/agents" class="pagination-form">
+  <form method="get" action="/sensors" class="pagination-form">
     <input type="hidden" name="page" value="{{ page + 1 }}">
     <button type="submit" class="btn">Next &rarr;</button>
   </form>

@@ -14,8 +14,8 @@ use axum::response::{Html, IntoResponse, Response};
 #[template(path = "overview.html")]
 struct OverviewTemplate {
     show_nav: bool,
-    agent_count: usize,
-    active_agent_count: usize,
+    sensor_count: usize,
+    active_sensor_count: usize,
     total_records: i64,
     event_count: usize,
     platform_status: String,
@@ -26,7 +26,7 @@ struct OverviewTemplate {
     pipeline_items: Vec<TopologyItem>,
 }
 
-/// GET /overview — the landing dashboard: KPI cards summarizing agents, ingestion volume,
+/// GET /overview — the landing dashboard: KPI cards summarizing sensors, ingestion volume,
 /// events, and platform health at a glance, each pulled from the same backends every other
 /// page already reads (no new data path — just presented as tiles instead of a table).
 pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -36,12 +36,12 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
     };
 
     // Capped at 1000, same tradeoff as the events count below — a KPI tile approximates at
-    // very high agent counts rather than needing an exact total.
-    let agents = state
-        .agents_client
-        .list_agents(session.tenant_id, 1000, 0)
+    // very high sensor counts rather than needing an exact total.
+    let sensors = state
+        .sensors_client
+        .list_sensors(session.tenant_id, 1000, 0)
         .await
-        .map(|page| page.agents)
+        .map(|page| page.sensors)
         .unwrap_or_default();
     let connector_stats =
         state.stats_client.connector_stats(session.tenant_id).await.unwrap_or_default();
@@ -61,8 +61,8 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
 
     let active_connector_ids: std::collections::HashSet<&str> =
         connector_stats.iter().map(|s| s.connector_id.as_str()).collect();
-    let active_agent_count =
-        agents.iter().filter(|a| active_connector_ids.contains(a.name.as_str())).count();
+    let active_sensor_count =
+        sensors.iter().filter(|a| active_connector_ids.contains(a.name.as_str())).count();
     let total_records: i64 = connector_stats.iter().map(|s| s.record_count).sum();
 
     let (platform_status, services_up, services_total) = match &health {
@@ -76,8 +76,8 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
     Html(
         OverviewTemplate {
             show_nav: true,
-            agent_count: agents.len(),
-            active_agent_count,
+            sensor_count: sensors.len(),
+            active_sensor_count,
             total_records,
             event_count: events.len(),
             platform_status,

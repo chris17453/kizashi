@@ -3131,5 +3131,55 @@ architectural decision.
 - **Follow-up (explicitly out of scope, see ADR-0037):** the `analysis_config.changed` consume
   loop still uses unbounded `nack(requeue: true)` — deferred since it's low-volume and wasn't
   implicated in the incident. No operator UI yet for inspecting/replaying the dead-letter queue.
-- **PR:** (opened in this branch's PR)
+- **PR:** [#59](https://github.com/chris17453/kizashi/pull/59)
 - **ADR:** [ADR-0037](../docs/adr/0037-analysis-service-consumer-liveness-healthcheck.md)
+
+## [2026-07-19] feature/0049-sensor-naming-stage2-types-and-routes — "Sensor" terminology, Stage 2 (types, routes, bus contract)
+- **Type:** feature
+- **Summary:** Stage 2 of the ADR-0036 rename (Stage 1: #57, UI labels only). A pure,
+  behavior-preserving rename of the Rust-level API surface, HTTP routes, and message-bus
+  contract from "Agent" to "Sensor" — no schema, no service/crate identity change (both stay
+  Stage 3). Renamed `common::Agent` → `Sensor`, `common::AgentChangeEvent` → `SensorChangeEvent`,
+  and `AGENT_CHANGED_EXCHANGE` (`"agent.changed"`) → `SENSOR_CHANGED_EXCHANGE`
+  (`"sensor.changed"`) — updated `config-admin-service` (publisher) and `agent-scheduler`
+  (consumer) together in the same change so the exchange/queue names they agree on never drift
+  out of sync with each other. In `config-admin-service`: `AgentRepository`/
+  `AgentRepositoryError`/`PostgresAgentRepository`/`AgentPublisher`/`AgentState` → `Sensor*`
+  equivalents, HTTP routes `/v1/agents*` → `/v1/sensors*`. In `agent-scheduler`:
+  `AgentRepository` → `SensorRepository`, `StoredAgent` → `StoredSensor`, `Invoker` trait now
+  takes `&Sensor`, consumer queue renamed to `agent-scheduler.sensor.changed` bound to the new
+  exchange. In `kizashi-ui`: `AgentsClient` → `SensorsClient`, handler/client files and
+  functions renamed, `AppState.agents_client` → `sensors_client`, routes `/agents*` →
+  `/sensors*`, templates renamed and their internal hrefs/`{% template(path=...) %}` references
+  updated to match. Explicitly untouched, per the ADR's staging: the `agents` Postgres table
+  name and its columns in both services' schemas (including the `entity_type: "agent"` value
+  written into `config-admin-service`'s audit log rows, left as-is since it's persisted data,
+  not an API name), and `agent-scheduler`'s own crate/binary/service name, Docker image, and
+  `docker-compose.yml` entry (Stage 3).
+- **Tests:** `cargo test --workspace --all-features` (full real-infra stack: Postgres, RabbitMQ,
+  ClickHouse) — every test binary passed, 0 failed, except 5 pre-existing/unrelated
+  infra-dependent failures not touched by this change (SMTP/greenmail delivery test, Fabric AAD
+  auth tests, IMAP connector tests, an observability RabbitMQ backlog test, and the retention
+  S3 archive store test — all fail because their specific external test fixtures
+  (greenmail/MSSQL/S3-compatible backend) aren't part of this environment's running stack, not
+  because of anything in this PR). All Sensor-specific suites pass: `config-admin-service`
+  unit tests (89 passed, including `sensor_handlers`/`sensor_repository`/`sensor_publisher`),
+  `config-admin-service`'s real-Postgres `repository_integration_test.rs` (16 passed, including
+  tenant-isolation cases renamed to `a_sensor_owned_by_one_tenant_is_invisible_...` and
+  `deleting_a_sensor_owned_by_another_tenant_fails_...`), `config-admin-service`'s real-RabbitMQ
+  `sensor_publisher_integration_test.rs` (2 passed, proving the renamed exchange/event round-trip
+  over the real bus), `agent-scheduler` unit tests (17 passed) and its real-Postgres
+  `sensor_repository_integration_test.rs` (3 passed), and `kizashi-ui`'s full lib test suite
+  (241 passed). `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean. `cargo deny check` / `cargo audit` — clean, same 3
+  pre-existing allow-listed advisories, no dependency changes.
+- **Live verification:** not run — this stage lands as source only; the actual
+  `agent-scheduler`/`config-admin-service`/`kizashi-ui` containers keep running their
+  currently-deployed images (still on the old `agent.changed` exchange/queue names) until this
+  merges and those services are rebuilt/redeployed together, since the exchange rename is a
+  breaking wire-contract change across the two services that must roll out atomically.
+- **Follow-up (staged, not this PR):** Stage 3 — `agent-scheduler`'s own crate/binary/service
+  name, Docker image name, and `docker-compose.yml` service key, plus (optionally) the `agents`
+  DB table/column names — see ADR-0036.
+- **PR:** [#58](https://github.com/chris17453/kizashi/pull/58)
+- **ADR:** [ADR-0036](../docs/adr/0036-sensor-vs-agent-terminology.md)
