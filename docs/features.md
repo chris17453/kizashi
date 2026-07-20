@@ -4958,5 +4958,5 @@ architectural decision.
   `cargo test -p action-executor --lib` — 52 passed. `cargo build --workspace`, `cargo clippy -p
   action-executor --all-targets --all-features -- -D warnings`, `cargo fmt --all --check` all
   clean.
-- **PR:** pending
+- **PR:** #134
 - **ADR:** docs/adr/0104-action-executions-immutability-trigger.md
