@@ -33,7 +33,11 @@ full before/after diff.</p>
   </tbody>
 </table>
 {% if let Some(before) = next_before %}
-<p><a href="/audit-log?before={{ before }}">Load older &rarr;</a></p>
+<p>
+  <a href="/audit-log?before={{ before }}">Load older &rarr;</a>
+  &middot;
+  <a href="/audit-log/export.csv?before={{ before }}" class="btn-link">Download CSV from here &#8595;</a>
+</p>
 {% endif %}
 {% endif %}
 {% endblock %}

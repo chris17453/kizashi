@@ -4005,3 +4005,21 @@ architectural decision.
   pre-existing allow-listed warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0059-nav-wide-tenant-branding.md
+
+## [2026-07-20] feature/0068-audit-log-csv-export-pagination — Audit log CSV export pagination
+- **Type:** feature
+- **Branch:** feature/0068-audit-log-csv-export-pagination
+- **Summary:** Closes a gap ADR-0049 explicitly flagged as a follow-up: the CSV export capped at
+  6000 rows with no way to get the rest and no signal that more history existed. `GET
+  /audit-log/export.csv` now accepts the same `?before=` cursor the HTML page's "Load older"
+  link uses, and sets an `X-Next-Before` response header when the row cap was hit while more
+  history remained (vs. a source genuinely running dry) — no more silent truncation. The HTML
+  page's "Load older" section gained a matching "Download CSV from here" link.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 379 passed (3 new: `?before=` honored as the
+  starting cursor, `X-Next-Before` header set when more history remains, header absent when
+  history is fully exported). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
+  --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. `cargo
+  deny check`/`cargo audit` — same pre-existing allow-listed warnings as prior entries, no new
+  issues.
+- **PR:** pending
+- **ADR:** docs/adr/0060-audit-log-csv-export-pagination.md
