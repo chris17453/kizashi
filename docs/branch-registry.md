@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0083         |
-| fix           | `fix/`     | 0014         |
+| fix           | `fix/`     | 0015         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
 | chore         | `chore/`   | 0005         |
@@ -124,3 +124,4 @@ manually created branches.
 | 0080 | `feature/0080-triggers-page-sortable-columns` | feature | 2026-07-20 | open | pending | |
 | 0081 | `feature/0081-session-idle-timeout` | feature | 2026-07-20 | open | pending | |
 | 0082 | `feature/0081-events-page-search-and-sort` | feature | 2026-07-20 | open | pending | numbering race between two concurrently-created branches; kept original branch name, registry # bumped to avoid collision (same precedent as row 0050) |
+| 0014 | `fix/0014-table-header-scope-attributes` | fix | 2026-07-20 | open | pending | |

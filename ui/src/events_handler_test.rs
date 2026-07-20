@@ -115,6 +115,10 @@ async fn renders_the_events_table_when_signed_in() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("sentiment_spike"));
     assert!(body.contains("customer-42"));
+    assert!(
+        body.contains(r#"scope="col""#),
+        "table headers should carry scope=\"col\" for screen readers"
+    );
 }
 
 #[tokio::test]
