@@ -4939,5 +4939,5 @@ architectural decision.
   crates, `cargo fmt --all --check` clean. No file exceeds 500 lines. Live-verified against the
   real `watkinslabs` tenant: rebuilt/redeployed all four services, confirmed normal (non-error)
   paths for Events, Triggers, API Keys, Retention Policies, and AI Analysis all still return 200.
-- **PR:** pending
+- **PR:** #133
 - **ADR:** docs/adr/0103-error-scrub-rollout.md
