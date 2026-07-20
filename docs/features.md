@@ -3183,3 +3183,34 @@ architectural decision.
   DB table/column names — see ADR-0036.
 - **PR:** [#58](https://github.com/chris17453/kizashi/pull/58)
 - **ADR:** [ADR-0036](../docs/adr/0036-sensor-vs-agent-terminology.md)
+
+## [2026-07-20] fix/0005-analysis-service-timeout-and-heartbeat-window — bound AI call latency, widen heartbeat staleness window
+- **Type:** fix
+- **Branch:** fix/0005-analysis-service-timeout-and-heartbeat-window
+- **Summary:** Follow-up to #59's liveness healthcheck: live redeploy against the real
+  watkinslabs stack showed `/healthz` flapping to `503` and staying stuck, even though the
+  process wasn't actually deadlocked. Root cause: the AI HTTP client (`reqwest::Client::new()`)
+  had no request timeout, and the consume loop's heartbeat only ticked in the outer
+  `tokio::select!` — a slow or hanging call to the local Ollama backend for a real batch could
+  block the loop for minutes with zero heartbeat ticks, tripping the 30s staleness threshold
+  even for legitimate (if slow) work. Fixes: (1) the AI HTTP client now has a 30s per-request
+  timeout, bounding worst-case single-call hang time; (2) `STALE_THRESHOLD` raised from 30s to
+  180s to comfortably exceed worst-case batch time (batch_size 20 / concurrency 4 = 5 rounds *
+  30s = 150s, plus margin); (3) heartbeat now also ticks once per tenant group before
+  `process_batch`, not just in the outer select loop, so multi-tenant batches stay fresher.
+- **Tests:** `cargo test -p analysis-service` — all 40 unit tests pass (health/retry tests
+  unaffected by the threshold/timeout changes), 3 real-Postgres + 1 real-RabbitMQ integration
+  tests pass. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — clean.
+  `cargo fmt --all --check` — clean.
+- **Live verification:** rebuilt/redeployed `analysis-service` against the live watkinslabs
+  stack. Previous deploy (without this fix) went unhealthy (`503`) within ~30s of restart,
+  reproducibly. After this fix: `/healthz` held `200` continuously for 15+ minutes of
+  observation while the real queue kept draining (428 → 368 messages), 0 messages
+  dead-lettered, 1 consumer attached throughout.
+- **Follow-up:** the 150s theoretical worst-case bound assumes no queueing/contention beyond
+  concurrency=4; if `ANALYSIS_BATCH_SIZE` or per-request latency grow significantly, this
+  threshold should be revisited. `docs/adr/0037-analysis-service-consumer-liveness-healthcheck.md`
+  updated to reflect these numbers is a candidate follow-up, not done in this PR.
+- **PR:** (opened in this branch's PR)
+- **ADR:** n/a — direct correction to ADR-0037's stated thresholds/assumptions, not a new
+  architectural decision.

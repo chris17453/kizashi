@@ -69,9 +69,14 @@ async fn main() {
     let analysis_config_channel =
         connection.create_channel().await.expect("failed to open channel");
 
+    let ai_http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .expect("failed to build AI/ML HTTP client");
+
     let deps = AnalysisDeps {
         analysis_client: Arc::new(FoundryAnalysisClient::new(
-            reqwest::Client::new(),
+            ai_http_client.clone(),
             foundry_endpoint,
             foundry_api_key,
         )),
@@ -79,7 +84,7 @@ async fn main() {
             RabbitMqEventPublisher::new(publish_channel).await.expect("failed to declare exchange"),
         ),
         analysis_config_repository: analysis_config_repository.clone(),
-        http_client: reqwest::Client::new(),
+        http_client: ai_http_client,
         openai_compatible_concurrency: openai_compatible_concurrency(),
     };
 
@@ -258,6 +263,7 @@ async fn main() {
                 }
 
                 for (tenant_id, entries) in groups {
+                    heartbeat.tick();
                     let (deliveries, records): (Vec<_>, Vec<_>) = entries.into_iter().unzip();
                     match process_batch(&deps, tenant_id, records).await {
                         Ok(_) => {
