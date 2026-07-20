@@ -4759,3 +4759,20 @@ architectural decision.
   confirmation attribute.
 - **PR:** pending
 - **ADR:** docs/adr/0095-sensors-bulk-delete-and-sessions-confirm.md
+
+## [2026-07-20] feature/0096-users-and-retention-policies-bulk-delete — Users and Retention Policies bulk-delete
+- **Type:** feature
+- **Branch:** feature/0096-users-and-retention-policies-bulk-delete
+- **Summary:** Closes the follow-up ADR-0095 left open: Users and Retention Policies gain the
+  same bulk-delete capability already shipped for API Keys and Sensors — checkboxes + "Remove
+  selected" + a `POST .../bulk-delete` route looping over the existing single-item delete method.
+  Every list page with a destructive per-row action now has bulk-select parity. Users' bulk-delete
+  omits the checkbox for the caller's own row, matching the existing single-delete self-protection.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 464 passed (7 new: 3 bulk-delete-users tests, 3
+  bulk-delete-retention-policies tests, mirroring the established shape). `cargo build
+  --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
+  clean. `cargo fmt --all --check` clean. No file exceeds 500 lines (split
+  `retention_policies_handler_mutations_test.rs` a second time). Live-verified against the real
+  `watkinslabs` tenant: Users renders the bulk-delete UI.
+- **PR:** pending
+- **ADR:** docs/adr/0096-users-and-retention-policies-bulk-delete.md

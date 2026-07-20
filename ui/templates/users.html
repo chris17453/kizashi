@@ -44,9 +44,15 @@
   {% endif %}
 </div>
 {% else %}
+<!-- Declared empty and referenced by `form="bulk-delete-form"` on each checkbox/button below,
+     rather than physically wrapping the table -- HTML forms can't nest, and each row also needs
+     its own role/delete forms. Same pattern as API Keys' bulk-revoke and Sensors' bulk-delete
+     (ADR-0065/ADR-0095). -->
+<form id="bulk-delete-form" method="post" action="/users/bulk-delete" onsubmit="return confirm('Remove the selected users? This cannot be undone.');"></form>
 <table>
   <thead>
     <tr>
+      <th scope="col"></th>
       <th scope="col">
         <a href="/users?q={{ q|urlencode }}&sort=username&dir={% if sort == "username" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Username{% if sort == "username" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
@@ -63,6 +69,11 @@
   <tbody>
     {% for user in users %}
     <tr>
+      <td>
+        {% if !user.is_current %}
+        <input type="checkbox" name="ids" value="{{ user.id }}" form="bulk-delete-form" aria-label="Select {{ user.username }} for bulk removal">
+        {% endif %}
+      </td>
       <td>{{ user.username }}</td>
       <td>
         <form class="inline" method="post" action="/users/{{ user.id }}/role" style="display:inline">
@@ -84,5 +95,6 @@
     {% endfor %}
   </tbody>
 </table>
+<p><button type="submit" form="bulk-delete-form" class="btn-danger">Remove selected</button></p>
 {% endif %}
 {% endblock %}

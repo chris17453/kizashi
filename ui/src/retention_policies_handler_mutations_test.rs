@@ -26,6 +26,7 @@ fn router(state: AppState) -> Router {
         .route("/retention-policies/:id/toggle", post(post_toggle_retention_policy))
         .route("/retention-policies/:id/edit", post(post_edit_retention_policy))
         .route("/retention-policies/:id/delete", post(post_delete_retention_policy))
+        .route("/retention-policies/bulk-delete", post(post_bulk_delete_retention_policies))
         .with_state(state)
 }
 

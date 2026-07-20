@@ -26,6 +26,7 @@ fn router(state: AppState) -> Router {
         .route("/users", get(get_users).post(post_users))
         .route("/users/:id/role", post(post_update_user_role))
         .route("/users/:id/delete", post(post_delete_user))
+        .route("/users/bulk-delete", post(post_bulk_delete_users))
         .route("/users/:id/export", get(get_export_user))
         .with_state(state)
 }
@@ -182,4 +183,109 @@ async fn post_delete_user_is_forbidden_for_an_operator() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn post_bulk_delete_users_removes_every_selected_user() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    let first = state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "first", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+    let second = state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "second", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "untouched", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/users/bulk-delete")
+                .header("cookie", cookie(&session_id))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={}&ids={}", first.id, second.id)))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let remaining = state.users_client.list_users(tenant_id, Role::Admin).await.unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].username, "untouched");
+}
+
+#[tokio::test]
+async fn post_bulk_delete_users_with_no_selection_is_a_no_op() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "untouched", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/users/bulk-delete")
+                .header("cookie", cookie(&session_id))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(""))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let remaining = state.users_client.list_users(tenant_id, Role::Admin).await.unwrap();
+    assert_eq!(remaining.len(), 1);
+}
+
+#[tokio::test]
+async fn post_bulk_delete_users_is_forbidden_for_an_operator() {
+    let (state, _session_id, tenant_id) = state_with_session(Role::Admin).await;
+    let created = state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "first", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+
+    let session_store = InMemorySessionStore::default();
+    let operator_session_id = session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "operator-user".to_string(),
+            role: Role::Operator,
+            created_at: chrono::Utc::now(),
+        })
+        .await;
+    let mut operator_state = state.clone();
+    operator_state.session_store = Arc::new(session_store);
+
+    let response = router(operator_state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/users/bulk-delete")
+                .header("cookie", cookie(&operator_session_id))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={}", created.id)))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let remaining = state.users_client.list_users(tenant_id, Role::Admin).await.unwrap();
+    assert_eq!(remaining.len(), 1);
 }

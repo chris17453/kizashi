@@ -48,13 +48,28 @@ overrides it.</p>
   {% if can_write %}<p>Use the form above to create your first one.</p>{% endif %}
 </div>
 {% else %}
+{% if can_write %}
+<!-- Declared empty and referenced by `form="bulk-delete-form"` on each checkbox/button below,
+     rather than physically wrapping the table -- HTML forms can't nest, and each row also needs
+     its own edit/toggle/delete forms. Same pattern as API Keys/Sensors/Users bulk-delete
+     (ADR-0065/ADR-0095). -->
+<form id="bulk-delete-form" method="post" action="/retention-policies/bulk-delete" onsubmit="return confirm('Remove the selected retention policies? This cannot be undone.');"></form>
+{% endif %}
 <table>
   <thead>
-    <tr><th scope="col">Data Class</th><th scope="col">TTL (days)</th><th scope="col">Status</th>{% if can_write %}<th scope="col"></th>{% endif %}<th scope="col"></th></tr>
+    <tr>
+      {% if can_write %}<th scope="col"></th>{% endif %}
+      <th scope="col">Data Class</th><th scope="col">TTL (days)</th><th scope="col">Status</th>{% if can_write %}<th scope="col"></th>{% endif %}<th scope="col"></th>
+    </tr>
   </thead>
   <tbody>
     {% for policy in policies %}
     <tr>
+      {% if can_write %}
+      <td>
+        <input type="checkbox" name="ids" value="{{ policy.id }}" form="bulk-delete-form" aria-label="Select {{ policy.data_class }} policy for bulk removal">
+      </td>
+      {% endif %}
       <td>{{ policy.data_class }}</td>
       <td>
         {% if can_write %}
@@ -86,5 +101,8 @@ overrides it.</p>
     {% endfor %}
   </tbody>
 </table>
+{% if can_write %}
+<p><button type="submit" form="bulk-delete-form" class="btn-danger">Remove selected</button></p>
+{% endif %}
 {% endif %}
 {% endblock %}
