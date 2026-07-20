@@ -1,16 +1,19 @@
 use futures_util::StreamExt;
 use lapin::options::{
-    BasicAckOptions, BasicConsumeOptions, BasicNackOptions, QueueBindOptions, QueueDeclareOptions,
+    BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions, QueueBindOptions,
+    QueueDeclareOptions,
 };
 use lapin::types::FieldTable;
 use std::sync::Arc;
 use trigger_engine::{
-    api_router, health_router, process_analyzed_record, ApiState, ClickHouseEventStore,
-    PostgresSignalRepository, PostgresTriggerRepository, RabbitMqEventPublisher, TriggerDeps,
-    RECORD_ANALYZED_EXCHANGE, TRIGGER_CHANGED_EXCHANGE,
+    api_router, health_router, process_analyzed_record, retry_count, should_dead_letter,
+    with_incremented_retry_count, ApiState, ClickHouseEventStore, PostgresSignalRepository,
+    PostgresTriggerRepository, RabbitMqEventPublisher, TriggerDeps, RECORD_ANALYZED_EXCHANGE,
+    TRIGGER_CHANGED_EXCHANGE,
 };
 
 const QUEUE_NAME: &str = "trigger-engine.record.analyzed";
+const DEAD_LETTER_QUEUE_NAME: &str = "trigger-engine.record.analyzed.dead";
 const TRIGGER_CHANGED_QUEUE_NAME: &str = "trigger-engine.trigger.changed";
 
 #[tokio::main]
@@ -64,6 +67,14 @@ async fn main() {
         )
         .await
         .expect("failed to declare queue");
+    consume_channel
+        .queue_declare(
+            DEAD_LETTER_QUEUE_NAME,
+            QueueDeclareOptions { durable: true, ..Default::default() },
+            FieldTable::default(),
+        )
+        .await
+        .expect("failed to declare dead-letter queue");
     consume_channel
         .queue_bind(
             QUEUE_NAME,
@@ -196,9 +207,37 @@ async fn main() {
                 let _ = delivery.ack(BasicAckOptions::default()).await;
             }
             Err(e) => {
-                tracing::error!(record_id = %record.record.id, error = %e, "processing failed, requeueing");
-                let _ =
-                    delivery.nack(BasicNackOptions { requeue: true, ..Default::default() }).await;
+                let headers = delivery.properties.headers().as_ref();
+                if should_dead_letter(headers) {
+                    tracing::error!(
+                        record_id = %record.record.id,
+                        error = %e,
+                        retries = retry_count(headers),
+                        "message exceeded max retries, dead-lettering"
+                    );
+                    let _ = consume_channel
+                        .basic_publish(
+                            "",
+                            DEAD_LETTER_QUEUE_NAME,
+                            BasicPublishOptions::default(),
+                            &delivery.data,
+                            delivery.properties.clone(),
+                        )
+                        .await;
+                } else {
+                    tracing::error!(record_id = %record.record.id, error = %e, "processing failed, requeueing");
+                    let next_headers = with_incremented_retry_count(headers);
+                    let _ = consume_channel
+                        .basic_publish(
+                            "",
+                            QUEUE_NAME,
+                            BasicPublishOptions::default(),
+                            &delivery.data,
+                            delivery.properties.clone().with_headers(next_headers),
+                        )
+                        .await;
+                }
+                let _ = delivery.ack(BasicAckOptions::default()).await;
             }
         }
     }
