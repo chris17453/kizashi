@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0051         |
-| fix           | `fix/`     | 0006         |
+| fix           | `fix/`     | 0007         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
 | chore         | `chore/`   | 0004         |
@@ -82,3 +82,4 @@ manually created branches.
 | 0049 | `feature/0049-analysis-service-consumer-liveness-healthcheck` | feature | 2026-07-19 | merged | #59 | |
 | 0050 | `feature/0049-sensor-naming-stage2-types-and-routes` | feature | 2026-07-19 | open | pending | branch predates renumbering; kept original branch name, registry # bumped to avoid collision |
 | 0005 | `fix/0005-analysis-service-timeout-and-heartbeat-window` | fix | 2026-07-19 | open | pending | |
+| 0006 | `fix/0006-ingestion-gateway-audit-actor` | fix | 2026-07-19 | open | pending | |

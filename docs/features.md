@@ -3214,3 +3214,32 @@ architectural decision.
 - **PR:** (opened in this branch's PR)
 - **ADR:** n/a — direct correction to ADR-0037's stated thresholds/assumptions, not a new
   architectural decision.
+
+## [2026-07-19] fix/0006-ingestion-gateway-audit-actor — API key audit log records the real actor, not the tenant_id
+- **Type:** fix
+- **Branch:** fix/0006-ingestion-gateway-audit-actor
+- **Summary:** `ApiKeyStore::create`/`revoke` in `crates/ingestion-gateway` hardcoded
+  `AuditLogEntry.actor` to `tenant_id.to_string()`, making the audit log useless for its
+  compliance purpose (CLAUDE.md §5) — `tenant_id` is already a separate column on every row, so
+  the audit trail couldn't say *who* created or revoked an API key. Added a
+  `username_from_headers` helper in `api_key_handlers.rs` (reads `X-Username`, 401s if absent —
+  same wire contract as auth-service/config-admin-service/retention-service's identical fix),
+  threaded a new `actor: &str` parameter through `ApiKeyStore::create`/`revoke` (trait, Postgres
+  impl, and the in-memory/failing test doubles), and wired `create_api_key`/`revoke_api_key` to
+  pass the real username instead of the tenant_id fallback.
+- **Tests:** `cargo test -p ingestion-gateway --all-features` — 44 passed, 0 failed (38 unit +
+  6 integration against real Postgres), including new tests
+  `create_and_revoke_thread_the_real_actor_not_the_tenant_id` (store-level),
+  `create_api_key_passes_the_real_username_as_actor_not_the_tenant_id` and
+  `revoke_api_key_passes_the_real_username_as_actor_not_the_tenant_id` (handler-level,
+  asserting the recorded actor equals the `X-Username` header value and is never the tenant_id),
+  `create_api_key_missing_username_header_is_unauthorized` (401 on missing `X-Username`), and
+  updated integration tests `create_writes_a_created_audit_row_and_the_key_resolves` /
+  `revoke_writes_a_deleted_audit_row_and_the_key_stops_resolving` to assert the persisted
+  `AuditLogEntry.actor` is the real username. `cargo clippy -p ingestion-gateway --all-targets
+  --all-features -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo build
+  --workspace --all-targets` — clean.
+- **PR:** (not yet opened — committed locally for review alongside sibling fixes to
+  auth-service/config-admin-service/retention-service)
+- **ADR:** n/a — bugfix restoring the audit log's intended behavior, not a new architectural
+  decision.

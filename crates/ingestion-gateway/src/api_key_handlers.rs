@@ -34,6 +34,20 @@ fn role_from_headers(headers: &HeaderMap) -> Result<Role, (StatusCode, &'static 
     raw.parse().map_err(|_| (StatusCode::BAD_REQUEST, "X-Role is not a recognized role"))
 }
 
+/// Identifies the real human/operator performing a write, distinct from `tenant_id` (which
+/// identifies the tenant being acted on, not who acted on it). Required for every handler that
+/// writes an audit row (CLAUDE.md §5) — the audit log is useless for its compliance purpose if
+/// `actor` can't be traced back to a person, since `tenant_id` is already a separate column on
+/// every audit row. Same wire contract as auth-service/config-admin-service/retention-service's
+/// `username_from_headers`.
+fn username_from_headers(headers: &HeaderMap) -> Result<String, (StatusCode, &'static str)> {
+    headers
+        .get("x-username")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .ok_or((StatusCode::UNAUTHORIZED, "missing X-Username header"))
+}
+
 fn require_operator(headers: &HeaderMap) -> Option<Response> {
     match role_from_headers(headers) {
         Ok(role) if role.at_least(Role::Operator) => None,
@@ -72,8 +86,12 @@ pub async fn create_api_key(
     if let Some(response) = require_operator(&headers) {
         return response;
     }
+    let username = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
 
-    match state.api_key_store.create(tenant_id, &request.label).await {
+    match state.api_key_store.create(tenant_id, &request.label, &username).await {
         Ok((summary, plaintext)) => (
             StatusCode::CREATED,
             Json(CreatedApiKeyResponse {
@@ -121,8 +139,12 @@ pub async fn revoke_api_key(
     if let Some(response) = require_operator(&headers) {
         return response;
     }
+    let username = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
 
-    match state.api_key_store.revoke(tenant_id, id).await {
+    match state.api_key_store.revoke(tenant_id, id, &username).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             tracing::error!(error = %e, "api key revocation failed");

@@ -28,8 +28,9 @@ pub struct AuditLogEntry {
     pub entity_type: String,
     pub entity_id: Uuid,
     pub change_type: ChangeType,
-    /// Records the tenant_id for now — same limitation as config-admin-service's audit log
-    /// (ADR-0009/ADR-0010): no per-user identity exists downstream of the tenant session yet.
+    /// The real user who performed the action (from `X-Username`), not the tenant being acted
+    /// on — `tenant_id` above is already a separate column, so this must carry actual identity
+    /// to be useful for compliance (CLAUDE.md §5).
     pub actor: String,
     pub before: Option<serde_json::Value>,
     pub after: serde_json::Value,

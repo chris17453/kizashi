@@ -32,21 +32,24 @@ pub struct ApiKeySummary {
 pub trait ApiKeyStore: Send + Sync {
     async fn tenant_for_key(&self, api_key: &str) -> Result<Option<Uuid>, ApiKeyStoreError>;
 
-    /// Creates a new key for `tenant_id`, writes a `Created` audit row in the same transaction,
-    /// and returns the summary plus the plaintext key — the only time the plaintext is ever
-    /// available, since only its hash is persisted.
+    /// Creates a new key for `tenant_id`, writes a `Created` audit row (with `actor` set to the
+    /// real user performing the action, not the tenant) in the same transaction, and returns the
+    /// summary plus the plaintext key — the only time the plaintext is ever available, since
+    /// only its hash is persisted.
     async fn create(
         &self,
         tenant_id: Uuid,
         label: &str,
+        actor: &str,
     ) -> Result<(ApiKeySummary, String), ApiKeyStoreError>;
 
     async fn list(&self, tenant_id: Uuid) -> Result<Vec<ApiKeySummary>, ApiKeyStoreError>;
 
-    /// Revokes a key by id, scoped to `tenant_id`, writing a `Deleted` audit row in the same
-    /// transaction. A no-op (not an error) if the key doesn't exist or is already revoked —
-    /// revocation is idempotent by design.
-    async fn revoke(&self, tenant_id: Uuid, id: Uuid) -> Result<(), ApiKeyStoreError>;
+    /// Revokes a key by id, scoped to `tenant_id`, writing a `Deleted` audit row (with `actor`
+    /// set to the real user performing the action, not the tenant) in the same transaction. A
+    /// no-op (not an error) if the key doesn't exist or is already revoked — revocation is
+    /// idempotent by design.
+    async fn revoke(&self, tenant_id: Uuid, id: Uuid, actor: &str) -> Result<(), ApiKeyStoreError>;
 }
 
 pub fn hash_api_key(api_key: &str) -> String {
@@ -97,6 +100,7 @@ impl ApiKeyStore for PostgresApiKeyStore {
         &self,
         tenant_id: Uuid,
         label: &str,
+        actor: &str,
     ) -> Result<(ApiKeySummary, String), ApiKeyStoreError> {
         let plaintext = generate_api_key();
         let key_hash = hash_api_key(&plaintext);
@@ -129,7 +133,7 @@ impl ApiKeyStore for PostgresApiKeyStore {
                 entity_type: "api_key".to_string(),
                 entity_id: id,
                 change_type: ChangeType::Created,
-                actor: tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: None,
                 after: serde_json::json!({"label": label}),
                 changed_at: created_at,
@@ -153,7 +157,7 @@ impl ApiKeyStore for PostgresApiKeyStore {
         Ok(rows.into_iter().map(row_to_summary).collect())
     }
 
-    async fn revoke(&self, tenant_id: Uuid, id: Uuid) -> Result<(), ApiKeyStoreError> {
+    async fn revoke(&self, tenant_id: Uuid, id: Uuid, actor: &str) -> Result<(), ApiKeyStoreError> {
         let mut tx =
             self.pool.begin().await.map_err(|e| ApiKeyStoreError::Backend(e.to_string()))?;
 
@@ -175,7 +179,7 @@ impl ApiKeyStore for PostgresApiKeyStore {
                     entity_type: "api_key".to_string(),
                     entity_id: id,
                     change_type: ChangeType::Deleted,
-                    actor: tenant_id.to_string(),
+                    actor: actor.to_string(),
                     before: None,
                     after: serde_json::json!({"revoked": true}),
                     changed_at: Utc::now(),
