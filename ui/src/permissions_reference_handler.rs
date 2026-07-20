@@ -21,6 +21,7 @@ struct PermissionRow {
 #[template(path = "permissions_reference.html")]
 struct PermissionsReferenceTemplate {
     show_nav: bool,
+    is_admin: bool,
     rows: Vec<PermissionRow>,
 }
 
@@ -123,10 +124,16 @@ pub async fn get_permissions_reference(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Response {
-    if let Err(response) = require_session(state.session_store.as_ref(), &headers).await {
-        return response;
-    }
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
-    Html(PermissionsReferenceTemplate { show_nav: true, rows: permission_rows() }.render().unwrap())
-        .into_response()
+    Html(
+        PermissionsReferenceTemplate { show_nav: true, is_admin, rows: permission_rows() }
+            .render()
+            .unwrap(),
+    )
+    .into_response()
 }

@@ -62,6 +62,7 @@ fn sort_rows(rows: &mut [SessionRow], sort: &str, dir: &str) {
 #[template(path = "sessions.html")]
 struct SessionsTemplate {
     show_nav: bool,
+    is_admin: bool,
     sessions: Vec<SessionRow>,
     q: String,
     sort: String,
@@ -93,6 +94,7 @@ pub async fn get_sessions(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(Role::Admin);
     let current_id = session_cookie_value(&headers);
 
     let mut sessions: Vec<SessionRow> = state
@@ -112,9 +114,16 @@ pub async fn get_sessions(
     sort_rows(&mut sessions, &query.sort, &query.dir);
 
     Html(
-        SessionsTemplate { show_nav: true, sessions, q: query.q, sort: query.sort, dir: query.dir }
-            .render()
-            .unwrap(),
+        SessionsTemplate {
+            show_nav: true,
+            is_admin,
+            sessions,
+            q: query.q,
+            sort: query.sort,
+            dir: query.dir,
+        }
+        .render()
+        .unwrap(),
     )
     .into_response()
 }

@@ -32,6 +32,7 @@ fn chart_json(labels: &[String], values: &[i64]) -> String {
 #[template(path = "reports.html")]
 struct ReportsTemplate {
     show_nav: bool,
+    is_admin: bool,
     connector_stats: Vec<ConnectorStatSummary>,
     connector_stats_chart_json: String,
     event_counts: Vec<EventTypeCount>,
@@ -52,6 +53,7 @@ pub async fn get_reports(State(state): State<AppState>, headers: HeaderMap) -> R
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let connector_stats = match state.stats_client.connector_stats(session.tenant_id).await {
         Ok(stats) => stats,
@@ -59,6 +61,7 @@ pub async fn get_reports(State(state): State<AppState>, headers: HeaderMap) -> R
             return Html(
                 ReportsTemplate {
                     show_nav: true,
+                    is_admin,
                     connector_stats: vec![],
                     connector_stats_chart_json: chart_json(&[], &[]),
                     event_counts: vec![],
@@ -90,6 +93,7 @@ pub async fn get_reports(State(state): State<AppState>, headers: HeaderMap) -> R
     Html(
         ReportsTemplate {
             show_nav: true,
+            is_admin,
             connector_stats,
             connector_stats_chart_json,
             event_counts,

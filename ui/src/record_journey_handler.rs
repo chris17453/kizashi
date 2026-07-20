@@ -48,6 +48,7 @@ fn format_latency(
 #[template(path = "record_journey.html")]
 struct RecordJourneyTemplate {
     show_nav: bool,
+    is_admin: bool,
     record: Option<RecordSummary>,
     event_links: Vec<EventLink>,
     error: Option<String>,
@@ -67,6 +68,7 @@ pub async fn get_record_journey(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let record = match state.stats_client.get_record(session.tenant_id, id).await {
         Ok(record) => record,
@@ -74,6 +76,7 @@ pub async fn get_record_journey(
             return Html(
                 RecordJourneyTemplate {
                     show_nav: true,
+                    is_admin,
                     record: None,
                     event_links: vec![],
                     error: Some(e.to_string()),
@@ -91,6 +94,7 @@ pub async fn get_record_journey(
             return Html(
                 RecordJourneyTemplate {
                     show_nav: true,
+                    is_admin,
                     record,
                     event_links: vec![],
                     error: Some(e.to_string()),
@@ -121,7 +125,7 @@ pub async fn get_record_journey(
     }
 
     Html(
-        RecordJourneyTemplate { show_nav: true, record, event_links, error: None }
+        RecordJourneyTemplate { show_nav: true, is_admin, record, event_links, error: None }
             .render()
             .unwrap(),
     )

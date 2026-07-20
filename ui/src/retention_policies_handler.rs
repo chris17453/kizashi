@@ -15,6 +15,7 @@ use uuid::Uuid;
 #[template(path = "retention_policies.html")]
 struct RetentionPoliciesTemplate {
     show_nav: bool,
+    is_admin: bool,
     policies: Vec<RetentionPolicy>,
     can_write: bool,
     error: Option<String>,
@@ -29,11 +30,13 @@ pub async fn get_retention_policies(State(state): State<AppState>, headers: Head
         Err(response) => return response,
     };
     let can_write = session.role.at_least(common::Role::Operator);
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     match state.retention_policies_client.list_policies(session.tenant_id).await {
         Ok(policies) => Html(
             RetentionPoliciesTemplate {
                 show_nav: true,
+                is_admin,
                 policies,
                 can_write,
                 error: None,
@@ -46,6 +49,7 @@ pub async fn get_retention_policies(State(state): State<AppState>, headers: Head
         Err(e) => Html(
             RetentionPoliciesTemplate {
                 show_nav: true,
+                is_admin,
                 policies: vec![],
                 can_write,
                 error: Some(e.to_string()),
@@ -83,6 +87,7 @@ pub async fn post_retention_policies(
         Err(response) => return response,
     };
     let can_write = session.role.at_least(common::Role::Operator);
+    let is_admin = session.role.at_least(common::Role::Admin);
     if !can_write {
         return axum::http::StatusCode::FORBIDDEN.into_response();
     }
@@ -106,6 +111,7 @@ pub async fn post_retention_policies(
             return Html(
                 RetentionPoliciesTemplate {
                     show_nav: true,
+                    is_admin,
                     policies,
                     can_write,
                     error: None,
@@ -141,6 +147,7 @@ pub async fn post_retention_policies(
             Html(
                 RetentionPoliciesTemplate {
                     show_nav: true,
+                    is_admin,
                     policies,
                     can_write,
                     error: None,
@@ -202,6 +209,7 @@ pub async fn post_edit_retention_policy(
         Err(response) => return response,
     };
     let can_write = session.role.at_least(common::Role::Operator);
+    let is_admin = session.role.at_least(common::Role::Admin);
     if !can_write {
         return axum::http::StatusCode::FORBIDDEN.into_response();
     }
@@ -215,6 +223,7 @@ pub async fn post_edit_retention_policy(
         return Html(
             RetentionPoliciesTemplate {
                 show_nav: true,
+                is_admin,
                 policies,
                 can_write,
                 error: None,

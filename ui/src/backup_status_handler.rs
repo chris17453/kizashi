@@ -34,6 +34,7 @@ pub struct BackupsQuery {
 #[template(path = "backups.html")]
 struct BackupsTemplate {
     show_nav: bool,
+    is_admin: bool,
     runs: Vec<BackupRunRow>,
     next_before: Option<DateTime<Utc>>,
     error: Option<String>,
@@ -63,6 +64,7 @@ pub async fn get_backups(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     match state.backup_status_client.list_recent(session.role, query.before).await {
         Ok(runs) => {
@@ -74,6 +76,7 @@ pub async fn get_backups(
             Html(
                 BackupsTemplate {
                     show_nav: true,
+                    is_admin,
                     runs: runs
                         .into_iter()
                         .map(|r| BackupRunRow {
@@ -96,6 +99,7 @@ pub async fn get_backups(
         Err(e) => Html(
             BackupsTemplate {
                 show_nav: true,
+                is_admin,
                 runs: vec![],
                 next_before: None,
                 error: Some(e.to_string()),

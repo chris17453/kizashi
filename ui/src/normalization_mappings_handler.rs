@@ -27,6 +27,7 @@ fn matches_query(mapping: &NormalizationMapping, q: &str) -> bool {
 #[template(path = "normalization_mappings.html")]
 struct NormalizationMappingsTemplate {
     show_nav: bool,
+    is_admin: bool,
     mappings: Vec<NormalizationMapping>,
     can_write: bool,
     error: Option<String>,
@@ -45,12 +46,14 @@ pub async fn get_normalization_mappings(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let can_write = session.role.at_least(common::Role::Operator);
 
     match state.normalization_mappings_client.list_mappings(session.tenant_id).await {
         Ok(mappings) => Html(
             NormalizationMappingsTemplate {
                 show_nav: true,
+                is_admin,
                 mappings: mappings.into_iter().filter(|m| matches_query(m, &query.q)).collect(),
                 can_write,
                 error: None,
@@ -64,6 +67,7 @@ pub async fn get_normalization_mappings(
         Err(e) => Html(
             NormalizationMappingsTemplate {
                 show_nav: true,
+                is_admin,
                 mappings: vec![],
                 can_write,
                 error: Some(e.to_string()),
@@ -117,6 +121,7 @@ pub async fn post_normalization_mapping(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let can_write = session.role.at_least(common::Role::Operator);
     if !can_write {
         return axum::http::StatusCode::FORBIDDEN.into_response();
@@ -133,6 +138,7 @@ pub async fn post_normalization_mapping(
             return Html(
                 NormalizationMappingsTemplate {
                     show_nav: true,
+                    is_admin,
                     mappings,
                     can_write,
                     error: None,
@@ -163,6 +169,7 @@ pub async fn post_normalization_mapping(
             Html(
                 NormalizationMappingsTemplate {
                     show_nav: true,
+                    is_admin,
                     mappings,
                     can_write,
                     error: None,

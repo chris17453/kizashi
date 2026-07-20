@@ -19,6 +19,7 @@ const RECENT_ACTIVITY_LIMIT: usize = 5;
 #[template(path = "overview.html")]
 struct OverviewTemplate {
     show_nav: bool,
+    is_admin: bool,
     sensor_count: usize,
     active_sensor_count: usize,
     total_records: i64,
@@ -48,6 +49,7 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let mut errors = Vec::new();
 
@@ -114,6 +116,7 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
     Html(
         OverviewTemplate {
             show_nav: true,
+            is_admin,
             sensor_count: sensors.len(),
             active_sensor_count,
             total_records,

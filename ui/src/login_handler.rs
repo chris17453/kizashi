@@ -20,6 +20,7 @@ pub const MFA_USERNAME_COOKIE_NAME: &str = "kizashi_mfa_username";
 #[template(path = "login.html")]
 struct LoginTemplate {
     show_nav: bool,
+    is_admin: bool,
     error: Option<String>,
     tenant_name: String,
     product_name: String,
@@ -36,6 +37,7 @@ pub struct GetLoginQuery {
 fn default_login_template(error: Option<String>) -> LoginTemplate {
     LoginTemplate {
         show_nav: false,
+        is_admin: false,
         error,
         tenant_name: String::new(),
         product_name: String::new(),
@@ -63,6 +65,7 @@ pub async fn get_login(
     Html(
         LoginTemplate {
             show_nav: false,
+            is_admin: false,
             error: None,
             tenant_name: query.tenant_name,
             product_name: branding.product_name.unwrap_or_default(),

@@ -20,6 +20,7 @@ const BACKUP_HISTORY_LOOKBACK: usize = 20;
 #[template(path = "compliance_report.html")]
 struct ComplianceReportTemplate {
     show_nav: bool,
+    is_admin: bool,
     generated_at: String,
     admin_count: usize,
     operator_count: usize,
@@ -83,6 +84,7 @@ pub async fn get_compliance_report(State(state): State<AppState>, headers: Heade
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     let mut errors = Vec::new();
 
@@ -167,6 +169,7 @@ pub async fn get_compliance_report(State(state): State<AppState>, headers: Heade
     Html(
         ComplianceReportTemplate {
             show_nav: true,
+            is_admin,
             generated_at: Utc::now().to_rfc3339(),
             admin_count,
             operator_count,

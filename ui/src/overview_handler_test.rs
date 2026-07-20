@@ -232,6 +232,58 @@ async fn a_backend_failure_is_surfaced_not_silently_shown_as_zero() {
 }
 
 #[tokio::test]
+async fn admin_only_nav_links_hidden_for_non_admin_and_shown_for_admin() {
+    let (state, admin_session_id, tenant_id) = state_with_session().await;
+
+    let viewer_session_id = state
+        .session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "bob".to_string(),
+            role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
+        })
+        .await;
+
+    let viewer_response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/overview")
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(viewer_response.status(), StatusCode::OK);
+    let viewer_bytes = axum::body::to_bytes(viewer_response.into_body(), usize::MAX).await.unwrap();
+    let viewer_body = String::from_utf8(viewer_bytes.to_vec()).unwrap();
+    assert!(
+        !viewer_body.contains("href=\"/users\""),
+        "a Viewer session should not see the admin-only Users nav link"
+    );
+
+    let admin_response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/overview")
+                .header("cookie", format!("kizashi_session={admin_session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(admin_response.status(), StatusCode::OK);
+    let admin_bytes = axum::body::to_bytes(admin_response.into_body(), usize::MAX).await.unwrap();
+    let admin_body = String::from_utf8(admin_bytes.to_vec()).unwrap();
+    assert!(
+        admin_body.contains("href=\"/users\""),
+        "an Admin session should see the admin-only Users nav link"
+    );
+}
+
+#[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session().await;
 

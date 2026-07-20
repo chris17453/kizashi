@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 #[template(path = "sensor_generate_select.html")]
 struct SelectConnectorTypeTemplate {
     show_nav: bool,
+    is_admin: bool,
     connector_types: &'static [(&'static str, &'static str)],
 }
 
@@ -23,11 +24,13 @@ struct SelectConnectorTypeTemplate {
 /// JavaScript (ADR-0014) — there's no way to show/hide fields based on a dropdown without a
 /// page load, so the page load *is* the mechanism.
 pub async fn get_generate_select(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    if let Err(response) = require_session(state.session_store.as_ref(), &headers).await {
-        return response;
-    }
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    let is_admin = session.role.at_least(common::Role::Admin);
     Html(
-        SelectConnectorTypeTemplate { show_nav: true, connector_types: CONNECTOR_TYPES }
+        SelectConnectorTypeTemplate { show_nav: true, is_admin, connector_types: CONNECTOR_TYPES }
             .render()
             .unwrap(),
     )
@@ -51,6 +54,7 @@ impl From<&ConnectorField> for FieldView {
 #[template(path = "sensor_generate_form.html")]
 struct GenerateFormTemplate {
     show_nav: bool,
+    is_admin: bool,
     connector_type: String,
     connector_type_label: &'static str,
     fields: Vec<FieldView>,
@@ -81,11 +85,16 @@ pub async fn get_generate_form(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let Some(label) = display_name(&query.connector_type) else {
         return Html(
-            SelectConnectorTypeTemplate { show_nav: true, connector_types: CONNECTOR_TYPES }
-                .render()
-                .unwrap(),
+            SelectConnectorTypeTemplate {
+                show_nav: true,
+                is_admin,
+                connector_types: CONNECTOR_TYPES,
+            }
+            .render()
+            .unwrap(),
         )
         .into_response();
     };
@@ -112,6 +121,7 @@ pub async fn get_generate_form(
     Html(
         GenerateFormTemplate {
             show_nav: true,
+            is_admin,
             connector_type: query.connector_type,
             connector_type_label: label,
             fields,
@@ -129,6 +139,7 @@ pub async fn get_generate_form(
 #[template(path = "sensor_generate_result.html")]
 struct GenerateResultTemplate {
     show_nav: bool,
+    is_admin: bool,
     connector_type_label: &'static str,
     bash_script: String,
     powershell_script: String,
@@ -198,6 +209,7 @@ pub async fn post_generate_script(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let pairs: Vec<(String, String)> = match serde_urlencoded::from_bytes(&body) {
         Ok(pairs) => pairs,
         Err(_) => return axum::http::StatusCode::BAD_REQUEST.into_response(),
@@ -221,6 +233,7 @@ pub async fn post_generate_script(
     Html(
         GenerateResultTemplate {
             show_nav: true,
+            is_admin,
             connector_type_label: label,
             bash_script,
             powershell_script,

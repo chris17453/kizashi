@@ -13,6 +13,7 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 #[template(path = "mfa_settings.html")]
 struct MfaSettingsTemplate {
     show_nav: bool,
+    is_admin: bool,
     enabled: bool,
     error: Option<String>,
     enrollment: Option<EnrollmentView>,
@@ -28,11 +29,16 @@ async fn render_status(state: &AppState, headers: &HeaderMap, error: Option<Stri
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let enabled =
         state.mfa_client.status(session.tenant_id, &session.username).await.unwrap_or(false);
 
-    Html(MfaSettingsTemplate { show_nav: true, enabled, error, enrollment: None }.render().unwrap())
-        .into_response()
+    Html(
+        MfaSettingsTemplate { show_nav: true, is_admin, enabled, error, enrollment: None }
+            .render()
+            .unwrap(),
+    )
+    .into_response()
 }
 
 /// GET /security/mfa — shows the caller's own MFA status (self-service, not admin-gated: every
@@ -52,11 +58,13 @@ pub async fn post_mfa_enroll(State(state): State<AppState>, headers: HeaderMap) 
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     match state.mfa_client.enroll(session.tenant_id, &session.username).await {
         Ok(enrollment) => Html(
             MfaSettingsTemplate {
                 show_nav: true,
+                is_admin,
                 enabled: false,
                 error: None,
                 enrollment: Some(EnrollmentView {

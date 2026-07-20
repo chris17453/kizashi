@@ -4641,3 +4641,24 @@ architectural decision.
   re-verified independently after the drafting agent's own run.
 - **PR:** pending
 - **ADR:** docs/adr/0089-kubernetes-helm-chart.md
+
+## [2026-07-20] feature/0090-nav-hides-admin-only-links-per-role — Console UI nav hides admin-only links per role
+- **Type:** feature
+- **Branch:** feature/0090-nav-hides-admin-only-links-per-role
+- **Summary:** Closes a sixth-audit-pass RBAC gap: the sidebar nav rendered admin-only links
+  (Users, Active Sessions, Login Attempts, Backups, Compliance Report) identically for every
+  role, even though each already 403s server-side for a Viewer/Operator — a dead-link UX and
+  compliance gap. Every page template gained an `is_admin: bool` field, threaded the same way
+  `show_nav: bool` already is; `layout.html` gates exactly those 5 links, leaving `/branding`
+  (its own internal `can_write` gate) and `/audit-log` (intentionally role-open) unconditional.
+  Also split two pre-existing 500+-line test files (`sensors_handler_test.rs`,
+  `users_handler_test.rs`) into GET/mutation pairs per CLAUDE.md §0's file-size rule, since this
+  change would have pushed them further over the limit.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 445 passed (3 new: role-visibility assertions in
+  `overview_handler_test.rs`, `sensors_handler_test.rs`, `users_handler_test.rs`, each asserting
+  admin-only links are absent for Viewer/Operator and present for Admin). Every other handler's
+  existing tests re-verified passing after the `is_admin` field addition. `cargo build
+  --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
+  clean. `cargo fmt --all --check` clean. No file in the diff exceeds 500 lines.
+- **PR:** pending
+- **ADR:** docs/adr/0090-nav-hides-admin-only-links-per-role.md

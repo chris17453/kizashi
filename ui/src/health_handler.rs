@@ -13,20 +13,24 @@ use axum::response::{Html, IntoResponse, Response};
 #[template(path = "health.html")]
 struct HealthTemplate {
     show_nav: bool,
+    is_admin: bool,
     platform_status: Option<String>,
     services: Vec<ServiceHealthSummary>,
     error: Option<String>,
 }
 
 pub async fn get_health(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    if let Err(response) = require_session(state.session_store.as_ref(), &headers).await {
-        return response;
-    }
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    let is_admin = session.role.at_least(common::Role::Admin);
 
     match state.health_client.platform_health().await {
         Ok(summary) => Html(
             HealthTemplate {
                 show_nav: true,
+                is_admin,
                 platform_status: Some(summary.status),
                 services: summary.services,
                 error: None,
@@ -38,6 +42,7 @@ pub async fn get_health(State(state): State<AppState>, headers: HeaderMap) -> Re
         Err(e) => Html(
             HealthTemplate {
                 show_nav: true,
+                is_admin,
                 platform_status: None,
                 services: vec![],
                 error: Some(e.to_string()),

@@ -13,6 +13,7 @@ use axum::response::{Html, IntoResponse, Response};
 #[template(path = "egress_allowlist.html")]
 struct EgressAllowlistTemplate {
     show_nav: bool,
+    is_admin: bool,
     domains: Vec<String>,
     can_write: bool,
     saved: bool,
@@ -32,12 +33,14 @@ pub async fn get_egress_allowlist(State(state): State<AppState>, headers: Header
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     let can_write = session.role.at_least(common::Role::Operator);
 
     match state.egress_allowlist_client.get_allowlist(session.tenant_id).await {
         Ok(domains) => Html(
             EgressAllowlistTemplate {
                 show_nav: true,
+                is_admin,
                 domains,
                 can_write,
                 saved: false,
@@ -50,6 +53,7 @@ pub async fn get_egress_allowlist(State(state): State<AppState>, headers: Header
         Err(e) => Html(
             EgressAllowlistTemplate {
                 show_nav: true,
+                is_admin,
                 domains: vec![],
                 can_write,
                 saved: false,
@@ -81,6 +85,7 @@ pub async fn post_egress_allowlist(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let is_admin = session.role.at_least(common::Role::Admin);
     if !session.role.at_least(common::Role::Operator) {
         return StatusCode::FORBIDDEN.into_response();
     }
@@ -95,6 +100,7 @@ pub async fn post_egress_allowlist(
         Ok(domains) => Html(
             EgressAllowlistTemplate {
                 show_nav: true,
+                is_admin,
                 domains,
                 can_write: true,
                 saved: true,
@@ -107,6 +113,7 @@ pub async fn post_egress_allowlist(
         Err(e) => Html(
             EgressAllowlistTemplate {
                 show_nav: true,
+                is_admin,
                 domains: parse_domains(&form.domains),
                 can_write: true,
                 saved: false,
