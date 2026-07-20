@@ -6,6 +6,8 @@ use axum::Router;
 use common::TriggerCondition;
 use std::sync::Mutex;
 
+const TEST_SECRET: &str = "test-internal-secret";
+
 #[derive(Default)]
 pub struct InMemoryTriggerClient {
     pub triggers: Mutex<Vec<TriggerDefinition>>,
@@ -82,32 +84,39 @@ async fn spawn_stub_trigger_engine(trigger: Option<TriggerDefinition>) -> String
     format!("http://{addr}")
 }
 
-/// Only accepts the request if `X-Tenant-Id` matches the one baked in at spawn time; otherwise
-/// 401 -- used to prove the client actually sends the header with the right value, not just
-/// that a request with the header present happens to succeed.
-async fn spawn_stub_trigger_engine_requiring_tenant(
+/// Only accepts the request if `X-Tenant-Id` and `X-Internal-Secret` both match what was baked
+/// in at spawn time; otherwise 401 -- used to prove the client actually sends both headers with
+/// the right values, not just that a request with the headers present happens to succeed.
+async fn spawn_stub_trigger_engine_requiring_tenant_and_secret(
     trigger: TriggerDefinition,
     expected_tenant_id: Uuid,
+    expected_secret: &str,
 ) -> String {
     #[derive(Clone)]
     struct Fixture {
         trigger: TriggerDefinition,
         expected_tenant_id: Uuid,
+        expected_secret: String,
     }
     async fn handler(
         axum::extract::State(fixture): axum::extract::State<Fixture>,
         headers: axum::http::HeaderMap,
         Path(_id): Path<Uuid>,
     ) -> axum::response::Response {
-        let provided = headers.get("x-tenant-id").and_then(|v| v.to_str().ok());
-        if provided != Some(&fixture.expected_tenant_id.to_string()) {
+        let tenant_ok = headers.get("x-tenant-id").and_then(|v| v.to_str().ok())
+            == Some(&fixture.expected_tenant_id.to_string());
+        let secret_ok = headers.get("x-internal-secret").and_then(|v| v.to_str().ok())
+            == Some(fixture.expected_secret.as_str());
+        if !tenant_ok || !secret_ok {
             return axum::http::StatusCode::UNAUTHORIZED.into_response();
         }
         axum::Json(fixture.trigger).into_response()
     }
-    let app = Router::new()
-        .route("/v1/triggers/:id", get(handler))
-        .with_state(Fixture { trigger, expected_tenant_id });
+    let app = Router::new().route("/v1/triggers/:id", get(handler)).with_state(Fixture {
+        trigger,
+        expected_tenant_id,
+        expected_secret: expected_secret.to_string(),
+    });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -120,17 +129,22 @@ async fn spawn_stub_trigger_engine_requiring_tenant(
 async fn http_client_parses_a_found_trigger() {
     let trigger = sample_trigger();
     let url = spawn_stub_trigger_engine(Some(trigger.clone())).await;
-    let client = HttpTriggerClient::new(reqwest::Client::new(), url);
+    let client = HttpTriggerClient::new(reqwest::Client::new(), url, TEST_SECRET.to_string());
 
     let found = client.get_trigger(trigger.id, trigger.tenant_id).await.unwrap();
     assert_eq!(found, Some(trigger));
 }
 
 #[tokio::test]
-async fn http_client_sends_the_tenant_id_header() {
+async fn http_client_sends_the_tenant_id_and_internal_secret_headers() {
     let trigger = sample_trigger();
-    let url = spawn_stub_trigger_engine_requiring_tenant(trigger.clone(), trigger.tenant_id).await;
-    let client = HttpTriggerClient::new(reqwest::Client::new(), url);
+    let url = spawn_stub_trigger_engine_requiring_tenant_and_secret(
+        trigger.clone(),
+        trigger.tenant_id,
+        TEST_SECRET,
+    )
+    .await;
+    let client = HttpTriggerClient::new(reqwest::Client::new(), url, TEST_SECRET.to_string());
 
     let found = client.get_trigger(trigger.id, trigger.tenant_id).await.unwrap();
     assert_eq!(found, Some(trigger));
@@ -139,17 +153,37 @@ async fn http_client_sends_the_tenant_id_header() {
 #[tokio::test]
 async fn http_client_is_rejected_when_it_sends_the_wrong_tenant_id() {
     let trigger = sample_trigger();
-    let url = spawn_stub_trigger_engine_requiring_tenant(trigger.clone(), trigger.tenant_id).await;
-    let client = HttpTriggerClient::new(reqwest::Client::new(), url);
+    let url = spawn_stub_trigger_engine_requiring_tenant_and_secret(
+        trigger.clone(),
+        trigger.tenant_id,
+        TEST_SECRET,
+    )
+    .await;
+    let client = HttpTriggerClient::new(reqwest::Client::new(), url, TEST_SECRET.to_string());
 
     let result = client.get_trigger(trigger.id, Uuid::new_v4()).await;
     assert!(matches!(result, Err(TriggerClientError::Rejected(401))));
 }
 
 #[tokio::test]
+async fn http_client_is_rejected_when_it_sends_the_wrong_internal_secret() {
+    let trigger = sample_trigger();
+    let url = spawn_stub_trigger_engine_requiring_tenant_and_secret(
+        trigger.clone(),
+        trigger.tenant_id,
+        TEST_SECRET,
+    )
+    .await;
+    let client = HttpTriggerClient::new(reqwest::Client::new(), url, "wrong-secret".to_string());
+
+    let result = client.get_trigger(trigger.id, trigger.tenant_id).await;
+    assert!(matches!(result, Err(TriggerClientError::Rejected(401))));
+}
+
+#[tokio::test]
 async fn http_client_returns_none_on_404() {
     let url = spawn_stub_trigger_engine(None).await;
-    let client = HttpTriggerClient::new(reqwest::Client::new(), url);
+    let client = HttpTriggerClient::new(reqwest::Client::new(), url, TEST_SECRET.to_string());
 
     let found = client.get_trigger(Uuid::new_v4(), Uuid::new_v4()).await.unwrap();
     assert!(found.is_none());
@@ -157,7 +191,11 @@ async fn http_client_returns_none_on_404() {
 
 #[tokio::test]
 async fn http_client_returns_unreachable_when_server_is_down() {
-    let client = HttpTriggerClient::new(reqwest::Client::new(), "http://127.0.0.1:1".to_string());
+    let client = HttpTriggerClient::new(
+        reqwest::Client::new(),
+        "http://127.0.0.1:1".to_string(),
+        TEST_SECRET.to_string(),
+    );
     let err = client.get_trigger(Uuid::new_v4(), Uuid::new_v4()).await.unwrap_err();
     assert!(matches!(err, TriggerClientError::Unreachable(_)));
 }

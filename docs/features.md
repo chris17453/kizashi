@@ -3608,3 +3608,33 @@ architectural decision.
   `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
 - **PR:** pending
 - **ADR:** docs/adr/0043-tenant-isolation-audit-and-cookie-hardening.md
+
+## [2026-07-20] fix/0009-internal-secret-header-trust-gap — Close the X-Role/X-Tenant-Id/X-Username unauthenticated trust gap
+- **Type:** fix
+- **Branch:** fix/0009-internal-secret-header-trust-gap
+- **Summary:** A security audit found that config-admin-service, trigger-engine, auth-service's
+  session-authenticated endpoints, and retention-service's retention-policy endpoints trust
+  `X-Role`/`X-Tenant-Id`/`X-Username` headers with zero verification, and all four services
+  publish their ports directly — any network caller could set `X-Role: admin` (or any tenant id)
+  and be trusted outright, a live unauthenticated privilege-escalation and cross-tenant-access
+  path. Extends the existing `X-Internal-Secret`/`INTERNAL_API_SECRET` shared-secret pattern
+  (ADR-0009, ADR-0042) to all four services (via router-level middleware in three, a per-handler
+  check in retention-service to match its existing style), and wires the Console UI to send it
+  automatically on every backend call via a default header on its shared `reqwest::Client`.
+  `action-executor`'s `HttpTriggerClient` also sends it when calling trigger-engine.
+- **Tests:** `cargo test -p config-admin-service --lib` (94 passed, incl.
+  `protected_route_without_internal_secret_returns_401`, `healthz_succeeds_with_zero_headers`);
+  `cargo test -p trigger-engine` (44 unit + 3 contract passed, incl. 3 new middleware tests and
+  `returns_401_when_the_internal_secret_header_is_missing`); `cargo test -p auth-service` (88
+  unit + 6 + 3 integration passed, incl. gated-route-without-secret and login-still-works tests);
+  `cargo test -p retention-service --lib` (59 passed, incl.
+  `list_policies_rejects_missing_internal_secret_even_with_valid_headers`,
+  `healthz_works_with_zero_headers`) plus 8 real-Postgres integration tests; `cargo test -p
+  action-executor --lib` (52 passed, incl. `http_client_sends_the_tenant_id_and_internal_secret_headers`,
+  `http_client_is_rejected_when_it_sends_the_wrong_internal_secret`). Full workspace gate green:
+  `cargo build --workspace`, `cargo test --workspace --all-features` against real
+  Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures), `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all --check`, `cargo deny
+  check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
+- **PR:** pending
+- **ADR:** docs/adr/0044-internal-service-secret-for-header-trusted-endpoints.md

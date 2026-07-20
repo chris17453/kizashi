@@ -19,6 +19,8 @@ async fn main() {
     let rabbitmq_url = std::env::var("RABBITMQ_URL").expect("RABBITMQ_URL must be set");
     let trigger_engine_url =
         std::env::var("TRIGGER_ENGINE_URL").expect("TRIGGER_ENGINE_URL must be set");
+    let internal_secret =
+        std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
     let pool = common::connect_with_schema(&database_url, "action_executor")
@@ -49,6 +51,7 @@ async fn main() {
         trigger_client: Arc::new(HttpTriggerClient::new(
             reqwest::Client::new(),
             trigger_engine_url,
+            internal_secret,
         )),
         dispatcher: Arc::new(RoutingActionDispatcher::new(egress_proxy_url)),
         execution_repository: execution_repository.clone(),

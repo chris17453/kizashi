@@ -125,6 +125,7 @@ services:
       DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
       RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
       CLICKHOUSE_URL: http://kizashi:kizashi@clickhouse:8123
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
     ports: ["8087:8080"]
     depends_on:
       analysis-service: { condition: service_healthy }
@@ -138,6 +139,7 @@ services:
       DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
       RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
       TRIGGER_ENGINE_URL: http://trigger-engine:8080
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
     ports: ["8088:8080"]
     depends_on:
       trigger-engine: { condition: service_healthy }
@@ -199,6 +201,7 @@ services:
       BIND_ADDR: "0.0.0.0:8080"
       DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
       RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
     ports: ["8090:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -315,6 +318,7 @@ services:
       RETENTION_SERVICE_URL: http://retention-service:8080
       EGRESS_GATEWAY_URL: http://egress-gateway:8080
       TRIGGER_ENGINE_URL: http://trigger-engine:8080
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
       # Local/dev runs over plain HTTP, so this defaults to false (a Secure cookie a browser
       # won't send over plain HTTP would silently break every login). Set to "true" behind a
       # real TLS-terminating deployment.

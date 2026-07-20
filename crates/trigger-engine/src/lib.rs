@@ -8,6 +8,7 @@ mod classify;
 mod event_publisher;
 mod event_store;
 mod health;
+mod internal_secret;
 mod process_analyzed_record;
 mod signal_repository;
 mod trigger_repository;

@@ -34,8 +34,25 @@ async fn main() {
         std::env::var("EGRESS_GATEWAY_URL").expect("EGRESS_GATEWAY_URL must be set");
     let trigger_engine_url =
         std::env::var("TRIGGER_ENGINE_URL").expect("TRIGGER_ENGINE_URL must be set");
+    let internal_secret =
+        std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
 
-    let client = reqwest::Client::new();
+    // Every backend call the Console UI makes on behalf of an authenticated session carries this
+    // shared secret as a default header, proving to services like config-admin-service,
+    // trigger-engine, auth-service, and retention-service that the caller is actually the UI --
+    // not an arbitrary network client forging X-Role/X-Tenant-Id/X-Username (see ADR-0044).
+    // Services that don't check it (observability, ingestion-gateway, action-executor,
+    // egress-gateway) simply ignore the extra header.
+    let mut default_headers = reqwest::header::HeaderMap::new();
+    default_headers.insert(
+        "x-internal-secret",
+        reqwest::header::HeaderValue::from_str(&internal_secret)
+            .expect("INTERNAL_API_SECRET must be a valid header value"),
+    );
+    let client = reqwest::Client::builder()
+        .default_headers(default_headers)
+        .build()
+        .expect("failed to build reqwest client");
     let state = AppState {
         session_store: Arc::new(InMemorySessionStore::default()),
         auth_client: Arc::new(HttpAuthClient::new(client.clone(), auth_service_url.clone())),

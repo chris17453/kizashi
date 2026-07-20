@@ -13,8 +13,11 @@ use axum::Router;
 use chrono::Utc;
 use tower::ServiceExt;
 
-fn router(state: AppState) -> Router {
+pub(crate) const TEST_INTERNAL_SECRET: &str = "test-internal-secret";
+
+pub(crate) fn router(state: AppState) -> Router {
     Router::new()
+        .route("/healthz", get(crate::healthz))
         .route("/v1/retention-policies", post(create_policy).get(list_policies))
         .route(
             "/v1/retention-policies/:id",
@@ -24,7 +27,7 @@ fn router(state: AppState) -> Router {
         .with_state(state)
 }
 
-fn sample_policy(tenant_id: Uuid) -> RetentionPolicy {
+pub(crate) fn sample_policy(tenant_id: Uuid) -> RetentionPolicy {
     RetentionPolicy {
         id: Uuid::new_v4(),
         tenant_id,
@@ -34,30 +37,47 @@ fn sample_policy(tenant_id: Uuid) -> RetentionPolicy {
     }
 }
 
-fn default_state() -> AppState {
+pub(crate) fn default_state() -> AppState {
     AppState {
         policy_repository: Arc::new(InMemoryRetentionPolicyRepository::default()),
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         record_client: Arc::new(InMemoryRawRecordClient::default()),
         archive_store: Arc::new(InMemoryArchiveStore::default()),
-        internal_secret: "test-internal-secret".to_string(),
+        internal_secret: TEST_INTERNAL_SECRET.to_string(),
     }
 }
 
-async fn send(
+/// Always-valid `X-Internal-Secret`, and — when `tenant_header` is `Some` — always-valid
+/// `X-Tenant-Id`/`X-Role`/`X-Username` too. `policy_handlers_auth_test.rs` uses `send_raw`
+/// instead when it needs to omit or vary an individual header.
+pub(crate) async fn send(
     app: Router,
     method: &str,
     uri: String,
     tenant_header: Option<Uuid>,
     body: Option<serde_json::Value>,
 ) -> axum::http::Response<Body> {
+    let mut headers = vec![("x-internal-secret", TEST_INTERNAL_SECRET.to_string())];
+    if let Some(tenant_id) = tenant_header {
+        headers.push(("x-tenant-id", tenant_id.to_string()));
+        headers.push(("x-role", "admin".to_string()));
+        headers.push(("x-username", "test-user".to_string()));
+    }
+    send_raw(app, method, uri, &headers, body).await
+}
+
+/// Sends a request with exactly the headers given — no implicit extras.
+pub(crate) async fn send_raw(
+    app: Router,
+    method: &str,
+    uri: String,
+    headers: &[(&str, String)],
+    body: Option<serde_json::Value>,
+) -> axum::http::Response<Body> {
     let mut req =
         Request::builder().method(method).uri(uri).header("content-type", "application/json");
-    if let Some(tenant_id) = tenant_header {
-        req = req
-            .header("x-tenant-id", tenant_id.to_string())
-            .header("x-role", "admin")
-            .header("x-username", "test-user");
+    for (name, value) in headers {
+        req = req.header(*name, value.as_str());
     }
     let body = body.map(|b| Body::from(b.to_string())).unwrap_or(Body::empty());
     app.oneshot(req.body(body).unwrap()).await.unwrap()
@@ -118,106 +138,6 @@ async fn create_policy_requires_tenant_header() {
         Some(serde_json::to_value(&policy).unwrap()),
     )
     .await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn create_policy_requires_role_header() {
-    let tenant_id = Uuid::new_v4();
-    let policy = sample_policy(tenant_id);
-    let response = router(default_state())
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/v1/retention-policies")
-                .header("content-type", "application/json")
-                .header("x-tenant-id", tenant_id.to_string())
-                .body(Body::from(serde_json::to_value(&policy).unwrap().to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn create_policy_rejects_a_viewer_role() {
-    let tenant_id = Uuid::new_v4();
-    let policy = sample_policy(tenant_id);
-    let response = router(default_state())
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/v1/retention-policies")
-                .header("content-type", "application/json")
-                .header("x-tenant-id", tenant_id.to_string())
-                .header("x-role", "viewer")
-                .body(Body::from(serde_json::to_value(&policy).unwrap().to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-}
-
-#[tokio::test]
-async fn create_policy_allows_an_operator_role() {
-    let tenant_id = Uuid::new_v4();
-    let policy = sample_policy(tenant_id);
-    let response = router(default_state())
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/v1/retention-policies")
-                .header("content-type", "application/json")
-                .header("x-tenant-id", tenant_id.to_string())
-                .header("x-role", "operator")
-                .header("x-username", "test-user")
-                .body(Body::from(serde_json::to_value(&policy).unwrap().to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
-}
-
-#[tokio::test]
-async fn create_policy_requires_username_header() {
-    let tenant_id = Uuid::new_v4();
-    let policy = sample_policy(tenant_id);
-    let response = router(default_state())
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/v1/retention-policies")
-                .header("content-type", "application/json")
-                .header("x-tenant-id", tenant_id.to_string())
-                .header("x-role", "operator")
-                .body(Body::from(serde_json::to_value(&policy).unwrap().to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn update_policy_requires_username_header() {
-    let tenant_id = Uuid::new_v4();
-    let policy = sample_policy(tenant_id);
-    let response = router(default_state())
-        .oneshot(
-            Request::builder()
-                .method("PUT")
-                .uri(format!("/v1/retention-policies/{}", policy.id))
-                .header("content-type", "application/json")
-                .header("x-tenant-id", tenant_id.to_string())
-                .header("x-role", "operator")
-                .body(Body::from(serde_json::to_value(&policy).unwrap().to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
@@ -382,7 +302,7 @@ async fn delete_policy_succeeds_then_get_returns_404() {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         record_client: Arc::new(InMemoryRawRecordClient::default()),
         archive_store: Arc::new(InMemoryArchiveStore::default()),
-        internal_secret: "test-internal-secret".to_string(),
+        internal_secret: TEST_INTERNAL_SECRET.to_string(),
     };
     let app = router(state);
 
@@ -400,62 +320,6 @@ async fn delete_policy_succeeds_then_get_returns_404() {
         send(app, "GET", format!("/v1/retention-policies/{}", policy.id), Some(tenant_id), None)
             .await;
     assert_eq!(get_response.status(), StatusCode::NOT_FOUND);
-}
-
-#[tokio::test]
-async fn delete_policy_requires_role_header() {
-    let tenant_id = Uuid::new_v4();
-    let policy_id = Uuid::new_v4();
-    let response = router(default_state())
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/v1/retention-policies/{policy_id}"))
-                .header("x-tenant-id", tenant_id.to_string())
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn delete_policy_rejects_a_viewer_role() {
-    let tenant_id = Uuid::new_v4();
-    let policy_id = Uuid::new_v4();
-    let response = router(default_state())
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/v1/retention-policies/{policy_id}"))
-                .header("x-tenant-id", tenant_id.to_string())
-                .header("x-role", "viewer")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-}
-
-#[tokio::test]
-async fn delete_policy_requires_username_header() {
-    let tenant_id = Uuid::new_v4();
-    let policy_id = Uuid::new_v4();
-    let response = router(default_state())
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/v1/retention-policies/{policy_id}"))
-                .header("x-tenant-id", tenant_id.to_string())
-                .header("x-role", "operator")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

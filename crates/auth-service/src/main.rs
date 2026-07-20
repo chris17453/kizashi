@@ -97,13 +97,13 @@ async fn main() {
         session_client: Arc::new(HttpSessionClient::new(
             reqwest::Client::new(),
             query_gateway_url,
-            internal_secret,
+            internal_secret.clone(),
         )),
         oidc_clients,
         audit_log_reader: Arc::new(PostgresAuditLogReader::new(pool)),
     };
 
-    let app = health_router().merge(build_router(state));
+    let app = health_router().merge(build_router(state, internal_secret));
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "auth-service listening");
     axum::serve(listener, app).await.expect("server error");

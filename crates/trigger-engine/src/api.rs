@@ -2,6 +2,7 @@
 #[cfg(test)]
 mod api_test;
 
+use crate::internal_secret::require_internal_secret;
 use crate::process_analyzed_record::evaluate_trigger;
 use crate::signal_repository::SignalRepository;
 use crate::trigger_repository::TriggerRepository;
@@ -118,9 +119,15 @@ async fn test_trigger(
     }
 }
 
-pub fn build_router(state: ApiState) -> Router {
+/// `internal_secret` gates every route on this router (ADR-0009 shared-secret pattern) via a
+/// single router-wide middleware layer, so a future handler added here can't accidentally skip
+/// the check the way a per-handler copy-paste could. `/healthz` is intentionally not part of
+/// this router at all (see `health::build_router` / `main.rs`), so Docker's zero-header
+/// healthcheck is unaffected.
+pub fn build_router(state: ApiState, internal_secret: String) -> Router {
     Router::new()
         .route("/v1/triggers/:id", get(get_trigger))
         .route("/v1/triggers/:id/test", post(test_trigger))
+        .layer(axum::middleware::from_fn_with_state(internal_secret, require_internal_secret))
         .with_state(state)
 }

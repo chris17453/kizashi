@@ -14,6 +14,8 @@ async fn main() {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let rabbitmq_url = std::env::var("RABBITMQ_URL").expect("RABBITMQ_URL must be set");
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+    let internal_secret =
+        std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
 
     let pool = common::connect_with_schema(&database_url, "config_admin_service")
         .await
@@ -73,7 +75,13 @@ async fn main() {
     tracing::info!(%addr, "config-admin-service listening");
     axum::serve(
         listener,
-        build_router(state, sensor_state, analysis_config_state, saved_search_query_state),
+        build_router(
+            state,
+            sensor_state,
+            analysis_config_state,
+            saved_search_query_state,
+            internal_secret,
+        ),
     )
     .await
     .expect("server error");

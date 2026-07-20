@@ -8,6 +8,7 @@ mod analysis_config_repository;
 mod audit_log;
 mod handlers;
 mod health;
+mod internal_secret;
 mod mapping_publisher;
 mod normalization_mapping_repository;
 mod saved_search_query_handlers;
@@ -34,6 +35,7 @@ pub use handlers::{
     list_triggers, update_mapping, update_trigger, AdminState,
 };
 pub use health::healthz;
+pub use internal_secret::require_internal_secret;
 pub use mapping_publisher::{MappingPublishError, MappingPublisher, RabbitMqMappingPublisher};
 pub use normalization_mapping_repository::{
     NormalizationMappingRepository, NormalizationMappingRepositoryError,
@@ -66,9 +68,9 @@ pub fn build_router(
     sensor_state: SensorState,
     analysis_config_state: AnalysisConfigState,
     saved_search_query_state: SavedSearchQueryState,
+    internal_secret: String,
 ) -> Router {
     let admin_routes = Router::new()
-        .route("/healthz", get(healthz))
         .route("/v1/trigger-definitions", post(create_trigger).get(list_triggers))
         .route("/v1/trigger-definitions/:id", get(get_trigger).put(update_trigger))
         .route("/v1/normalization-mappings", post(create_mapping).get(list_mappings))
@@ -94,5 +96,13 @@ pub fn build_router(
         .route("/v1/saved-search-queries/:id", axum::routing::delete(delete_saved_search_query))
         .with_state(saved_search_query_state);
 
-    admin_routes.merge(sensor_routes).merge(analysis_config_routes).merge(saved_search_query_routes)
+    let protected_routes = admin_routes
+        .merge(sensor_routes)
+        .merge(analysis_config_routes)
+        .merge(saved_search_query_routes)
+        .layer(axum::middleware::from_fn_with_state(internal_secret, require_internal_secret));
+
+    let healthz_route = Router::new().route("/healthz", get(healthz));
+
+    protected_routes.merge(healthz_route)
 }
