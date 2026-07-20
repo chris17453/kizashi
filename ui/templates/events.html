@@ -2,6 +2,11 @@
 {% block content %}
 <h1>Events</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+<form method="get" action="/events/export.csv" style="margin-bottom:0.5rem;">
+  <input type="hidden" name="from" value="{{ from }}">
+  <input type="hidden" name="to" value="{{ to }}">
+  <button type="submit" class="btn-link">Download CSV &#8595;</button>
+</form>
 
 {% if !chart_bars.is_empty() %}
 <div class="panel" style="margin-bottom: 1.5rem;">

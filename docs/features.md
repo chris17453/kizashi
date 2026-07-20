@@ -4846,3 +4846,21 @@ architectural decision.
   `watkinslabs` tenant: Sessions renders the bulk-revoke checkboxes/form/button.
 - **PR:** #129
 - **ADR:** docs/adr/0099-sessions-bulk-revoke.md
+
+## [2026-07-20] feature/0097-events-csv-export — Events CSV export
+- **Type:** feature
+- **Branch:** feature/0097-events-csv-export
+- **Summary:** A ninth UI audit pass found Events was structurally identical to Data and Login
+  Attempts/Audit Log (search, date-range filter, sortable columns, pagination) but was the only
+  one of the four missing a CSV export, despite being trigger-firing history that's directly
+  compliance-relevant. Adds `GET /events/export.csv`, same bounded-pagination export shape as
+  the other three (ADR-0049), honoring the existing `?from=`/`?to=` date-range filter. A
+  "Download CSV" form was added above the search bar.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 474 passed (2 new:
+  `export_csv_returns_every_event_as_csv`, `export_csv_requires_a_session`). `cargo build
+  --workspace`, `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`, `cargo
+  fmt --all --check` all clean. No file exceeds 500 lines. Live-verified against the real
+  `watkinslabs` tenant: downloaded the CSV, confirmed real event rows with the correct header
+  and content-disposition filename.
+- **PR:** #130
+- **ADR:** docs/adr/0100-events-csv-export.md
