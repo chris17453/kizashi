@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Compliance Snapshot</h1>
+<p class="muted">A point-in-time summary of the controls in place for this workspace, generated
+{{ generated_at }}. Print this page (or save as PDF) to hand to an auditor or a customer's
+compliance team. This snapshot does not cover ingested ticket/email content — see the Data
+Subject export on the Users page for that scope.</p>
+{% if !errors.is_empty() %}
+<p class="error">Some sections could not be loaded: {{ errors.join(", ") }}</p>
+{% endif %}
+
+<div class="panel">
+  <h2>Access control</h2>
+  <p>{{ total_user_count }} local user account(s): {{ admin_count }} Admin, {{ operator_count }}
+  Operator, {{ viewer_count }} Viewer.</p>
+  <p>{{ mfa_enabled_count }} of {{ total_user_count }} account(s) have two-factor authentication
+  enabled.</p>
+</div>
+
+<div class="panel">
+  <h2>Password policy</h2>
+  {% if let Some(p) = password_policy %}
+  <p>Minimum {{ p.min_length }} characters, maximum {{ p.max_length }}. Rejects a blocklist of
+  {{ p.blocklist_size }} known-weak values and any password matching the account's own
+  username.</p>
+  {% else %}
+  <p class="muted">Could not be loaded for this snapshot.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Login/auth anomaly monitoring</h2>
+  <p>{{ failed_login_count_7d }} failed local-login attempt(s) in the last 7 days.</p>
+</div>
+
+<div class="panel">
+  <h2>Data retention</h2>
+  <p>{{ retention_enabled_count }} of {{ retention_policy_count }} retention policy(ies)
+  enabled.</p>
+</div>
+
+<div class="panel">
+  <h2>Egress control</h2>
+  <p>{{ egress_domain_count }} domain(s) on the outbound allowlist.</p>
+</div>
+
+<div class="panel">
+  <h2>Backup / disaster recovery</h2>
+  {% if let Some(status) = last_backup_status %}
+  <p>Most recent backup: <strong>{{ status }}</strong>{% if let Some(at) = last_backup_at %} at
+  {{ at }}{% endif %}. {{ recent_backup_failure_count }} failure(s) among the most recently
+  recorded runs.</p>
+  {% else %}
+  <p class="muted">No backup runs recorded yet.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Audit trail</h2>
+  <p>{{ recent_admin_activity_count }} admin/config change(s) recorded in the last 7 days across
+  auth, config-admin, and retention services.</p>
+</div>
+{% endblock %}

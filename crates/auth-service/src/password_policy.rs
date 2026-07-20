@@ -29,6 +29,24 @@ const COMMON_PASSWORDS: &[&str] = &[
     "correcthorsebatterystaple",
 ];
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct PasswordPolicySummary {
+    pub min_length: usize,
+    pub max_length: usize,
+    pub blocklist_size: usize,
+}
+
+/// The policy's live parameters, for the compliance report (ADR-0056) to describe accurately
+/// rather than hardcoding a copy on the Console UI side that could silently drift from what
+/// `validate_password_strength` actually enforces.
+pub fn summary() -> PasswordPolicySummary {
+    PasswordPolicySummary {
+        min_length: MIN_LENGTH,
+        max_length: MAX_LENGTH,
+        blocklist_size: COMMON_PASSWORDS.len(),
+    }
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PasswordPolicyError {
     #[error("password must be at least {MIN_LENGTH} characters")]

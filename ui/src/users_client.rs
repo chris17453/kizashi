@@ -13,6 +13,18 @@ pub struct UiUser {
     pub tenant_id: Uuid,
     pub username: String,
     pub role: Role,
+    #[serde(default)]
+    pub mfa_enabled: bool,
+}
+
+/// The live-enforced password policy parameters (ADR-0056), for the compliance report to
+/// describe accurately rather than hardcoding a copy that could drift from what
+/// `password_policy::validate_password_strength` actually enforces.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct PasswordPolicySummary {
+    pub min_length: usize,
+    pub max_length: usize,
+    pub blocklist_size: usize,
 }
 
 #[derive(Debug, Error)]
@@ -75,6 +87,8 @@ pub trait UsersClient: Send + Sync {
         role: Role,
         id: Uuid,
     ) -> Result<Vec<u8>, UsersClientError>;
+
+    async fn password_policy(&self) -> Result<PasswordPolicySummary, UsersClientError>;
 }
 
 /// Reads the backend's `{"error": "..."}` body when present, falling back to a generic message
@@ -227,5 +241,19 @@ impl UsersClient for HttpUsersClient {
             .await
             .map(|b| b.to_vec())
             .map_err(|e| UsersClientError::Unreachable(e.to_string()))
+    }
+
+    async fn password_policy(&self) -> Result<PasswordPolicySummary, UsersClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/auth/local/password-policy", self.auth_service_url))
+            .send()
+            .await
+            .map_err(|e| UsersClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(rejected_error(response).await);
+        }
+        response.json().await.map_err(|e| UsersClientError::Unreachable(e.to_string()))
     }
 }

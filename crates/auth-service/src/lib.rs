@@ -65,8 +65,8 @@ pub use tenant_branding_repository::{
 };
 pub use tenant_repository::{PostgresTenantRepository, TenantRepository, TenantRepositoryError};
 pub use user_handlers::{
-    create_user, delete_user, get_recent_audit_log, get_user_audit_log, list_users,
-    update_user_role, CreateUserRequest, RecentAuditLogQuery, UpdateUserRoleRequest,
+    create_user, delete_user, get_password_policy, get_recent_audit_log, get_user_audit_log,
+    list_users, update_user_role, CreateUserRequest, RecentAuditLogQuery, UpdateUserRoleRequest,
 };
 
 use axum::routing::{get, post, put};
@@ -123,6 +123,7 @@ pub fn build_router(state: AuthState, internal_secret: String) -> Router {
         // Data subject export (ADR-0054) -- Admin-only, same bar as /v1/users since it's
         // reachable by user id in the same URL family.
         .route("/v1/users/:id/data-subject-export", get(get_data_subject_export))
+        .route("/v1/auth/local/password-policy", get(get_password_policy))
         .with_state(state)
         .layer(axum::middleware::from_fn_with_state(internal_secret, require_internal_secret));
 
