@@ -7,6 +7,7 @@ use crate::local_user_repository::LocalUserRepository;
 use crate::oidc_handler::OidcClients;
 use crate::password::verify_password;
 use crate::session_client::SessionClient;
+use crate::tenant_branding_repository::TenantBrandingRepository;
 use crate::tenant_repository::TenantRepository;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -18,6 +19,7 @@ use uuid::Uuid;
 pub struct AuthState {
     pub local_user_repository: Arc<dyn LocalUserRepository>,
     pub tenant_repository: Arc<dyn TenantRepository>,
+    pub tenant_branding_repository: Arc<dyn TenantBrandingRepository>,
     pub session_client: Arc<dyn SessionClient>,
     pub oidc_clients: OidcClients,
     pub audit_log_reader: Arc<dyn AuditLogReader>,

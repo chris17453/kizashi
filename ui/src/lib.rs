@@ -9,6 +9,7 @@ mod api_keys_client;
 mod audit_log_client;
 mod auth_client;
 mod backlog_client;
+mod branding_client;
 mod connector_field_catalog;
 mod egress_allowlist_client;
 mod events_client;
@@ -30,6 +31,7 @@ mod users_client;
 mod analysis_config_handler;
 mod api_keys_handler;
 mod audit_log_handler;
+mod branding_handler;
 mod data_detail_handler;
 mod data_handler;
 mod egress_allowlist_handler;
@@ -62,6 +64,7 @@ pub use audit_log_client::{
 };
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient};
 pub use backlog_client::{BacklogClient, BacklogClientError, HttpBacklogClient, QueueDepthSummary};
+pub use branding_client::{Branding, BrandingClient, BrandingClientError, HttpBrandingClient};
 pub use egress_allowlist_client::{
     EgressAllowlistClient, EgressAllowlistClientError, HttpEgressAllowlistClient,
 };
@@ -99,6 +102,7 @@ pub use users_client::{HttpUsersClient, UiUser, UsersClient, UsersClientError};
 pub use analysis_config_handler::{get_analysis_config_page, post_analysis_config};
 pub use api_keys_handler::{get_api_keys, post_api_keys, post_revoke_api_key};
 pub use audit_log_handler::get_audit_log as get_entity_audit_log;
+pub use branding_handler::{get_branding_page, post_branding};
 pub use data_detail_handler::get_data_detail;
 pub use data_handler::{get_data, post_delete_saved_search, post_reprocess, post_save_search};
 pub use egress_allowlist_handler::{get_egress_allowlist, post_egress_allowlist};
@@ -135,6 +139,7 @@ pub const SESSION_COOKIE_NAME: &str = "kizashi_session";
 pub struct AppState {
     pub session_store: Arc<dyn SessionStore>,
     pub auth_client: Arc<dyn AuthClient>,
+    pub branding_client: Arc<dyn BrandingClient>,
     pub oidc_client: Arc<dyn OidcClient>,
     pub pending_oidc_flow_store: Arc<dyn PendingOidcFlowStore>,
     pub events_client: Arc<dyn EventsClient>,
@@ -176,6 +181,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/events", get(get_events))
         .route("/triggers", get(get_triggers).post(post_trigger))
         .route("/health", get(get_health))
+        .route("/branding", get(get_branding_page).post(post_branding))
         .route("/pipeline", get(get_pipeline))
         .route("/overview", get(get_overview))
         .route("/sensors", get(get_sensors).post(post_sensors))

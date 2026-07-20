@@ -1,14 +1,22 @@
 {% extends "layout.html" %}
 {% block content %}
+{% if !accent_color.is_empty() %}
+<style>.login-card { --accent: {{ accent_color }}; }</style>
+{% endif %}
 <div class="brand">
+  {% if !logo_url.is_empty() %}
+  <img class="brand-mark brand-logo" src="{{ logo_url }}" alt="">
+  {% else %}
   <span class="brand-mark">&#9670;</span>
-  <span class="brand-name">Kizashi</span>
+  {% endif %}
+  <span class="brand-name">{% if !product_name.is_empty() %}{{ product_name }}{% else %}Kizashi{% endif %}</span>
 </div>
 <h1>Sign in to your workspace</h1>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 <form class="login" method="post" action="/login">
   <label for="tenant_name">Workspace</label>
-  <input type="text" id="tenant_name" name="tenant_name" placeholder="acme" autocapitalize="off" autocomplete="organization" required>
+  <input type="text" id="tenant_name" name="tenant_name" value="{{ tenant_name }}" placeholder="acme" autocapitalize="off" autocomplete="organization" required
+    onblur="if (this.value.trim()) location.href = '/login?tenant_name=' + encodeURIComponent(this.value.trim())">
   <label for="username">Username</label>
   <input type="text" id="username" name="username" autocomplete="username" required>
   <label for="password">Password</label>
@@ -18,7 +26,7 @@
 <div class="login-divider"><span>or</span></div>
 <form class="login" method="get" action="/login/sso">
   <label for="sso_tenant_name">Workspace</label>
-  <input type="text" id="sso_tenant_name" name="tenant_name" placeholder="acme" autocapitalize="off" autocomplete="organization" required>
+  <input type="text" id="sso_tenant_name" name="tenant_name" value="{{ tenant_name }}" placeholder="acme" autocapitalize="off" autocomplete="organization" required>
   <button type="submit" class="btn-secondary">Sign in with SSO</button>
 </form>
 {% endblock %}

@@ -3514,3 +3514,36 @@ architectural decision.
   defense, code-exchange-to-session-mint) against a stub IdP.
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0040](../docs/adr/0040-console-ui-oidc-sso-wiring.md)
+
+## [2026-07-20] feature/0054-tenant-branding-config — tenant white-label branding (product name, logo, accent color)
+- **Type:** feature
+- **Branch:** feature/0054-tenant-branding-config
+- **Summary:** Implements the spec's "white-labelable" requirement (§1), previously entirely
+  unimplemented. Three nullable columns on `auth-service`'s `tenants` table (product name, logo
+  URL, accent color) — `NULL` means "use the platform default," never "broken." Read is by
+  workspace name (`GET /v1/tenants/:name/branding`, deliberately unauthenticated — the login
+  page needs it before anyone's signed in, and branding isn't sensitive) plus a by-id variant
+  for the authenticated Settings page. Write is admin-only, audit-logged with the real actor
+  (ADR-0039). `accent_color` is validated server-side against a strict hex-color pattern since
+  it renders into a `<style>` block on the unauthenticated login page — unvalidated free text
+  there is a real CSS-injection surface. New Console UI `/branding` Settings page (nav: palette
+  icon). The login page's Workspace field reloads with the typed name on blur, live-loading and
+  applying that workspace's branding (product name replaces "Kizashi", logo swaps the diamond
+  mark, accent color re-themes the page) before the operator even signs in — "loaded based on
+  login." Scope deliberately stops at the login page; applying branding to authenticated pages
+  is a larger, separate change (would require threading a branding fetch through every page
+  handler) and is tracked as follow-up, not done here.
+- **Tests:** `cargo test -p auth-service` — 79 passed (13 new: repository round-trip by name and
+  by id, 3 real-Postgres integration tests including an audit-actor assertion, handler tests for
+  404/403/401/CSS-injection-rejection/happy-path). `cargo test -p kizashi-ui` — 273 passed (9 new
+  handler/client tests plus 2 login-page branding-loading tests). `cargo test --workspace
+  --all-features` (full real-infra stack) — every test binary passed, 0 failed. `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` — clean. `cargo fmt --all --check` —
+  clean. `cargo deny check` / `cargo audit` — clean, same 3 pre-existing allow-listed advisories.
+- **Live verification:** rebuilt/redeployed `auth-service` and `kizashi-ui` together, set real
+  branding (product name "Acme Signals", accent color `#ff6600`) for the acme demo tenant via
+  the live Settings page, confirmed via screenshot that `/login?tenant_name=acme` renders the
+  custom product name and re-themed accent color on the real running login page. Confirmed the
+  Settings page itself renders and round-trips saved values. Test branding cleared afterward.
+- **PR:** (opened in this branch's PR)
+- **ADR:** [ADR-0041](../docs/adr/0041-tenant-branding-white-label.md)

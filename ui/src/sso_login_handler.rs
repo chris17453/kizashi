@@ -22,11 +22,26 @@ const DEFAULT_PROVIDER: &str = "entra";
 struct LoginTemplate {
     show_nav: bool,
     error: Option<String>,
+    tenant_name: String,
+    product_name: String,
+    logo_url: String,
+    accent_color: String,
 }
 
 fn sso_error(message: impl Into<String>) -> Response {
-    Html(LoginTemplate { show_nav: false, error: Some(message.into()) }.render().unwrap())
-        .into_response()
+    Html(
+        LoginTemplate {
+            show_nav: false,
+            error: Some(message.into()),
+            tenant_name: String::new(),
+            product_name: String::new(),
+            logo_url: String::new(),
+            accent_color: String::new(),
+        }
+        .render()
+        .unwrap(),
+    )
+    .into_response()
 }
 
 #[derive(serde::Deserialize)]

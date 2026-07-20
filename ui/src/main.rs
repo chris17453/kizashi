@@ -1,7 +1,7 @@
 use kizashi_ui::{
     build_router, AppState, HttpAnalysisConfigClient, HttpApiKeysClient, HttpAuditLogClient,
-    HttpAuthClient, HttpBacklogClient, HttpEgressAllowlistClient, HttpEventsClient,
-    HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
+    HttpAuthClient, HttpBacklogClient, HttpBrandingClient, HttpEgressAllowlistClient,
+    HttpEventsClient, HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
     HttpNormalizationMappingsClient, HttpOidcClient, HttpRetentionPoliciesClient,
     HttpSavedSearchQueriesClient, HttpSensorsClient, HttpTriggersClient, HttpUsersClient,
     InMemoryPendingOidcFlowStore, InMemorySessionStore,
@@ -39,6 +39,10 @@ async fn main() {
     let state = AppState {
         session_store: Arc::new(InMemorySessionStore::default()),
         auth_client: Arc::new(HttpAuthClient::new(client.clone(), auth_service_url.clone())),
+        branding_client: Arc::new(HttpBrandingClient::new(
+            client.clone(),
+            auth_service_url.clone(),
+        )),
         oidc_client: Arc::new(HttpOidcClient::new(client.clone(), auth_service_url.clone())),
         pending_oidc_flow_store: Arc::new(InMemoryPendingOidcFlowStore::default()),
         events_client: Arc::new(HttpEventsClient::new(client.clone(), query_gateway_url)),

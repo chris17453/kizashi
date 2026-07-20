@@ -22,6 +22,9 @@ pub(crate) fn default_state() -> AuthState {
         tenant_repository: Arc::new(
             crate::tenant_repository::tenant_repository_test::InMemoryTenantRepository::default(),
         ),
+        tenant_branding_repository: Arc::new(
+            crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default(),
+        ),
         session_client: Arc::new(
             crate::session_client::session_client_test::InMemorySessionClient::default(),
         ),

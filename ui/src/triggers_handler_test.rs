@@ -37,6 +37,7 @@ async fn state_with_session_and_role(role: common::Role) -> (AppState, String, U
     let state = AppState {
         session_store: Arc::new(session_store),
         auth_client: Arc::new(InMemoryAuthClient::default()),
+        branding_client: Arc::new(crate::branding_client::branding_client_test::InMemoryBrandingClient::default()),
         oidc_client: Arc::new(crate::oidc_client::oidc_client_test::InMemoryOidcClient::default()),
         pending_oidc_flow_store: Arc::new(crate::pending_oidc_flow::InMemoryPendingOidcFlowStore::default()),
         events_client: Arc::new(InMemoryEventsClient::default()),
