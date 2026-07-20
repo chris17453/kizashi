@@ -79,7 +79,8 @@ async fn state_with(
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
         mfa_client: Arc::new(crate::mfa_client::mfa_client_test::InMemoryMfaClient::default()),
         login_attempts_client,
-    }
+                backup_status_client: Arc::new(crate::backup_status_client::backup_status_client_test::InMemoryBackupStatusClient::default()),
+}
 }
 
 async fn get_page(state: AppState, session_id: &str) -> axum::http::Response<Body> {

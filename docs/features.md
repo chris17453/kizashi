@@ -3855,3 +3855,34 @@ architectural decision.
   warnings as prior entries, no new issues.
 - **PR:** pending
 - **ADR:** docs/adr/0054-data-subject-rights-export-and-delete.md
+
+## [2026-07-20] feature/0063-backup-service-and-dr-visibility — Backup service and DR visibility
+- **Type:** feature
+- **Branch:** feature/0063-backup-service-and-dr-visibility
+- **Summary:** Closes another gap from the ADR-0051 compliance rubric: a repo-wide audit found
+  zero backup automation anywhere (no `pg_dump`, no scheduled snapshot, nothing in
+  docker-compose/CI). Rather than ship a status page with nothing real behind it (CLAUDE.md's
+  "no half-truths" rule), builds the actual backup pipeline first: new `crates/backup-service`
+  shells out to the real `pg_dump` binary (custom format), uploads to a new MinIO/S3 bucket
+  (`kizashi-backups`, reusing retention-service's proven storage infra), and records every
+  attempt — success or failure — in a `backup_runs` table. `POST /v1/backup/run` (internal-secret
+  gated, triggered by a new `backup-scheduler` sidecar mirroring `retention-sweep-scheduler`'s
+  shape, daily by default) and `GET /v1/backup/status` (Admin-gated, platform-wide since a
+  backup isn't tenant-scoped). Console UI gained `/security/backups` (new nav entry) showing
+  recent run history. Shared `Dockerfile` gained an `INSTALL_POSTGRES_CLIENT` build arg (same
+  opt-in pattern as `agent-scheduler`'s `INSTALL_DOCKER_CLI`) so the runtime image actually has
+  `pg_dump` available. ClickHouse backup and automated restore-verification are explicitly out
+  of scope for v1, documented in the ADR rather than silently dropped.
+- **Tests:** `cargo test -p backup-service --lib` — 15 passed (executor success/dump-failure/
+  upload-failure/start-failure paths, repository start/complete/fail/list, ops-handler auth
+  gating). `cargo test -p backup-service --tests` — 3 passed against real infra: a genuine
+  `pg_dump` invocation against the real Postgres instance (`pg_dump_integration_test.rs`,
+  asserts the `PGDMP` magic-byte header) and 2 `backup_run_repository` round-trips against real
+  Postgres. `cargo test -p kizashi-ui --lib` — 359 passed (7 new: admin can view backup status,
+  empty state, backend-unreachable error, non-admin forbidden, redirect-when-signed-out, plus
+  the HTTP client's 2 tests). `cargo build --workspace` clean. `cargo clippy -p backup-service
+  --all-targets --all-features -- -D warnings` and `cargo clippy -p kizashi-ui --all-targets
+  --all-features -- -D warnings` both clean. `cargo fmt --all --check` clean. `cargo deny check`
+  and `cargo audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0055-backup-service-and-dr-visibility.md

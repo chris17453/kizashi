@@ -276,6 +276,46 @@ services:
       retention-service: { condition: service_healthy }
     restart: unless-stopped
 
+  backup-service:
+    build: { context: ., args: { BIN: backup-service, INSTALL_POSTGRES_CLIENT: "true" } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+      S3_ENDPOINT_URL: http://minio:9000
+      AWS_S3_BUCKET: "${BACKUP_S3_BUCKET:-kizashi-backups}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-kizashi}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env, see .env.example}"
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
+    ports: ["8095:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    healthcheck: *healthz
+
+  # Same "external scheduling, HTTP-triggered" shape as retention-sweep-scheduler (ADR-0011
+  # point 5, ADR-0055): a minimal sidecar that POSTs /v1/backup/run on an interval, standing in
+  # for a future Kubernetes CronJob.
+  backup-scheduler:
+    image: alpine:3.20
+    entrypoint: ["/bin/sh", "-c"]
+    environment:
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
+    command:
+      - |
+        apk add --no-cache curl >/dev/null
+        echo "backup-scheduler: backing up every ${BACKUP_INTERVAL_SECONDS:-86400}s"
+        while true; do
+          curl -sf -X POST http://backup-service:8080/v1/backup/run \
+            -H "X-Internal-Secret: $$INTERNAL_API_SECRET" \
+            && echo "backup-scheduler: backup triggered" \
+            || echo "backup-scheduler: backup request failed, will retry next interval"
+          sleep "${BACKUP_INTERVAL_SECONDS:-86400}"
+        done
+    depends_on:
+      backup-service: { condition: service_healthy }
+    restart: unless-stopped
+
   auth-service:
     build: { context: ., args: { BIN: auth-service } }
     environment:
@@ -316,6 +356,7 @@ services:
       INGESTION_GATEWAY_PUBLIC_URL: "${INGESTION_GATEWAY_PUBLIC_URL:-http://localhost:8081}"
       ACTION_EXECUTOR_URL: http://action-executor:8080
       RETENTION_SERVICE_URL: http://retention-service:8080
+      BACKUP_SERVICE_URL: http://backup-service:8080
       EGRESS_GATEWAY_URL: http://egress-gateway:8080
       TRIGGER_ENGINE_URL: http://trigger-engine:8080
       INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
@@ -342,6 +383,7 @@ services:
       ingestion-gateway: { condition: service_started }
       action-executor: { condition: service_started }
       retention-service: { condition: service_started }
+      backup-service: { condition: service_started }
       egress-gateway: { condition: service_started }
       trigger-engine: { condition: service_started }
     healthcheck: *healthz

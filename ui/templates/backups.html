@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Backups</h1>
+<p class="muted">Recent scheduled backups of the platform database, successful or not. This is a
+whole-database backup, not scoped to one tenant — it's an operational/DR record, not tenant
+application data.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if runs.is_empty() %}
+<div class="empty-state">
+  <div class="empty-icon">&#128190;</div>
+  <p>No backup runs recorded yet.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Started</th><th>Completed</th><th>Status</th><th>Target</th><th>Size</th><th>Error</th></tr>
+  </thead>
+  <tbody>
+    {% for r in runs %}
+    <tr>
+      <td>{{ r.started_at }}</td>
+      <td>{% if let Some(c) = r.completed_at %}{{ c }}{% else %}&mdash;{% endif %}</td>
+      <td>
+        {% if r.status == "success" %}
+        <span class="status-up">Success</span>
+        {% else if r.status == "failed" %}
+        <span class="status-down">Failed</span>
+        {% else %}
+        <span class="muted">Running</span>
+        {% endif %}
+      </td>
+      <td><code>{{ r.target }}</code></td>
+      <td>{% if let Some(s) = r.size_bytes %}{{ s }} bytes{% else %}&mdash;{% endif %}</td>
+      <td>{% if let Some(e) = r.error %}{{ e }}{% else %}&mdash;{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

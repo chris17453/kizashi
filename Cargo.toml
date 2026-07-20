@@ -5,6 +5,7 @@ members = [
   "crates/agent-scheduler",
   "crates/analysis-service",
   "crates/auth-service",
+  "crates/backup-service",
   "crates/common",
   "crates/config-admin-service",
   "crates/connectors/connector-runtime",

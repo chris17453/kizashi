@@ -9,6 +9,7 @@ mod api_keys_client;
 mod audit_log_client;
 mod auth_client;
 mod backlog_client;
+mod backup_status_client;
 mod branding_client;
 mod connector_field_catalog;
 mod cookie_security;
@@ -34,6 +35,7 @@ mod users_client;
 mod analysis_config_handler;
 mod api_keys_handler;
 mod audit_log_handler;
+mod backup_status_handler;
 mod branding_handler;
 mod data_detail_handler;
 mod data_handler;
@@ -74,6 +76,9 @@ pub use audit_log_client::{
 };
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient, LocalLoginResult};
 pub use backlog_client::{BacklogClient, BacklogClientError, HttpBacklogClient, QueueDepthSummary};
+pub use backup_status_client::{
+    BackupRun, BackupStatusClient, BackupStatusClientError, HttpBackupStatusClient,
+};
 pub use branding_client::{Branding, BrandingClient, BrandingClientError, HttpBrandingClient};
 pub use cookie_security::{cookie_secure, cookie_secure_suffix};
 pub use egress_allowlist_client::{
@@ -117,6 +122,7 @@ pub use users_client::{HttpUsersClient, UiUser, UsersClient, UsersClientError};
 pub use analysis_config_handler::{get_analysis_config_page, post_analysis_config};
 pub use api_keys_handler::{get_api_keys, post_api_keys, post_revoke_api_key};
 pub use audit_log_handler::get_audit_log as get_entity_audit_log;
+pub use backup_status_handler::get_backups;
 pub use branding_handler::{get_branding_page, post_branding};
 pub use data_detail_handler::get_data_detail;
 pub use data_handler::{get_data, post_delete_saved_search, post_reprocess, post_save_search};
@@ -182,6 +188,7 @@ pub struct AppState {
     pub normalization_mappings_client: Arc<dyn NormalizationMappingsClient>,
     pub retention_policies_client: Arc<dyn RetentionPoliciesClient>,
     pub egress_allowlist_client: Arc<dyn EgressAllowlistClient>,
+    pub backup_status_client: Arc<dyn BackupStatusClient>,
     pub users_client: Arc<dyn UsersClient>,
     pub login_attempts_client: Arc<dyn LoginAttemptsClient>,
     pub saved_search_queries_client: Arc<dyn SavedSearchQueriesClient>,
@@ -248,6 +255,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/security/mfa/disable", axum::routing::post(post_mfa_settings_disable))
         .route("/security/sessions", get(get_sessions))
         .route("/security/login-attempts", get(get_login_attempts_page))
+        .route("/security/backups", get(get_backups))
         .route("/security/sessions/:id/revoke", axum::routing::post(post_revoke_session))
         .route("/reports", get(get_reports))
         .route("/data", get(get_data))
