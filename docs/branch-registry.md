@@ -13,7 +13,7 @@ manually created branches.
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
 | feature       | `feature/` | 0055         |
-| fix           | `fix/`     | 0007         |
+| fix           | `fix/`     | 0008         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0003         |
 | chore         | `chore/`   | 0004         |
@@ -87,3 +87,4 @@ manually created branches.
 | 0052 | `feature/0052-overview-recent-activity` | feature | 2026-07-19 | open | pending | |
 | 0053 | `feature/0053-console-ui-oidc-sso-login` | feature | 2026-07-19 | open | pending | |
 | 0054 | `feature/0054-tenant-branding-config` | feature | 2026-07-19 | open | pending | |
+| 0007 | `fix/0007-rbac-audit-fixes` | fix | 2026-07-19 | open | pending | |
