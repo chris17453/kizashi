@@ -24,6 +24,7 @@ impl ApiKeysClient for InMemoryApiKeysClient {
         _tenant_id: Uuid,
         _role: Role,
         label: &str,
+        _actor: &str,
     ) -> Result<String, ApiKeysClientError> {
         self.keys.lock().unwrap().push(ApiKeySummary {
             id: Uuid::new_v4(),
@@ -39,6 +40,7 @@ impl ApiKeysClient for InMemoryApiKeysClient {
         _tenant_id: Uuid,
         _role: Role,
         id: Uuid,
+        _actor: &str,
     ) -> Result<(), ApiKeysClientError> {
         if let Some(key) = self.keys.lock().unwrap().iter_mut().find(|k| k.id == id) {
             key.revoked_at = Some(Utc::now());
@@ -63,6 +65,7 @@ impl ApiKeysClient for FailingApiKeysClient {
         _tenant_id: Uuid,
         _role: Role,
         _label: &str,
+        _actor: &str,
     ) -> Result<String, ApiKeysClientError> {
         Err(ApiKeysClientError::Unreachable("simulated failure".to_string()))
     }
@@ -72,6 +75,7 @@ impl ApiKeysClient for FailingApiKeysClient {
         _tenant_id: Uuid,
         _role: Role,
         _id: Uuid,
+        _actor: &str,
     ) -> Result<(), ApiKeysClientError> {
         Err(ApiKeysClientError::Unreachable("simulated failure".to_string()))
     }
@@ -92,6 +96,9 @@ async fn spawn_stub_server() -> String {
     }
     async fn create_handler(headers: HeaderMap) -> axum::response::Response {
         if headers.get("x-role").is_none() {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
+        if headers.get("x-username").is_none() {
             return axum::http::StatusCode::UNAUTHORIZED.into_response();
         }
         (
@@ -135,7 +142,7 @@ async fn http_client_creates_an_api_key_against_a_real_server() {
     let client = HttpApiKeysClient::new(reqwest::Client::new(), url);
 
     let plaintext =
-        client.create_api_key(Uuid::new_v4(), Role::Operator, "ci-agent").await.unwrap();
+        client.create_api_key(Uuid::new_v4(), Role::Operator, "ci-agent", "alice").await.unwrap();
 
     assert_eq!(plaintext, "kzsh_test-plaintext-key");
 }
@@ -145,7 +152,7 @@ async fn http_client_revokes_an_api_key_against_a_real_server() {
     let url = spawn_stub_server().await;
     let client = HttpApiKeysClient::new(reqwest::Client::new(), url);
 
-    client.revoke_api_key(Uuid::new_v4(), Role::Operator, Uuid::new_v4()).await.unwrap();
+    client.revoke_api_key(Uuid::new_v4(), Role::Operator, Uuid::new_v4(), "alice").await.unwrap();
 }
 
 #[tokio::test]
@@ -153,4 +160,44 @@ async fn http_client_returns_unreachable_when_server_is_down() {
     let client = HttpApiKeysClient::new(reqwest::Client::new(), "http://127.0.0.1:1".to_string());
     let err = client.list_api_keys(Uuid::new_v4()).await.unwrap_err();
     assert!(matches!(err, ApiKeysClientError::Unreachable(_)));
+}
+
+#[tokio::test]
+async fn http_client_sends_x_username_header_on_create() {
+    use std::sync::Arc;
+
+    let captured: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let captured_for_handler = captured.clone();
+
+    async fn create_handler(
+        axum::extract::State(captured): axum::extract::State<Arc<Mutex<Option<String>>>>,
+        headers: HeaderMap,
+    ) -> axum::response::Response {
+        *captured.lock().unwrap() =
+            headers.get("x-username").and_then(|v| v.to_str().ok()).map(str::to_string);
+        (
+            axum::http::StatusCode::CREATED,
+            Json(serde_json::json!({
+                "id": "11111111-1111-1111-1111-111111111111",
+                "label": "ci-agent",
+                "api_key": "kzsh_test-plaintext-key"
+            })),
+        )
+            .into_response()
+    }
+
+    let app = Router::new()
+        .route("/v1/api-keys", axum::routing::post(create_handler))
+        .with_state(captured_for_handler);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let url = format!("http://{addr}");
+
+    let client = HttpApiKeysClient::new(reqwest::Client::new(), url);
+    client.create_api_key(Uuid::new_v4(), Role::Operator, "ci-agent", "bob").await.unwrap();
+
+    assert_eq!(captured.lock().unwrap().as_deref(), Some("bob"));
 }

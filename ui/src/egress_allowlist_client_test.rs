@@ -25,6 +25,7 @@ impl EgressAllowlistClient for InMemoryEgressAllowlistClient {
         tenant_id: Uuid,
         role: Role,
         domains: Vec<String>,
+        _actor: &str,
     ) -> Result<Vec<String>, EgressAllowlistClientError> {
         if !role.at_least(Role::Operator) {
             return Err(EgressAllowlistClientError::Rejected(403));
@@ -50,6 +51,7 @@ impl EgressAllowlistClient for FailingEgressAllowlistClient {
         _tenant_id: Uuid,
         _role: Role,
         _domains: Vec<String>,
+        _actor: &str,
     ) -> Result<Vec<String>, EgressAllowlistClientError> {
         Err(EgressAllowlistClientError::Unreachable("simulated failure".to_string()))
     }
@@ -68,6 +70,9 @@ async fn spawn_stub_server() -> String {
     ) -> axum::response::Response {
         if headers.get("x-role").and_then(|v| v.to_str().ok()) != Some("operator") {
             return axum::http::StatusCode::FORBIDDEN.into_response();
+        }
+        if headers.get("x-username").is_none() {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
         }
         Json(body["domains"].clone()).into_response()
     }
@@ -99,6 +104,7 @@ async fn http_client_puts_a_new_allowlist_against_a_real_server() {
             Uuid::new_v4(),
             Role::Operator,
             vec!["api.github.com".to_string(), "example.com".to_string()],
+            "alice",
         )
         .await
         .unwrap();
@@ -111,7 +117,7 @@ async fn http_client_put_is_rejected_for_insufficient_role() {
     let client = HttpEgressAllowlistClient::new(reqwest::Client::new(), url);
 
     let err = client
-        .put_allowlist(Uuid::new_v4(), Role::Viewer, vec!["x.com".to_string()])
+        .put_allowlist(Uuid::new_v4(), Role::Viewer, vec!["x.com".to_string()], "alice")
         .await
         .unwrap_err();
     assert!(matches!(err, EgressAllowlistClientError::Rejected(403)));

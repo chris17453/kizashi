@@ -94,7 +94,11 @@ pub async fn get_generate_form(
 
     let (api_key, api_key_auto_generated) = if session.role.at_least(common::Role::Operator) {
         let label = format!("{}-deploy-key", query.connector_type);
-        match state.api_keys_client.create_api_key(session.tenant_id, session.role, &label).await {
+        match state
+            .api_keys_client
+            .create_api_key(session.tenant_id, session.role, &label, &session.username)
+            .await
+        {
             Ok(plaintext) => (plaintext, true),
             Err(e) => {
                 tracing::error!(error = %e, "failed to auto-generate a deploy API key");

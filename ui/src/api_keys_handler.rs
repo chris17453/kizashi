@@ -73,7 +73,7 @@ pub async fn post_api_keys(
 
     let created_key = match state
         .api_keys_client
-        .create_api_key(session.tenant_id, session.role, &form.label)
+        .create_api_key(session.tenant_id, session.role, &form.label, &session.username)
         .await
     {
         Ok(plaintext) => Some(plaintext),
@@ -114,6 +114,9 @@ pub async fn post_revoke_api_key(
         Err(response) => return response,
     };
 
-    let _ = state.api_keys_client.revoke_api_key(session.tenant_id, session.role, id).await;
+    let _ = state
+        .api_keys_client
+        .revoke_api_key(session.tenant_id, session.role, id, &session.username)
+        .await;
     Redirect::to("/api-keys").into_response()
 }

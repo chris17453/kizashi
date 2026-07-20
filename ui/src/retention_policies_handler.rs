@@ -126,7 +126,11 @@ pub async fn post_retention_policies(
         enabled: true,
     };
 
-    match state.retention_policies_client.create_policy(session.role, policy).await {
+    match state
+        .retention_policies_client
+        .create_policy(session.role, policy, &session.username)
+        .await
+    {
         Ok(_) => Redirect::to("/retention-policies").into_response(),
         Err(e) => {
             let policies = state
@@ -169,7 +173,10 @@ pub async fn post_toggle_retention_policy(
     if let Ok(policies) = state.retention_policies_client.list_policies(session.tenant_id).await {
         if let Some(mut policy) = policies.into_iter().find(|p| p.id == id) {
             policy.enabled = !policy.enabled;
-            let _ = state.retention_policies_client.update_policy(session.role, policy).await;
+            let _ = state
+                .retention_policies_client
+                .update_policy(session.role, policy, &session.username)
+                .await;
         }
     }
     Redirect::to("/retention-policies").into_response()
@@ -222,7 +229,10 @@ pub async fn post_edit_retention_policy(
     if let Ok(policies) = state.retention_policies_client.list_policies(session.tenant_id).await {
         if let Some(mut policy) = policies.into_iter().find(|p| p.id == id) {
             policy.ttl_days = ttl_days;
-            let _ = state.retention_policies_client.update_policy(session.role, policy).await;
+            let _ = state
+                .retention_policies_client
+                .update_policy(session.role, policy, &session.username)
+                .await;
         }
     }
     Redirect::to("/retention-policies").into_response()
@@ -242,7 +252,9 @@ pub async fn post_delete_retention_policy(
         return axum::http::StatusCode::FORBIDDEN.into_response();
     }
 
-    let _ =
-        state.retention_policies_client.delete_policy(session.role, session.tenant_id, id).await;
+    let _ = state
+        .retention_policies_client
+        .delete_policy(session.role, session.tenant_id, id, &session.username)
+        .await;
     Redirect::to("/retention-policies").into_response()
 }
