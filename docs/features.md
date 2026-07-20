@@ -4426,3 +4426,20 @@ architectural decision.
   and `.env.example`).
 - **PR:** pending
 - **ADR:** docs/adr/0077-local-test-database-isolation.md
+
+## [2026-07-20] fix/0018-permissions-reference-stale-rows — Permissions Reference page had drifted stale
+- **Type:** fix
+- **Branch:** fix/0018-permissions-reference-stale-rows
+- **Summary:** The Permissions Reference page (ADR-0048) exists so an auditor/new admin can see
+  what each role can do without reading source — but four areas added in later features (Login
+  Attempts, Backups, Compliance Report, Security Overview) were never added to its hand-
+  maintained row list. Added all four, each transcribed directly from its handler's actual
+  role-gate code (Admin-only for the first three; Security Overview allows any role but
+  degrades RBAC-count sections to zero for non-Admins). Documentation-accuracy fix only, no
+  permissions changed.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 423 passed (existing `shows_every_documented_area`
+  test extended to assert all 4 new rows render). `cargo build --workspace` clean. `cargo
+  clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
+  --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0078-permissions-reference-stale-rows.md

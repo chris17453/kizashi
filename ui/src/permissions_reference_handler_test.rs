@@ -125,6 +125,10 @@ async fn shows_every_documented_area() {
         "Users / RBAC",
         "Audit Log",
         "Active Sessions",
+        "Login Attempts",
+        "Backups",
+        "Compliance Report",
+        "Security Overview",
         "Branding",
         "Saved Searches",
     ] {
