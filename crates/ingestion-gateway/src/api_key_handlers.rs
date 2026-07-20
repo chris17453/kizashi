@@ -103,7 +103,10 @@ pub async fn create_api_key(
             .into_response(),
         Err(e) => {
             tracing::error!(error = %e, "api key creation failed");
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
         }
     }
 }
@@ -120,7 +123,10 @@ pub async fn list_api_keys(State(state): State<GatewayState>, headers: HeaderMap
         Ok(keys) => Json(keys).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "api key list failed");
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
         }
     }
 }
@@ -148,7 +154,10 @@ pub async fn revoke_api_key(
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             tracing::error!(error = %e, "api key revocation failed");
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
         }
     }
 }
@@ -167,6 +176,12 @@ pub async fn get_api_key_audit_log(
 
     match state.audit_reader.list_for_entity(tenant_id, id).await {
         Ok(entries) => Json(entries).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "api key audit log lookup failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }

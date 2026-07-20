@@ -101,7 +101,13 @@ pub async fn list_events(
             events.truncate(query.limit as usize);
             Json(ListEventsResponse { events, has_more }).into_response()
         }
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "event query repository error");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }
 
@@ -118,7 +124,13 @@ pub async fn get_event(
     match state.event_query_repository.get_event(tenant_id, id).await {
         Ok(Some(event)) => Json(event).into_response(),
         Ok(None) => error_response(StatusCode::NOT_FOUND, format!("no event with id {id}")),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "event query repository error");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }
 
@@ -168,6 +180,12 @@ pub async fn daily_event_counts(
             counts: counts.into_iter().map(DailyEventCountView::from).collect(),
         })
         .into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "event query repository error");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }

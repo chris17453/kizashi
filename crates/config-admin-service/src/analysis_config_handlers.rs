@@ -105,7 +105,13 @@ pub async fn get_analysis_config(
 
     match state.repository.get(tenant_id).await {
         Ok(config) => Json(config.map(AnalysisConfigView::from)).into_response(),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "analysis config lookup failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }
 
@@ -138,7 +144,13 @@ pub async fn put_analysis_config(
         Some(explicit) => explicit,
         None => match state.repository.get(tenant_id).await {
             Ok(existing) => existing.and_then(|c| c.api_key),
-            Err(e) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            Err(e) => {
+                tracing::error!(error = %e, "analysis config lookup failed");
+                return error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "an internal error occurred; check server logs for details",
+                );
+            }
         },
     };
 
@@ -154,6 +166,12 @@ pub async fn put_analysis_config(
             }
             Json(saved).into_response()
         }
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => {
+            tracing::error!(error = %e, "analysis config upsert failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
     }
 }

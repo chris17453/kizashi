@@ -79,6 +79,9 @@ async fn get_audit_log_returns_500_on_backend_failure() {
         send(router(state), format!("/v1/audit-log/{}", Uuid::new_v4()), Some(Uuid::new_v4()))
             .await;
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
 }
 
 #[tokio::test]
@@ -193,4 +196,7 @@ async fn get_recent_audit_log_returns_500_on_backend_failure() {
     let state = state_with_reader(FailingAuditLogReader);
     let response = send(router(state), "/v1/audit-log".to_string(), Some(Uuid::new_v4())).await;
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("simulated failure"));
 }
