@@ -4236,3 +4236,19 @@ architectural decision.
   --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0067-disabled-button-accessible-labels.md
+
+## [2026-07-20] feature/0078-sessions-page-sortable-columns — Active Sessions page sortable columns
+- **Type:** feature
+- **Branch:** feature/0078-sessions-page-sortable-columns
+- **Summary:** Closes another UI/UX audit finding: Active Sessions had search but no sorting,
+  always hardcoded most-recent-first. `GET /security/sessions` now accepts `?sort=username|role`
+  and `?dir=asc|desc`, same pattern as Users (ADR-0064), applied after the search filter so the
+  two compose. Unlike Users, the unset-sort default stays most-recently-signed-in-first (more
+  useful for a security-review page than alphabetical) — the "Signed in" header itself is now
+  also a toggle link.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 406 passed (3 new: ascending/descending username
+  sort, default-unset-sort newest-first ordering). `cargo build --workspace` clean. `cargo
+  clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
+  --check` clean.
+- **PR:** pending
+- **ADR:** docs/adr/0068-sessions-page-sortable-columns.md
