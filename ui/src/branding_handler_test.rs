@@ -103,6 +103,26 @@ async fn get_branding_page_renders_current_values() {
 }
 
 #[tokio::test]
+async fn get_branding_page_links_to_its_audit_history() {
+    let (state, session_id, tenant_id) = state_with_session_role(common::Role::Admin).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/branding")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(&format!("/audit-log/auth/{tenant_id}")));
+}
+
+#[tokio::test]
 async fn get_branding_page_hides_the_form_for_a_non_admin() {
     let (state, session_id, _tenant_id) = state_with_session_role(common::Role::Operator).await;
 

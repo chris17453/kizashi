@@ -96,6 +96,26 @@ async fn renders_an_empty_prompt_when_none_configured() {
 }
 
 #[tokio::test]
+async fn get_links_to_its_audit_history() {
+    let (state, session_id, tenant_id) = state_with_session(common::Role::Operator).await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/analysis-config")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(&format!("/audit-log/config/{tenant_id}")));
+}
+
+#[tokio::test]
 async fn post_saves_the_prompt_and_rerenders_it() {
     let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
 

@@ -10,12 +10,14 @@ use axum::extract::{Form, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use common::AnalysisProvider;
+use uuid::Uuid;
 
 #[derive(Template)]
 #[template(path = "analysis_config.html")]
 struct AnalysisConfigTemplate {
     show_nav: bool,
     is_admin: bool,
+    tenant_id: Uuid,
     prompt: String,
     is_openai_compatible: bool,
     model: String,
@@ -30,12 +32,14 @@ struct AnalysisConfigTemplate {
 fn empty_template(
     show_nav: bool,
     is_admin: bool,
+    tenant_id: Uuid,
     can_write: bool,
     error: Option<String>,
 ) -> AnalysisConfigTemplate {
     AnalysisConfigTemplate {
         show_nav,
         is_admin,
+        tenant_id,
         prompt: String::new(),
         is_openai_compatible: false,
         model: String::new(),
@@ -56,12 +60,14 @@ fn empty_template(
 fn template_from_view(
     view: AnalysisConfigView,
     is_admin: bool,
+    tenant_id: Uuid,
     can_write: bool,
     saved: bool,
 ) -> AnalysisConfigTemplate {
     AnalysisConfigTemplate {
         show_nav: true,
         is_admin,
+        tenant_id,
         prompt: view.prompt,
         is_openai_compatible: view.provider == AnalysisProvider::OpenAiCompatible,
         model: view.model.unwrap_or_default(),
@@ -90,17 +96,22 @@ pub async fn get_analysis_config_page(
     let can_write = session.role.at_least(common::Role::Operator);
 
     match state.analysis_config_client.get_analysis_config(session.tenant_id).await {
-        Ok(Some(config)) => {
-            Html(template_from_view(config, is_admin, can_write, false).render().unwrap())
-                .into_response()
-        }
-        Ok(None) => {
-            Html(empty_template(true, is_admin, can_write, None).render().unwrap()).into_response()
-        }
-        Err(e) => {
-            Html(empty_template(true, is_admin, can_write, Some(e.to_string())).render().unwrap())
-                .into_response()
-        }
+        Ok(Some(config)) => Html(
+            template_from_view(config, is_admin, session.tenant_id, can_write, false)
+                .render()
+                .unwrap(),
+        )
+        .into_response(),
+        Ok(None) => Html(
+            empty_template(true, is_admin, session.tenant_id, can_write, None).render().unwrap(),
+        )
+        .into_response(),
+        Err(e) => Html(
+            empty_template(true, is_admin, session.tenant_id, can_write, Some(e.to_string()))
+                .render()
+                .unwrap(),
+        )
+        .into_response(),
     }
 }
 
@@ -162,13 +173,15 @@ pub async fn post_analysis_config(
         .put_analysis_config(session.tenant_id, session.role, &session.username, input)
         .await
     {
-        Ok(config) => {
-            Html(template_from_view(config, is_admin, true, true).render().unwrap()).into_response()
-        }
+        Ok(config) => Html(
+            template_from_view(config, is_admin, session.tenant_id, true, true).render().unwrap(),
+        )
+        .into_response(),
         Err(e) => Html(
             AnalysisConfigTemplate {
                 show_nav: true,
                 is_admin,
+                tenant_id: session.tenant_id,
                 prompt: form.prompt,
                 is_openai_compatible: form.provider == AnalysisProvider::OpenAiCompatible,
                 model: form.model,
