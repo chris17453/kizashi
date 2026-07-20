@@ -39,6 +39,13 @@ async fn main() {
         std::env::var("TRIGGER_ENGINE_URL").expect("TRIGGER_ENGINE_URL must be set");
     let internal_secret =
         std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
+    // Enterprise session-timeout policy (a real gap until this change -- sessions previously
+    // lived forever until explicit logout/revoke). Sliding idle timeout: any activity resets
+    // the clock, only genuine idleness signs a session out.
+    let session_idle_timeout_minutes: i64 = std::env::var("SESSION_IDLE_TIMEOUT_MINUTES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
 
     // Every backend call the Console UI makes on behalf of an authenticated session carries this
     // shared secret as a default header, proving to services like config-admin-service,
@@ -57,7 +64,9 @@ async fn main() {
         .build()
         .expect("failed to build reqwest client");
     let state = AppState {
-        session_store: Arc::new(InMemorySessionStore::default()),
+        session_store: Arc::new(InMemorySessionStore::with_idle_timeout(
+            chrono::Duration::minutes(session_idle_timeout_minutes),
+        )),
         auth_client: Arc::new(HttpAuthClient::new(client.clone(), auth_service_url.clone())),
         mfa_client: Arc::new(HttpMfaClient::new(client.clone(), auth_service_url.clone())),
         branding_client: Arc::new(HttpBrandingClient::new(
