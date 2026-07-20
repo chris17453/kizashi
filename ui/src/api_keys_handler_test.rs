@@ -174,6 +174,34 @@ async fn get_api_keys_renders_the_table_when_signed_in() {
 }
 
 #[tokio::test]
+async fn get_api_keys_revoke_buttons_ask_for_confirmation_before_submitting() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/api-keys")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    // Both the single-key revoke form and the bulk-revoke-form (the latter targeted via a
+    // button's form= attribute rather than physically wrapping the table) confirm before
+    // submitting.
+    assert_eq!(body.matches("onsubmit=\"return confirm(").count(), 2);
+}
+
+#[tokio::test]
 async fn get_api_keys_filters_by_the_q_query_param_case_insensitively() {
     let (state, session_id, tenant_id) = state_with_session().await;
     state

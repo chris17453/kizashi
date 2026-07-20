@@ -74,7 +74,7 @@
         </form>
       </td>
       <td>
-        <form class="inline" method="post" action="/users/{{ user.id }}/delete" style="display:inline">
+        <form class="inline" method="post" action="/users/{{ user.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this user? This cannot be undone.');">
           <button type="submit" class="btn-danger" {% if user.is_current %}disabled title="you can't remove yourself" aria-label="Remove -- you can't remove yourself"{% endif %}>Remove</button>
         </form>
       </td>

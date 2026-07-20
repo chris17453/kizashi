@@ -64,7 +64,7 @@
 <!-- Declared empty and referenced by `form="bulk-revoke-form"` on each checkbox/button below,
      rather than physically wrapping the table -- HTML forms can't nest, and each row also needs
      its own single-key revoke form. -->
-<form id="bulk-revoke-form" method="post" action="/api-keys/bulk-revoke"></form>
+<form id="bulk-revoke-form" method="post" action="/api-keys/bulk-revoke" onsubmit="return confirm('Revoke the selected API keys? This cannot be undone.');"></form>
 {% endif %}
 <table>
   <thead>
@@ -102,7 +102,7 @@
       <td class="status-up">active</td>
       <td>
         {% if can_write %}
-        <form class="inline" method="post" action="/api-keys/{{ key.id }}/revoke" style="display:inline">
+        <form class="inline" method="post" action="/api-keys/{{ key.id }}/revoke" style="display:inline" onsubmit="return confirm('Revoke this API key? This cannot be undone.');">
           <button type="submit" class="btn-danger">Revoke</button>
         </form>
         {% endif %}

@@ -115,7 +115,7 @@
         <form class="inline" method="post" action="/sensors/{{ sensor.id }}/toggle" style="display:inline">
           <button type="submit" class="{% if sensor.enabled %}btn-danger{% else %}btn{% endif %}">{% if sensor.enabled %}Disable{% else %}Enable{% endif %}</button>
         </form>
-        <form class="inline" method="post" action="/sensors/{{ sensor.id }}/delete" style="display:inline">
+        <form class="inline" method="post" action="/sensors/{{ sensor.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this sensor? This cannot be undone.');">
           <button type="submit" class="btn-danger">Remove</button>
         </form>
         {% endif %}
