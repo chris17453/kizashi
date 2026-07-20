@@ -20,6 +20,17 @@ until docker compose exec -T postgres pg_isready -U kizashi >/dev/null 2>&1; do
   sleep 1
 done
 
+# A dedicated database for local `cargo test`/integration-test runs -- kept separate from
+# `kizashi` (the database the actual running docker-compose stack, and the Console UI a
+# developer is looking at in a browser, both read/write) so running tests locally never
+# pollutes what's visible in the live stack. CI already gets this for free (a fresh ephemeral
+# Postgres container per run); this is the local-dev-loop equivalent. Idempotent: safe to
+# re-run bootstrap.sh against an already-provisioned Postgres.
+echo "==> ensuring kizashi_test database exists (for local cargo test runs, kept separate from kizashi)"
+docker compose exec -T postgres psql -U kizashi -d postgres -tc \
+  "SELECT 1 FROM pg_database WHERE datname = 'kizashi_test'" | grep -q 1 || \
+  docker compose exec -T postgres psql -U kizashi -d postgres -c "CREATE DATABASE kizashi_test OWNER kizashi;"
+
 echo "==> waiting for clickhouse to accept connections"
 until docker compose exec -T clickhouse clickhouse-client --query "SELECT 1" >/dev/null 2>&1; do
   sleep 1

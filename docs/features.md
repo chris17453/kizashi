@@ -4406,3 +4406,23 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
 - **PR:** pending
 - **ADR:** docs/adr/0076-backups-pagination-and-cursor-urlencoding-fix.md
+
+## [2026-07-20] fix/0017-local-test-database-isolation — Local test runs use a separate database from the live stack
+- **Type:** fix
+- **Branch:** fix/0017-local-test-database-isolation
+- **Summary:** Fixes the root cause behind an earlier session incident (Console UI full of
+  leftover test fixtures): `.env`'s `DATABASE_URL` pointed at the same `kizashi` database the
+  live docker-compose stack/Console UI use, so every local `cargo test` run wrote real test
+  junk directly into it. `scripts/bootstrap.sh` now creates a separate `kizashi_test` database
+  (idempotent) and `.env`/`.env.example` point `DATABASE_URL` at it instead — a host-only
+  variable, never read by the docker-compose services themselves (each hardcodes its own DB
+  URL). CI was already unaffected (fresh ephemeral Postgres per run); this is the local-dev-loop
+  fix. Each crate's tests already self-migrate their own `DATABASE_URL` target, so no schema
+  setup step was needed.
+- **Tests:** Verified live: ran `config-admin-service`'s real-Postgres integration suite (19
+  tests, all passing) before and after the change — `kizashi`'s `trigger_definitions` row count
+  stayed at its real value (1) throughout, while `kizashi_test` picked up the 9 rows those tests
+  created. `cargo build --workspace` clean (no Rust source changed, only `scripts/bootstrap.sh`
+  and `.env.example`).
+- **PR:** pending
+- **ADR:** docs/adr/0077-local-test-database-isolation.md
