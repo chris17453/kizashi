@@ -19,9 +19,13 @@ pub enum TriggerClientError {
 /// Executor never reads Trigger Engine's Postgres schema directly.
 #[async_trait]
 pub trait TriggerClient: Send + Sync {
+    /// `tenant_id` is the firing event's own tenant — sent as `X-Tenant-Id` so Trigger Engine
+    /// can reject (404) a mismatch, since a trigger id alone doesn't prove which tenant it
+    /// belongs to.
     async fn get_trigger(
         &self,
         trigger_id: Uuid,
+        tenant_id: Uuid,
     ) -> Result<Option<TriggerDefinition>, TriggerClientError>;
 }
 
@@ -41,10 +45,12 @@ impl TriggerClient for HttpTriggerClient {
     async fn get_trigger(
         &self,
         trigger_id: Uuid,
+        tenant_id: Uuid,
     ) -> Result<Option<TriggerDefinition>, TriggerClientError> {
         let response = self
             .client
             .get(format!("{}/v1/triggers/{}", self.trigger_engine_url, trigger_id))
+            .header("x-tenant-id", tenant_id.to_string())
             .send()
             .await
             .map_err(|e| TriggerClientError::Unreachable(e.to_string()))?;

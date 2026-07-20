@@ -11,6 +11,7 @@ mod auth_client;
 mod backlog_client;
 mod branding_client;
 mod connector_field_catalog;
+mod cookie_security;
 mod egress_allowlist_client;
 mod events_client;
 mod execution_client;
@@ -65,6 +66,7 @@ pub use audit_log_client::{
 pub use auth_client::{AuthClient, AuthClientError, HttpAuthClient};
 pub use backlog_client::{BacklogClient, BacklogClientError, HttpBacklogClient, QueueDepthSummary};
 pub use branding_client::{Branding, BrandingClient, BrandingClientError, HttpBrandingClient};
+pub use cookie_security::{cookie_secure, cookie_secure_suffix};
 pub use egress_allowlist_client::{
     EgressAllowlistClient, EgressAllowlistClientError, HttpEgressAllowlistClient,
 };

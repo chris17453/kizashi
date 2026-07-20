@@ -14,7 +14,8 @@ pub async fn get_logout(State(state): State<AppState>, headers: HeaderMap) -> Re
         state.session_store.delete(&session_id).await;
     }
 
-    let expire_cookie = format!("{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Max-Age=0");
+    let secure = crate::cookie_secure_suffix(crate::cookie_secure());
+    let expire_cookie = format!("{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Max-Age=0{secure}");
     let mut response = Redirect::to("/login").into_response();
     response.headers_mut().insert(SET_COOKIE, expire_cookie.parse().unwrap());
     response

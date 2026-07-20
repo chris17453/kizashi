@@ -94,7 +94,9 @@ pub async fn post_login(State(state): State<AppState>, Form(form): Form<LoginFor
     let session = Session { bearer_token, tenant_id, username: form.username, role };
     let session_id = state.session_store.create(session).await;
 
-    let cookie = format!("{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Strict");
+    let secure = crate::cookie_secure_suffix(crate::cookie_secure());
+    let cookie =
+        format!("{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Strict{secure}");
     let mut response = Redirect::to("/overview").into_response();
     response.headers_mut().insert(SET_COOKIE, cookie.parse().unwrap());
     response

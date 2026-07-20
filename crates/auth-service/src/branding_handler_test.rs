@@ -196,6 +196,7 @@ async fn put_branding_rejects_an_invalid_accent_color() {
                 .uri(format!("/v1/tenants/{tenant_id}/branding"))
                 .header("content-type", "application/json")
                 .header("x-role", "admin")
+                .header("x-tenant-id", tenant_id.to_string())
                 .header("x-username", "alice")
                 .body(Body::from(
                     serde_json::json!({"product_name": null, "logo_url": null, "accent_color": "red; } body { display:none"})
@@ -222,6 +223,7 @@ async fn put_branding_accepts_a_valid_hex_color() {
                 .uri(format!("/v1/tenants/{tenant_id}/branding"))
                 .header("content-type", "application/json")
                 .header("x-role", "admin")
+                .header("x-tenant-id", tenant_id.to_string())
                 .header("x-username", "alice")
                 .body(Body::from(
                     serde_json::json!({"product_name": null, "logo_url": null, "accent_color": "#ff6600"})
@@ -248,6 +250,7 @@ async fn put_branding_as_admin_saves_and_records_the_real_actor() {
                 .uri(format!("/v1/tenants/{tenant_id}/branding"))
                 .header("content-type", "application/json")
                 .header("x-role", "admin")
+                .header("x-tenant-id", tenant_id.to_string())
                 .header("x-username", "alice@acme.example.com")
                 .body(Body::from(
                     serde_json::json!({"product_name": "Acme Signals", "logo_url": null, "accent_color": "#ff6600"})
@@ -263,4 +266,61 @@ async fn put_branding_as_admin_saves_and_records_the_real_actor() {
         *branding_repo.last_update_actor.lock().unwrap(),
         Some("alice@acme.example.com".to_string())
     );
+}
+
+#[tokio::test]
+async fn put_branding_requires_a_tenant_id_header() {
+    let state = default_state();
+    let tenant_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/v1/tenants/{tenant_id}/branding"))
+                .header("content-type", "application/json")
+                .header("x-role", "admin")
+                .header("x-username", "alice")
+                .body(Body::from(
+                    serde_json::json!({"product_name": "Acme", "logo_url": null, "accent_color": null})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn put_branding_rejects_a_caller_from_a_different_tenant() {
+    // An Admin authenticated as tenant A must not be able to overwrite tenant B's branding just
+    // by knowing/guessing tenant B's id in the path -- this was a real cross-tenant write bug:
+    // the handler never checked the path id against the caller's own X-Tenant-Id.
+    let branding_repo = Arc::new(InMemoryTenantBrandingRepository::default());
+    let state = AuthState { tenant_branding_repository: branding_repo.clone(), ..default_state() };
+    let victim_tenant_id = Uuid::new_v4();
+    let attacker_tenant_id = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/v1/tenants/{victim_tenant_id}/branding"))
+                .header("content-type", "application/json")
+                .header("x-role", "admin")
+                .header("x-tenant-id", attacker_tenant_id.to_string())
+                .header("x-username", "attacker-admin")
+                .body(Body::from(
+                    serde_json::json!({"product_name": "Defaced", "logo_url": null, "accent_color": null})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(branding_repo.branding.lock().unwrap().get(&victim_tenant_id.to_string()), None);
 }

@@ -83,8 +83,9 @@ pub async fn get_sso_login(
     // for the IdP and comes straight back via a top-level GET redirect, which is exactly the
     // navigation Strict cookies are dropped on — Lax still blocks it from being sent on
     // cross-site subrequests/POSTs, just not this top-level GET.
+    let secure = crate::cookie_secure_suffix(crate::cookie_secure());
     let cookie = format!(
-        "{OIDC_FLOW_COOKIE_NAME}={flow_id}; Path=/login/sso; HttpOnly; SameSite=Lax; Max-Age=600"
+        "{OIDC_FLOW_COOKIE_NAME}={flow_id}; Path=/login/sso; HttpOnly; SameSite=Lax; Max-Age=600{secure}"
     );
     let mut response = Redirect::to(&authorization.authorization_url).into_response();
     response.headers_mut().insert(SET_COOKIE, cookie.parse().unwrap());
@@ -156,7 +157,9 @@ pub async fn get_sso_callback(
         })
         .await;
 
-    let cookie = format!("{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Strict");
+    let secure = crate::cookie_secure_suffix(crate::cookie_secure());
+    let cookie =
+        format!("{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Strict{secure}");
     let mut response = Redirect::to("/overview").into_response();
     response.headers_mut().insert(SET_COOKIE, cookie.parse().unwrap());
     response

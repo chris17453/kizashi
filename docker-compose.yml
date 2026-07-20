@@ -315,6 +315,10 @@ services:
       RETENTION_SERVICE_URL: http://retention-service:8080
       EGRESS_GATEWAY_URL: http://egress-gateway:8080
       TRIGGER_ENGINE_URL: http://trigger-engine:8080
+      # Local/dev runs over plain HTTP, so this defaults to false (a Secure cookie a browser
+      # won't send over plain HTTP would silently break every login). Set to "true" behind a
+      # real TLS-terminating deployment.
+      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
     ports: ["8093:8080"]
     # service_started, not service_healthy: the Console UI calls these over HTTP per-request
     # and already renders per-page/per-widget error states when a backend is unreachable (see
