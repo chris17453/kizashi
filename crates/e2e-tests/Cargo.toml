@@ -1,0 +1,32 @@
+[package]
+name = "e2e-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# This crate exists solely to hold the full-pipeline e2e integration test (CLAUDE.md §2) — it
+# has no production code of its own, only a real-infra test chaining every stage's own crate
+# (ingestion-service -> normalization-service -> analysis-service -> trigger-engine ->
+# action-executor).
+[dependencies]
+
+[dev-dependencies]
+common = { path = "../common" }
+serde = { workspace = true }
+ingestion-service = { path = "../ingestion-service" }
+normalization-service = { path = "../normalization-service" }
+analysis-service = { path = "../analysis-service" }
+trigger-engine = { path = "../trigger-engine" }
+action-executor = { path = "../action-executor" }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+sqlx = { workspace = true }
+lapin = { workspace = true }
+reqwest = { workspace = true }
+futures-util = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
