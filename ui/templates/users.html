@@ -75,7 +75,7 @@
       </td>
       <td>
         <form class="inline" method="post" action="/users/{{ user.id }}/delete" style="display:inline">
-          <button type="submit" class="btn-danger" {% if user.is_current %}disabled title="you can't remove yourself"{% endif %}>Remove</button>
+          <button type="submit" class="btn-danger" {% if user.is_current %}disabled title="you can't remove yourself" aria-label="Remove -- you can't remove yourself"{% endif %}>Remove</button>
         </form>
       </td>
       <td><a href="/audit-log/auth/{{ user.id }}">History</a></td>

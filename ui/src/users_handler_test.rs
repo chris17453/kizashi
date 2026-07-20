@@ -100,6 +100,34 @@ async fn get_users_succeeds_for_an_admin() {
 }
 
 #[tokio::test]
+async fn get_users_marks_the_current_users_remove_button_with_an_accessible_label() {
+    let (mut state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    let users_client = InMemoryUsersClient::default();
+    users_client.users.lock().unwrap().push(UiUser {
+        id: Uuid::new_v4(),
+        tenant_id,
+        username: "alice".to_string(),
+        role: Role::Admin,
+        mfa_enabled: false,
+    });
+    state.users_client = Arc::new(users_client);
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/users")
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(r#"aria-label="Remove -- you can't remove yourself""#));
+}
+
+#[tokio::test]
 async fn get_users_is_forbidden_for_an_operator() {
     let (state, session_id, _) = state_with_session(Role::Operator).await;
     let response = router(state)
