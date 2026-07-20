@@ -43,6 +43,8 @@
 <form class="inline" method="get" action="/api-keys" style="margin-bottom:1rem;">
   <label for="q">Search</label>
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by label&hellip;">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="dir" value="{{ dir }}">
   <button type="submit">Search</button>
   {% if !q.is_empty() %}<a href="/api-keys" class="btn-link">Clear</a>{% endif %}
 </form>
@@ -68,7 +70,17 @@
   <thead>
     <tr>
       {% if can_write %}<th scope="col"></th>{% endif %}
-      <th scope="col">Label</th><th scope="col">Created</th><th scope="col">Status</th><th scope="col"></th>
+      <th scope="col">
+        <a href="/api-keys?q={{ q|urlencode }}&sort=label&dir={% if sort == "label" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Label{% if sort == "label" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th scope="col">
+        <a href="/api-keys?q={{ q|urlencode }}&sort=created_at&dir={% if sort == "created_at" && dir != "desc" %}desc{% else %}asc{% endif %}">
+          Created{% if sort == "created_at" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
+        </a>
+      </th>
+      <th scope="col">Status</th><th scope="col"></th>
     </tr>
   </thead>
   <tbody>

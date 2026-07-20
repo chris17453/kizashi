@@ -1,3 +1,6 @@
+#[path = "api_keys_handler_mutations_test.rs"]
+#[cfg(test)]
+mod api_keys_handler_mutations_test;
 #[path = "api_keys_handler_test.rs"]
 #[cfg(test)]
 mod api_keys_handler_test;
@@ -14,6 +17,10 @@ use uuid::Uuid;
 pub struct ApiKeysQuery {
     #[serde(default)]
     q: String,
+    #[serde(default)]
+    sort: String,
+    #[serde(default)]
+    dir: String,
 }
 
 /// Case-insensitive substring match on label -- same in-handler-filter shape as the Users page
@@ -22,6 +29,20 @@ pub struct ApiKeysQuery {
 /// of fix, not a new backend query param.
 fn matches_query(key: &ApiKeySummary, q: &str) -> bool {
     q.is_empty() || key.label.to_lowercase().contains(&q.to_lowercase())
+}
+
+/// Same shape as Sensors' sortable columns (ADR-0070): applied after the search filter, on the
+/// already-fetched full list (this page has no server-side pagination to preserve ordering
+/// across). An unset `sort` keeps `list_api_keys`' own default (creation order).
+fn sort_rows(rows: &mut [ApiKeySummary], sort: &str, dir: &str) {
+    match sort {
+        "created_at" => rows.sort_by_key(|k| k.created_at),
+        "label" => rows.sort_by_key(|k| k.label.to_lowercase()),
+        _ => return,
+    }
+    if dir == "desc" {
+        rows.reverse();
+    }
 }
 
 #[derive(Template)]
@@ -40,6 +61,8 @@ struct ApiKeysTemplate {
     can_write: bool,
     error: Option<String>,
     q: String,
+    sort: String,
+    dir: String,
 }
 
 pub async fn get_api_keys(
@@ -55,20 +78,27 @@ pub async fn get_api_keys(
     let can_write = session.role.at_least(common::Role::Operator);
 
     match state.api_keys_client.list_api_keys(session.tenant_id).await {
-        Ok(keys) => Html(
-            ApiKeysTemplate {
-                show_nav: true,
-                is_admin,
-                keys: keys.into_iter().filter(|k| matches_query(k, &query.q)).collect(),
-                created_key: None,
-                can_write,
-                error: None,
-                q: query.q,
-            }
-            .render()
-            .unwrap(),
-        )
-        .into_response(),
+        Ok(keys) => {
+            let mut keys: Vec<ApiKeySummary> =
+                keys.into_iter().filter(|k| matches_query(k, &query.q)).collect();
+            sort_rows(&mut keys, &query.sort, &query.dir);
+            Html(
+                ApiKeysTemplate {
+                    show_nav: true,
+                    is_admin,
+                    keys,
+                    created_key: None,
+                    can_write,
+                    error: None,
+                    q: query.q,
+                    sort: query.sort,
+                    dir: query.dir,
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response()
+        }
         Err(e) => Html(
             ApiKeysTemplate {
                 show_nav: true,
@@ -78,6 +108,8 @@ pub async fn get_api_keys(
                 can_write,
                 error: Some(e.to_string()),
                 q: query.q,
+                sort: query.sort,
+                dir: query.dir,
             }
             .render()
             .unwrap(),
@@ -124,6 +156,8 @@ pub async fn post_api_keys(
                     can_write,
                     error: Some(e.to_string()),
                     q: String::new(),
+                    sort: String::new(),
+                    dir: String::new(),
                 }
                 .render()
                 .unwrap(),
@@ -142,6 +176,8 @@ pub async fn post_api_keys(
             can_write,
             error: None,
             q: String::new(),
+            sort: String::new(),
+            dir: String::new(),
         }
         .render()
         .unwrap(),

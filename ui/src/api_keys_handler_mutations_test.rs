@@ -1,5 +1,5 @@
 use super::*;
-use crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient;
+use crate::api_keys_client::api_keys_client_test::{FailingApiKeysClient, InMemoryApiKeysClient};
 use crate::auth_client::auth_client_test::InMemoryAuthClient;
 use crate::events_client::events_client_test::InMemoryEventsClient;
 use crate::health_client::health_client_test::InMemoryHealthClient;
@@ -73,13 +73,32 @@ async fn state_with_session() -> (AppState, String, Uuid) {
 }
 
 #[tokio::test]
-async fn viewer_role_does_not_see_create_form_or_revoke_buttons() {
-    let (state, _admin_session_id, tenant_id) = state_with_session().await;
-    state
-        .api_keys_client
-        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
+async fn post_api_keys_creates_and_shows_the_plaintext_key_once() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api-keys")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("label=ci-agent"))
+                .unwrap(),
+        )
         .await
         .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("kzsh_"));
+    assert!(body.contains("only time this key will be shown"));
+}
+
+#[tokio::test]
+async fn post_api_keys_is_rejected_for_a_viewer() {
+    let (state, _admin_session_id, tenant_id) = state_with_session().await;
     let viewer_session_id = state
         .session_store
         .create(Session {
@@ -94,9 +113,32 @@ async fn viewer_role_does_not_see_create_form_or_revoke_buttons() {
     let response = router(state)
         .oneshot(
             Request::builder()
+                .method("POST")
                 .uri("/api-keys")
                 .header("cookie", format!("kizashi_session={viewer_session_id}"))
-                .body(Body::empty())
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("label=ci-agent"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn post_api_keys_backend_failure_rerenders_with_an_error() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    state.api_keys_client = Arc::new(FailingApiKeysClient);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api-keys")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("label=ci-agent"))
                 .unwrap(),
         )
         .await
@@ -105,26 +147,26 @@ async fn viewer_role_does_not_see_create_form_or_revoke_buttons() {
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("ci-agent"));
-    assert!(!body.contains("Create a new key"));
-    assert!(!body.contains(">Revoke<"));
+    assert!(body.contains("unreachable"));
 }
 
 #[tokio::test]
-async fn operator_role_sees_create_form_and_revoke_buttons() {
+async fn post_revoke_api_key_is_rejected_for_a_viewer() {
     let (state, _admin_session_id, tenant_id) = state_with_session().await;
     state
         .api_keys_client
-        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
+        .create_api_key(tenant_id, common::Role::Admin, "to-revoke", "test-actor")
         .await
         .unwrap();
-    let operator_session_id = state
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let id = keys[0].id;
+    let viewer_session_id = state
         .session_store
         .create(Session {
             bearer_token: "tok".to_string(),
             tenant_id,
-            username: "operator-alice".to_string(),
-            role: common::Role::Operator,
+            username: "viewer-alice".to_string(),
+            role: common::Role::Viewer,
             created_at: chrono::Utc::now(),
         })
         .await;
@@ -132,144 +174,152 @@ async fn operator_role_sees_create_form_and_revoke_buttons() {
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/api-keys")
-                .header("cookie", format!("kizashi_session={operator_session_id}"))
+                .method("POST")
+                .uri(format!("/api-keys/{id}/revoke"))
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Create a new key"));
-    assert!(body.contains(">Revoke<"));
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]
-async fn get_api_keys_renders_the_table_when_signed_in() {
+async fn post_revoke_api_key_revokes_and_redirects() {
     let (state, session_id, tenant_id) = state_with_session().await;
     state
         .api_keys_client
-        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
+        .create_api_key(tenant_id, common::Role::Admin, "to-revoke", "test-actor")
         .await
         .unwrap();
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let id = keys[0].id;
 
     let response = router(state)
         .oneshot(
             Request::builder()
-                .uri("/api-keys")
+                .method("POST")
+                .uri(format!("/api-keys/{id}/revoke"))
                 .header("cookie", format!("kizashi_session={session_id}"))
                 .body(Body::empty())
                 .unwrap(),
         )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("ci-agent"));
-}
-
-#[tokio::test]
-async fn get_api_keys_filters_by_the_q_query_param_case_insensitively() {
-    let (state, session_id, tenant_id) = state_with_session().await;
-    state
-        .api_keys_client
-        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
-        .await
-        .unwrap();
-    state
-        .api_keys_client
-        .create_api_key(tenant_id, common::Role::Admin, "zzz-other-key", "test-actor")
-        .await
-        .unwrap();
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .uri("/api-keys?q=CI-AGENT")
-                .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("ci-agent"));
-    assert!(!body.contains("zzz-other-key"));
-}
-
-#[tokio::test]
-async fn get_api_keys_sorts_by_label_descending_when_dir_is_desc() {
-    let (state, session_id, tenant_id) = state_with_session().await;
-    state
-        .api_keys_client
-        .create_api_key(tenant_id, common::Role::Admin, "alpha-key", "test-actor")
-        .await
-        .unwrap();
-    state
-        .api_keys_client
-        .create_api_key(tenant_id, common::Role::Admin, "zeta-key", "test-actor")
-        .await
-        .unwrap();
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .uri("/api-keys?sort=label&dir=desc")
-                .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    let alpha_pos = body.find("alpha-key").unwrap();
-    let zeta_pos = body.find("zeta-key").unwrap();
-    assert!(zeta_pos < alpha_pos);
-}
-
-#[tokio::test]
-async fn get_api_keys_shows_a_no_match_empty_state_for_an_unmatched_query() {
-    let (state, session_id, tenant_id) = state_with_session().await;
-    state
-        .api_keys_client
-        .create_api_key(tenant_id, common::Role::Admin, "ci-agent", "test-actor")
-        .await
-        .unwrap();
-
-    let response = router(state)
-        .oneshot(
-            Request::builder()
-                .uri("/api-keys?q=nobody-matches-this")
-                .header("cookie", format!("kizashi_session={session_id}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("No API keys match"));
-}
-
-#[tokio::test]
-async fn get_api_keys_redirects_to_login_when_not_signed_in() {
-    let (state, _session_id, _tenant_id) = state_with_session().await;
-
-    let response = router(state)
-        .oneshot(Request::builder().uri("/api-keys").body(Body::empty()).unwrap())
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[tokio::test]
+async fn post_bulk_revoke_api_keys_revokes_every_selected_key() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "first", "test-actor")
+        .await
+        .unwrap();
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "second", "test-actor")
+        .await
+        .unwrap();
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "untouched", "test-actor")
+        .await
+        .unwrap();
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let first_id = keys.iter().find(|k| k.label == "first").unwrap().id;
+    let second_id = keys.iter().find(|k| k.label == "second").unwrap().id;
+
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api-keys/bulk-revoke")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={first_id}&ids={second_id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let first = keys.iter().find(|k| k.label == "first").unwrap();
+    let second = keys.iter().find(|k| k.label == "second").unwrap();
+    let untouched = keys.iter().find(|k| k.label == "untouched").unwrap();
+    assert!(first.revoked_at.is_some());
+    assert!(second.revoked_at.is_some());
+    assert!(untouched.revoked_at.is_none());
+}
+
+#[tokio::test]
+async fn post_bulk_revoke_api_keys_with_no_selection_is_a_no_op() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "untouched", "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api-keys/bulk-revoke")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(""))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    assert!(keys[0].revoked_at.is_none());
+}
+
+#[tokio::test]
+async fn post_bulk_revoke_api_keys_is_rejected_for_a_viewer() {
+    let (state, _session_id, tenant_id) = state_with_session().await;
+    state
+        .api_keys_client
+        .create_api_key(tenant_id, common::Role::Admin, "first", "test-actor")
+        .await
+        .unwrap();
+    let keys = state.api_keys_client.list_api_keys(tenant_id).await.unwrap();
+    let id = keys[0].id;
+
+    let session_store = InMemorySessionStore::default();
+    let viewer_session_id = session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id,
+            username: "viewer-user".to_string(),
+            role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
+        })
+        .await;
+    let mut viewer_state = state.clone();
+    viewer_state.session_store = Arc::new(session_store);
+
+    let response = router(viewer_state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api-keys/bulk-revoke")
+                .header("cookie", format!("kizashi_session={viewer_session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }

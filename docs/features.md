@@ -4662,3 +4662,20 @@ architectural decision.
   clean. `cargo fmt --all --check` clean. No file in the diff exceeds 500 lines.
 - **PR:** pending
 - **ADR:** docs/adr/0090-nav-hides-admin-only-links-per-role.md
+
+## [2026-07-20] feature/0091-api-keys-and-mappings-sortable-headers — Sortable headers for API Keys and Field Mappings
+- **Type:** feature
+- **Branch:** feature/0091-api-keys-and-mappings-sortable-headers
+- **Summary:** Closes another sixth-audit-pass peer-page inconsistency: `api_keys.html` and
+  `normalization_mappings.html` had working search but plain, non-sortable headers, unlike every
+  other list page (ADR-0070). Both gained `sort`/`dir` query fields, an in-handler `sort_rows`
+  helper (API Keys: label/created_at; Field Mappings: source_type/version), and clickable
+  sort-header links matching the existing peer-page shape.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 447 passed (2 new: sort-by-label-descending for
+  API Keys, sort-by-source_type-descending for Field Mappings). `cargo build --workspace` clean.
+  `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
+  --check` clean. `api_keys_handler_test.rs` split into GET/mutation files (same as ADR-0090) to
+  stay under the 500-line limit. Live-verified against the real `watkinslabs` tenant: both pages
+  render working sort-header links reflecting the query string.
+- **PR:** pending
+- **ADR:** docs/adr/0091-api-keys-and-mappings-sortable-headers.md
