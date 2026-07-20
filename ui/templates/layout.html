@@ -162,6 +162,11 @@
     }
     .btn-danger { background: transparent; color: var(--danger); border: 1px solid rgba(245, 101, 101, 0.4); }
     .btn-danger:hover { background: rgba(245, 101, 101, 0.1); }
+    form.inline button:disabled, .btn:disabled {
+      opacity: 0.4; cursor: not-allowed; background: var(--surface-raised); color: var(--text-dim);
+      border-color: var(--border);
+    }
+    form.inline button:disabled:hover, .btn:disabled:hover { background: var(--surface-raised); }
     .btn-link {
       background: none; border: none; color: var(--accent); cursor: pointer; padding: 0;
       font-size: inherit; text-decoration: underline;
