@@ -4622,3 +4622,22 @@ architectural decision.
   warnings`, `cargo fmt --all --check` — all clean.
 - **PR:** pending
 - **ADR:** docs/adr/0088-full-pipeline-e2e-test.md
+
+## [2026-07-20] feature/0089-kubernetes-helm-chart — Kubernetes Helm chart
+- **Type:** feature
+- **Branch:** feature/0089-kubernetes-helm-chart
+- **Summary:** Closes the "Kubernetes/Helm" leg of the docker-compose → Container Apps →
+  Kubernetes deployment path stated in `docs/kizashi-spec.md` §10 — a confirmed, standing gap.
+  New chart at `deploy/helm/kizashi/`: one templated Deployment+Service pair per app service
+  (driven by `values.yaml`'s `services` map, not hand-written per-service files), a shared
+  ConfigMap/Secret for env, and CronJobs for the seven connector pollers. Deliberately scoped as
+  a v1 "basic" chart — HPA/PodDisruptionBudget/NetworkPolicy/Ingress and Postgres/RabbitMQ/
+  ClickHouse/MinIO manifests are explicitly out of scope, documented in the chart's README
+  rather than silently missing. Every application service in `docker-compose.yml` has a
+  corresponding chart entry, verified by diffing the two service lists.
+- **Tests:** `helm lint deploy/helm/kizashi` — 0 failures. `helm template deploy/helm/kizashi` —
+  43 objects render cleanly (18 Deployments, 16 Services, 7 CronJobs, 1 ConfigMap, 1 Secret).
+  `kubeconform` against the Kubernetes 1.29 schema — 43 valid, 0 invalid, 0 errors. All three
+  re-verified independently after the drafting agent's own run.
+- **PR:** pending
+- **ADR:** docs/adr/0089-kubernetes-helm-chart.md

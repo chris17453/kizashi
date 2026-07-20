@@ -1,0 +1,92 @@
+{{- $root := . -}}
+{{- range $name, $svc := .Values.services }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kizashi.fullname" $root }}-{{ $name }}
+  labels:
+    {{- include "kizashi.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  replicas: {{ $svc.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "kizashi.selectorLabels" $root | nindent 6 }}
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "kizashi.selectorLabels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+    spec:
+      {{- if $svc.runAsRoot }}
+      securityContext:
+        runAsUser: 0
+        runAsNonRoot: false
+      {{- else }}
+      securityContext:
+        runAsNonRoot: true
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ $root.Values.image.registry }}/{{ $svc.bin }}:{{ $root.Values.image.tag }}"
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port | default 8080 }}
+              protocol: TCP
+            {{- range $svc.extraPorts }}
+            - name: {{ .name }}
+              containerPort: {{ .port }}
+              protocol: TCP
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "kizashi.secretName" $root }}
+            - configMapRef:
+                name: {{ include "kizashi.configMapName" $root }}
+          {{- if $svc.env }}
+          env:
+            {{- range $key, $value := $svc.env }}
+            - name: {{ $key }}
+              value: {{ tpl (toString $value) $root | quote }}
+            {{- end }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml ($svc.resources | default $root.Values.resources) | nindent 12 }}
+          {{- if $svc.dockerSocket }}
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+          {{- end }}
+      {{- if $svc.dockerSocket }}
+      volumes:
+        # ADR-0020's shell-to-`docker run` pattern (see the comment on this entry in
+        # values.yaml). hostPath-mounting the node's Docker socket is a real, deliberate
+        # security/portability concession carried over from docker-compose.yml to preserve
+        # existing agent-scheduler behavior in this v1 chart — it will not work on
+        # containerd-only nodes (no dockerd to talk to) and grants the pod effective node-root.
+        # See README.md "Known limitations".
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+      {{- end }}
+---
+{{- end }}

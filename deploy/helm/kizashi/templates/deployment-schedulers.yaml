@@ -1,0 +1,59 @@
+{{- /*
+retention-sweep-scheduler and backup-scheduler in docker-compose.yml are already
+`while true; do curl ...; sleep N; done` loops (image: alpine:3.20), not one-shot processes —
+see the ADR-0011 point 5 / ADR-0055 comments there and the note on `schedulers:` in
+values.yaml. The k8s-native equivalent of "the same container, running in k8s" is therefore a
+low-replica Deployment, not a CronJob: forcing a CronJob shape here would mean rewriting the
+command to a one-shot curl-and-exit, a bigger behavioral change than this v1 chart is scoped to
+make. (Named cronjob-* per the original ask, this file intentionally renders Deployments —
+flagged for review, see README.md.)
+*/ -}}
+{{- $root := . -}}
+{{- range $name, $sched := .Values.schedulers }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kizashi.fullname" $root }}-{{ $name }}
+  labels:
+    {{- include "kizashi.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "kizashi.selectorLabels" $root | nindent 6 }}
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "kizashi.selectorLabels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: {{ $name }}
+          image: "{{ $root.Values.schedulerImage.repository }}:{{ $root.Values.schedulerImage.tag }}"
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              apk add --no-cache curl >/dev/null
+              echo "{{ $name }}: sweeping on the configured {{ $sched.intervalEnvVar }} interval"
+              while true; do
+                curl -sf -X POST "{{ tpl $sched.targetUrl $root }}" \
+                  -H "X-Internal-Secret: $INTERNAL_API_SECRET" \
+                  && echo "{{ $name }}: triggered" \
+                  || echo "{{ $name }}: request failed, will retry next interval"
+                {{ printf "sleep \"$%s\"" $sched.intervalEnvVar }}
+              done
+          envFrom:
+            - secretRef:
+                name: {{ include "kizashi.secretName" $root }}
+            - configMapRef:
+                name: {{ include "kizashi.configMapName" $root }}
+          resources:
+            {{- toYaml $root.Values.resources | nindent 12 }}
+---
+{{- end }}
