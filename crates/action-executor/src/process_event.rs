@@ -42,7 +42,7 @@ pub async fn process_event(deps: &ActionDeps, event: &Event) -> Result<usize, Pr
 
     let trigger = deps
         .trigger_client
-        .get_trigger(trigger_id)
+        .get_trigger(trigger_id, event.tenant_id)
         .await
         .map_err(|e| ProcessError::TriggerLookup(e.to_string()))?
         .ok_or(ProcessError::TriggerNotFound(trigger_id))?;

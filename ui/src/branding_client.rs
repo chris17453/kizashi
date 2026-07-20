@@ -102,6 +102,7 @@ impl BrandingClient for HttpBrandingClient {
         let response = self
             .client
             .put(format!("{}/v1/tenants/{tenant_id}/branding", self.auth_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
             .header("x-role", role.to_string())
             .header("x-username", actor)
             .json(&branding)

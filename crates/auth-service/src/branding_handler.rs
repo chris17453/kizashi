@@ -35,6 +35,14 @@ fn username_from_headers(headers: &HeaderMap) -> Result<String, (StatusCode, &'s
         .ok_or((StatusCode::UNAUTHORIZED, "missing X-Username header"))
 }
 
+fn tenant_id_from_headers(headers: &HeaderMap) -> Result<Uuid, (StatusCode, &'static str)> {
+    let raw = headers
+        .get("x-tenant-id")
+        .and_then(|v| v.to_str().ok())
+        .ok_or((StatusCode::UNAUTHORIZED, "missing X-Tenant-Id header"))?;
+    Uuid::parse_str(raw).map_err(|_| (StatusCode::BAD_REQUEST, "X-Tenant-Id is not a valid UUID"))
+}
+
 /// The Console UI renders `accent_color` into a `<style>` block on the login page
 /// (unauthenticated, pre-login — every visitor who knows a workspace name sees it), so it must
 /// be restricted to an actual CSS hex color, not free text — anything else is a CSS injection
@@ -95,6 +103,17 @@ pub async fn put_branding(
         Ok(actor) => actor,
         Err((status, message)) => return error_response(status, message),
     };
+    // Without this, any Admin (of any tenant) could overwrite another tenant's branding just by
+    // knowing/guessing its id — the path `:id` alone was never checked against the caller's own
+    // tenant. `X-Tenant-Id` is the same header every other write handler in this codebase
+    // trusts for this purpose.
+    let caller_tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, message)) => return error_response(status, message),
+    };
+    if caller_tenant_id != tenant_id {
+        return error_response(StatusCode::FORBIDDEN, "tenant_id does not match X-Tenant-Id");
+    }
     if let Some(color) = &branding.accent_color {
         if !is_valid_hex_color(color) {
             return error_response(

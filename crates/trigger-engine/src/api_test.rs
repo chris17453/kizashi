@@ -42,6 +42,7 @@ async fn returns_200_and_the_trigger_when_found() {
         .oneshot(
             Request::builder()
                 .uri(format!("/v1/triggers/{}", trigger.id))
+                .header("x-tenant-id", trigger.tenant_id.to_string())
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -62,6 +63,7 @@ async fn returns_404_when_not_found() {
         .oneshot(
             Request::builder()
                 .uri(format!("/v1/triggers/{}", Uuid::new_v4()))
+                .header("x-tenant-id", Uuid::new_v4().to_string())
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -69,6 +71,55 @@ async fn returns_404_when_not_found() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn returns_401_when_the_tenant_header_is_missing() {
+    let trigger = sample_trigger();
+    let state = state(
+        InMemoryTriggerRepository::with_trigger(trigger.clone()),
+        InMemorySignalRepository::default(),
+    );
+
+    let response = build_router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v1/triggers/{}", trigger.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn returns_404_not_leaking_data_when_the_caller_is_from_a_different_tenant() {
+    // A caller authenticated as one tenant must not be able to read another tenant's
+    // TriggerDefinition (name, event_type_match, condition DSL, and action targets like
+    // email/webhook/Teams URLs) just by knowing/guessing its id.
+    let trigger = sample_trigger();
+    let state = state(
+        InMemoryTriggerRepository::with_trigger(trigger.clone()),
+        InMemorySignalRepository::default(),
+    );
+
+    let response = build_router(state)
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v1/triggers/{}", trigger.id))
+                .header("x-tenant-id", Uuid::new_v4().to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains(&trigger.name), "leaked another tenant's trigger name");
 }
 
 async fn send_test_request(

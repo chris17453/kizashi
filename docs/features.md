@@ -3583,3 +3583,28 @@ architectural decision.
   live running UI (test user deleted afterward).
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0042](../docs/adr/0042-retention-ops-internal-secret-and-ui-rbac-gaps.md)
+
+## [2026-07-20] fix/0008-tenant-isolation-and-cookie-security — Tenant isolation audit fixes and cookie Secure flag
+- **Type:** fix
+- **Branch:** fix/0008-tenant-isolation-and-cookie-security
+- **Summary:** Fixes two real cross-tenant data-isolation vulnerabilities found by a targeted
+  audit: `auth-service`'s `PUT /v1/tenants/:id/branding` had no tenant check (any admin could
+  overwrite any other tenant's branding), and `trigger-engine`'s `GET /v1/triggers/:id` had no
+  tenant check (any caller could read any tenant's trigger definition, including action targets,
+  by guessing a UUID). `action-executor`'s `TriggerClient` now sends `X-Tenant-Id` on trigger
+  lookups to satisfy the new check. Also hardens Console UI session cookies with a `Secure`
+  attribute, gated by a new `COOKIE_SECURE` env var (default `false` to not break local/dev over
+  plain HTTP).
+- **Tests:** `cargo test -p auth-service branding_handler` (12 passed, incl. new
+  `put_branding_requires_a_tenant_id_header` and `put_branding_rejects_a_caller_from_a_different_tenant`);
+  `cargo test -p trigger-engine api_test` (10 passed, incl. new
+  `returns_401_when_the_tenant_header_is_missing` and
+  `returns_404_not_leaking_data_when_the_caller_is_from_a_different_tenant`);
+  `cargo test -p action-executor trigger_client` (8 passed, incl. new
+  `http_client_sends_the_tenant_id_header` and `http_client_is_rejected_when_it_sends_the_wrong_tenant_id`);
+  `cargo test -p kizashi-ui cookie_security` (5 passed). Full workspace gate run and green:
+  `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
+  `cargo test --workspace --all-features` against real Postgres/RabbitMQ/ClickHouse/MinIO,
+  `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
+- **PR:** pending
+- **ADR:** docs/adr/0043-tenant-isolation-audit-and-cookie-hardening.md

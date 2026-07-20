@@ -38,11 +38,23 @@ fn tenant_id_from_headers(headers: &HeaderMap) -> Result<Uuid, (StatusCode, &'st
 
 /// GET /v1/triggers/:id — the API-mediated read path onto TriggerDefinition storage (spec §2
 /// principle 1). Action Executor calls this to resolve which actions to run for a firing
-/// event, instead of reading Trigger Engine's Postgres schema directly.
-async fn get_trigger(State(state): State<ApiState>, Path(id): Path<Uuid>) -> Response {
+/// event, instead of reading Trigger Engine's Postgres schema directly. Tenant-scoped the same
+/// way `test_trigger` below already was: a caller's `X-Tenant-Id` must match the trigger's own
+/// tenant_id, reported as 404 (not 403) on mismatch so a caller can't distinguish "wrong
+/// tenant" from "doesn't exist" and enumerate other tenants' trigger ids.
+async fn get_trigger(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+
     match state.trigger_repository.get_by_id(id).await {
-        Ok(Some(trigger)) => Json(trigger).into_response(),
-        Ok(None) => {
+        Ok(Some(trigger)) if trigger.tenant_id == tenant_id => Json(trigger).into_response(),
+        Ok(_) => {
             (StatusCode::NOT_FOUND, Json(ErrorBody { error: format!("no trigger with id {id}") }))
                 .into_response()
         }
