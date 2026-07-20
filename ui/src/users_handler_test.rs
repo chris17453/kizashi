@@ -284,6 +284,42 @@ async fn get_users_sorts_by_username_ascending_by_default_when_sort_param_is_set
 }
 
 #[tokio::test]
+async fn get_users_sort_header_links_percent_encode_a_q_containing_an_ampersand() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "smith & co", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/users?q=smith%20%26%20co")
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    // The raw search term contains "&", which -- if spliced unencoded into an href's query
+    // string -- would be read as a new query parameter, corrupting the sort/dir that follow it.
+    // Assert the actual link text, not just the page overall, since the input's own `value=`
+    // attribute is expected to contain an HTML-escaped "&amp;" (a different, already-safe
+    // escaping layer) and shouldn't be confused with the href bug this guards against.
+    let link_start = text.find("/users?q=").expect("sort link missing");
+    let link_end = text[link_start..].find('"').unwrap() + link_start;
+    let link = &text[link_start..link_end];
+    assert!(
+        link.contains("smith%20%26%20co") || link.contains("smith+%26+co"),
+        "q should be percent-encoded in the sort header href, got: {link}"
+    );
+}
+
+#[tokio::test]
 async fn get_users_sorts_descending_when_dir_is_desc() {
     let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
     state
