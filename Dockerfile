@@ -6,12 +6,13 @@
 # resolution depends on the workspace root). Example:
 #   docker build --build-arg BIN=ingestion-service -t kizashi/ingestion-service .
 #
-# Two binaries need more than the base image: `agent-scheduler` (ADR-0020) shells out to the
+# Three binaries need more than the base image: `agent-scheduler` (ADR-0020) shells out to the
 # `docker` CLI against the host's Docker socket to run each due connector, so it needs the CLI
 # installed and (via docker-compose.yml's volume mount + `RUN_AS_USER=root` build arg) socket
-# access — every other binary stays on the minimal, non-root default. `INSTALL_DOCKER_CLI` and
-# `RUN_AS_USER` are opt-in per build, not per-BIN-name magic, so any future binary that needs
-# the same capability just sets the same two args rather than this file special-casing names.
+# access; `backup-service` (ADR-0055) shells out to `pg_dump`. Every other binary stays on the
+# minimal, non-root default. `INSTALL_DOCKER_CLI`/`INSTALL_POSTGRES_CLIENT` and `RUN_AS_USER`
+# are opt-in per build, not per-BIN-name magic, so any future binary that needs the same
+# capability just sets the same args rather than this file special-casing names.
 
 # syntax=docker/dockerfile:1
 FROM rust:1-slim-bookworm AS builder
@@ -30,6 +31,7 @@ ARG INSTALL_DOCKER_CLI=false
 # the official static CLI-only binary instead of the distro package sidesteps that mismatch
 # without adding Docker's apt repo/GPG key for what amounts to one binary.
 ARG DOCKER_CLI_VERSION=26.1.4
+ARG INSTALL_POSTGRES_CLIENT=false
 ARG RUN_AS_USER=kizashi
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
     && if [ "$INSTALL_DOCKER_CLI" = "true" ]; then \
@@ -39,6 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
          && mv /tmp/docker/docker /usr/local/bin/docker \
          && rm -rf /tmp/docker-cli.tgz /tmp/docker \
          && chmod +x /usr/local/bin/docker; \
+       fi \
+    && if [ "$INSTALL_POSTGRES_CLIENT" = "true" ]; then \
+         apt-get install -y --no-install-recommends postgresql-client; \
        fi \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --uid 1000 kizashi

@@ -78,7 +78,8 @@ async fn state_with_mfa_client(mfa_client: Arc<dyn MfaClient>) -> (AppState, Str
         mfa_client,
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
             login_attempts_client: Arc::new(crate::login_attempts_client::login_attempts_client_test::InMemoryLoginAttemptsClient::default()),
-    };
+                backup_status_client: Arc::new(crate::backup_status_client::backup_status_client_test::InMemoryBackupStatusClient::default()),
+};
     (state, session_id)
 }
 

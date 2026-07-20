@@ -1,10 +1,11 @@
 use kizashi_ui::{
     build_router, AppState, HttpAnalysisConfigClient, HttpApiKeysClient, HttpAuditLogClient,
-    HttpAuthClient, HttpBacklogClient, HttpBrandingClient, HttpEgressAllowlistClient,
-    HttpEventsClient, HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
-    HttpLoginAttemptsClient, HttpMfaClient, HttpNormalizationMappingsClient, HttpOidcClient,
-    HttpRetentionPoliciesClient, HttpSavedSearchQueriesClient, HttpSensorsClient,
-    HttpTriggersClient, HttpUsersClient, InMemoryPendingOidcFlowStore, InMemorySessionStore,
+    HttpAuthClient, HttpBacklogClient, HttpBackupStatusClient, HttpBrandingClient,
+    HttpEgressAllowlistClient, HttpEventsClient, HttpExecutionClient, HttpHealthClient,
+    HttpIngestionStatsClient, HttpLoginAttemptsClient, HttpMfaClient,
+    HttpNormalizationMappingsClient, HttpOidcClient, HttpRetentionPoliciesClient,
+    HttpSavedSearchQueriesClient, HttpSensorsClient, HttpTriggersClient, HttpUsersClient,
+    InMemoryPendingOidcFlowStore, InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -30,6 +31,8 @@ async fn main() {
         std::env::var("ACTION_EXECUTOR_URL").expect("ACTION_EXECUTOR_URL must be set");
     let retention_service_url =
         std::env::var("RETENTION_SERVICE_URL").expect("RETENTION_SERVICE_URL must be set");
+    let backup_service_url =
+        std::env::var("BACKUP_SERVICE_URL").expect("BACKUP_SERVICE_URL must be set");
     let egress_gateway_url =
         std::env::var("EGRESS_GATEWAY_URL").expect("EGRESS_GATEWAY_URL must be set");
     let trigger_engine_url =
@@ -96,6 +99,10 @@ async fn main() {
         egress_allowlist_client: Arc::new(HttpEgressAllowlistClient::new(
             client.clone(),
             egress_gateway_url,
+        )),
+        backup_status_client: Arc::new(HttpBackupStatusClient::new(
+            client.clone(),
+            backup_service_url,
         )),
         config_audit_log_client: Arc::new(HttpAuditLogClient::new(
             client.clone(),
