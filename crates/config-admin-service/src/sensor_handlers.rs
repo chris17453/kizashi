@@ -2,7 +2,9 @@
 #[cfg(test)]
 mod sensor_handlers_test;
 
-use crate::handlers::{require_operator, tenant_id_from_headers, tenant_mismatch};
+use crate::handlers::{
+    require_operator, tenant_id_from_headers, tenant_mismatch, username_from_headers,
+};
 use crate::sensor_publisher::SensorPublisher;
 use crate::sensor_repository::{SensorRepository, SensorRepositoryError};
 use axum::extract::{Path, Query, State};
@@ -52,7 +54,11 @@ pub async fn create_sensor(
     if let Some(response) = require_operator(&headers) {
         return response;
     }
-    match state.sensor_repository.create(sensor).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.sensor_repository.create(sensor, &actor).await {
         Ok(created) => {
             let event = SensorChangeEvent::Upserted(created.clone());
             if let Err(e) = state.sensor_publisher.publish_sensor_changed(&event).await {
@@ -77,7 +83,11 @@ pub async fn update_sensor(
         return response;
     }
     sensor.id = id;
-    match state.sensor_repository.update(sensor).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.sensor_repository.update(sensor, &actor).await {
         Ok(updated) => {
             let event = SensorChangeEvent::Upserted(updated.clone());
             if let Err(e) = state.sensor_publisher.publish_sensor_changed(&event).await {
@@ -173,7 +183,11 @@ pub async fn delete_sensor(
     if let Some(response) = require_operator(&headers) {
         return response;
     }
-    match state.sensor_repository.delete(tenant_id, id).await {
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.sensor_repository.delete(tenant_id, id, &actor).await {
         Ok(()) => {
             let event = SensorChangeEvent::Deleted { id, tenant_id };
             if let Err(e) = state.sensor_publisher.publish_sensor_changed(&event).await {

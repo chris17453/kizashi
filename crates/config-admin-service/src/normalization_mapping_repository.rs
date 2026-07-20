@@ -26,10 +26,12 @@ pub trait NormalizationMappingRepository: Send + Sync {
     async fn create(
         &self,
         mapping: NormalizationMapping,
+        actor: &str,
     ) -> Result<NormalizationMapping, NormalizationMappingRepositoryError>;
     async fn update(
         &self,
         mapping: NormalizationMapping,
+        actor: &str,
     ) -> Result<NormalizationMapping, NormalizationMappingRepositoryError>;
     async fn get(
         &self,
@@ -64,6 +66,7 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
     async fn create(
         &self,
         mapping: NormalizationMapping,
+        actor: &str,
     ) -> Result<NormalizationMapping, NormalizationMappingRepositoryError> {
         let mut tx = self
             .pool
@@ -91,7 +94,7 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
                 entity_type: "normalization_mapping".to_string(),
                 entity_id: mapping.id,
                 change_type: ChangeType::Created,
-                actor: mapping.tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: None,
                 after: serde_json::to_value(&mapping).unwrap_or_default(),
                 changed_at: chrono::Utc::now(),
@@ -109,6 +112,7 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
     async fn update(
         &self,
         mapping: NormalizationMapping,
+        actor: &str,
     ) -> Result<NormalizationMapping, NormalizationMappingRepositoryError> {
         let mut tx = self
             .pool
@@ -150,7 +154,7 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
                 entity_type: "normalization_mapping".to_string(),
                 entity_id: mapping.id,
                 change_type: ChangeType::Updated,
-                actor: mapping.tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: Some(serde_json::to_value(&before).unwrap_or_default()),
                 after: serde_json::to_value(&mapping).unwrap_or_default(),
                 changed_at: chrono::Utc::now(),

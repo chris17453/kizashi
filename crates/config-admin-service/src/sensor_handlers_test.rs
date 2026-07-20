@@ -60,6 +60,7 @@ async fn send_with_role(
     if let Some(role) = role_header {
         req = req.header("x-role", role);
     }
+    req = req.header("x-username", "test-actor@example.com");
     let body = body.map(|b| Body::from(b.to_string())).unwrap_or(Body::empty());
     app.oneshot(req.body(body).unwrap()).await.unwrap()
 }
@@ -135,7 +136,9 @@ async fn list_sensors_reports_has_more_when_results_exceed_the_page_size() {
     let tenant_id = Uuid::new_v4();
     let repo = InMemorySensorRepository::default();
     for name in ["a", "b", "c"] {
-        repo.create(Sensor::new(tenant_id, "zendesk", name, serde_json::json!({}))).await.unwrap();
+        repo.create(Sensor::new(tenant_id, "zendesk", name, serde_json::json!({})), "test-actor")
+            .await
+            .unwrap();
     }
     let state = SensorState {
         sensor_repository: Arc::new(repo),
@@ -312,6 +315,28 @@ async fn update_sensor_rejects_a_viewer_role() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+// --- Audit actor (regression coverage): the real caller identity comes from `X-Username`, not
+// `X-Tenant-Id` — previously every audit_log write hardcoded `actor` to the tenant id, which
+// made the audit trail unable to answer "who" as opposed to "which tenant".
+
+#[tokio::test]
+async fn create_sensor_requires_username_header() {
+    let tenant_id = Uuid::new_v4();
+    let sensor = sample_sensor(tenant_id);
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/sensors")
+        .header("content-type", "application/json")
+        .header("x-tenant-id", tenant_id.to_string())
+        .header("x-role", "operator");
+    let response = router(default_state())
+        .oneshot(req.body(Body::from(serde_json::to_value(&sensor).unwrap().to_string())).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

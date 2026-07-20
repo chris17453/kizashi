@@ -27,6 +27,7 @@ pub trait AnalysisConfigRepository: Send + Sync {
     async fn upsert(
         &self,
         config: AnalysisConfig,
+        actor: &str,
     ) -> Result<AnalysisConfig, AnalysisConfigRepositoryError>;
     async fn get(
         &self,
@@ -87,6 +88,7 @@ impl AnalysisConfigRepository for PostgresAnalysisConfigRepository {
     async fn upsert(
         &self,
         config: AnalysisConfig,
+        actor: &str,
     ) -> Result<AnalysisConfig, AnalysisConfigRepositoryError> {
         let mut tx = self
             .pool
@@ -139,7 +141,7 @@ impl AnalysisConfigRepository for PostgresAnalysisConfigRepository {
                 } else {
                     ChangeType::Created
                 },
-                actor: config.tenant_id.to_string(),
+                actor: actor.to_string(),
                 before: before.as_ref().map(redact_for_audit),
                 after: redact_for_audit(&config),
                 changed_at: chrono::Utc::now(),
