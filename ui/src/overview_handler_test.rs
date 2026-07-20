@@ -134,6 +134,67 @@ async fn renders_kpi_cards_reflecting_real_data_when_signed_in() {
 }
 
 #[tokio::test]
+async fn shows_the_five_most_recent_events_as_recent_activity() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+
+    let events_client = Arc::new(InMemoryEventsClient::default());
+    {
+        let mut events = events_client.events.lock().unwrap();
+        for i in 0..7 {
+            events.push(crate::events_client::EventSummary {
+                id: Uuid::new_v4(),
+                event_type: format!("event-type-{i}"),
+                group_key: format!("group-{i}"),
+                status: "open".to_string(),
+                occurred_at: chrono::Utc::now(),
+            });
+        }
+    }
+    state.events_client = events_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/overview")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    // first 5 (0-4) shown, the rest (5, 6) not shown on the dashboard preview
+    assert!(body.contains("event-type-0"));
+    assert!(body.contains("event-type-4"));
+    assert!(!body.contains("event-type-5"));
+    assert!(!body.contains("event-type-6"));
+}
+
+#[tokio::test]
+async fn shows_an_empty_state_for_recent_activity_when_there_are_no_events() {
+    let (state, session_id, _tenant_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/overview")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No recent activity"));
+}
+
+#[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session().await;
 
