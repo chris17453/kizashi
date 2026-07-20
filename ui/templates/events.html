@@ -21,10 +21,14 @@
 <form class="inline" method="get" action="/events" style="margin-bottom:1rem;">
   <label for="q">Search</label>
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by type, group, or status&hellip;">
+  <label for="from">Occurred from</label>
+  <input type="date" id="from" name="from" value="{{ from }}">
+  <label for="to">Occurred to</label>
+  <input type="date" id="to" name="to" value="{{ to }}">
   <input type="hidden" name="sort" value="{{ sort }}">
   <input type="hidden" name="dir" value="{{ dir }}">
   <button type="submit">Search</button>
-  {% if !q.is_empty() %}<a href="/events" class="btn-link">Clear</a>{% endif %}
+  {% if !q.is_empty() || !from.is_empty() || !to.is_empty() %}<a href="/events" class="btn-link">Clear</a>{% endif %}
 </form>
 
 {% if events.is_empty() && page == 0 && !has_more %}
@@ -43,22 +47,22 @@
   <thead>
     <tr>
       <th scope="col">
-        <a href="/events?q={{ q|urlencode }}&sort=event_type&dir={% if sort == "event_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/events?q={{ q|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=event_type&dir={% if sort == "event_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Event Type{% if sort == "event_type" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/events?q={{ q|urlencode }}&sort=group_key&dir={% if sort == "group_key" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/events?q={{ q|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=group_key&dir={% if sort == "group_key" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Group Key{% if sort == "group_key" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/events?q={{ q|urlencode }}&sort=status&dir={% if sort == "status" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/events?q={{ q|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=status&dir={% if sort == "status" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Status{% if sort == "status" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/events?q={{ q|urlencode }}&sort=occurred_at&dir={% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %}desc{% else %}asc{% endif %}{% else %}desc{% endif %}">
+        <a href="/events?q={{ q|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=occurred_at&dir={% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %}desc{% else %}asc{% endif %}{% else %}desc{% endif %}">
           Occurred At{% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %} &#9650;{% else %} &#9660;{% endif %}{% endif %}
         </a>
       </th>
@@ -92,6 +96,8 @@
   {% if page > 0 %}
   <form method="get" action="/events" class="pagination-form">
     <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="from" value="{{ from }}">
+    <input type="hidden" name="to" value="{{ to }}">
     <input type="hidden" name="sort" value="{{ sort }}">
     <input type="hidden" name="dir" value="{{ dir }}">
     <input type="hidden" name="page" value="{{ page - 1 }}">
@@ -102,6 +108,8 @@
   {% if has_more %}
   <form method="get" action="/events" class="pagination-form">
     <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="from" value="{{ from }}">
+    <input type="hidden" name="to" value="{{ to }}">
     <input type="hidden" name="sort" value="{{ sort }}">
     <input type="hidden" name="dir" value="{{ dir }}">
     <input type="hidden" name="page" value="{{ page + 1 }}">

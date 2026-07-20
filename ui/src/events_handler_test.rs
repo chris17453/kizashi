@@ -370,6 +370,8 @@ async fn a_daily_counts_failure_does_not_break_the_rest_of_the_page() {
             _bearer_token: &str,
             _limit: u32,
             _offset: u32,
+            _since: Option<chrono::DateTime<chrono::Utc>>,
+            _until: Option<chrono::DateTime<chrono::Utc>>,
         ) -> Result<crate::events_client::EventsPage, crate::events_client::EventsClientError>
         {
             Ok(crate::events_client::EventsPage { events: vec![], has_more: false })
@@ -485,4 +487,40 @@ async fn shows_a_previous_link_on_page_two() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("Previous"));
     assert!(body.contains("Page 2"));
+}
+
+#[tokio::test]
+async fn date_range_filter_is_prefilled_from_the_query_string() {
+    let (state, session_id) = state_with_session().await;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events?from=2026-07-15&to=2026-07-20")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains(r#"id="from" name="from" value="2026-07-15""#));
+    assert!(body.contains(r#"id="to" name="to" value="2026-07-20""#));
+}
+
+#[test]
+fn parse_date_range_treats_from_as_start_of_day_and_to_as_end_of_day() {
+    let (from, to) = parse_date_range("2026-07-15", "2026-07-20");
+    assert_eq!(from.unwrap().to_rfc3339(), "2026-07-15T00:00:00+00:00");
+    assert_eq!(to.unwrap().to_rfc3339(), "2026-07-20T23:59:59+00:00");
+}
+
+#[test]
+fn parse_date_range_leaves_an_empty_or_unparseable_side_as_none() {
+    let (from, to) = parse_date_range("", "not-a-date");
+    assert!(from.is_none());
+    assert!(to.is_none());
 }

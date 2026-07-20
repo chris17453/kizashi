@@ -9,9 +9,31 @@ use askama::Template;
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Response};
+use chrono::{DateTime, Utc};
 
 fn default_page() -> i64 {
     0
+}
+
+/// Parses `YYYY-MM-DD` date-only strings from `<input type="date">` into a fully inclusive
+/// `DateTime<Utc>` range -- same shape as `data_handler`'s `parse_date_range`, duplicated here
+/// rather than shared since it's a small, page-local concern (matching this codebase's existing
+/// convention of per-handler `matches_query`/`sort_rows` helpers rather than a shared crate-wide
+/// filter-parsing module).
+fn parse_date_range(from: &str, to: &str) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {
+    let parse_start = |s: &str| {
+        chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            .ok()
+            .and_then(|d| d.and_hms_opt(0, 0, 0))
+            .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc))
+    };
+    let parse_end = |s: &str| {
+        chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            .ok()
+            .and_then(|d| d.and_hms_opt(23, 59, 59))
+            .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc))
+    };
+    (parse_start(from), parse_end(to))
 }
 
 #[derive(Debug, serde::Deserialize, Default)]
@@ -24,6 +46,13 @@ pub struct EventsQuery {
     pub sort: String,
     #[serde(default)]
     pub dir: String,
+    /// Scopes the search to a specific incident window -- forwarded to the backend, which
+    /// already supported `since`/`until` (unlike `q`/`sort`, which only apply to the current
+    /// fetched page since the backend has no substring-match/sort query of its own).
+    #[serde(default)]
+    pub from: String,
+    #[serde(default)]
+    pub to: String,
 }
 
 /// Case-insensitive substring match across event_type/group_key/status -- same shape as the
@@ -94,6 +123,8 @@ struct EventsTemplate {
     q: String,
     sort: String,
     dir: String,
+    from: String,
+    to: String,
 }
 
 pub async fn get_events(
@@ -108,6 +139,7 @@ pub async fn get_events(
 
     let page = query.page.max(0);
     let offset = (page * DEFAULT_PAGE_SIZE) as u32;
+    let (filter_since, filter_until) = parse_date_range(&query.from, &query.to);
 
     // Independent of list_events below: a daily-counts failure shows an empty chart, not a
     // broken page — the table is the primary content, the chart is a supplementary view.
@@ -122,7 +154,13 @@ pub async fn get_events(
 
     match state
         .events_client
-        .list_events(&session.bearer_token, DEFAULT_PAGE_SIZE as u32, offset)
+        .list_events(
+            &session.bearer_token,
+            DEFAULT_PAGE_SIZE as u32,
+            offset,
+            filter_since,
+            filter_until,
+        )
         .await
     {
         Ok(result) => {
@@ -140,6 +178,8 @@ pub async fn get_events(
                     q: query.q,
                     sort: query.sort,
                     dir: query.dir,
+                    from: query.from,
+                    to: query.to,
                 }
                 .render()
                 .unwrap(),
@@ -157,6 +197,8 @@ pub async fn get_events(
                 q: query.q,
                 sort: query.sort,
                 dir: query.dir,
+                from: query.from,
+                to: query.to,
             }
             .render()
             .unwrap(),

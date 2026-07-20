@@ -19,6 +19,8 @@ impl EventsClient for InMemoryEventsClient {
         _bearer_token: &str,
         _limit: u32,
         _offset: u32,
+        _since: Option<chrono::DateTime<chrono::Utc>>,
+        _until: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<EventsPage, EventsClientError> {
         Ok(EventsPage {
             events: self.events.lock().unwrap().clone(),
@@ -53,6 +55,8 @@ impl EventsClient for FailingEventsClient {
         _bearer_token: &str,
         _limit: u32,
         _offset: u32,
+        _since: Option<chrono::DateTime<chrono::Utc>>,
+        _until: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<EventsPage, EventsClientError> {
         Err(EventsClientError::Unreachable("simulated failure".to_string()))
     }
@@ -117,7 +121,7 @@ async fn http_client_lists_events_against_a_real_server() {
     let url = spawn_stub_server("correct-token").await;
     let client = HttpEventsClient::new(reqwest::Client::new(), url);
 
-    let page = client.list_events("correct-token", 100, 0).await.unwrap();
+    let page = client.list_events("correct-token", 100, 0, None, None).await.unwrap();
 
     assert_eq!(page.events.len(), 1);
     assert_eq!(page.events[0].event_type, "sentiment_spike");
@@ -130,18 +134,51 @@ async fn http_client_lists_events_against_a_real_server() {
 }
 
 #[tokio::test]
+async fn http_client_sends_since_and_until_as_query_params() {
+    async fn handler(
+        axum::extract::Query(params): axum::extract::Query<
+            std::collections::HashMap<String, String>,
+        >,
+    ) -> axum::response::Response {
+        assert_eq!(params.get("since").map(String::as_str), Some("2026-07-15T00:00:00+00:00"));
+        assert_eq!(params.get("until").map(String::as_str), Some("2026-07-20T23:59:59+00:00"));
+        Json(serde_json::json!({"events": [], "has_more": false})).into_response()
+    }
+    let app = Router::new().route("/v1/events", get(handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let client = HttpEventsClient::new(reqwest::Client::new(), format!("http://{addr}"));
+
+    let page = client
+        .list_events(
+            "token",
+            100,
+            0,
+            Some("2026-07-15T00:00:00Z".parse().unwrap()),
+            Some("2026-07-20T23:59:59Z".parse().unwrap()),
+        )
+        .await
+        .unwrap();
+
+    assert!(page.events.is_empty());
+}
+
+#[tokio::test]
 async fn http_client_is_rejected_with_the_wrong_token() {
     let url = spawn_stub_server("correct-token").await;
     let client = HttpEventsClient::new(reqwest::Client::new(), url);
 
-    let err = client.list_events("wrong-token", 100, 0).await.unwrap_err();
+    let err = client.list_events("wrong-token", 100, 0, None, None).await.unwrap_err();
     assert!(matches!(err, EventsClientError::Rejected(401)));
 }
 
 #[tokio::test]
 async fn http_client_returns_unreachable_when_server_is_down() {
     let client = HttpEventsClient::new(reqwest::Client::new(), "http://127.0.0.1:1".to_string());
-    let err = client.list_events("token", 100, 0).await.unwrap_err();
+    let err = client.list_events("token", 100, 0, None, None).await.unwrap_err();
     assert!(matches!(err, EventsClientError::Unreachable(_)));
 }
 

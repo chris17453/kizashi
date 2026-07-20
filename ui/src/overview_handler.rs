@@ -70,13 +70,14 @@ pub async fn get_overview(State(state): State<AppState>, headers: HeaderMap) -> 
     // Capped at 1000 (the same ceiling the backend itself clamps to) — a KPI tile approximates
     // at very high volume rather than needing an exact count, same tradeoff this dashboard
     // already made before pagination existed (it used to silently cap at the default limit).
-    let events = match state.events_client.list_events(&session.bearer_token, 1000, 0).await {
-        Ok(page) => page.events,
-        Err(e) => {
-            errors.push(format!("events: {e}"));
-            vec![]
-        }
-    };
+    let events =
+        match state.events_client.list_events(&session.bearer_token, 1000, 0, None, None).await {
+            Ok(page) => page.events,
+            Err(e) => {
+                errors.push(format!("events: {e}"));
+                vec![]
+            }
+        };
     let health = match state.health_client.platform_health().await {
         Ok(h) => Some(h),
         Err(e) => {

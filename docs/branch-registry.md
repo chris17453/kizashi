@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0088         |
+| feature       | `feature/` | 0089         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
@@ -137,3 +137,4 @@ manually created branches.
 | 0021 | `fix/0021-auth-service-error-message-leak-fix` | fix | 2026-07-20 | open | pending | |
 | 0086 | `feature/0086-events-page-links-to-record-journey` | feature | 2026-07-20 | open | pending | |
 | 0087 | `feature/0087-data-viewer-csv-export` | feature | 2026-07-20 | open | pending | |
+| 0088 | `feature/0088-events-page-date-range-filtering` | feature | 2026-07-20 | open | pending | |
