@@ -60,6 +60,7 @@ async fn logout_deletes_the_session_and_expires_the_cookie() {
         ),
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
             mfa_client: Arc::new(crate::mfa_client::mfa_client_test::InMemoryMfaClient::default()),
+            login_attempts_client: Arc::new(crate::login_attempts_client::login_attempts_client_test::InMemoryLoginAttemptsClient::default()),
     };
 
     let response = router(state)

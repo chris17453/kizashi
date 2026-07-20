@@ -2,9 +2,9 @@ use kizashi_ui::{
     build_router, AppState, HttpAnalysisConfigClient, HttpApiKeysClient, HttpAuditLogClient,
     HttpAuthClient, HttpBacklogClient, HttpBrandingClient, HttpEgressAllowlistClient,
     HttpEventsClient, HttpExecutionClient, HttpHealthClient, HttpIngestionStatsClient,
-    HttpMfaClient, HttpNormalizationMappingsClient, HttpOidcClient, HttpRetentionPoliciesClient,
-    HttpSavedSearchQueriesClient, HttpSensorsClient, HttpTriggersClient, HttpUsersClient,
-    InMemoryPendingOidcFlowStore, InMemorySessionStore,
+    HttpLoginAttemptsClient, HttpMfaClient, HttpNormalizationMappingsClient, HttpOidcClient,
+    HttpRetentionPoliciesClient, HttpSavedSearchQueriesClient, HttpSensorsClient,
+    HttpTriggersClient, HttpUsersClient, InMemoryPendingOidcFlowStore, InMemorySessionStore,
 };
 use std::sync::Arc;
 
@@ -106,6 +106,10 @@ async fn main() {
             retention_service_url,
         )),
         auth_audit_log_client: Arc::new(HttpAuditLogClient::new(
+            client.clone(),
+            auth_service_url.clone(),
+        )),
+        login_attempts_client: Arc::new(HttpLoginAttemptsClient::new(
             client.clone(),
             auth_service_url.clone(),
         )),

@@ -1,7 +1,8 @@
 use auth_service::{
     build_router, health_router, AuthState, HttpSessionClient, OidcClients, OidcProviderConfig,
-    PostgresAuditLogReader, PostgresLocalUserRepository, PostgresMfaChallengeRepository,
-    PostgresTenantBrandingRepository, PostgresTenantRepository, StandardOidcClient,
+    PostgresAuditLogReader, PostgresLocalUserRepository, PostgresLoginAttemptRepository,
+    PostgresMfaChallengeRepository, PostgresTenantBrandingRepository, PostgresTenantRepository,
+    StandardOidcClient,
 };
 use std::sync::Arc;
 
@@ -101,7 +102,8 @@ async fn main() {
         )),
         oidc_clients,
         audit_log_reader: Arc::new(PostgresAuditLogReader::new(pool.clone())),
-        mfa_challenge_repository: Arc::new(PostgresMfaChallengeRepository::new(pool)),
+        mfa_challenge_repository: Arc::new(PostgresMfaChallengeRepository::new(pool.clone())),
+        login_attempt_repository: Arc::new(PostgresLoginAttemptRepository::new(pool)),
     };
 
     let app = health_router().merge(build_router(state, internal_secret));

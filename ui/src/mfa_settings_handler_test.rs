@@ -77,6 +77,7 @@ async fn state_with_mfa_client(mfa_client: Arc<dyn MfaClient>) -> (AppState, Str
         saved_search_queries_client: Arc::new(InMemorySavedSearchQueriesClient::default()),
         mfa_client,
         ingestion_gateway_public_url: "http://localhost:8081".to_string(),
+            login_attempts_client: Arc::new(crate::login_attempts_client::login_attempts_client_test::InMemoryLoginAttemptsClient::default()),
     };
     (state, session_id)
 }

@@ -217,17 +217,35 @@ pub async fn post_mfa_challenge(
         return error_response(StatusCode::UNAUTHORIZED, "invalid or expired challenge");
     };
     if !user.mfa_enabled || !mfa::verify_code(secret, &user.username, &req.code) {
+        crate::local_login_handler::record_attempt(
+            &state,
+            Some(user.tenant_id),
+            &user.username,
+            false,
+            "mfa_code_invalid",
+        )
+        .await;
         return error_response(StatusCode::UNAUTHORIZED, "invalid code");
     }
 
     match state.session_client.mint_session(user.tenant_id, user.role, "local-login").await {
-        Ok(token) => Json(LoginResponse {
-            token,
-            tenant_id: user.tenant_id,
-            role: user.role,
-            username: None,
-        })
-        .into_response(),
+        Ok(token) => {
+            crate::local_login_handler::record_attempt(
+                &state,
+                Some(user.tenant_id),
+                &user.username,
+                true,
+                "mfa_success",
+            )
+            .await;
+            Json(LoginResponse {
+                token,
+                tenant_id: user.tenant_id,
+                role: user.role,
+                username: None,
+            })
+            .into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "session mint failed");
             error_response(StatusCode::BAD_GATEWAY, "failed to establish session")

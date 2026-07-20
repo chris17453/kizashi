@@ -3795,3 +3795,33 @@ architectural decision.
   --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
 - **PR:** pending
 - **ADR:** docs/adr/0052-password-policy-enforcement.md
+
+## [2026-07-20] feature/0061-login-attempt-anomaly-alerting — Login-attempt anomaly alerting
+- **Type:** feature
+- **Branch:** feature/0061-login-attempt-anomaly-alerting
+- **Summary:** Closes another gap from the ADR-0051 compliance rubric: a failed login had no
+  entity for `auth_audit_log` to attach a row to, so brute-force/anomaly patterns were
+  invisible. Adds a dedicated append-only `login_attempts` table (immutable via DB trigger,
+  matching the `auth_audit_log` pattern) recording every local-login and MFA-challenge attempt
+  with a specific reason (`unknown_workspace`, `unknown_username`, `wrong_password`,
+  `password_ok_mfa_pending`, `mfa_code_invalid`, `mfa_success`, `success`). Recording is
+  best-effort/non-blocking so a telemetry write can never break a real login. New Admin-only,
+  tenant-scoped `GET /v1/auth/local/login-attempts` endpoint and a matching `/security/login-
+  attempts` Console UI page in the Security & Compliance nav group.
+- **Tests:** `cargo test -p auth-service --all-features` — 138 lib tests + 4 new real-Postgres
+  integration tests (`login_attempt_integration_test.rs`: round-trip record/list, null-tenant
+  persistence, UPDATE rejected, DELETE rejected) + existing integration suites, all passing, 0
+  failed. `cargo test -p kizashi-ui --lib` — 349 passed (6 new: admin can view, empty state,
+  backend-unreachable error surfaces, non-admin forbidden, redirect-when-signed-out, plus the
+  HTTP client's 2 tests), 0 failed. `cargo build --workspace` clean. `cargo clippy -p
+  auth-service --all-targets --all-features -- -D warnings` and `cargo clippy -p kizashi-ui
+  --all-targets --all-features -- -D warnings` both clean. `cargo fmt --all --check` clean.
+  `cargo deny check` — advisories/bans/licenses/sources ok (pre-existing allow-listed warnings
+  unchanged). `cargo audit` — 3 pre-existing allow-listed unmaintained-crate warnings, no new
+  vulnerabilities. Note: `cargo test --workspace --all-features` was not run end-to-end for
+  unrelated crates (`action-executor`, `connector-fabric`, `connector-imap`) that require
+  external test fixtures (`SMTP_TEST_HOST`, `FABRIC_TEST_HOST`, `IMAP_TEST_HOST`) not present in
+  this local environment — a pre-existing local-env gap unconnected to this change; the two
+  crates this feature actually touches were fully verified.
+- **PR:** pending
+- **ADR:** docs/adr/0053-login-attempt-anomaly-alerting.md
