@@ -5,11 +5,23 @@ mod normalization_mappings_handler_test;
 use crate::session_guard::require_session;
 use crate::AppState;
 use askama::Template;
-use axum::extract::{Form, State};
+use axum::extract::{Form, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use common::NormalizationMapping;
 use std::collections::BTreeMap;
+
+#[derive(serde::Deserialize, Default)]
+pub struct NormalizationMappingsQuery {
+    #[serde(default)]
+    q: String,
+}
+
+/// Case-insensitive substring match on source_type -- same in-handler-filter shape as the other
+/// list-page searches (ADR-0062).
+fn matches_query(mapping: &NormalizationMapping, q: &str) -> bool {
+    q.is_empty() || mapping.source_type.to_lowercase().contains(&q.to_lowercase())
+}
 
 #[derive(Template)]
 #[template(path = "normalization_mappings.html")]
@@ -19,6 +31,7 @@ struct NormalizationMappingsTemplate {
     can_write: bool,
     error: Option<String>,
     form_error: Option<String>,
+    q: String,
 }
 
 /// GET /normalization-mappings — the Field Mappings page (this entity previously had zero UI
@@ -26,6 +39,7 @@ struct NormalizationMappingsTemplate {
 pub async fn get_normalization_mappings(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<NormalizationMappingsQuery>,
 ) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(session) => session,
@@ -37,10 +51,11 @@ pub async fn get_normalization_mappings(
         Ok(mappings) => Html(
             NormalizationMappingsTemplate {
                 show_nav: true,
-                mappings,
+                mappings: mappings.into_iter().filter(|m| matches_query(m, &query.q)).collect(),
                 can_write,
                 error: None,
                 form_error: None,
+                q: query.q,
             }
             .render()
             .unwrap(),
@@ -53,6 +68,7 @@ pub async fn get_normalization_mappings(
                 can_write,
                 error: Some(e.to_string()),
                 form_error: None,
+                q: query.q,
             }
             .render()
             .unwrap(),
@@ -121,6 +137,7 @@ pub async fn post_normalization_mapping(
                     can_write,
                     error: None,
                     form_error: Some(msg.to_string()),
+                    q: String::new(),
                 }
                 .render()
                 .unwrap(),
@@ -150,6 +167,7 @@ pub async fn post_normalization_mapping(
                     can_write,
                     error: None,
                     form_error: Some(e.to_string()),
+                    q: String::new(),
                 }
                 .render()
                 .unwrap(),

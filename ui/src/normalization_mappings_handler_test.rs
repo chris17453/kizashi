@@ -114,6 +114,71 @@ async fn shows_an_empty_state_with_no_mappings_configured() {
 }
 
 #[tokio::test]
+async fn filters_by_the_q_query_param_case_insensitively() {
+    let (mut state, session_id, tenant_id) = state_with_session(common::Role::Admin).await;
+    let mappings_client = Arc::new(InMemoryNormalizationMappingsClient::default());
+    let mut ticket_map = BTreeMap::new();
+    ticket_map.insert("text".to_string(), "$.description".to_string());
+    mappings_client.mappings.lock().unwrap().push(NormalizationMapping::new(
+        tenant_id,
+        "ticket",
+        ticket_map.clone(),
+    ));
+    mappings_client
+        .mappings
+        .lock()
+        .unwrap()
+        .push(NormalizationMapping::new(tenant_id, "email", ticket_map));
+    state.normalization_mappings_client = mappings_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/normalization-mappings?q=TICKET")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("ticket"));
+    assert!(!body.contains(">email<"));
+}
+
+#[tokio::test]
+async fn shows_a_no_match_empty_state_for_an_unmatched_query() {
+    let (mut state, session_id, tenant_id) = state_with_session(common::Role::Admin).await;
+    let mappings_client = Arc::new(InMemoryNormalizationMappingsClient::default());
+    let mut field_map = BTreeMap::new();
+    field_map.insert("text".to_string(), "$.description".to_string());
+    mappings_client
+        .mappings
+        .lock()
+        .unwrap()
+        .push(NormalizationMapping::new(tenant_id, "ticket", field_map));
+    state.normalization_mappings_client = mappings_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/normalization-mappings?q=nobody-matches-this")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("No mappings match"));
+}
+
+#[tokio::test]
 async fn post_creates_a_mapping_and_redirects() {
     let (state, session_id, _tenant_id) = state_with_session(common::Role::Operator).await;
     let mappings_client = Arc::new(

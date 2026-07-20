@@ -36,11 +36,22 @@ analysis. One mapping per source type — the most specific one for a record's
 </div>
 {% endif %}
 
+<form class="inline" method="get" action="/normalization-mappings" style="margin-bottom:1rem;">
+  <label for="q">Search</label>
+  <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by source type&hellip;">
+  <button type="submit">Search</button>
+  {% if !q.is_empty() %}<a href="/normalization-mappings" class="btn-link">Clear</a>{% endif %}
+</form>
+
 {% if mappings.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#9636;</div>
+  {% if q.is_empty() %}
   <p>No normalization mappings configured yet for this tenant.</p>
   {% if can_write %}<p>Use the form above to create your first one.</p>{% endif %}
+  {% else %}
+  <p>No mappings match &ldquo;{{ q }}&rdquo;.</p>
+  {% endif %}
 </div>
 {% else %}
 <table>

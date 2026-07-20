@@ -4135,3 +4135,21 @@ architectural decision.
   issues.
 - **PR:** pending
 - **ADR:** docs/adr/0063-login-attempts-pagination-and-search.md
+
+## [2026-07-20] feature/0074-normalization-mappings-search — Field Mappings page search
+- **Type:** feature
+- **Branch:** feature/0074-normalization-mappings-search
+- **Summary:** Extends ADR-0062's search pattern to the Field Mappings page. `GET
+  /normalization-mappings` now accepts `?q=` and filters the fetched mapping list by a
+  case-insensitive `source_type` substring match, in-handler. Bookmarkable `GET` search form,
+  "Clear" link when active, distinct "no results" vs "no mappings configured" empty states.
+  (Egress Allowlist was evaluated and skipped — it's a single free-text textarea per tenant, not
+  a row-based list, so search doesn't apply; Retention Policies was evaluated and skipped too —
+  realistically only a handful of rows per tenant, not a genuine search candidate.)
+- **Tests:** `cargo test -p kizashi-ui --lib` — 393 passed (2 new: case-insensitive source_type
+  filter match, "no mappings match" empty state for an unmatched query). `cargo build
+  --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
+  clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
+  allow-listed warnings as prior entries, no new issues.
+- **PR:** pending
+- **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
