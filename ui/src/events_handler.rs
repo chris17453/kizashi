@@ -119,6 +119,7 @@ fn build_chart_bars(counts: Vec<crate::events_client::DailyCount>) -> Vec<ChartB
 struct EventsTemplate {
     show_nav: bool,
     is_admin: bool,
+    can_write: bool,
     events: Vec<EventSummary>,
     chart_bars: Vec<ChartBar>,
     page: i64,
@@ -141,6 +142,7 @@ pub async fn get_events(
         Err(response) => return response,
     };
     let is_admin = session.role.at_least(common::Role::Admin);
+    let can_write = session.role.at_least(common::Role::Operator);
 
     let page = query.page.max(0);
     let offset = (page * DEFAULT_PAGE_SIZE) as u32;
@@ -176,6 +178,7 @@ pub async fn get_events(
                 EventsTemplate {
                     show_nav: true,
                     is_admin,
+                    can_write,
                     events,
                     chart_bars,
                     page,
@@ -196,6 +199,7 @@ pub async fn get_events(
             EventsTemplate {
                 show_nav: true,
                 is_admin,
+                can_write,
                 events: vec![],
                 chart_bars,
                 page,

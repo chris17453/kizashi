@@ -1,0 +1,79 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Incidents</h1>
+<p class="muted">Groups related Events into one trackable problem — select Events on the
+<a href="/events">Events</a> page and use "Create Incident from Selected" to start one, or
+create a blank one below.</p>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if let Some(e) = form_error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if can_write %}
+<div class="panel" style="max-width: 480px; margin-bottom: 1.5rem;">
+  <h2>Create an incident</h2>
+  <form class="inline" method="post" action="/incidents">
+    <label for="title">Title</label>
+    <input type="text" id="title" name="title" placeholder="elevated error rate" required>
+
+    <label for="severity">Severity</label>
+    <select id="severity" name="severity">
+      <option value="low">Low</option>
+      <option value="medium" selected>Medium</option>
+      <option value="high">High</option>
+      <option value="critical">Critical</option>
+    </select>
+
+    <button type="submit">Create incident</button>
+  </form>
+</div>
+{% endif %}
+
+<form class="inline" method="get" action="/incidents" style="margin-bottom:1rem;">
+  <label for="status">Status</label>
+  <select id="status" name="status">
+    <option value="" {% if status.is_empty() %}selected{% endif %}>All</option>
+    <option value="open" {% if status == "open" %}selected{% endif %}>Open</option>
+    <option value="acknowledged" {% if status == "acknowledged" %}selected{% endif %}>Acknowledged</option>
+    <option value="resolved" {% if status == "resolved" %}selected{% endif %}>Resolved</option>
+  </select>
+  <button type="submit">Filter</button>
+  {% if !status.is_empty() %}<a href="/incidents" class="btn-link">Clear</a>{% endif %}
+</form>
+
+{% if incidents.is_empty() %}
+<div class="empty-state">
+  <div class="empty-icon">&#9888;</div>
+  <p>No incidents{% if !status.is_empty() %} match this filter{% else %} yet for this tenant{% endif %}.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Title</th>
+      <th scope="col">Severity</th>
+      <th scope="col">Status</th>
+      <th scope="col">Events</th>
+      <th scope="col">Created</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for incident in incidents %}
+    <tr>
+      <td><a href="/incidents/{{ incident.id }}">{{ incident.title }}</a></td>
+      <td>
+        <span class="pill {% if incident.severity.to_string() == "critical" || incident.severity.to_string() == "high" %}pill-down{% else %}pill-up{% endif %}">
+          {{ incident.severity }}
+        </span>
+      </td>
+      <td>
+        <span class="pill {% if incident.status.to_string() == "resolved" %}pill-up{% else if incident.status.to_string() == "acknowledged" %}pill-muted{% else %}pill-down{% endif %}">
+          {{ incident.status }}
+        </span>
+      </td>
+      <td>{{ incident.event_count }}</td>
+      <td>{{ incident.created_at }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

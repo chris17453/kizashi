@@ -1,0 +1,98 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Incident Detail</h1>
+{% if let Some(e) = error %}
+<p class="error">{{ e }}</p>
+{% endif %}
+{% if let Some(inc) = incident %}
+<p class="muted">
+  <a href="/incidents">&larr; Back to Incidents</a>
+</p>
+
+<div class="form-row">
+  <div class="panel">
+    <h2>{{ inc.title }}</h2>
+    <table>
+      <tbody>
+        <tr><th scope="row">Status</th><td>
+          <span class="pill {% if inc.status.to_string() == "resolved" %}pill-up{% else if inc.status.to_string() == "acknowledged" %}pill-muted{% else %}pill-down{% endif %}">{{ inc.status }}</span>
+        </td></tr>
+        <tr><th scope="row">Severity</th><td>
+          <span class="pill {% if inc.severity.to_string() == "critical" || inc.severity.to_string() == "high" %}pill-down{% else %}pill-up{% endif %}">{{ inc.severity }}</span>
+        </td></tr>
+        <tr><th scope="row">Created</th><td>{{ inc.created_at }}</td></tr>
+        <tr><th scope="row">Updated</th><td>{{ inc.updated_at }}</td></tr>
+        {% if let Some(resolved_at) = inc.resolved_at %}
+        <tr><th scope="row">Resolved</th><td>{{ resolved_at }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% if can_write %}
+  <div class="info-panel">
+    <h2>Update incident</h2>
+    <form class="inline" method="post" action="/incidents/{{ inc.id }}">
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" value="{{ inc.title }}" required>
+
+      <label for="severity">Severity</label>
+      <select id="severity" name="severity">
+        <option value="low" {% if inc.severity.to_string() == "low" %}selected{% endif %}>Low</option>
+        <option value="medium" {% if inc.severity.to_string() == "medium" %}selected{% endif %}>Medium</option>
+        <option value="high" {% if inc.severity.to_string() == "high" %}selected{% endif %}>High</option>
+        <option value="critical" {% if inc.severity.to_string() == "critical" %}selected{% endif %}>Critical</option>
+      </select>
+
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        <option value="open" {% if inc.status.to_string() == "open" %}selected{% endif %}>Open</option>
+        <option value="acknowledged" {% if inc.status.to_string() == "acknowledged" %}selected{% endif %}>Acknowledged</option>
+        <option value="resolved" {% if inc.status.to_string() == "resolved" %}selected{% endif %}>Resolved</option>
+      </select>
+
+      <button type="submit">Save</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+<h2 class="section-title">Linked events</h2>
+{% if linked_events.is_empty() %}
+<div class="empty-state">
+  <p>No events are linked to this incident.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Event type</th>
+      <th scope="col">Status</th>
+      <th scope="col">Occurred at</th>
+      <th scope="col"></th>
+      {% if can_write %}<th scope="col"></th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in linked_events %}
+    <tr>
+      <td>{{ row.event.event_type }}</td>
+      <td>{{ row.event.status }}</td>
+      <td>{{ row.event.occurred_at }}</td>
+      <td><a href="/events/{{ row.event.id }}">View event</a></td>
+      {% if can_write %}
+      <td>
+        <form class="inline" method="post" action="/incidents/{{ inc.id }}/events/{{ row.event.id }}/unlink" style="display:inline">
+          <button type="submit" class="btn-danger">Unlink</button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% else %}
+<p class="muted">Incident not found.</p>
+{% endif %}
+{% endblock %}
