@@ -5207,5 +5207,5 @@ architectural decision.
   Other) and all 6 connector cards render with working "Configure" links, and confirmed following
   one through to `/sensors/generate/form?connector_type=zendesk` still renders the existing
   field-entry form unchanged.
-- **PR:** pending
+- **PR:** #142
 - **ADR:** none — pure UI reskin, no architecturally significant decision
