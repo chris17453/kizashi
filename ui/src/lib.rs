@@ -68,6 +68,7 @@ mod sensors_handler;
 mod sessions_handler;
 mod sso_login_handler;
 mod static_assets;
+mod trigger_toggle_handler;
 mod triggers_handler;
 mod users_handler;
 
@@ -173,13 +174,14 @@ pub use sensors_handler::{
 pub use sessions_handler::{get_sessions, post_bulk_revoke_sessions, post_revoke_session};
 pub use sso_login_handler::{get_sso_callback, get_sso_login};
 pub use static_assets::{get_charts_js, get_confirm_danger_js};
+pub use trigger_toggle_handler::post_toggle_trigger;
 pub use triggers_handler::{get_triggers, post_trigger};
 pub use users_handler::{
     get_export_user, get_users, post_bulk_delete_users, post_delete_user, post_update_user_role,
     post_users,
 };
 
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use std::sync::Arc;
 
@@ -245,6 +247,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/events/:id", get(get_event_detail))
         .route("/events/export.csv", get(get_events_export_csv))
         .route("/triggers", get(get_triggers).post(post_trigger))
+        .route("/triggers/:id/toggle", post(post_toggle_trigger))
         .route("/health", get(get_health))
         .route("/branding", get(get_branding_page).post(post_branding))
         .route("/pipeline", get(get_pipeline))

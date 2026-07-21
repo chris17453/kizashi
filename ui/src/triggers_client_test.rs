@@ -12,6 +12,8 @@ pub struct InMemoryTriggersClient {
     pub has_more: Mutex<bool>,
     pub created: Mutex<Vec<TriggerDefinition>>,
     pub test_result: Mutex<Option<TriggerTestResult>>,
+    pub full_triggers: Mutex<Vec<TriggerDefinition>>,
+    pub updated: Mutex<Vec<TriggerDefinition>>,
 }
 
 #[async_trait]
@@ -54,6 +56,27 @@ impl TriggersClient for InMemoryTriggersClient {
             .clone()
             .unwrap_or(TriggerTestResult { would_fire: false, contributing_record_count: 0 }))
     }
+
+    async fn get_trigger(
+        &self,
+        _tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<Option<TriggerDefinition>, TriggersClientError> {
+        Ok(self.full_triggers.lock().unwrap().iter().find(|t| t.id == id).cloned())
+    }
+
+    async fn update_trigger(
+        &self,
+        role: Role,
+        _actor: &str,
+        trigger: TriggerDefinition,
+    ) -> Result<TriggerDefinition, TriggersClientError> {
+        if !role.at_least(Role::Operator) {
+            return Err(TriggersClientError::Rejected(403));
+        }
+        self.updated.lock().unwrap().push(trigger.clone());
+        Ok(trigger)
+    }
 }
 
 pub struct FailingTriggersClient;
@@ -84,6 +107,23 @@ impl TriggersClient for FailingTriggersClient {
         _id: Uuid,
         _group_key: &str,
     ) -> Result<TriggerTestResult, TriggersClientError> {
+        Err(TriggersClientError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn get_trigger(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+    ) -> Result<Option<TriggerDefinition>, TriggersClientError> {
+        Err(TriggersClientError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn update_trigger(
+        &self,
+        _role: Role,
+        _actor: &str,
+        _trigger: TriggerDefinition,
+    ) -> Result<TriggerDefinition, TriggersClientError> {
         Err(TriggersClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -120,7 +160,40 @@ async fn spawn_stub_server() -> String {
         }
         (axum::http::StatusCode::CREATED, Json(body)).into_response()
     }
-    let app = Router::new().route("/v1/trigger-definitions", get(handler).post(create_handler));
+    async fn get_one_handler(
+        axum::extract::Path(id): axum::extract::Path<Uuid>,
+        headers: HeaderMap,
+    ) -> axum::response::Response {
+        if headers.get("x-tenant-id").is_none() {
+            return axum::http::StatusCode::UNAUTHORIZED.into_response();
+        }
+        if id.to_string() == "99999999-9999-9999-9999-999999999999" {
+            return axum::http::StatusCode::NOT_FOUND.into_response();
+        }
+        Json(serde_json::json!({
+            "id": id,
+            "tenant_id": "22222222-2222-2222-2222-222222222222",
+            "name": "high-volume-negative",
+            "event_type_match": "sentiment",
+            "condition": {"shape": "count_over_window", "count": 3},
+            "window_seconds": 3600,
+            "actions": [],
+            "enabled": true
+        }))
+        .into_response()
+    }
+    async fn update_handler(
+        headers: HeaderMap,
+        Json(body): Json<serde_json::Value>,
+    ) -> axum::response::Response {
+        if headers.get("x-role").and_then(|v| v.to_str().ok()) != Some("operator") {
+            return axum::http::StatusCode::FORBIDDEN.into_response();
+        }
+        Json(body).into_response()
+    }
+    let app = Router::new()
+        .route("/v1/trigger-definitions", get(handler).post(create_handler))
+        .route("/v1/trigger-definitions/:id", get(get_one_handler).put(update_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -235,4 +308,48 @@ async fn http_client_test_trigger_returns_unreachable_when_trigger_engine_is_dow
     );
     let err = client.test_trigger(Uuid::new_v4(), Uuid::new_v4(), "cust-1").await.unwrap_err();
     assert!(matches!(err, TriggersClientError::Unreachable(_)));
+}
+
+#[tokio::test]
+async fn http_client_gets_a_triggers_full_definition_against_a_real_server() {
+    let url = spawn_stub_server().await;
+    let client = HttpTriggersClient::new(reqwest::Client::new(), url, String::new());
+    let id = Uuid::new_v4();
+
+    let trigger = client.get_trigger(Uuid::new_v4(), id).await.unwrap().unwrap();
+
+    assert_eq!(trigger.id, id);
+    assert_eq!(trigger.name, "high-volume-negative");
+}
+
+#[tokio::test]
+async fn http_client_returns_none_when_the_trigger_is_not_found() {
+    let url = spawn_stub_server().await;
+    let client = HttpTriggersClient::new(reqwest::Client::new(), url, String::new());
+    let missing_id = "99999999-9999-9999-9999-999999999999".parse().unwrap();
+
+    let trigger = client.get_trigger(Uuid::new_v4(), missing_id).await.unwrap();
+
+    assert!(trigger.is_none());
+}
+
+#[tokio::test]
+async fn http_client_updates_a_trigger_against_a_real_server() {
+    let url = spawn_stub_server().await;
+    let client = HttpTriggersClient::new(reqwest::Client::new(), url, String::new());
+    let mut trigger = sample_trigger();
+    trigger.enabled = false;
+
+    let updated = client.update_trigger(Role::Operator, "alice", trigger).await.unwrap();
+
+    assert!(!updated.enabled);
+}
+
+#[tokio::test]
+async fn http_client_update_is_rejected_for_insufficient_role() {
+    let url = spawn_stub_server().await;
+    let client = HttpTriggersClient::new(reqwest::Client::new(), url, String::new());
+
+    let err = client.update_trigger(Role::Viewer, "alice", sample_trigger()).await.unwrap_err();
+    assert!(matches!(err, TriggersClientError::Rejected(403)));
 }
