@@ -5209,3 +5209,24 @@ architectural decision.
   field-entry form unchanged.
 - **PR:** #142
 - **ADR:** none — pure UI reskin, no architecturally significant decision
+
+## [2026-07-20] docs/0004-adr-alert-fingerprint-dedup — Scope ADR for alert fingerprint/dedup layer
+- **Type:** docs
+- **Branch:** docs/0004-adr-alert-fingerprint-dedup
+- **Summary:** The last unshipped item from the Keep-comparison research (alongside Incidents
+  MVP and the Sensors marketplace reskin, both already merged): Keep fingerprints every alert to
+  suppress exact-duplicate noise before it re-triggers downstream work. Wrote ADR-0112 scoping a
+  Kizashi-specific MVP before any implementation starts: `NormalizationMapping` gains opt-in
+  `dedup_fields`/`dedup_window_seconds` (additive, `#[serde(default)]`, empty = disabled);
+  normalization-service computes a fingerprint over the configured normalized field values and
+  checks it against a new per-service `record_fingerprints` table; on an exact-duplicate hit
+  within the window, `normalized_payload` is still written back (raw/normalized data is never
+  silently dropped) but `record.normalized` is not republished, so analysis-service/
+  trigger-engine never re-react to a repeat. Partial-duplicate-as-update is explicitly deferred
+  to a future ADR, same "defer the harder half" call ADR-0111 made for Incidents'
+  auto-correlation/AI-summaries. No implementation in this PR — ADR only, per an explicit
+  checkpoint with the user on which large feature to build next after several already shipped
+  this session.
+- **Tests:** N/A — docs/ADR-only change, no code.
+- **PR:** pending
+- **ADR:** docs/adr/0112-alert-fingerprint-dedup.md

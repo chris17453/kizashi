@@ -15,7 +15,7 @@ manually created branches.
 | feature       | `feature/` | 0113         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
-| docs          | `docs/`    | 0004         |
+| docs          | `docs/`    | 0005         |
 | chore         | `chore/`   | 0007         |
 
 ## Branch log (append-only, newest last)
@@ -164,3 +164,4 @@ manually created branches.
 | 0110 | `feature/0110-normalization-mapping-delete` | feature | 2026-07-20 | open | pending | |
 | 0111 | `feature/0111-incidents-mvp` | feature | 2026-07-20 | open | pending | |
 | 0112 | `feature/0112-sensors-marketplace-reskin` | feature | 2026-07-20 | open | pending | |
+| 0004 | `docs/0004-adr-alert-fingerprint-dedup` | docs | 2026-07-20 | open | pending | |
