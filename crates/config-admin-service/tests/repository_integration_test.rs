@@ -220,6 +220,39 @@ async fn create_mapping_writes_a_created_audit_row_in_the_same_transaction() {
 }
 
 #[tokio::test]
+async fn delete_mapping_writes_a_deleted_audit_row_and_removes_the_row() {
+    let pool = test_pool().await;
+    let repo = PostgresNormalizationMappingRepository::new(pool.clone());
+    let audit_reader = PostgresAuditLogReader::new(pool.clone());
+
+    let tenant_id = Uuid::new_v4();
+    let mapping = sample_mapping(tenant_id);
+    repo.create(mapping.clone(), "operator@example.com").await.unwrap();
+
+    repo.delete(tenant_id, mapping.id, "operator@example.com")
+        .await
+        .expect("delete should succeed");
+
+    let found = repo.get(tenant_id, mapping.id).await.unwrap();
+    assert!(found.is_none());
+
+    let entries = audit_reader.list_for_entity(tenant_id, mapping.id).await.unwrap();
+    assert_eq!(entries.len(), 2);
+    let delete_entry = entries.iter().find(|e| e.change_type == ChangeType::Deleted).unwrap();
+    assert!(delete_entry.before.is_some());
+}
+
+#[tokio::test]
+async fn delete_mapping_returns_not_found_for_an_unknown_id() {
+    let pool = test_pool().await;
+    let repo = PostgresNormalizationMappingRepository::new(pool.clone());
+
+    let err =
+        repo.delete(Uuid::new_v4(), Uuid::new_v4(), "operator@example.com").await.unwrap_err();
+    assert!(matches!(err, config_admin_service::NormalizationMappingRepositoryError::NotFound(_)));
+}
+
+#[tokio::test]
 async fn upsert_analysis_config_writes_created_then_updated_audit_rows_against_real_postgres() {
     let pool = test_pool().await;
     let repo = PostgresAnalysisConfigRepository::new(pool.clone(), test_encryptor());

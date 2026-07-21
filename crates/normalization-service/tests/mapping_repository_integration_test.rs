@@ -81,3 +81,20 @@ async fn upsert_inserts_then_replaces_a_mapping_by_id_against_real_postgres() {
     let found = repo.active_mapping(tenant_id, "sync-test").await.unwrap();
     assert_eq!(found, Some(updated));
 }
+
+#[tokio::test]
+async fn delete_removes_a_mapping_against_real_postgres() {
+    let pool = test_pool().await;
+    let repo = PostgresMappingRepository::new(pool);
+    let tenant_id = Uuid::new_v4();
+
+    let mut field_map = BTreeMap::new();
+    field_map.insert("text".to_string(), "$.description".to_string());
+    let mapping = NormalizationMapping::new(tenant_id, "delete-test", field_map);
+    repo.upsert(mapping.clone()).await.expect("insert should succeed");
+
+    repo.delete(mapping.id).await.expect("delete should succeed");
+
+    let found = repo.active_mapping(tenant_id, "delete-test").await.unwrap();
+    assert!(found.is_none());
+}

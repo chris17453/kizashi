@@ -33,6 +33,17 @@ pub trait NormalizationMappingsClient: Send + Sync {
         actor: &str,
         mapping: NormalizationMapping,
     ) -> Result<NormalizationMapping, NormalizationMappingsClientError>;
+
+    /// Deletes a mapping — operator-only (RBAC v1, ADR-0016), same actor-attribution shape as
+    /// `create_mapping`. config-admin-service's `delete` writes an audit-log row per call
+    /// (ADR-0110).
+    async fn delete_mapping(
+        &self,
+        role: Role,
+        actor: &str,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<(), NormalizationMappingsClientError>;
 }
 
 pub struct HttpNormalizationMappingsClient {
@@ -93,5 +104,28 @@ impl NormalizationMappingsClient for HttpNormalizationMappingsClient {
             .json()
             .await
             .map_err(|e| NormalizationMappingsClientError::Unreachable(e.to_string()))
+    }
+
+    async fn delete_mapping(
+        &self,
+        role: Role,
+        actor: &str,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<(), NormalizationMappingsClientError> {
+        let response = self
+            .client
+            .delete(format!("{}/v1/normalization-mappings/{id}", self.config_admin_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
+            .header("x-username", actor)
+            .send()
+            .await
+            .map_err(|e| NormalizationMappingsClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(NormalizationMappingsClientError::Rejected(response.status().as_u16()));
+        }
+        Ok(())
     }
 }

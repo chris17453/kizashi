@@ -24,7 +24,10 @@ fn router(state: AdminState) -> Router {
             get(get_trigger).put(update_trigger).delete(delete_trigger),
         )
         .route("/v1/normalization-mappings", post(create_mapping).get(list_mappings))
-        .route("/v1/normalization-mappings/:id", get(get_mapping).put(update_mapping))
+        .route(
+            "/v1/normalization-mappings/:id",
+            get(get_mapping).put(update_mapping).delete(delete_mapping),
+        )
         .route("/v1/audit-log/:entity_id", get(get_audit_log))
         .with_state(state)
 }
@@ -531,6 +534,84 @@ async fn full_mapping_crud_round_trip() {
     )
     .await;
     assert_eq!(update.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn delete_mapping_succeeds_then_get_returns_404() {
+    let tenant_id = Uuid::new_v4();
+    let mapping = sample_mapping(tenant_id);
+    let state = AdminState {
+        trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
+        mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::with_mapping(
+            mapping.clone(),
+        )),
+        audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
+        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+    };
+    let app = router(state);
+
+    let delete_response = send(
+        app.clone(),
+        "DELETE",
+        format!("/v1/normalization-mappings/{}", mapping.id),
+        Some(tenant_id),
+        None,
+    )
+    .await;
+    assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+
+    let get_response = send(
+        app,
+        "GET",
+        format!("/v1/normalization-mappings/{}", mapping.id),
+        Some(tenant_id),
+        None,
+    )
+    .await;
+    assert_eq!(get_response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn delete_mapping_returns_404_for_unknown_id() {
+    let tenant_id = Uuid::new_v4();
+    let response = send(
+        router(default_state()),
+        "DELETE",
+        format!("/v1/normalization-mappings/{}", Uuid::new_v4()),
+        Some(tenant_id),
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn delete_mapping_rejects_a_viewer_role() {
+    let tenant_id = Uuid::new_v4();
+    let mapping = sample_mapping(tenant_id);
+    let state = AdminState {
+        trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::default()),
+        mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::with_mapping(
+            mapping.clone(),
+        )),
+        audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
+        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+    };
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/normalization-mappings/{}", mapping.id))
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "viewer")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 // get_audit_log / get_recent_audit_log handler tests live in `audit_log_handlers_test.rs` —

@@ -11,6 +11,7 @@ use std::sync::Mutex;
 pub struct InMemoryNormalizationMappingsClient {
     pub mappings: Mutex<Vec<NormalizationMapping>>,
     pub created: Mutex<Vec<NormalizationMapping>>,
+    pub deleted: Mutex<Vec<Uuid>>,
 }
 
 #[async_trait]
@@ -34,6 +35,20 @@ impl NormalizationMappingsClient for InMemoryNormalizationMappingsClient {
         self.created.lock().unwrap().push(mapping.clone());
         Ok(mapping)
     }
+
+    async fn delete_mapping(
+        &self,
+        role: Role,
+        _actor: &str,
+        _tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<(), NormalizationMappingsClientError> {
+        if !role.at_least(Role::Operator) {
+            return Err(NormalizationMappingsClientError::Rejected(403));
+        }
+        self.deleted.lock().unwrap().push(id);
+        Ok(())
+    }
 }
 
 pub struct FailingNormalizationMappingsClient;
@@ -53,6 +68,16 @@ impl NormalizationMappingsClient for FailingNormalizationMappingsClient {
         _actor: &str,
         _mapping: NormalizationMapping,
     ) -> Result<NormalizationMapping, NormalizationMappingsClientError> {
+        Err(NormalizationMappingsClientError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn delete_mapping(
+        &self,
+        _role: Role,
+        _actor: &str,
+        _tenant_id: Uuid,
+        _id: Uuid,
+    ) -> Result<(), NormalizationMappingsClientError> {
         Err(NormalizationMappingsClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -85,8 +110,15 @@ async fn spawn_stub_server() -> String {
         }
         (axum::http::StatusCode::CREATED, Json(body)).into_response()
     }
-    let app =
-        Router::new().route("/v1/normalization-mappings", get(list_handler).post(create_handler));
+    async fn delete_handler(headers: HeaderMap) -> axum::response::Response {
+        if headers.get("x-role").and_then(|v| v.to_str().ok()) != Some("operator") {
+            return axum::http::StatusCode::FORBIDDEN.into_response();
+        }
+        axum::http::StatusCode::NO_CONTENT.into_response()
+    }
+    let app = Router::new()
+        .route("/v1/normalization-mappings", get(list_handler).post(create_handler))
+        .route("/v1/normalization-mappings/:id", axum::routing::delete(delete_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -153,4 +185,24 @@ async fn http_client_returns_unreachable_when_server_is_down() {
     );
     let err = client.list_mappings(Uuid::new_v4()).await.unwrap_err();
     assert!(matches!(err, NormalizationMappingsClientError::Unreachable(_)));
+}
+
+#[tokio::test]
+async fn http_client_deletes_a_mapping_against_a_real_server() {
+    let url = spawn_stub_server().await;
+    let client = HttpNormalizationMappingsClient::new(reqwest::Client::new(), url);
+
+    client.delete_mapping(Role::Operator, "alice", Uuid::new_v4(), Uuid::new_v4()).await.unwrap();
+}
+
+#[tokio::test]
+async fn http_client_delete_is_rejected_for_insufficient_role() {
+    let url = spawn_stub_server().await;
+    let client = HttpNormalizationMappingsClient::new(reqwest::Client::new(), url);
+
+    let err = client
+        .delete_mapping(Role::Viewer, "alice", Uuid::new_v4(), Uuid::new_v4())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, NormalizationMappingsClientError::Rejected(403)));
 }

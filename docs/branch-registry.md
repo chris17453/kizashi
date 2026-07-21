@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0110         |
+| feature       | `feature/` | 0111         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
@@ -161,3 +161,4 @@ manually created branches.
 | 0107 | `feature/0107-event-detail-view` | feature | 2026-07-20 | open | pending | |
 | 0108 | `feature/0108-trigger-enable-disable-toggle` | feature | 2026-07-20 | open | pending | |
 | 0109 | `feature/0109-trigger-delete` | feature | 2026-07-20 | open | pending | |
+| 0110 | `feature/0110-normalization-mapping-delete` | feature | 2026-07-20 | open | pending | |

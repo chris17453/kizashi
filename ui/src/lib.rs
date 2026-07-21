@@ -51,6 +51,7 @@ mod login_handler;
 mod logout_handler;
 mod mfa_login_handler;
 mod mfa_settings_handler;
+mod normalization_mapping_delete_handler;
 mod normalization_mappings_handler;
 mod overview_handler;
 mod password_change_handler;
@@ -153,6 +154,7 @@ pub use mfa_settings_handler::{
     get_mfa_settings, post_mfa_disable as post_mfa_settings_disable,
     post_mfa_enroll as post_mfa_settings_enroll, post_mfa_verify as post_mfa_settings_verify,
 };
+pub use normalization_mapping_delete_handler::post_delete_normalization_mapping;
 pub use normalization_mappings_handler::{get_normalization_mappings, post_normalization_mapping};
 pub use overview_handler::get_overview;
 pub use password_change_handler::{get_password_settings, post_password_settings};
@@ -270,6 +272,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/normalization-mappings",
             get(get_normalization_mappings).post(post_normalization_mapping),
+        )
+        .route(
+            "/normalization-mappings/:id/delete",
+            axum::routing::post(post_delete_normalization_mapping),
         )
         .route("/retention-policies", get(get_retention_policies).post(post_retention_policies))
         .route("/retention-policies/:id/toggle", axum::routing::post(post_toggle_retention_policy))

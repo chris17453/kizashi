@@ -38,6 +38,11 @@ impl MappingRepository for InMemoryMappingRepository {
         }
         Ok(())
     }
+
+    async fn delete(&self, id: Uuid) -> Result<(), MappingRepositoryError> {
+        self.mappings.lock().unwrap().retain(|m| m.id != id);
+        Ok(())
+    }
 }
 
 fn sample_mapping(tenant_id: Uuid) -> NormalizationMapping {
@@ -97,4 +102,21 @@ async fn upsert_replaces_an_existing_mapping_with_the_same_id() {
 
     let found = repo.active_mapping(tenant_id, "ticket").await.unwrap();
     assert_eq!(found, Some(updated));
+}
+
+#[tokio::test]
+async fn delete_removes_the_mapping() {
+    let mapping = sample_mapping(Uuid::new_v4());
+    let repo = InMemoryMappingRepository::with_mapping(mapping.clone());
+
+    repo.delete(mapping.id).await.unwrap();
+
+    let found = repo.active_mapping(mapping.tenant_id, &mapping.source_type).await.unwrap();
+    assert!(found.is_none());
+}
+
+#[tokio::test]
+async fn delete_of_unknown_id_is_a_no_op() {
+    let repo = InMemoryMappingRepository::default();
+    repo.delete(Uuid::new_v4()).await.unwrap();
 }

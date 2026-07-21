@@ -151,9 +151,8 @@ async fn main() {
                 }
             };
 
-            let mapping: common::NormalizationMapping = match serde_json::from_slice(&delivery.data)
-            {
-                Ok(m) => m,
+            let event: common::MappingChangeEvent = match serde_json::from_slice(&delivery.data) {
+                Ok(e) => e,
                 Err(e) => {
                     tracing::error!(error = %e, "failed to deserialize mapping.changed message, dropping");
                     let _ = delivery.ack(BasicAckOptions::default()).await;
@@ -161,13 +160,26 @@ async fn main() {
                 }
             };
 
-            match mapping_repository.upsert(mapping.clone()).await {
+            let mapping_id = match &event {
+                common::MappingChangeEvent::Upserted(mapping) => mapping.id,
+                common::MappingChangeEvent::Deleted { id, .. } => *id,
+            };
+            let result = match &event {
+                common::MappingChangeEvent::Upserted(mapping) => {
+                    mapping_repository.upsert(mapping.clone()).await
+                }
+                common::MappingChangeEvent::Deleted { id, .. } => {
+                    mapping_repository.delete(*id).await
+                }
+            };
+
+            match result {
                 Ok(()) => {
-                    tracing::info!(mapping_id = %mapping.id, "synced mapping.changed");
+                    tracing::info!(mapping_id = %mapping_id, "synced mapping.changed");
                     let _ = delivery.ack(BasicAckOptions::default()).await;
                 }
                 Err(e) => {
-                    tracing::error!(mapping_id = %mapping.id, error = %e, "failed to sync mapping, requeueing");
+                    tracing::error!(mapping_id = %mapping_id, error = %e, "failed to sync mapping, requeueing");
                     let _ = delivery
                         .nack(BasicNackOptions { requeue: true, ..Default::default() })
                         .await;

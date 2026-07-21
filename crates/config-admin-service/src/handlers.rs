@@ -18,7 +18,9 @@ use crate::trigger_publisher::TriggerPublisher;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use common::{NormalizationMapping, Role, TriggerChangeEvent, TriggerDefinition};
+use common::{
+    MappingChangeEvent, NormalizationMapping, Role, TriggerChangeEvent, TriggerDefinition,
+};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -279,7 +281,8 @@ pub async fn create_mapping(
     };
     match state.mapping_repository.create(mapping, &actor).await {
         Ok(created) => {
-            if let Err(e) = state.mapping_publisher.publish_mapping_changed(&created).await {
+            let event = MappingChangeEvent::Upserted(created.clone());
+            if let Err(e) = state.mapping_publisher.publish_mapping_changed(&event).await {
                 tracing::error!(mapping_id = %created.id, error = %e, "failed to publish mapping.changed");
             }
             (StatusCode::CREATED, Json(created)).into_response()
@@ -307,10 +310,39 @@ pub async fn update_mapping(
     };
     match state.mapping_repository.update(mapping, &actor).await {
         Ok(updated) => {
-            if let Err(e) = state.mapping_publisher.publish_mapping_changed(&updated).await {
+            let event = MappingChangeEvent::Upserted(updated.clone());
+            if let Err(e) = state.mapping_publisher.publish_mapping_changed(&event).await {
                 tracing::error!(mapping_id = %updated.id, error = %e, "failed to publish mapping.changed");
             }
             Json(updated).into_response()
+        }
+        Err(e) => mapping_error_response(e),
+    }
+}
+
+pub async fn delete_mapping(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.mapping_repository.delete(tenant_id, id, &actor).await {
+        Ok(()) => {
+            let event = MappingChangeEvent::Deleted { id, tenant_id };
+            if let Err(e) = state.mapping_publisher.publish_mapping_changed(&event).await {
+                tracing::error!(mapping_id = %id, error = %e, "failed to publish mapping.changed");
+            }
+            StatusCode::NO_CONTENT.into_response()
         }
         Err(e) => mapping_error_response(e),
     }
