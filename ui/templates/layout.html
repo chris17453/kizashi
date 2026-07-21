@@ -267,6 +267,16 @@
     }
     .status-card .status-name { font-weight: 600; font-size: 0.92rem; }
 
+    /* Provider/connector marketplace card (Sensors' "choose a connector" step) — same visual
+       language as .status-card but column-stacked (name, description, action) instead of a
+       space-between row, since a card here needs more than a name and one status word. */
+    .provider-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1.1rem 1.3rem; display: flex; flex-direction: column; gap: 0.5rem;
+    }
+    .provider-card .provider-name { font-weight: 600; font-size: 0.95rem; }
+    .provider-card .provider-description { font-size: 0.85rem; color: var(--text-dim); flex: 1; }
+
     /* Record journey / link view (ADR-0017): a record node, connected down to the event(s) it
        produced, each connected down to the action(s) executed because of it. */
     .journey {

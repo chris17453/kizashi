@@ -97,6 +97,9 @@ async fn get_generate_select_lists_every_connector_type() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("Zendesk"));
     assert!(body.contains("Fabric"));
+    assert!(body.contains("Ticketing &amp; Support"));
+    assert!(body.contains("Poll Zendesk tickets and comments"));
+    assert!(body.contains("/sensors/generate/form?connector_type=zendesk"));
 }
 
 #[tokio::test]
