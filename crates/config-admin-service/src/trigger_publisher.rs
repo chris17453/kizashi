@@ -3,7 +3,7 @@
 pub(crate) mod trigger_publisher_test;
 
 use async_trait::async_trait;
-use common::{TriggerDefinition, TRIGGER_CHANGED_EXCHANGE};
+use common::{TriggerChangeEvent, TRIGGER_CHANGED_EXCHANGE};
 use lapin::options::{BasicPublishOptions, ExchangeDeclareOptions};
 use lapin::types::FieldTable;
 use lapin::{BasicProperties, Channel, ExchangeKind};
@@ -17,15 +17,17 @@ pub enum TriggerPublishError {
     Serialization(String),
 }
 
-/// Publishes `trigger.changed` on every trigger create/update (ADR-0018) so trigger-engine's
-/// own copy of trigger definitions — the one it actually evaluates against every
-/// `record.analyzed` message — stays in sync with what operators author through this
-/// service's API/Console UI.
+/// Publishes `trigger.changed` on every trigger create/update/delete (ADR-0018, ADR-0109) so
+/// trigger-engine's own copy of trigger definitions — the one it actually evaluates against
+/// every `record.analyzed` message — stays in sync with what operators author through this
+/// service's API/Console UI. A tagged `TriggerChangeEvent` rather than always publishing a
+/// bare `TriggerDefinition` because deletion has no definition payload to carry (same shape as
+/// `SensorPublisher`/`SensorChangeEvent`).
 #[async_trait]
 pub trait TriggerPublisher: Send + Sync {
     async fn publish_trigger_changed(
         &self,
-        trigger: &TriggerDefinition,
+        event: &TriggerChangeEvent,
     ) -> Result<(), TriggerPublishError>;
 }
 
@@ -52,9 +54,9 @@ impl RabbitMqTriggerPublisher {
 impl TriggerPublisher for RabbitMqTriggerPublisher {
     async fn publish_trigger_changed(
         &self,
-        trigger: &TriggerDefinition,
+        event: &TriggerChangeEvent,
     ) -> Result<(), TriggerPublishError> {
-        let payload = serde_json::to_vec(trigger)
+        let payload = serde_json::to_vec(event)
             .map_err(|e| TriggerPublishError::Serialization(e.to_string()))?;
         self.channel
             .basic_publish(

@@ -37,6 +37,10 @@ pub trait TriggerRepository: Send + Sync {
     /// Engine's own copy of trigger definitions with what config-admin-service's `trigger.
     /// changed` messages say is current.
     async fn upsert(&self, trigger: TriggerDefinition) -> Result<(), TriggerRepositoryError>;
+
+    /// Removes a trigger by id (ADR-0109): the write side of syncing a `TriggerChangeEvent::
+    /// Deleted` message, same shape as `SensorRepository::delete` in agent-scheduler.
+    async fn delete(&self, id: Uuid) -> Result<(), TriggerRepositoryError>;
 }
 
 pub struct PostgresTriggerRepository {
@@ -155,6 +159,15 @@ impl TriggerRepository for PostgresTriggerRepository {
         .await
         .map_err(|e| TriggerRepositoryError::Backend(e.to_string()))?;
 
+        Ok(())
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), TriggerRepositoryError> {
+        sqlx::query("DELETE FROM trigger_definitions WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| TriggerRepositoryError::Backend(e.to_string()))?;
         Ok(())
     }
 }

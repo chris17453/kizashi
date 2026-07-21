@@ -128,6 +128,39 @@ async fn a_failed_update_does_not_leave_a_partial_audit_row() {
     assert!(entries.is_empty());
 }
 
+#[tokio::test]
+async fn delete_trigger_writes_a_deleted_audit_row_and_removes_the_row() {
+    let pool = test_pool().await;
+    let repo = PostgresTriggerDefinitionRepository::new(pool.clone());
+    let audit_reader = PostgresAuditLogReader::new(pool.clone());
+
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id);
+    repo.create(trigger.clone(), "operator@example.com").await.unwrap();
+
+    repo.delete(tenant_id, trigger.id, "operator@example.com")
+        .await
+        .expect("delete should succeed");
+
+    let found = repo.get(tenant_id, trigger.id).await.unwrap();
+    assert!(found.is_none());
+
+    let entries = audit_reader.list_for_entity(tenant_id, trigger.id).await.unwrap();
+    assert_eq!(entries.len(), 2);
+    let delete_entry = entries.iter().find(|e| e.change_type == ChangeType::Deleted).unwrap();
+    assert!(delete_entry.before.is_some());
+}
+
+#[tokio::test]
+async fn delete_trigger_returns_not_found_for_an_unknown_id() {
+    let pool = test_pool().await;
+    let repo = PostgresTriggerDefinitionRepository::new(pool.clone());
+
+    let err =
+        repo.delete(Uuid::new_v4(), Uuid::new_v4(), "operator@example.com").await.unwrap_err();
+    assert!(matches!(err, config_admin_service::TriggerDefinitionRepositoryError::NotFound(_)));
+}
+
 fn sample_mapping(tenant_id: Uuid) -> common::NormalizationMapping {
     let mut field_map = BTreeMap::new();
     field_map.insert("text".to_string(), "$.description".to_string());

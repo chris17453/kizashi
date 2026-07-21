@@ -62,6 +62,11 @@ impl TriggerRepository for InMemoryTriggerRepository {
         }
         Ok(())
     }
+
+    async fn delete(&self, id: Uuid) -> Result<(), TriggerRepositoryError> {
+        self.triggers.lock().unwrap().retain(|t| t.id != id);
+        Ok(())
+    }
 }
 
 fn sample_trigger(tenant_id: Uuid, enabled: bool) -> TriggerDefinition {
@@ -179,4 +184,21 @@ async fn upsert_replaces_an_existing_trigger_with_the_same_id() {
 
     let found = repo.get_by_id(trigger.id).await.unwrap();
     assert_eq!(found, Some(updated));
+}
+
+#[tokio::test]
+async fn delete_removes_the_trigger() {
+    let trigger = sample_trigger(Uuid::new_v4(), true);
+    let repo = InMemoryTriggerRepository::with_trigger(trigger.clone());
+
+    repo.delete(trigger.id).await.unwrap();
+
+    let found = repo.get_by_id(trigger.id).await.unwrap();
+    assert!(found.is_none());
+}
+
+#[tokio::test]
+async fn delete_of_unknown_id_is_a_no_op() {
+    let repo = InMemoryTriggerRepository::default();
+    repo.delete(Uuid::new_v4()).await.unwrap();
 }

@@ -80,6 +80,17 @@ pub trait TriggersClient: Send + Sync {
         actor: &str,
         trigger: TriggerDefinition,
     ) -> Result<TriggerDefinition, TriggersClientError>;
+
+    /// Deletes a trigger — operator-only (RBAC v1, ADR-0016), same actor-attribution shape as
+    /// `update_trigger`. config-admin-service's `delete` writes an audit-log row per call
+    /// (ADR-0109).
+    async fn delete_trigger(
+        &self,
+        role: Role,
+        actor: &str,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<(), TriggersClientError>;
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Deserialize)]
@@ -222,5 +233,28 @@ impl TriggersClient for HttpTriggersClient {
             return Err(TriggersClientError::Rejected(response.status().as_u16()));
         }
         response.json().await.map_err(|e| TriggersClientError::Unreachable(e.to_string()))
+    }
+
+    async fn delete_trigger(
+        &self,
+        role: Role,
+        actor: &str,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<(), TriggersClientError> {
+        let response = self
+            .client
+            .delete(format!("{}/v1/trigger-definitions/{id}", self.config_admin_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
+            .header("x-username", actor)
+            .send()
+            .await
+            .map_err(|e| TriggersClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(TriggersClientError::Rejected(response.status().as_u16()));
+        }
+        Ok(())
     }
 }

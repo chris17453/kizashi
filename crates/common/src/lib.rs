@@ -19,6 +19,7 @@ pub mod role;
 pub mod saved_search_query;
 pub mod sensor;
 pub mod sensor_change_event;
+pub mod trigger_change_event;
 pub mod trigger_definition;
 
 pub use action_execution::{ActionExecution, ActionExecutionStatus};
@@ -41,6 +42,7 @@ pub use role::{ParseRoleError, Role};
 pub use saved_search_query::SavedSearchQuery;
 pub use sensor::Sensor;
 pub use sensor_change_event::SensorChangeEvent;
+pub use trigger_change_event::TriggerChangeEvent;
 pub use trigger_definition::{
     ActionRef, ActionType, CorrelatedCondition, ThresholdDirection, TriggerCondition,
     TriggerDefinition,

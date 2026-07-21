@@ -69,6 +69,21 @@ impl TriggerDefinitionRepository for InMemoryTriggerDefinitionRepository {
         triggers.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(triggers.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
+
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        _actor: &str,
+    ) -> Result<(), TriggerDefinitionRepositoryError> {
+        let mut triggers = self.triggers.lock().unwrap();
+        let before_len = triggers.len();
+        triggers.retain(|t| !(t.id == id && t.tenant_id == tenant_id));
+        if triggers.len() == before_len {
+            return Err(TriggerDefinitionRepositoryError::NotFound(id));
+        }
+        Ok(())
+    }
 }
 
 pub struct FailingTriggerDefinitionRepository;
@@ -105,6 +120,15 @@ impl TriggerDefinitionRepository for FailingTriggerDefinitionRepository {
         _limit: i64,
         _offset: i64,
     ) -> Result<Vec<TriggerDefinition>, TriggerDefinitionRepositoryError> {
+        Err(TriggerDefinitionRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn delete(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+        _actor: &str,
+    ) -> Result<(), TriggerDefinitionRepositoryError> {
         Err(TriggerDefinitionRepositoryError::Backend("simulated failure".to_string()))
     }
 }
@@ -165,4 +189,25 @@ async fn list_respects_limit_and_offset() {
     let found = repo.list(tenant_id, 1, 1).await.unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].name, "b");
+}
+
+#[tokio::test]
+async fn delete_removes_the_trigger() {
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id);
+    let repo = InMemoryTriggerDefinitionRepository::with_trigger(trigger.clone());
+
+    repo.delete(tenant_id, trigger.id, "test-actor").await.unwrap();
+
+    let found = repo.get(tenant_id, trigger.id).await.unwrap();
+    assert!(found.is_none());
+}
+
+#[tokio::test]
+async fn delete_of_unknown_trigger_returns_not_found() {
+    let repo = InMemoryTriggerDefinitionRepository::default();
+
+    let err = repo.delete(Uuid::new_v4(), Uuid::new_v4(), "test-actor").await.unwrap_err();
+
+    assert!(matches!(err, TriggerDefinitionRepositoryError::NotFound(_)));
 }

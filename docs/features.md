@@ -5067,3 +5067,39 @@ architectural decision.
   "Enable" (and back), and confirmed the change shows up in `/audit-log/config/<trigger-id>`.
 - **PR:** #138
 - **ADR:** docs/adr/0108-trigger-enable-disable-toggle.md
+
+## [2026-07-20] feature/0109-trigger-delete — Trigger delete
+- **Type:** feature
+- **Branch:** feature/0109-trigger-delete
+- **Summary:** ADR-0108's toggle feature explicitly deferred delete since config-admin-service
+  had no delete endpoint for trigger definitions. A follow-up audit pass confirmed the gap:
+  `TriggerDefinitionRepository` had no `delete` method, `TriggerPublisher` only ever published a
+  bare `TriggerDefinition` with no way to signal removal, and trigger-engine's own mirrored copy
+  of every trigger (the one it actually evaluates) had no delete-sync path — a trigger could be
+  disabled forever but never actually removed. Mirrored the Sensor entity's already-proven
+  pattern: new `common::TriggerChangeEvent` enum (`Upserted`/`Deleted`) replaces the bare
+  `TriggerDefinition` previously published on `trigger.changed` (a breaking wire-format change,
+  accepted since publisher and sole consumer ship together); added
+  `TriggerDefinitionRepository::delete` (audit-logged) and `TriggerRepository::delete` in
+  trigger-engine; added `DELETE /v1/trigger-definitions/:id` (operator-gated); trigger-engine's
+  consumer now branches on Upserted vs Deleted instead of always upserting; added
+  `TriggersClient::delete_trigger` and `POST /triggers/:id/delete` with a confirm() dialog on a
+  new Remove button, matching `post_delete_retention_policy`'s shape.
+- **Tests:** `cargo test --workspace --lib` — all 26 workspace crates green, 0 failures
+  (config-admin-service 120, trigger-engine 60, kizashi-ui 501 — 7 new: repository delete ×2,
+  publisher upsert/delete round-trip ×2, handler delete ×3; trigger-engine repository delete ×2;
+  UI client delete ×2, handler delete ×3). `cargo build --workspace`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `cargo fmt --all --check` all clean. No file exceeds 500 lines.
+  Real-infra tests: RabbitMQ round-trip for both `Upserted`/`Deleted` `TriggerChangeEvent`
+  variants (config-admin-service, stable across repeated runs using the same
+  wait-for-matching-event pattern `sensor_publisher_integration_test.rs` already established
+  for concurrent fanout-exchange tests), real-Postgres delete-with-audit-row tests in both
+  config-admin-service and trigger-engine. Live-verified against the real stack: rebuilt/
+  redeployed config-admin-service, trigger-engine, and kizashi-ui; created a throwaway trigger
+  via the UI; confirmed trigger-engine's own copy synced (`GET /v1/triggers/:id` returned 200);
+  deleted it via the new Remove button; confirmed it no longer appears in the Triggers list,
+  confirmed trigger-engine's copy now returns 404 (proving the delete-sync path works, not just
+  config-admin-service's own row), and confirmed both `created` and `deleted` audit entries
+  appear under `/audit-log/config/<trigger-id>` attributed to the real actor.
+- **PR:** #139
+- **ADR:** docs/adr/0109-trigger-delete.md

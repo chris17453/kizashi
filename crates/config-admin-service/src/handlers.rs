@@ -18,7 +18,7 @@ use crate::trigger_publisher::TriggerPublisher;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use common::{NormalizationMapping, Role, TriggerDefinition};
+use common::{NormalizationMapping, Role, TriggerChangeEvent, TriggerDefinition};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -140,7 +140,8 @@ pub async fn create_trigger(
     };
     match state.trigger_repository.create(trigger, &actor).await {
         Ok(created) => {
-            if let Err(e) = state.trigger_publisher.publish_trigger_changed(&created).await {
+            let event = TriggerChangeEvent::Upserted(created.clone());
+            if let Err(e) = state.trigger_publisher.publish_trigger_changed(&event).await {
                 tracing::error!(trigger_id = %created.id, error = %e, "failed to publish trigger.changed");
             }
             (StatusCode::CREATED, Json(created)).into_response()
@@ -168,10 +169,39 @@ pub async fn update_trigger(
     };
     match state.trigger_repository.update(trigger, &actor).await {
         Ok(updated) => {
-            if let Err(e) = state.trigger_publisher.publish_trigger_changed(&updated).await {
+            let event = TriggerChangeEvent::Upserted(updated.clone());
+            if let Err(e) = state.trigger_publisher.publish_trigger_changed(&event).await {
                 tracing::error!(trigger_id = %updated.id, error = %e, "failed to publish trigger.changed");
             }
             Json(updated).into_response()
+        }
+        Err(e) => trigger_error_response(e),
+    }
+}
+
+pub async fn delete_trigger(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
+    let actor = match username_from_headers(&headers) {
+        Ok(username) => username,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.trigger_repository.delete(tenant_id, id, &actor).await {
+        Ok(()) => {
+            let event = TriggerChangeEvent::Deleted { id, tenant_id };
+            if let Err(e) = state.trigger_publisher.publish_trigger_changed(&event).await {
+                tracing::error!(trigger_id = %id, error = %e, "failed to publish trigger.changed");
+            }
+            StatusCode::NO_CONTENT.into_response()
         }
         Err(e) => trigger_error_response(e),
     }
