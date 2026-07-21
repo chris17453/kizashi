@@ -19,6 +19,7 @@ members = [
   "crates/dashboard-api",
   "crates/e2e-tests",
   "crates/egress-gateway",
+  "crates/incident-service",
   "crates/ingestion-gateway",
   "crates/ingestion-service",
   "crates/normalization-service",

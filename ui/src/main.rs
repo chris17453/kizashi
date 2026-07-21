@@ -2,7 +2,7 @@ use kizashi_ui::{
     build_router, AppState, HttpAnalysisConfigClient, HttpApiKeysClient, HttpAuditLogClient,
     HttpAuthClient, HttpBacklogClient, HttpBackupStatusClient, HttpBrandingClient,
     HttpEgressAllowlistClient, HttpEventsClient, HttpExecutionClient, HttpHealthClient,
-    HttpIngestionStatsClient, HttpLoginAttemptsClient, HttpMfaClient,
+    HttpIncidentsClient, HttpIngestionStatsClient, HttpLoginAttemptsClient, HttpMfaClient,
     HttpNormalizationMappingsClient, HttpOidcClient, HttpRetentionPoliciesClient,
     HttpSavedSearchQueriesClient, HttpSensorsClient, HttpTriggersClient, HttpUsersClient,
     InMemoryPendingOidcFlowStore, InMemorySessionStore, IngestionGatewayApiKeyAuditLogClient,
@@ -37,6 +37,8 @@ async fn main() {
         std::env::var("EGRESS_GATEWAY_URL").expect("EGRESS_GATEWAY_URL must be set");
     let trigger_engine_url =
         std::env::var("TRIGGER_ENGINE_URL").expect("TRIGGER_ENGINE_URL must be set");
+    let incident_service_url =
+        std::env::var("INCIDENT_SERVICE_URL").expect("INCIDENT_SERVICE_URL must be set");
     let internal_secret =
         std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
     // Enterprise session-timeout policy (a real gap until this change -- sessions previously
@@ -81,6 +83,7 @@ async fn main() {
             config_admin_service_url.clone(),
             trigger_engine_url,
         )),
+        incidents_client: Arc::new(HttpIncidentsClient::new(client.clone(), incident_service_url)),
         health_client: Arc::new(HttpHealthClient::new(client.clone(), observability_url.clone())),
         sensors_client: Arc::new(HttpSensorsClient::new(
             client.clone(),

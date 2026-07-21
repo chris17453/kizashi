@@ -5136,3 +5136,45 @@ architectural decision.
   `/audit-log/config/<mapping-id>`.
 - **PR:** #140
 - **ADR:** docs/adr/0110-normalization-mapping-delete.md
+
+## [2026-07-20] feature/0111-incidents-mvp — Incidents (MVP)
+- **Type:** feature
+- **Branch:** feature/0111-incidents-mvp
+- **Summary:** A structured comparison against Keep (keephq/keep) identified Kizashi's biggest
+  single feature gap: Keep groups multiple related alerts into a distinct Incident entity, while
+  Kizashi's Events were flat — one row per trigger fire, with no way to represent "these events
+  are all the same underlying problem." Ships a manual-only Incidents MVP (ADR-0111);
+  auto-correlation, alert dedup/fingerprinting, and AI-generated summaries are explicitly
+  deferred as follow-ups. New `incident-service` (own Postgres schema, migrations, audit log —
+  same per-service-owned-schema pattern as retention-service/config-admin-service): `Incident`
+  entity (title/summary/severity/status/timestamps) and an `incident_events` many-to-many join
+  table; `IncidentRepository` (create/get/list/update/link_event/unlink_event, audit-logged
+  transactions mirroring config-admin-service's repositories); HTTP API (`POST /v1/incidents`,
+  `GET /v1/incidents`, `GET/PUT /v1/incidents/:id`, `POST /v1/incidents/:id/events`, `DELETE
+  /v1/incidents/:id/events/:event_id`), operator-gated writes. Console UI: `IncidentsClient` +
+  new `/incidents` (list, filterable by status) and `/incidents/:id` (detail — metadata,
+  status/severity update form, linked-events table with unlink, reusing the existing
+  `EventsClient::get_event` from the Event Detail feature to resolve each linked event) pages;
+  the Events table gains a checkbox column + "Create Incident from Selected" bulk action (same
+  standalone-form checkbox pattern as Sensors'/API Keys' bulk actions), POSTing to a new
+  `/events/create-incident` route that creates an incident and links the selected events in one
+  atomic call.
+- **Tests:** `cargo test --workspace --lib` — all 27 workspace crates green, 0 failures
+  (incident-service 71: 17 lib + real-Postgres integration; kizashi-ui 527, 20 new — 10 client,
+  10 handler tests covering create/list/detail/update/unlink/bulk-create, role-gating, and
+  redirect-to-login). `cargo build --workspace`, `cargo clippy --workspace --all-targets -- -D
+  warnings`, `cargo fmt --all --check` all clean. No file exceeds 500 lines. Real-Postgres
+  integration tests (create/update/link/unlink with audit rows, immutability-trigger rejection
+  on `incident_audit_log`) stable across 3 repeated runs; a Postgres TIMESTAMPTZ
+  microsecond-precision vs `chrono::Utc::now()` nanosecond-precision mismatch (same known gotcha
+  documented in `analysis_config_repository_integration_test.rs`) was hit and fixed by comparing
+  fields individually rather than full-struct equality. Live-verified against the real stack:
+  rebuilt/redeployed incident-service and kizashi-ui; selected two real events on the Events
+  page via the new checkboxes and used "Create Incident from Selected"; confirmed it landed on
+  the new incident's detail page showing both linked events; confirmed the incident appears in
+  `/incidents` with the correct linked-event count; unlinked one event and updated
+  title/severity/status via the detail page's form, confirming both took effect; confirmed
+  `created`/`deleted` (unlink)/`updated` audit rows in `incident_service.incident_audit_log` via
+  direct Postgres query, attributed to the real actor.
+- **PR:** #141
+- **ADR:** docs/adr/0111-incidents-mvp.md

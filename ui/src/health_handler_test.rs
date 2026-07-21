@@ -37,6 +37,7 @@ async fn state_with_session(health_client: Arc<dyn crate::HealthClient>) -> (App
         pending_oidc_flow_store: Arc::new(crate::pending_oidc_flow::InMemoryPendingOidcFlowStore::default()),
         events_client: Arc::new(InMemoryEventsClient::default()),
         triggers_client: Arc::new(InMemoryTriggersClient::default()),
+        incidents_client: Arc::new(crate::incidents_client::incidents_client_test::InMemoryIncidentsClient::default()),
         health_client,
         sensors_client: Arc::new(crate::sensors_client::sensors_client_test::InMemorySensorsClient::default()),
         api_keys_client: Arc::new(crate::api_keys_client::api_keys_client_test::InMemoryApiKeysClient::default()),

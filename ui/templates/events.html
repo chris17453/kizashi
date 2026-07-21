@@ -48,9 +48,16 @@
   {% endif %}
 </div>
 {% else %}
+{% if can_write %}
+<!-- Declared empty and referenced by `form="create-incident-form"` on each checkbox/button
+     below (same standalone-form pattern as Sensors'/API Keys' bulk actions) so the checkboxes
+     can live inside the events table without nesting a <form> inside each row's own controls. -->
+<form id="create-incident-form" method="post" action="/events/create-incident"></form>
+{% endif %}
 <table>
   <thead>
     <tr>
+      {% if can_write %}<th scope="col"></th>{% endif %}
       <th scope="col">
         <a href="/events?q={{ q|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=event_type&dir={% if sort == "event_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Event Type{% if sort == "event_type" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
@@ -77,6 +84,9 @@
   <tbody>
     {% for event in events %}
     <tr>
+      {% if can_write %}
+      <td><input type="checkbox" name="ids" value="{{ event.id }}" form="create-incident-form" aria-label="Select {{ event.event_type }} for incident creation"></td>
+      {% endif %}
       <td><a href="/events/{{ event.id }}">{{ event.event_type }}</a></td>
       <td>{{ event.group_key }}</td>
       <td class="status-{{ event.status }}">{{ event.status }}</td>
@@ -96,6 +106,10 @@
     {% endfor %}
   </tbody>
 </table>
+
+{% if can_write %}
+<p><button type="submit" form="create-incident-form" class="btn">Create Incident from Selected</button></p>
+{% endif %}
 
 <div class="pagination">
   {% if page > 0 %}

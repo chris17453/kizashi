@@ -41,6 +41,7 @@ async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
         ),
         events_client: Arc::new(InMemoryEventsClient::default()),
         triggers_client: Arc::new(InMemoryTriggersClient::default()),
+        incidents_client: Arc::new(crate::incidents_client::incidents_client_test::InMemoryIncidentsClient::default()),
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),

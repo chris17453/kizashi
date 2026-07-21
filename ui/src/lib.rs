@@ -18,6 +18,7 @@ mod egress_allowlist_client;
 mod events_client;
 mod execution_client;
 mod health_client;
+mod incidents_client;
 mod ingestion_stats_client;
 mod login_attempts_client;
 mod mfa_client;
@@ -46,6 +47,7 @@ mod event_detail_handler;
 mod events_handler;
 mod health_handler;
 mod healthz;
+mod incident_handlers;
 mod login_attempts_handler;
 mod login_handler;
 mod logout_handler;
@@ -100,6 +102,9 @@ pub use execution_client::{
 pub use health_client::{
     HealthClient, HealthClientError, HttpHealthClient, PlatformHealthSummary, ServiceHealthSummary,
 };
+pub use incidents_client::{
+    HttpIncidentsClient, IncidentDetail, IncidentsClient, IncidentsClientError,
+};
 pub use ingestion_stats_client::{
     ConnectorStatSummary, HttpIngestionStatsClient, IngestionStatsClient,
     IngestionStatsClientError, RecordSearchFilter, RecordSummary,
@@ -145,6 +150,10 @@ pub use event_detail_handler::get_event_detail;
 pub use events_handler::{get_events, get_events_export_csv};
 pub use health_handler::get_health;
 pub use healthz::healthz;
+pub use incident_handlers::{
+    get_incident_detail, get_incidents, post_create_incident_from_events, post_incident,
+    post_unlink_event, post_update_incident,
+};
 pub use login_attempts_handler::get_login_attempts as get_login_attempts_page;
 pub use login_attempts_handler::get_login_attempts_export_csv;
 pub use login_handler::{get_login, post_login};
@@ -201,6 +210,7 @@ pub struct AppState {
     pub pending_oidc_flow_store: Arc<dyn PendingOidcFlowStore>,
     pub events_client: Arc<dyn EventsClient>,
     pub triggers_client: Arc<dyn TriggersClient>,
+    pub incidents_client: Arc<dyn IncidentsClient>,
     pub health_client: Arc<dyn HealthClient>,
     pub sensors_client: Arc<dyn SensorsClient>,
     pub api_keys_client: Arc<dyn ApiKeysClient>,
@@ -250,6 +260,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/events", get(get_events))
         .route("/events/:id", get(get_event_detail))
         .route("/events/export.csv", get(get_events_export_csv))
+        .route("/events/create-incident", axum::routing::post(post_create_incident_from_events))
+        .route("/incidents", get(get_incidents).post(post_incident))
+        .route("/incidents/:id", get(get_incident_detail).post(post_update_incident))
+        .route("/incidents/:id/events/:event_id/unlink", axum::routing::post(post_unlink_event))
         .route("/triggers", get(get_triggers).post(post_trigger))
         .route("/triggers/:id/toggle", post(post_toggle_trigger))
         .route("/triggers/:id/delete", post(post_delete_trigger))

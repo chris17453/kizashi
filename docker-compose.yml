@@ -211,6 +211,16 @@ services:
       rabbitmq: { condition: service_healthy }
     healthcheck: *healthz
 
+  incident-service:
+    build: { context: ., args: { BIN: incident-service } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+    ports: ["8096:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck: *healthz
+
   ingestion-gateway:
     build: { context: ., args: { BIN: ingestion-gateway } }
     environment:
@@ -362,6 +372,7 @@ services:
       BACKUP_SERVICE_URL: http://backup-service:8080
       EGRESS_GATEWAY_URL: http://egress-gateway:8080
       TRIGGER_ENGINE_URL: http://trigger-engine:8080
+      INCIDENT_SERVICE_URL: http://incident-service:8080
       INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
       # Local/dev runs over plain HTTP, so this defaults to false (a Secure cookie a browser
       # won't send over plain HTTP would silently break every login). Set to "true" behind a
@@ -393,6 +404,7 @@ services:
       backup-service: { condition: service_started }
       egress-gateway: { condition: service_started }
       trigger-engine: { condition: service_started }
+      incident-service: { condition: service_started }
     healthcheck: *healthz
 
   # --- Connectors --------------------------------------------------------------------------

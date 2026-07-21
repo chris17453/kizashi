@@ -42,6 +42,7 @@ CONFIG_ADMIN_SERVICE_PORT=8090
 RETENTION_SERVICE_PORT=8091
 OBSERVABILITY_PORT=8092
 UI_PORT=8093
+INCIDENT_SERVICE_PORT=8096
 
 start() {
   local name="$1" bin="$2"
@@ -117,6 +118,10 @@ start config-admin-service config-admin-service \
   RABBITMQ_URL="$RABBITMQ_URL"
 wait_healthy config-admin-service "http://localhost:$CONFIG_ADMIN_SERVICE_PORT/healthz"
 
+start incident-service incident-service \
+  BIND_ADDR="0.0.0.0:$INCIDENT_SERVICE_PORT" DATABASE_URL="$DATABASE_URL"
+wait_healthy incident-service "http://localhost:$INCIDENT_SERVICE_PORT/healthz"
+
 start ingestion-gateway ingestion-gateway \
   BIND_ADDR="0.0.0.0:$INGESTION_GATEWAY_PORT" DATABASE_URL="$DATABASE_URL" \
   INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT" \
@@ -163,7 +168,8 @@ start kizashi-ui kizashi-ui \
   INGESTION_GATEWAY_URL="http://localhost:$INGESTION_GATEWAY_PORT" \
   INGESTION_GATEWAY_PUBLIC_URL="http://localhost:$INGESTION_GATEWAY_PORT" \
   ACTION_EXECUTOR_URL="http://localhost:$ACTION_EXECUTOR_PORT" \
-  TRIGGER_ENGINE_URL="http://localhost:$TRIGGER_ENGINE_PORT"
+  TRIGGER_ENGINE_URL="http://localhost:$TRIGGER_ENGINE_PORT" \
+  INCIDENT_SERVICE_URL="http://localhost:$INCIDENT_SERVICE_PORT"
 sleep 2
 
 echo ""

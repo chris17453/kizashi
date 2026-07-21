@@ -40,6 +40,7 @@ async fn state_with_session() -> (AppState, String) {
         pending_oidc_flow_store: Arc::new(crate::pending_oidc_flow::InMemoryPendingOidcFlowStore::default()),
         events_client: Arc::new(InMemoryEventsClient::default()),
         triggers_client: Arc::new(InMemoryTriggersClient::default()),
+        incidents_client: Arc::new(crate::incidents_client::incidents_client_test::InMemoryIncidentsClient::default()),
         health_client: Arc::new(InMemoryHealthClient {
             summary: PlatformHealthSummary { status: "up".to_string(), services: vec![] },
         }),
@@ -125,6 +126,51 @@ async fn renders_the_events_table_when_signed_in() {
         body.contains(r#"scope="col""#),
         "table headers should carry scope=\"col\" for screen readers"
     );
+    assert!(body.contains("Create Incident from Selected"));
+    assert!(body.contains(r#"name="ids""#));
+}
+
+#[tokio::test]
+async fn viewer_role_does_not_see_the_bulk_incident_checkboxes() {
+    let (mut state, _admin_session_id) = state_with_session().await;
+    let session_store = InMemorySessionStore::default();
+    let session_id = session_store
+        .create(Session {
+            bearer_token: "tok".to_string(),
+            tenant_id: Uuid::new_v4(),
+            username: "viewer".to_string(),
+            role: common::Role::Viewer,
+            created_at: chrono::Utc::now(),
+        })
+        .await;
+    state.session_store = Arc::new(session_store);
+    let events_client = InMemoryEventsClient::default();
+    events_client.events.lock().unwrap().push(EventSummary {
+        id: Uuid::new_v4(),
+        event_type: "sentiment_spike".to_string(),
+        group_key: "customer-42".to_string(),
+        status: "open".to_string(),
+        occurred_at: "2026-07-18T00:00:00Z".parse().unwrap(),
+        record_ids: vec![],
+    });
+    state.events_client = Arc::new(events_client);
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/events")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains("Create Incident from Selected"));
+    assert!(!body.contains(r#"name="ids""#));
 }
 
 #[tokio::test]
