@@ -31,6 +31,10 @@ pub trait MappingRepository: Send + Sync {
     /// message into this service's own local table — the sync mechanism ADR-0010 originally
     /// called for and ADR-0018 built for triggers, extended here to mappings.
     async fn upsert(&self, mapping: NormalizationMapping) -> Result<(), MappingRepositoryError>;
+
+    /// Removes a mapping by id (ADR-0110): the write side of syncing a `MappingChangeEvent::
+    /// Deleted` message, same shape as `TriggerRepository::delete` in trigger-engine.
+    async fn delete(&self, id: Uuid) -> Result<(), MappingRepositoryError>;
 }
 
 pub struct PostgresMappingRepository {
@@ -100,6 +104,15 @@ impl MappingRepository for PostgresMappingRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| MappingRepositoryError::Backend(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), MappingRepositoryError> {
+        sqlx::query("DELETE FROM normalization_mappings WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| MappingRepositoryError::Backend(e.to_string()))?;
         Ok(())
     }
 }

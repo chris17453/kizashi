@@ -65,6 +65,21 @@ impl NormalizationMappingRepository for InMemoryNormalizationMappingRepository {
             .cloned()
             .collect())
     }
+
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        _actor: &str,
+    ) -> Result<(), NormalizationMappingRepositoryError> {
+        let mut mappings = self.mappings.lock().unwrap();
+        let before_len = mappings.len();
+        mappings.retain(|m| !(m.id == id && m.tenant_id == tenant_id));
+        if mappings.len() == before_len {
+            return Err(NormalizationMappingRepositoryError::NotFound(id));
+        }
+        Ok(())
+    }
 }
 
 pub struct FailingNormalizationMappingRepository;
@@ -99,6 +114,15 @@ impl NormalizationMappingRepository for FailingNormalizationMappingRepository {
         &self,
         _tenant_id: Uuid,
     ) -> Result<Vec<NormalizationMapping>, NormalizationMappingRepositoryError> {
+        Err(NormalizationMappingRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn delete(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+        _actor: &str,
+    ) -> Result<(), NormalizationMappingRepositoryError> {
         Err(NormalizationMappingRepositoryError::Backend("simulated failure".to_string()))
     }
 }
@@ -137,4 +161,25 @@ async fn list_is_scoped_to_tenant() {
 
     let found = repo.list(tenant_id).await.unwrap();
     assert_eq!(found.len(), 1);
+}
+
+#[tokio::test]
+async fn delete_removes_the_mapping() {
+    let tenant_id = Uuid::new_v4();
+    let mapping = sample_mapping(tenant_id);
+    let repo = InMemoryNormalizationMappingRepository::with_mapping(mapping.clone());
+
+    repo.delete(tenant_id, mapping.id, "test-actor").await.unwrap();
+
+    let found = repo.get(tenant_id, mapping.id).await.unwrap();
+    assert!(found.is_none());
+}
+
+#[tokio::test]
+async fn delete_of_unknown_mapping_returns_not_found() {
+    let repo = InMemoryNormalizationMappingRepository::default();
+
+    let err = repo.delete(Uuid::new_v4(), Uuid::new_v4(), "test-actor").await.unwrap_err();
+
+    assert!(matches!(err, NormalizationMappingRepositoryError::NotFound(_)));
 }

@@ -5103,3 +5103,36 @@ architectural decision.
   appear under `/audit-log/config/<trigger-id>` attributed to the real actor.
 - **PR:** #139
 - **ADR:** docs/adr/0109-trigger-delete.md
+
+## [2026-07-20] feature/0110-normalization-mapping-delete — Normalization mapping delete
+- **Type:** feature
+- **Branch:** feature/0110-normalization-mapping-delete
+- **Summary:** ADR-0109 closed a "no delete anywhere in the stack" gap for TriggerDefinition; a
+  follow-up audit pass found the sibling entity, NormalizationMapping, had the identical gap —
+  `NormalizationMappingRepository` had no `delete`, `MappingPublisher` only ever published a
+  bare `NormalizationMapping` with no way to signal removal, and normalization-service's own
+  mirrored copy (the one it actually applies) had no delete-sync path. Mirrored ADR-0109's fix
+  exactly: new `common::MappingChangeEvent` enum (`Upserted`/`Deleted`) replaces the bare
+  `NormalizationMapping` previously published on `mapping.changed` (a breaking wire-format
+  change, accepted since publisher and sole consumer ship together); added
+  `NormalizationMappingRepository::delete` (audit-logged) and `MappingRepository::delete` in
+  normalization-service; added `DELETE /v1/normalization-mappings/:id` (operator-gated);
+  normalization-service's consumer now branches on Upserted vs Deleted instead of always
+  upserting; added `NormalizationMappingsClient::delete_mapping` and `POST
+  /normalization-mappings/:id/delete` with a confirm() dialog on a new Remove button.
+- **Tests:** `cargo test --workspace --lib` — all 26 workspace crates green, 0 failures
+  (config-admin-service 126, normalization-service 34, kizashi-ui 506). Real-infra tests:
+  RabbitMQ round-trip for both `Upserted`/`Deleted` `MappingChangeEvent` variants (stable across
+  3 repeated runs using the wait-for-matching-event pattern for concurrent fanout-exchange
+  tests), real-Postgres delete-with-audit-row tests in both config-admin-service and
+  normalization-service. `cargo build --workspace`, `cargo clippy --workspace --all-targets --
+  -D warnings`, `cargo fmt --all --check` all clean. No file exceeds 500 lines. Live-verified
+  against the real stack: rebuilt/redeployed config-admin-service, normalization-service, and
+  kizashi-ui; created a throwaway mapping via the UI; confirmed it landed in
+  normalization-service's own mirrored table; deleted it via the new Remove button; confirmed
+  it's gone from both the Field Mappings list AND normalization-service's own copy (verified
+  directly via Postgres, proving the delete-sync path, not just config-admin-service's row);
+  confirmed both `created` and `deleted` audit entries appear under
+  `/audit-log/config/<mapping-id>`.
+- **PR:** pending
+- **ADR:** docs/adr/0110-normalization-mapping-delete.md

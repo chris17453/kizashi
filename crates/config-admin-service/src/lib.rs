@@ -33,7 +33,7 @@ pub use audit_log::{
 };
 pub use encryption::{ApiKeyEncryptor, EncryptionError};
 pub use handlers::{
-    create_mapping, create_trigger, delete_trigger, get_audit_log, get_mapping,
+    create_mapping, create_trigger, delete_mapping, delete_trigger, get_audit_log, get_mapping,
     get_recent_audit_log, get_trigger, list_mappings, list_triggers, update_mapping,
     update_trigger, AdminState,
 };
@@ -80,7 +80,10 @@ pub fn build_router(
             get(get_trigger).put(update_trigger).delete(delete_trigger),
         )
         .route("/v1/normalization-mappings", post(create_mapping).get(list_mappings))
-        .route("/v1/normalization-mappings/:id", get(get_mapping).put(update_mapping))
+        .route(
+            "/v1/normalization-mappings/:id",
+            get(get_mapping).put(update_mapping).delete(delete_mapping),
+        )
         .route("/v1/audit-log", get(get_recent_audit_log))
         .route("/v1/audit-log/:entity_id", get(get_audit_log))
         .with_state(state);

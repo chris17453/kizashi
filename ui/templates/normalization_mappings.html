@@ -70,6 +70,7 @@ analysis. One mapping per source type — the most specific one for a record's
           Version{% if sort == "version" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
+      {% if can_write %}<th scope="col"></th>{% endif %}
       <th scope="col"></th>
     </tr>
   </thead>
@@ -83,6 +84,13 @@ analysis. One mapping per source type — the most specific one for a record's
         {% endfor %}
       </td>
       <td>{{ mapping.version }}</td>
+      {% if can_write %}
+      <td>
+        <form class="inline" method="post" action="/normalization-mappings/{{ mapping.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this mapping? This cannot be undone.');">
+          <button type="submit" class="btn-danger">Remove</button>
+        </form>
+      </td>
+      {% endif %}
       <td><a href="/audit-log/config/{{ mapping.id }}">History</a></td>
     </tr>
     {% endfor %}

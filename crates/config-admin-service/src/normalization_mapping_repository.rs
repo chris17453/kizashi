@@ -42,6 +42,12 @@ pub trait NormalizationMappingRepository: Send + Sync {
         &self,
         tenant_id: Uuid,
     ) -> Result<Vec<NormalizationMapping>, NormalizationMappingRepositoryError>;
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        actor: &str,
+    ) -> Result<(), NormalizationMappingRepositoryError>;
 }
 
 pub struct PostgresNormalizationMappingRepository {
@@ -197,5 +203,61 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
         .await
         .map_err(|e| NormalizationMappingRepositoryError::Backend(e.to_string()))?;
         Ok(rows.into_iter().map(row_to_mapping).collect())
+    }
+
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        actor: &str,
+    ) -> Result<(), NormalizationMappingRepositoryError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| NormalizationMappingRepositoryError::Backend(e.to_string()))?;
+
+        let existing: Option<MappingRow> = sqlx::query_as(
+            "SELECT id, tenant_id, source_type, field_map, version FROM normalization_mappings WHERE id = $1 AND tenant_id = $2",
+        )
+        .bind(id)
+        .bind(tenant_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| NormalizationMappingRepositoryError::Backend(e.to_string()))?;
+
+        let Some(existing) = existing else {
+            return Err(NormalizationMappingRepositoryError::NotFound(id));
+        };
+        let before = row_to_mapping(existing);
+
+        sqlx::query("DELETE FROM normalization_mappings WHERE id = $1 AND tenant_id = $2")
+            .bind(id)
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| NormalizationMappingRepositoryError::Backend(e.to_string()))?;
+
+        record_audit_entry(
+            &mut tx,
+            &AuditLogEntry {
+                id: Uuid::new_v4(),
+                tenant_id,
+                entity_type: "normalization_mapping".to_string(),
+                entity_id: id,
+                change_type: ChangeType::Deleted,
+                actor: actor.to_string(),
+                before: Some(serde_json::to_value(&before).unwrap_or_default()),
+                after: serde_json::Value::Null,
+                changed_at: chrono::Utc::now(),
+            },
+        )
+        .await
+        .map_err(|e| NormalizationMappingRepositoryError::Backend(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| NormalizationMappingRepositoryError::Backend(e.to_string()))?;
+        Ok(())
     }
 }
