@@ -5228,5 +5228,5 @@ architectural decision.
   checkpoint with the user on which large feature to build next after several already shipped
   this session.
 - **Tests:** N/A — docs/ADR-only change, no code.
-- **PR:** pending
+- **PR:** #143
 - **ADR:** docs/adr/0112-alert-fingerprint-dedup.md
