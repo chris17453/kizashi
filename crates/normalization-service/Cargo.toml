@@ -22,6 +22,7 @@ sqlx = { workspace = true }
 lapin = { workspace = true }
 reqwest = { workspace = true }
 futures-util = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 tower = { workspace = true }

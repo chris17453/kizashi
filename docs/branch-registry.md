@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0113         |
+| feature       | `feature/` | 0114         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0005         |
@@ -165,3 +165,4 @@ manually created branches.
 | 0111 | `feature/0111-incidents-mvp` | feature | 2026-07-20 | open | pending | |
 | 0112 | `feature/0112-sensors-marketplace-reskin` | feature | 2026-07-20 | open | pending | |
 | 0004 | `docs/0004-adr-alert-fingerprint-dedup` | docs | 2026-07-20 | open | pending | |
+| 0113 | `feature/0113-alert-fingerprint-dedup` | feature | 2026-07-21 | open | pending | |

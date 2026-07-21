@@ -44,8 +44,8 @@ use ingestion_service::{
 use lapin::options::{BasicAckOptions, BasicConsumeOptions, QueueBindOptions, QueueDeclareOptions};
 use lapin::types::FieldTable;
 use normalization_service::{
-    process_normalization, HttpRecordClient, NormalizationDeps, PostgresMappingRepository,
-    RabbitMqEventPublisher as NormalizationEventPublisher,
+    process_normalization, HttpRecordClient, NormalizationDeps, PostgresFingerprintRepository,
+    PostgresMappingRepository, RabbitMqEventPublisher as NormalizationEventPublisher,
 };
 use std::sync::Arc;
 use trigger_engine::{
@@ -284,12 +284,13 @@ async fn a_raw_record_flows_all_the_way_from_ingestion_to_a_dispatched_action() 
         .await
         .expect("failed to declare record.normalized exchange");
     let normalization_deps = NormalizationDeps {
-        mapping_repository: Arc::new(PostgresMappingRepository::new(normalization_pool)),
+        mapping_repository: Arc::new(PostgresMappingRepository::new(normalization_pool.clone())),
         record_client: Arc::new(HttpRecordClient::new(
             reqwest::Client::new(),
             stub_ingestion_service_url,
         )),
         publisher: Arc::new(normalization_publisher),
+        fingerprint_repository: Arc::new(PostgresFingerprintRepository::new(normalization_pool)),
     };
     let mut analyzed_input_consumer = bind_consumer(
         &analyzed_consume_channel,

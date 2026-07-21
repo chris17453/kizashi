@@ -5,6 +5,8 @@
 mod dead_letter;
 mod dead_letter_handlers;
 mod event_publisher;
+mod fingerprint;
+mod fingerprint_repository;
 mod health;
 mod mapping_repository;
 mod process_normalization;
@@ -18,6 +20,10 @@ pub use dead_letter_handlers::{
     DeadLetterState,
 };
 pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
+pub use fingerprint::compute_fingerprint;
+pub use fingerprint_repository::{
+    DedupOutcome, FingerprintRepository, FingerprintRepositoryError, PostgresFingerprintRepository,
+};
 pub use health::build_router as health_router;
 pub use mapping_repository::{
     MappingRepository, MappingRepositoryError, PostgresMappingRepository,

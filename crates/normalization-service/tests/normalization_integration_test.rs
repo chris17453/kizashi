@@ -13,8 +13,8 @@ use futures_util::StreamExt;
 use lapin::options::{BasicAckOptions, BasicConsumeOptions, QueueBindOptions, QueueDeclareOptions};
 use lapin::types::FieldTable;
 use normalization_service::{
-    process_normalization, HttpRecordClient, NormalizationDeps, PostgresMappingRepository,
-    ProcessOutcome, RabbitMqEventPublisher,
+    process_normalization, HttpRecordClient, NormalizationDeps, PostgresFingerprintRepository,
+    PostgresMappingRepository, ProcessOutcome, RabbitMqEventPublisher,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -88,12 +88,13 @@ async fn processing_a_record_publishes_record_normalized_over_real_rabbitmq() {
     let publisher =
         RabbitMqEventPublisher::new(publish_channel).await.expect("failed to declare exchange");
     let deps = NormalizationDeps {
-        mapping_repository: Arc::new(PostgresMappingRepository::new(pool)),
+        mapping_repository: Arc::new(PostgresMappingRepository::new(pool.clone())),
         record_client: Arc::new(HttpRecordClient::new(
             reqwest::Client::new(),
             ingestion_service_url,
         )),
         publisher: Arc::new(publisher),
+        fingerprint_repository: Arc::new(PostgresFingerprintRepository::new(pool)),
     };
 
     let queue = consume_channel
@@ -155,12 +156,13 @@ async fn processing_a_record_with_no_configured_mapping_does_not_publish() {
     let publisher =
         RabbitMqEventPublisher::new(publish_channel).await.expect("failed to declare exchange");
     let deps = NormalizationDeps {
-        mapping_repository: Arc::new(PostgresMappingRepository::new(pool)),
+        mapping_repository: Arc::new(PostgresMappingRepository::new(pool.clone())),
         record_client: Arc::new(HttpRecordClient::new(
             reqwest::Client::new(),
             ingestion_service_url,
         )),
         publisher: Arc::new(publisher),
+        fingerprint_repository: Arc::new(PostgresFingerprintRepository::new(pool)),
     };
 
     let tenant_id = Uuid::new_v4();
