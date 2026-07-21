@@ -5038,5 +5038,5 @@ architectural decision.
   the Events table's link navigates to `/events/<id>`, confirmed the rendered page shows the
   real payload, a populated timeline, and a linked contributing record, and confirmed the
   not-found path renders "no event found with this id" for a nonexistent id.
-- **PR:** pending
+- **PR:** #137
 - **ADR:** docs/adr/0107-event-detail-view.md
