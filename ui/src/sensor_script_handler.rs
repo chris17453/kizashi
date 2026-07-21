@@ -2,7 +2,7 @@
 #[cfg(test)]
 mod sensor_script_handler_test;
 
-use crate::connector_field_catalog::{display_name, fields_for, ConnectorField, CONNECTOR_TYPES};
+use crate::connector_field_catalog::{display_name, fields_for, ConnectorField, CONNECTOR_CATALOG};
 use crate::session_guard::require_session;
 use crate::AppState;
 use askama::Template;
@@ -11,18 +11,48 @@ use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Response};
 use std::collections::BTreeMap;
 
+struct CatalogEntryView {
+    connector_type: &'static str,
+    display_name: &'static str,
+    description: &'static str,
+}
+
+struct CatalogCategoryView {
+    category: &'static str,
+    entries: Vec<CatalogEntryView>,
+}
+
+/// Groups `CONNECTOR_CATALOG` by category, sorted for stable rendering — Askama templates
+/// can't group by field inline, so this is precomputed in Rust and handed to the template as
+/// plain data, same pattern as `event_detail_handler.rs`'s `TimelineEntry`.
+fn grouped_catalog() -> Vec<CatalogCategoryView> {
+    let mut by_category: BTreeMap<&'static str, Vec<CatalogEntryView>> = BTreeMap::new();
+    for (connector_type, display_name, category, description) in CONNECTOR_CATALOG {
+        by_category.entry(category).or_default().push(CatalogEntryView {
+            connector_type,
+            display_name,
+            description,
+        });
+    }
+    by_category
+        .into_iter()
+        .map(|(category, entries)| CatalogCategoryView { category, entries })
+        .collect()
+}
+
 #[derive(Template)]
 #[template(path = "sensor_generate_select.html")]
 struct SelectConnectorTypeTemplate {
     show_nav: bool,
     is_admin: bool,
-    connector_types: &'static [(&'static str, &'static str)],
+    categories: Vec<CatalogCategoryView>,
 }
 
 /// GET /sensors/generate — step 1: pick a connector type. Split into its own step (rather than
 /// one big form with every connector's fields crammed in) because this app renders no
 /// JavaScript (ADR-0014) — there's no way to show/hide fields based on a dropdown without a
-/// page load, so the page load *is* the mechanism.
+/// page load, so the page load *is* the mechanism. Presented as a categorized, card-based
+/// catalog (a Keep-provider-marketplace-inspired reskin) rather than a flat `<select>`.
 pub async fn get_generate_select(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(session) => session,
@@ -30,7 +60,7 @@ pub async fn get_generate_select(State(state): State<AppState>, headers: HeaderM
     };
     let is_admin = session.role.at_least(common::Role::Admin);
     Html(
-        SelectConnectorTypeTemplate { show_nav: true, is_admin, connector_types: CONNECTOR_TYPES }
+        SelectConnectorTypeTemplate { show_nav: true, is_admin, categories: grouped_catalog() }
             .render()
             .unwrap(),
     )
@@ -88,13 +118,9 @@ pub async fn get_generate_form(
     let is_admin = session.role.at_least(common::Role::Admin);
     let Some(label) = display_name(&query.connector_type) else {
         return Html(
-            SelectConnectorTypeTemplate {
-                show_nav: true,
-                is_admin,
-                connector_types: CONNECTOR_TYPES,
-            }
-            .render()
-            .unwrap(),
+            SelectConnectorTypeTemplate { show_nav: true, is_admin, categories: grouped_catalog() }
+                .render()
+                .unwrap(),
         )
         .into_response();
     };

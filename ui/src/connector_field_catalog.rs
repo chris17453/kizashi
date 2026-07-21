@@ -36,6 +36,25 @@ pub const CONNECTOR_TYPES: &[(&str, &str)] = &[
     ("generic", "Generic"),
 ];
 
+/// `(connector_type, display_name, category, short_description)` — the marketplace-style
+/// catalog for the "choose a connector" step (`GET /sensors/generate`), grouped by `category`
+/// there instead of a flat `<select>`. A separate list from `CONNECTOR_TYPES` rather than
+/// widening that tuple, since `CONNECTOR_TYPES` is also used by Sensors' plain "register an
+/// already-deployed sensor" dropdown, which has no use for category/description.
+pub const CONNECTOR_CATALOG: &[(&str, &str, &str, &str)] = &[
+    ("zendesk", "Zendesk", "Ticketing & Support", "Poll Zendesk tickets and comments"),
+    ("graph-mail", "Microsoft Graph (Mail)", "Communication", "Poll a mailbox via Microsoft Graph"),
+    (
+        "graph-teams",
+        "Microsoft Graph (Teams)",
+        "Communication",
+        "Poll a Teams channel via Microsoft Graph",
+    ),
+    ("sql", "SQL", "Database", "Poll rows from a SQL database via a configurable query"),
+    ("fabric", "Fabric", "Database & Analytics", "Poll a Microsoft Fabric SQL analytics endpoint"),
+    ("generic", "Generic", "Custom / Other", "Poll any HTTP JSON source with a bearer token"),
+];
+
 pub fn display_name(connector_type: &str) -> Option<&'static str> {
     CONNECTOR_TYPES.iter().find(|(t, _)| *t == connector_type).map(|(_, name)| *name)
 }

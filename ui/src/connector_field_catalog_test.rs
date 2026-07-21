@@ -34,6 +34,24 @@ fn zendesk_requires_subdomain_email_and_token() {
 }
 
 #[test]
+fn every_connector_type_has_a_catalog_entry() {
+    for (connector_type, _) in CONNECTOR_TYPES {
+        assert!(
+            CONNECTOR_CATALOG.iter().any(|(t, _, _, _)| t == connector_type),
+            "{connector_type} has no CONNECTOR_CATALOG entry"
+        );
+    }
+}
+
+#[test]
+fn every_catalog_entry_has_a_non_empty_category_and_description() {
+    for (connector_type, _display_name, category, description) in CONNECTOR_CATALOG {
+        assert!(!category.is_empty(), "{connector_type} has an empty category");
+        assert!(!description.is_empty(), "{connector_type} has an empty description");
+    }
+}
+
+#[test]
 fn secret_fields_are_marked_secret() {
     let fields = fields_for("zendesk");
     let token_field = fields.iter().find(|f| f.env_var == "ZENDESK_API_TOKEN").unwrap();

@@ -5178,3 +5178,34 @@ architectural decision.
   direct Postgres query, attributed to the real actor.
 - **PR:** #141
 - **ADR:** docs/adr/0111-incidents-mvp.md
+
+## [2026-07-21] feature/0112-sensors-marketplace-reskin — Sensors/Providers marketplace reskin
+- **Type:** feature
+- **Branch:** feature/0112-sensors-marketplace-reskin
+- **Summary:** Another item from the Keep-comparison research: Keep presents its 50+ integrations
+  as a categorized, card-based marketplace, while Kizashi's connector-type picker
+  (`GET /sensors/generate`, step 1 of the deploy-script generator) was a flat `<select>`. Pure UI
+  reskin, no backend/schema/API changes — the underlying `/sensors/generate/form?connector_type=X`
+  contract, `ConnectorField`/`CONNECTOR_TYPES` (still used by Sensors' own "register an
+  already-deployed sensor" dropdown), and every connector's field list are all unchanged. Added a
+  new `CONNECTOR_CATALOG` const (connector_type, display_name, category, short_description) next
+  to the existing `CONNECTOR_TYPES`, with a test asserting the two lists can't silently drift.
+  `sensor_script_handler.rs`'s `get_generate_select` now groups the catalog by category in Rust
+  (Askama can't group inline) and `sensor_generate_select.html` renders it as a categorized card
+  grid — new `.provider-card` CSS reusing the existing `.status-grid` layout and surface/border
+  language already established by Platform Health's status cards, rather than inventing new
+  visual patterns. Each card links straight to its connector's field form.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 529 passed (2 new catalog tests asserting every
+  `CONNECTOR_TYPES` entry has a matching `CONNECTOR_CATALOG` entry and every catalog entry has a
+  non-empty category/description; the existing `get_generate_select_lists_every_connector_type`
+  test extended to assert a category label, a description, and a connector's configure-link
+  appear in the rendered HTML). `cargo build --workspace`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, `cargo fmt --all --check` all clean. No file exceeds 500 lines.
+  No ADR — pure UI reskin with no new entities/endpoints/data model. Live-verified against the
+  real stack: rebuilt/redeployed kizashi-ui, logged in as `watkinslabs`/`operator`, confirmed all
+  5 categories (Ticketing & Support, Communication, Database, Database & Analytics, Custom /
+  Other) and all 6 connector cards render with working "Configure" links, and confirmed following
+  one through to `/sensors/generate/form?connector_type=zendesk` still renders the existing
+  field-entry form unchanged.
+- **PR:** pending
+- **ADR:** none — pure UI reskin, no architecturally significant decision
