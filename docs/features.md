@@ -5176,5 +5176,5 @@ architectural decision.
   title/severity/status via the detail page's form, confirming both took effect; confirmed
   `created`/`deleted` (unlink)/`updated` audit rows in `incident_service.incident_audit_log` via
   direct Postgres query, attributed to the real actor.
-- **PR:** pending
+- **PR:** #141
 - **ADR:** docs/adr/0111-incidents-mvp.md
