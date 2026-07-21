@@ -41,6 +41,12 @@ pub trait TriggerDefinitionRepository: Send + Sync {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<TriggerDefinition>, TriggerDefinitionRepositoryError>;
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        actor: &str,
+    ) -> Result<(), TriggerDefinitionRepositoryError>;
 }
 
 pub struct PostgresTriggerDefinitionRepository {
@@ -228,5 +234,59 @@ impl TriggerDefinitionRepository for PostgresTriggerDefinitionRepository {
         .await
         .map_err(|e| TriggerDefinitionRepositoryError::Backend(e.to_string()))?;
         Ok(rows.into_iter().map(row_to_trigger).collect())
+    }
+
+    async fn delete(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        actor: &str,
+    ) -> Result<(), TriggerDefinitionRepositoryError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| TriggerDefinitionRepositoryError::Backend(e.to_string()))?;
+
+        let existing: Option<TriggerRow> = sqlx::query_as(
+            "SELECT id, tenant_id, name, event_type_match, condition, window_seconds, actions, enabled FROM trigger_definitions WHERE id = $1 AND tenant_id = $2",
+        )
+        .bind(id)
+        .bind(tenant_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| TriggerDefinitionRepositoryError::Backend(e.to_string()))?;
+
+        let Some(existing) = existing else {
+            return Err(TriggerDefinitionRepositoryError::NotFound(id));
+        };
+        let before = row_to_trigger(existing);
+
+        sqlx::query("DELETE FROM trigger_definitions WHERE id = $1 AND tenant_id = $2")
+            .bind(id)
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| TriggerDefinitionRepositoryError::Backend(e.to_string()))?;
+
+        record_audit_entry(
+            &mut tx,
+            &AuditLogEntry {
+                id: Uuid::new_v4(),
+                tenant_id,
+                entity_type: "trigger_definition".to_string(),
+                entity_id: id,
+                change_type: ChangeType::Deleted,
+                actor: actor.to_string(),
+                before: Some(serde_json::to_value(&before).unwrap_or_default()),
+                after: serde_json::Value::Null,
+                changed_at: chrono::Utc::now(),
+            },
+        )
+        .await
+        .map_err(|e| TriggerDefinitionRepositoryError::Backend(e.to_string()))?;
+
+        tx.commit().await.map_err(|e| TriggerDefinitionRepositoryError::Backend(e.to_string()))?;
+        Ok(())
     }
 }

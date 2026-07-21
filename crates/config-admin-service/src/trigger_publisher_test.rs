@@ -1,20 +1,21 @@
 use super::*;
 use common::trigger_definition::{ThresholdDirection, TriggerCondition};
+use common::TriggerDefinition;
 use std::sync::Mutex;
 use uuid::Uuid;
 
 #[derive(Default)]
 pub struct InMemoryTriggerPublisher {
-    pub published: Mutex<Vec<TriggerDefinition>>,
+    pub published: Mutex<Vec<TriggerChangeEvent>>,
 }
 
 #[async_trait]
 impl TriggerPublisher for InMemoryTriggerPublisher {
     async fn publish_trigger_changed(
         &self,
-        trigger: &TriggerDefinition,
+        event: &TriggerChangeEvent,
     ) -> Result<(), TriggerPublishError> {
-        self.published.lock().unwrap().push(trigger.clone());
+        self.published.lock().unwrap().push(event.clone());
         Ok(())
     }
 }
@@ -25,7 +26,7 @@ pub struct FailingTriggerPublisher;
 impl TriggerPublisher for FailingTriggerPublisher {
     async fn publish_trigger_changed(
         &self,
-        _trigger: &TriggerDefinition,
+        _event: &TriggerChangeEvent,
     ) -> Result<(), TriggerPublishError> {
         Err(TriggerPublishError::Bus("simulated bus failure".to_string()))
     }
@@ -49,20 +50,32 @@ fn sample_trigger() -> TriggerDefinition {
 }
 
 #[tokio::test]
-async fn in_memory_publisher_records_published_triggers() {
+async fn in_memory_publisher_records_published_events() {
     let publisher = InMemoryTriggerPublisher::default();
-    let trigger = sample_trigger();
+    let event = TriggerChangeEvent::Upserted(sample_trigger());
 
-    publisher.publish_trigger_changed(&trigger).await.unwrap();
+    publisher.publish_trigger_changed(&event).await.unwrap();
 
     let published = publisher.published.lock().unwrap();
     assert_eq!(published.len(), 1);
-    assert_eq!(published[0], trigger);
+    assert_eq!(published[0], event);
+}
+
+#[tokio::test]
+async fn in_memory_publisher_records_deleted_events() {
+    let publisher = InMemoryTriggerPublisher::default();
+    let event = TriggerChangeEvent::Deleted { id: Uuid::new_v4(), tenant_id: Uuid::new_v4() };
+
+    publisher.publish_trigger_changed(&event).await.unwrap();
+
+    let published = publisher.published.lock().unwrap();
+    assert_eq!(published[0], event);
 }
 
 #[tokio::test]
 async fn failing_publisher_returns_bus_error() {
     let publisher = FailingTriggerPublisher;
-    let err = publisher.publish_trigger_changed(&sample_trigger()).await.unwrap_err();
+    let event = TriggerChangeEvent::Upserted(sample_trigger());
+    let err = publisher.publish_trigger_changed(&event).await.unwrap_err();
     assert!(matches!(err, TriggerPublishError::Bus(_)));
 }

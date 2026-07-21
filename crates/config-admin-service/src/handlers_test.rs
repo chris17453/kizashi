@@ -19,7 +19,10 @@ use tower::ServiceExt;
 fn router(state: AdminState) -> Router {
     Router::new()
         .route("/v1/trigger-definitions", post(create_trigger).get(list_triggers))
-        .route("/v1/trigger-definitions/:id", get(get_trigger).put(update_trigger))
+        .route(
+            "/v1/trigger-definitions/:id",
+            get(get_trigger).put(update_trigger).delete(delete_trigger),
+        )
         .route("/v1/normalization-mappings", post(create_mapping).get(list_mappings))
         .route("/v1/normalization-mappings/:id", get(get_mapping).put(update_mapping))
         .route("/v1/audit-log/:entity_id", get(get_audit_log))
@@ -285,6 +288,79 @@ async fn list_triggers_returns_backend_error_as_500() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn delete_trigger_succeeds_then_get_returns_404() {
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id);
+    let state = AdminState {
+        trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::with_trigger(
+            trigger.clone(),
+        )),
+        mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
+        audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
+        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+    };
+    let app = router(state);
+
+    let delete_response = send(
+        app.clone(),
+        "DELETE",
+        format!("/v1/trigger-definitions/{}", trigger.id),
+        Some(tenant_id),
+        None,
+    )
+    .await;
+    assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+
+    let get_response =
+        send(app, "GET", format!("/v1/trigger-definitions/{}", trigger.id), Some(tenant_id), None)
+            .await;
+    assert_eq!(get_response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn delete_trigger_returns_404_for_unknown_id() {
+    let tenant_id = Uuid::new_v4();
+    let response = send(
+        router(default_state()),
+        "DELETE",
+        format!("/v1/trigger-definitions/{}", Uuid::new_v4()),
+        Some(tenant_id),
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn delete_trigger_rejects_a_viewer_role() {
+    let tenant_id = Uuid::new_v4();
+    let trigger = sample_trigger(tenant_id);
+    let state = AdminState {
+        trigger_repository: Arc::new(InMemoryTriggerDefinitionRepository::with_trigger(
+            trigger.clone(),
+        )),
+        mapping_repository: Arc::new(InMemoryNormalizationMappingRepository::default()),
+        audit_reader: Arc::new(InMemoryAuditLogReader::default()),
+        trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
+        mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+    };
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/trigger-definitions/{}", trigger.id))
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("x-role", "viewer")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]

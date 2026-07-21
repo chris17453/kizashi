@@ -158,8 +158,8 @@ async fn main() {
                 }
             };
 
-            let trigger: common::TriggerDefinition = match serde_json::from_slice(&delivery.data) {
-                Ok(t) => t,
+            let event: common::TriggerChangeEvent = match serde_json::from_slice(&delivery.data) {
+                Ok(e) => e,
                 Err(e) => {
                     tracing::error!(error = %e, "failed to deserialize trigger.changed message, dropping");
                     let _ = delivery.ack(BasicAckOptions::default()).await;
@@ -167,13 +167,26 @@ async fn main() {
                 }
             };
 
-            match trigger_repository.upsert(trigger.clone()).await {
+            let trigger_id = match &event {
+                common::TriggerChangeEvent::Upserted(trigger) => trigger.id,
+                common::TriggerChangeEvent::Deleted { id, .. } => *id,
+            };
+            let result = match &event {
+                common::TriggerChangeEvent::Upserted(trigger) => {
+                    trigger_repository.upsert(trigger.clone()).await
+                }
+                common::TriggerChangeEvent::Deleted { id, .. } => {
+                    trigger_repository.delete(*id).await
+                }
+            };
+
+            match result {
                 Ok(()) => {
-                    tracing::info!(trigger_id = %trigger.id, "synced trigger.changed");
+                    tracing::info!(trigger_id = %trigger_id, "synced trigger.changed");
                     let _ = delivery.ack(BasicAckOptions::default()).await;
                 }
                 Err(e) => {
-                    tracing::error!(trigger_id = %trigger.id, error = %e, "failed to sync trigger, requeueing");
+                    tracing::error!(trigger_id = %trigger_id, error = %e, "failed to sync trigger, requeueing");
                     let _ = delivery
                         .nack(BasicNackOptions { requeue: true, ..Default::default() })
                         .await;

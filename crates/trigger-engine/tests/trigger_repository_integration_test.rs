@@ -67,6 +67,19 @@ async fn upsert_replaces_an_existing_trigger_by_id_against_real_postgres() {
     assert_eq!(found, Some(updated));
 }
 
+#[tokio::test]
+async fn delete_removes_a_trigger_against_real_postgres() {
+    let pool = test_pool().await;
+    let repo = PostgresTriggerRepository::new(pool);
+    let trigger = sample_trigger(Uuid::new_v4(), Uuid::new_v4());
+    repo.upsert(trigger.clone()).await.unwrap();
+
+    repo.delete(trigger.id).await.unwrap();
+
+    let found = repo.get_by_id(trigger.id).await.unwrap();
+    assert!(found.is_none());
+}
+
 fn correlated_trigger(id: Uuid, tenant_id: Uuid) -> TriggerDefinition {
     TriggerDefinition {
         id,
