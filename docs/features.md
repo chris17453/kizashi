@@ -5065,5 +5065,5 @@ architectural decision.
   `kizashi-ui`, logged in as `watkinslabs`/`operator`, confirmed the toggle button renders with
   a real trigger id, POSTed the toggle and confirmed the button flipped from "Disable" to
   "Enable" (and back), and confirmed the change shows up in `/audit-log/config/<trigger-id>`.
-- **PR:** pending
+- **PR:** #138
 - **ADR:** docs/adr/0108-trigger-enable-disable-toggle.md
