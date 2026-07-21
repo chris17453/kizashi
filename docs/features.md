@@ -5267,5 +5267,5 @@ architectural decision.
   `record_fingerprints` shows `occurrence_count = 2` with both real record ids recorded as
   first/last seen, and confirmed both raw records still have `normalized_payload` written
   (nothing silently dropped) even though the second's `record.normalized` was suppressed.
-- **PR:** pending
+- **PR:** #144
 - **ADR:** docs/adr/0112-alert-fingerprint-dedup.md
