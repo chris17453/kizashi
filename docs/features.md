@@ -5134,5 +5134,5 @@ architectural decision.
   directly via Postgres, proving the delete-sync path, not just config-admin-service's row);
   confirmed both `created` and `deleted` audit entries appear under
   `/audit-log/config/<mapping-id>`.
-- **PR:** pending
+- **PR:** #140
 - **ADR:** docs/adr/0110-normalization-mapping-delete.md
