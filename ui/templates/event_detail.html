@@ -1,0 +1,111 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Event Detail</h1>
+{% if let Some(e) = error %}
+<p class="error">{{ e }}</p>
+{% endif %}
+{% if let Some(ev) = event %}
+<p class="muted">
+  <a href="/events">&larr; Back to Events</a>
+</p>
+
+<div class="form-row">
+  <div class="panel">
+    <h2>{{ ev.event_type }}</h2>
+    <table>
+      <tbody>
+        <tr><th scope="row">Status</th><td><span class="status-{{ status_class }}">{{ ev.status }}</span></td></tr>
+        <tr><th scope="row">Group key</th><td><code>{{ ev.group_key }}</code></td></tr>
+        <tr><th scope="row">Entity</th><td><code>{{ ev.entity_ref }}</code></td></tr>
+        <tr><th scope="row">Occurred at</th><td>{{ ev.occurred_at }}</td></tr>
+        <tr><th scope="row">Recorded at</th><td>{{ ev.created_at }}</td></tr>
+        <tr><th scope="row">Source connectors</th><td>
+          {% if ev.source_connector_ids.is_empty() %}
+          <span class="muted">&mdash;</span>
+          {% else %}
+          {% for connector_id in ev.source_connector_ids %}<code>{{ connector_id }}</code>{% if !loop.last %}, {% endif %}{% endfor %}
+          {% endif %}
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="info-panel">
+    <h2>Payload</h2>
+    <pre class="panel" style="max-width: 100%; overflow-x: auto; font-size: 0.85em;">{{ payload_pretty }}</pre>
+  </div>
+</div>
+
+<h2 class="section-title">Timeline</h2>
+{% if timeline.is_empty() %}
+<div class="empty-state">
+  <p>Nothing recorded yet.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th scope="col">When</th>
+      <th scope="col">What</th>
+      <th scope="col">Detail</th>
+      <th scope="col">Latency from event</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for entry in timeline %}
+    <tr>
+      <td>{{ entry.at }}</td>
+      <td>{{ entry.label }}</td>
+      <td>
+        {% if entry.is_failure %}
+        <span class="status-down">{{ entry.detail }}</span>
+        {% else %}
+        <span class="status-up">{{ entry.detail }}</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if let Some(latency) = entry.latency_from_event %}
+        {{ latency }}
+        {% else %}
+        <span class="muted">&mdash;</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2 class="section-title">Contributing records</h2>
+{% if contributing_records.is_empty() %}
+<div class="empty-state">
+  <p>No raw records are linked to this event.</p>
+</div>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Record</th>
+      <th scope="col">Connector</th>
+      <th scope="col">Source type</th>
+      <th scope="col">Ingested at</th>
+      <th scope="col"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for record in contributing_records %}
+    <tr>
+      <td><code>{{ record.id }}</code></td>
+      <td>{{ record.connector_id }}</td>
+      <td>{{ record.source_type }}</td>
+      <td>{{ record.ingested_at }}</td>
+      <td><a href="/data/{{ record.id }}">View record</a> &middot; <a href="/data/{{ record.id }}/journey">View journey</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% else %}
+<p class="muted">Event not found.</p>
+{% endif %}
+{% endblock %}

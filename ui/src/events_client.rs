@@ -29,6 +29,24 @@ pub struct EventsPage {
     pub has_more: bool,
 }
 
+/// The full `common::Event` shape, as opposed to `EventSummary`'s list-view subset -- fetched
+/// once per event-detail-page view, not once per row in a list of dozens, so the extra fields
+/// (payload, entity_ref, source_connector_ids, created_at) are worth the larger response here.
+#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+pub struct EventDetail {
+    pub id: Uuid,
+    pub event_type: String,
+    pub source_connector_ids: Vec<String>,
+    pub entity_ref: String,
+    pub group_key: String,
+    pub payload: serde_json::Value,
+    pub occurred_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub status: String,
+    #[serde(default)]
+    pub record_ids: Vec<Uuid>,
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Deserialize)]
 pub struct DailyCount {
     pub date: String,
@@ -74,6 +92,15 @@ pub trait EventsClient: Send + Sync {
         since: chrono::DateTime<chrono::Utc>,
         until: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<DailyCount>, EventsClientError>;
+
+    /// Fetches one event's full detail (payload, entity_ref, timestamps) — the Event Detail
+    /// page's primary data source. `None` when the event doesn't exist or belongs to a
+    /// different tenant (dashboard-api's `get_event` returns 404 for both, indistinguishably).
+    async fn get_event(
+        &self,
+        bearer_token: &str,
+        id: Uuid,
+    ) -> Result<Option<EventDetail>, EventsClientError>;
 }
 
 pub struct HttpEventsClient {
@@ -180,5 +207,29 @@ impl EventsClient for HttpEventsClient {
         let body: DailyCountsResponse =
             response.json().await.map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
         Ok(body.counts)
+    }
+
+    async fn get_event(
+        &self,
+        bearer_token: &str,
+        id: Uuid,
+    ) -> Result<Option<EventDetail>, EventsClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/events/{id}", self.query_gateway_url))
+            .bearer_auth(bearer_token)
+            .send()
+            .await
+            .map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !response.status().is_success() {
+            return Err(EventsClientError::Rejected(response.status().as_u16()));
+        }
+        let event: EventDetail =
+            response.json().await.map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
+        Ok(Some(event))
     }
 }
