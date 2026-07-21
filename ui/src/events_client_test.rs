@@ -10,6 +10,7 @@ pub struct InMemoryEventsClient {
     pub events: Mutex<Vec<EventSummary>>,
     pub has_more: Mutex<bool>,
     pub daily_counts: Mutex<Vec<DailyCount>>,
+    pub event_detail: Mutex<Option<EventDetail>>,
 }
 
 #[async_trait]
@@ -44,6 +45,14 @@ impl EventsClient for InMemoryEventsClient {
     ) -> Result<Vec<DailyCount>, EventsClientError> {
         Ok(self.daily_counts.lock().unwrap().clone())
     }
+
+    async fn get_event(
+        &self,
+        _bearer_token: &str,
+        _id: Uuid,
+    ) -> Result<Option<EventDetail>, EventsClientError> {
+        Ok(self.event_detail.lock().unwrap().clone())
+    }
 }
 
 pub struct FailingEventsClient;
@@ -77,6 +86,14 @@ impl EventsClient for FailingEventsClient {
     ) -> Result<Vec<DailyCount>, EventsClientError> {
         Err(EventsClientError::Unreachable("simulated failure".to_string()))
     }
+
+    async fn get_event(
+        &self,
+        _bearer_token: &str,
+        _id: Uuid,
+    ) -> Result<Option<EventDetail>, EventsClientError> {
+        Err(EventsClientError::Unreachable("simulated failure".to_string()))
+    }
 }
 
 async fn spawn_stub_server(expected_token: &'static str) -> String {
@@ -104,10 +121,31 @@ async fn spawn_stub_server(expected_token: &'static str) -> String {
         }))
         .into_response()
     }
+    async fn get_event_handler(
+        axum::extract::Path(id): axum::extract::Path<Uuid>,
+    ) -> axum::response::Response {
+        if id == Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap() {
+            return axum::http::StatusCode::NOT_FOUND.into_response();
+        }
+        Json(serde_json::json!({
+            "id": id,
+            "event_type": "sentiment_spike",
+            "source_connector_ids": ["zendesk-1"],
+            "entity_ref": "cust-42",
+            "group_key": "customer-42",
+            "payload": {"score": -0.8},
+            "occurred_at": "2026-07-18T00:00:00Z",
+            "created_at": "2026-07-18T00:00:01Z",
+            "status": "triggered",
+            "record_ids": ["22222222-2222-2222-2222-222222222222"]
+        }))
+        .into_response()
+    }
     let _ = expected_token;
     let app = Router::new()
         .route("/v1/events", get(handler))
-        .route("/v1/events/daily-counts", get(daily_counts_handler));
+        .route("/v1/events/daily-counts", get(daily_counts_handler))
+        .route("/v1/events/:id", get(get_event_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -208,4 +246,30 @@ async fn http_client_gets_daily_counts_against_a_real_server() {
         .unwrap();
 
     assert_eq!(counts, vec![DailyCount { date: "2026-07-18".to_string(), count: 3 }]);
+}
+
+#[tokio::test]
+async fn http_client_gets_an_events_full_detail_against_a_real_server() {
+    let url = spawn_stub_server("correct-token").await;
+    let client = HttpEventsClient::new(reqwest::Client::new(), url);
+    let id = Uuid::new_v4();
+
+    let event = client.get_event("correct-token", id).await.unwrap().unwrap();
+
+    assert_eq!(event.id, id);
+    assert_eq!(event.event_type, "sentiment_spike");
+    assert_eq!(event.entity_ref, "cust-42");
+    assert_eq!(event.status, "triggered");
+    assert_eq!(event.payload, serde_json::json!({"score": -0.8}));
+}
+
+#[tokio::test]
+async fn http_client_returns_none_when_the_event_is_not_found() {
+    let url = spawn_stub_server("correct-token").await;
+    let client = HttpEventsClient::new(reqwest::Client::new(), url);
+    let id = Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap();
+
+    let event = client.get_event("correct-token", id).await.unwrap();
+
+    assert!(event.is_none());
 }

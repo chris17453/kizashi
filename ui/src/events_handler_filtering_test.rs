@@ -241,6 +241,16 @@ async fn a_daily_counts_failure_does_not_break_the_rest_of_the_page() {
         {
             Err(crate::events_client::EventsClientError::Unreachable("simulated".to_string()))
         }
+        async fn get_event(
+            &self,
+            _bearer_token: &str,
+            _id: Uuid,
+        ) -> Result<
+            Option<crate::events_client::EventDetail>,
+            crate::events_client::EventsClientError,
+        > {
+            Ok(None)
+        }
     }
     state.events_client = Arc::new(EventsOkDailyCountsFailing);
 

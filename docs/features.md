@@ -5012,3 +5012,31 @@ architectural decision.
   path work as designed. Auth also verified (401 with no/wrong secret).
 - **PR:** #136
 - **ADR:** docs/adr/0106-dead-letter-queue-visibility-and-replay.md
+
+## [2026-07-20] feature/0107-event-detail-view — Event detail view
+- **Type:** feature
+- **Branch:** feature/0107-event-detail-view
+- **Summary:** The Events page only ever showed a flat table row per event, with no page to land
+  on for investigating one specific event's full payload, contributing records, and downstream
+  action executions. Surfaced by comparing Kizashi's investigation surface against Keep
+  (keephq/keep), another AIOps platform, whose alert detail view was the concrete reference
+  point. Added `GET /events/:id` to `kizashi-ui`: a new `EventsClient::get_event` method calling
+  `dashboard-api`'s pre-existing (previously unused-by-UI) `GET /v1/events/:id` handler via
+  query-gateway's existing proxy, and a new `event_detail_handler.rs` + `event_detail.html`
+  page showing event metadata, the pretty-printed JSON payload, a chronological timeline
+  merging the event-fired moment with every action execution triggered by it (latency +
+  pass/fail per entry), and the contributing raw records linked to their record/journey pages.
+  The Events table's event-type cell now links here. No new backend endpoints were needed —
+  only a new UI client method and page, reusing `ExecutionClient::list_executions_for_event`
+  and `IngestionStatsClient::get_record`, both already tenant-scoped and already tested.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 489 passed (5 new: renders full detail with
+  payload/timeline/records, shows an error when the event id doesn't exist, still renders when
+  the execution client fails, redirects to login when unauthenticated). `cargo build
+  --workspace`, `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`,
+  `cargo fmt --all --check` all clean. No file exceeds 500 lines. Live-verified against the
+  real stack: rebuilt/redeployed `kizashi-ui`, logged in as `watkinslabs`/`operator`, confirmed
+  the Events table's link navigates to `/events/<id>`, confirmed the rendered page shows the
+  real payload, a populated timeline, and a linked contributing record, and confirmed the
+  not-found path renders "no event found with this id" for a nonexistent id.
+- **PR:** #137
+- **ADR:** docs/adr/0107-event-detail-view.md
