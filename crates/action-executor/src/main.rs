@@ -1,7 +1,8 @@
 use action_executor::{
-    execution_router, health_router, process_event, retry_count, should_dead_letter,
-    with_incremented_retry_count, ActionDeps, ExecutionState, HttpTriggerClient,
-    PostgresExecutionRepository, RoutingActionDispatcher, EVENT_CREATED_EXCHANGE,
+    dead_letter_router, execution_router, health_router, process_event, retry_count,
+    should_dead_letter, with_incremented_retry_count, ActionDeps, DeadLetterState, ExecutionState,
+    HttpTriggerClient, PostgresExecutionRepository, RabbitMqDeadLetterManager,
+    RoutingActionDispatcher, EVENT_CREATED_EXCHANGE,
 };
 use futures_util::StreamExt;
 use lapin::options::{
@@ -42,6 +43,7 @@ async fn main() {
             .await
             .expect("failed to connect to rabbitmq");
     let consume_channel = connection.create_channel().await.expect("failed to open channel");
+    let dead_letter_channel = connection.create_channel().await.expect("failed to open channel");
 
     // ADR-0021: opt-in — set EGRESS_PROXY_URL to route every action webhook dispatch (an
     // external, often customer-controlled endpoint) through Egress Gateway's audit log/
@@ -54,7 +56,7 @@ async fn main() {
         trigger_client: Arc::new(HttpTriggerClient::new(
             reqwest::Client::new(),
             trigger_engine_url,
-            internal_secret,
+            internal_secret.clone(),
         )),
         dispatcher: Arc::new(RoutingActionDispatcher::new(egress_proxy_url)),
         execution_repository: execution_repository.clone(),
@@ -87,10 +89,19 @@ async fn main() {
         .await
         .expect("failed to bind queue");
 
+    let dead_letter_state = DeadLetterState {
+        dead_letter_manager: Arc::new(RabbitMqDeadLetterManager::new(
+            dead_letter_channel,
+            DEAD_LETTER_QUEUE_NAME.to_string(),
+            QUEUE_NAME.to_string(),
+        )),
+        internal_secret,
+    };
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "action-executor http listening");
-    let http_router =
-        health_router().merge(execution_router(ExecutionState { execution_repository }));
+    let http_router = health_router()
+        .merge(execution_router(ExecutionState { execution_repository }))
+        .merge(dead_letter_router(dead_letter_state));
     tokio::spawn(async move {
         axum::serve(listener, http_router).await.expect("http server error");
     });

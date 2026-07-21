@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0106         |
+| feature       | `feature/` | 0107         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0004         |
@@ -157,3 +157,4 @@ manually created branches.
 | 0103 | `feature/0103-error-scrub-rollout` | feature | 2026-07-20 | open | pending | |
 | 0104 | `feature/0104-action-executions-immutability-trigger` | feature | 2026-07-20 | open | pending | |
 | 0105 | `feature/0105-retry-cap-dead-letter-pipeline-consumers` | feature | 2026-07-20 | open | pending | |
+| 0106 | `feature/0106-dead-letter-queue-visibility-and-replay` | feature | 2026-07-20 | open | pending | |

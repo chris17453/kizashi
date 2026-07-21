@@ -85,14 +85,16 @@ wait_healthy ingestion-service "http://localhost:$INGESTION_SERVICE_PORT/healthz
 
 start normalization-service normalization-service \
   BIND_ADDR="0.0.0.0:$NORMALIZATION_SERVICE_PORT" DATABASE_URL="$DATABASE_URL" \
-  RABBITMQ_URL="$RABBITMQ_URL" INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT"
+  RABBITMQ_URL="$RABBITMQ_URL" INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT" \
+  INTERNAL_API_SECRET="${INTERNAL_API_SECRET:-change-me-in-production}"
 wait_healthy normalization-service "http://localhost:$NORMALIZATION_SERVICE_PORT/healthz"
 
 start analysis-service analysis-service \
   BIND_ADDR="0.0.0.0:$ANALYSIS_SERVICE_PORT" DATABASE_URL="$DATABASE_URL" \
   RABBITMQ_URL="$RABBITMQ_URL" \
   AZURE_AI_FOUNDRY_ENDPOINT="${AZURE_AI_FOUNDRY_ENDPOINT:-}" \
-  AZURE_AI_FOUNDRY_API_KEY="${AZURE_AI_FOUNDRY_API_KEY:-}"
+  AZURE_AI_FOUNDRY_API_KEY="${AZURE_AI_FOUNDRY_API_KEY:-}" \
+  INTERNAL_API_SECRET="${INTERNAL_API_SECRET:-change-me-in-production}"
 wait_healthy analysis-service "http://localhost:$ANALYSIS_SERVICE_PORT/healthz"
 
 start trigger-engine trigger-engine \
