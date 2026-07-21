@@ -5040,3 +5040,30 @@ architectural decision.
   not-found path renders "no event found with this id" for a nonexistent id.
 - **PR:** #137
 - **ADR:** docs/adr/0107-event-detail-view.md
+
+## [2026-07-20] feature/0108-trigger-enable-disable-toggle — Trigger enable/disable toggle
+- **Type:** feature
+- **Branch:** feature/0108-trigger-enable-disable-toggle
+- **Summary:** Audit pass found the Triggers page missing feature parity with its structurally
+  similar peers (Sensors, Retention Policies): both of those let an operator disable/edit/delete
+  a row in place, but Triggers only ever supported list + create + test-dry-run. Once created, a
+  trigger could only be disabled via a raw API call bypassing the Console UI's session/RBAC
+  layer and audit-log actor attribution. Added `TriggersClient::get_trigger`/`update_trigger`
+  (calling config-admin-service's pre-existing, already audit-logged, already operator-gated
+  `GET`/`PUT /v1/trigger-definitions/:id`, previously unused by any UI client) and a new `POST
+  /triggers/:id/toggle` route (`trigger_toggle_handler.rs`) that fetches the current definition,
+  flips `enabled`, and PUTs it back — same fetch-flip-PUT shape as
+  `post_toggle_retention_policy`. The Triggers table gains a Disable/Enable button per row,
+  gated behind `can_write` (Operator+). Full condition/action editing and delete remain
+  out of scope — the condition DSL editor is materially bigger, and config-admin-service has no
+  delete endpoint for trigger definitions yet.
+- **Tests:** `cargo test -p kizashi-ui --lib` — 496 passed (7 new: 4 client tests — get full
+  definition, 404-to-None, update, role-rejected — and 3 toggle-handler tests — flips enabled,
+  viewer role forbidden, redirects to login). `cargo build --workspace`, `cargo clippy -p
+  kizashi-ui --all-targets --all-features -- -D warnings`, `cargo fmt --all --check` all clean.
+  No file exceeds 500 lines. Live-verified against the real stack: rebuilt/redeployed
+  `kizashi-ui`, logged in as `watkinslabs`/`operator`, confirmed the toggle button renders with
+  a real trigger id, POSTed the toggle and confirmed the button flipped from "Disable" to
+  "Enable" (and back), and confirmed the change shows up in `/audit-log/config/<trigger-id>`.
+- **PR:** #138
+- **ADR:** docs/adr/0108-trigger-enable-disable-toggle.md

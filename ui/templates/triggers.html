@@ -162,7 +162,7 @@
           Enabled{% if sort == "enabled" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
-      <th scope="col">Test</th><th scope="col"></th>
+      <th scope="col">Test</th>{% if can_write %}<th scope="col"></th>{% endif %}<th scope="col"></th>
     </tr>
   </thead>
   <tbody>
@@ -180,6 +180,13 @@
           <button type="submit" class="btn">Test</button>
         </form>
       </td>
+      {% if can_write %}
+      <td>
+        <form class="inline" method="post" action="/triggers/{{ trigger.id }}/toggle" style="display:inline">
+          <button type="submit" class="{% if trigger.enabled %}btn-danger{% else %}btn{% endif %}">{% if trigger.enabled %}Disable{% else %}Enable{% endif %}</button>
+        </form>
+      </td>
+      {% endif %}
       <td><a href="/audit-log/config/{{ trigger.id }}">History</a></td>
     </tr>
     {% endfor %}

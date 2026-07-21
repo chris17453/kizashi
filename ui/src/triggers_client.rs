@@ -62,6 +62,24 @@ pub trait TriggersClient: Send + Sync {
         id: Uuid,
         group_key: &str,
     ) -> Result<TriggerTestResult, TriggersClientError>;
+
+    /// Fetches one trigger's full definition (not just the list-page `TriggerSummary`) —
+    /// needed before a toggle/edit so the full record can be resent on `update_trigger`, since
+    /// config-admin-service's `PUT` replaces the whole row. No role gate: read-only.
+    async fn get_trigger(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<Option<TriggerDefinition>, TriggersClientError>;
+
+    /// Updates a trigger — operator-only (RBAC v1, ADR-0016), same actor-attribution shape as
+    /// `create_trigger`. config-admin-service's `update` writes an audit-log row per call.
+    async fn update_trigger(
+        &self,
+        role: Role,
+        actor: &str,
+        trigger: TriggerDefinition,
+    ) -> Result<TriggerDefinition, TriggersClientError>;
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Deserialize)]
@@ -151,6 +169,51 @@ impl TriggersClient for HttpTriggersClient {
             .post(format!("{}/v1/triggers/{id}/test", self.trigger_engine_url))
             .header("x-tenant-id", tenant_id.to_string())
             .json(&serde_json::json!({"group_key": group_key}))
+            .send()
+            .await
+            .map_err(|e| TriggersClientError::Unreachable(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(TriggersClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| TriggersClientError::Unreachable(e.to_string()))
+    }
+
+    async fn get_trigger(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<Option<TriggerDefinition>, TriggersClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/trigger-definitions/{id}", self.config_admin_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .send()
+            .await
+            .map_err(|e| TriggersClientError::Unreachable(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !response.status().is_success() {
+            return Err(TriggersClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map(Some).map_err(|e| TriggersClientError::Unreachable(e.to_string()))
+    }
+
+    async fn update_trigger(
+        &self,
+        role: Role,
+        actor: &str,
+        trigger: TriggerDefinition,
+    ) -> Result<TriggerDefinition, TriggersClientError> {
+        let response = self
+            .client
+            .put(format!("{}/v1/trigger-definitions/{}", self.config_admin_service_url, trigger.id))
+            .header("x-tenant-id", trigger.tenant_id.to_string())
+            .header("x-role", role.to_string())
+            .header("x-username", actor)
+            .json(&trigger)
             .send()
             .await
             .map_err(|e| TriggersClientError::Unreachable(e.to_string()))?;
