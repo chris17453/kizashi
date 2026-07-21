@@ -5101,5 +5101,5 @@ architectural decision.
   confirmed trigger-engine's copy now returns 404 (proving the delete-sync path works, not just
   config-admin-service's own row), and confirmed both `created` and `deleted` audit entries
   appear under `/audit-log/config/<trigger-id>` attributed to the real actor.
-- **PR:** pending
+- **PR:** #139
 - **ADR:** docs/adr/0109-trigger-delete.md
