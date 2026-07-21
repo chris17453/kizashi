@@ -3,6 +3,8 @@
 mod process_normalization_test;
 
 use crate::event_publisher::EventPublisher;
+use crate::fingerprint::compute_fingerprint;
+use crate::fingerprint_repository::{DedupOutcome, FingerprintRepository};
 use crate::mapping_repository::MappingRepository;
 use crate::record_client::RecordClient;
 use common::RawRecord;
@@ -24,6 +26,11 @@ pub enum ProcessOutcome {
     /// operator hasn't configured this source type yet — so the message is still acked rather
     /// than redelivered forever.
     NoMappingConfigured,
+    /// An exact duplicate within the mapping's dedup window (ADR-0112) — normalized_payload
+    /// was still written back (raw/normalized data is never silently dropped), but
+    /// `record.normalized` was not published, so analysis-service/trigger-engine never
+    /// re-react to a repeat.
+    Suppressed,
 }
 
 #[derive(Clone)]
@@ -31,6 +38,7 @@ pub struct NormalizationDeps {
     pub mapping_repository: Arc<dyn MappingRepository>,
     pub record_client: Arc<dyn RecordClient>,
     pub publisher: Arc<dyn EventPublisher>,
+    pub fingerprint_repository: Arc<dyn FingerprintRepository>,
 }
 
 /// Converts a common::SourceType into the string key NormalizationMapping rows are keyed by
@@ -73,6 +81,32 @@ pub async fn process_normalization(
         .update_normalized_payload(record.id, &normalized_payload)
         .await
         .map_err(|e| ProcessError::RecordUpdate(e.to_string()))?;
+
+    // ADR-0112: check for an exact duplicate before publishing. A fingerprint-store failure
+    // fails open (treated as a fresh occurrence, logged not propagated) — dedup is a
+    // noise-reduction layer, not a correctness guarantee, so a transient dedup-store hiccup
+    // must never cause a genuine record.normalized to go unpublished.
+    if let Some(fingerprint) = compute_fingerprint(&mapping.dedup_fields, &normalized_payload) {
+        match deps
+            .fingerprint_repository
+            .check_and_record(
+                record.tenant_id,
+                &fingerprint,
+                record.id,
+                mapping.dedup_window_seconds,
+            )
+            .await
+        {
+            Ok(DedupOutcome::Duplicate) => {
+                tracing::info!(record_id = %record.id, tenant_id = %record.tenant_id, "suppressing exact-duplicate record.normalized");
+                return Ok(ProcessOutcome::Suppressed);
+            }
+            Ok(DedupOutcome::New) => {}
+            Err(e) => {
+                tracing::error!(record_id = %record.id, error = %e, "fingerprint check failed, publishing anyway");
+            }
+        }
+    }
 
     let mut updated_record = record.clone();
     updated_record.normalized_payload = Some(normalized_payload);

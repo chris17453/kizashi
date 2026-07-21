@@ -95,6 +95,8 @@ async fn spawn_stub_server() -> String {
             source_type: "ticket".to_string(),
             field_map,
             version: 1,
+            dedup_fields: vec![],
+            dedup_window_seconds: None,
         }])
         .into_response()
     }
@@ -136,6 +138,8 @@ fn sample_mapping() -> NormalizationMapping {
         source_type: "ticket".to_string(),
         field_map,
         version: 1,
+        dedup_fields: vec![],
+        dedup_window_seconds: None,
     }
 }
 

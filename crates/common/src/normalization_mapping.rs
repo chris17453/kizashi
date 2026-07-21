@@ -16,6 +16,16 @@ pub struct NormalizationMapping {
     pub source_type: String,
     pub field_map: BTreeMap<String, String>,
     pub version: i32,
+    /// Names of `field_map` keys (i.e. normalized target fields) that participate in
+    /// exact-duplicate fingerprinting (ADR-0112). Empty = dedup disabled for this mapping —
+    /// opt-in, so existing mappings behave identically until an operator deliberately
+    /// configures this. `#[serde(default)]` keeps this additive to the existing API.
+    #[serde(default)]
+    pub dedup_fields: Vec<String>,
+    /// How long a fingerprint is remembered before a repeat is treated as new again.
+    /// `None` = no expiry. Ignored when `dedup_fields` is empty.
+    #[serde(default)]
+    pub dedup_window_seconds: Option<i64>,
 }
 
 impl NormalizationMapping {
@@ -30,6 +40,8 @@ impl NormalizationMapping {
             source_type: source_type.into(),
             field_map,
             version: 1,
+            dedup_fields: Vec::new(),
+            dedup_window_seconds: None,
         }
     }
 

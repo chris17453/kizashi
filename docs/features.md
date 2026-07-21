@@ -5230,3 +5230,42 @@ architectural decision.
 - **Tests:** N/A — docs/ADR-only change, no code.
 - **PR:** #143
 - **ADR:** docs/adr/0112-alert-fingerprint-dedup.md
+
+## [2026-07-21] feature/0113-alert-fingerprint-dedup — Alert fingerprint/dedup layer
+- **Type:** feature
+- **Branch:** feature/0113-alert-fingerprint-dedup
+- **Summary:** Implements ADR-0112's MVP: exact-duplicate suppression so a noisy, repeatedly
+  firing source doesn't flood analysis-service/trigger-engine with the same underlying problem
+  reported over and over. `NormalizationMapping` gains opt-in `dedup_fields: Vec<String>` /
+  `dedup_window_seconds: Option<i64>` (additive, `#[serde(default)]`, empty = disabled — zero
+  behavior change until an operator deliberately configures a mapping), synced through both
+  config-admin-service's and normalization-service's own copies via the existing
+  `mapping.changed` mechanism, no changes needed there. normalization-service computes a
+  SHA-256 fingerprint over the configured normalized field values (new `fingerprint.rs`, sorted
+  by field name for stability) and checks it against a new `record_fingerprints` table (new
+  `fingerprint_repository.rs`, `(tenant_id, fingerprint)` keyed, tracks occurrence_count/
+  first_seen/last_seen, not audit-logged since it's high-churn pipeline state not operator
+  config). On an exact-duplicate hit within the window, `normalized_payload` is still written
+  back to ingestion-service (raw/normalized data is never silently dropped — visible on the
+  Data page either way) but `record.normalized` is not published, so analysis-service/
+  trigger-engine never re-react to the repeat — `ProcessOutcome` gains a `Suppressed` variant. A
+  fingerprint-store failure fails open (logged, treated as a fresh occurrence) since dedup is a
+  noise-reduction layer, not a correctness guarantee. Partial-duplicate-as-update remains
+  deferred per ADR-0112, as does any Console UI for configuring `dedup_fields` — this PR is the
+  backend mechanism only.
+- **Tests:** `cargo test --workspace --lib` — all 27 workspace crates green, 0 failures
+  (normalization-service 49, +15 new: 6 fingerprint computation, 6 fingerprint-repository,
+  3 process_normalization suppression-path). `cargo build --workspace`, `cargo clippy
+  --workspace --all-targets -- -D warnings`, `cargo fmt --all --check` all clean. No file
+  exceeds 500 lines. Real-Postgres integration tests (new
+  `fingerprint_repository_integration_test.rs`: first-sighting-is-new, duplicate-within-window,
+  new-again-outside-window using a real 0-second window + sleep, occurrence_count increments)
+  stable across 3 repeated runs. Live-verified against the real stack: rebuilt/redeployed
+  config-admin-service and normalization-service; created a mapping with `dedup_fields`/
+  `dedup_window_seconds` via the API and confirmed it synced to normalization-service's own
+  table; ingested the same raw payload twice via ingestion-gateway; confirmed
+  `record_fingerprints` shows `occurrence_count = 2` with both real record ids recorded as
+  first/last seen, and confirmed both raw records still have `normalized_payload` written
+  (nothing silently dropped) even though the second's `record.normalized` was suppressed.
+- **PR:** #144
+- **ADR:** docs/adr/0112-alert-fingerprint-dedup.md

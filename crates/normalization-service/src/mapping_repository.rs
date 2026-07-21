@@ -60,9 +60,11 @@ impl MappingRepository for PostgresMappingRepository {
             String,
             sqlx::types::Json<std::collections::BTreeMap<String, String>>,
             i32,
+            sqlx::types::Json<Vec<String>>,
+            Option<i64>,
         )> = sqlx::query_as(
             r#"
-                SELECT id, tenant_id, source_type, field_map, version
+                SELECT id, tenant_id, source_type, field_map, version, dedup_fields, dedup_window_seconds
                 FROM normalization_mappings
                 WHERE tenant_id = $1 AND source_type = $2
                 ORDER BY version DESC
@@ -75,25 +77,42 @@ impl MappingRepository for PostgresMappingRepository {
         .await
         .map_err(|e| MappingRepositoryError::Backend(e.to_string()))?;
 
-        Ok(row.map(|(id, tenant_id, source_type, field_map, version)| NormalizationMapping {
-            id,
-            tenant_id,
-            source_type,
-            field_map: field_map.0,
-            version,
-        }))
+        Ok(row.map(
+            |(
+                id,
+                tenant_id,
+                source_type,
+                field_map,
+                version,
+                dedup_fields,
+                dedup_window_seconds,
+            )| {
+                NormalizationMapping {
+                    id,
+                    tenant_id,
+                    source_type,
+                    field_map: field_map.0,
+                    version,
+                    dedup_fields: dedup_fields.0,
+                    dedup_window_seconds,
+                }
+            },
+        ))
     }
 
     async fn upsert(&self, mapping: NormalizationMapping) -> Result<(), MappingRepositoryError> {
         sqlx::query(
             r#"
-            INSERT INTO normalization_mappings (id, tenant_id, source_type, field_map, version)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO normalization_mappings
+                (id, tenant_id, source_type, field_map, version, dedup_fields, dedup_window_seconds)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (id) DO UPDATE SET
                 tenant_id = EXCLUDED.tenant_id,
                 source_type = EXCLUDED.source_type,
                 field_map = EXCLUDED.field_map,
-                version = EXCLUDED.version
+                version = EXCLUDED.version,
+                dedup_fields = EXCLUDED.dedup_fields,
+                dedup_window_seconds = EXCLUDED.dedup_window_seconds
             "#,
         )
         .bind(mapping.id)
@@ -101,6 +120,8 @@ impl MappingRepository for PostgresMappingRepository {
         .bind(&mapping.source_type)
         .bind(sqlx::types::Json(&mapping.field_map))
         .bind(mapping.version)
+        .bind(sqlx::types::Json(&mapping.dedup_fields))
+        .bind(mapping.dedup_window_seconds)
         .execute(&self.pool)
         .await
         .map_err(|e| MappingRepositoryError::Backend(e.to_string()))?;

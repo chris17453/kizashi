@@ -7,8 +7,9 @@ use lapin::types::FieldTable;
 use normalization_service::{
     dead_letter_router, health_router, process_normalization, retry_count, should_dead_letter,
     source_type_key, with_incremented_retry_count, DeadLetterState, HttpRecordClient,
-    NormalizationDeps, PostgresMappingRepository, RabbitMqDeadLetterManager,
-    RabbitMqEventPublisher, MAPPING_CHANGED_EXCHANGE, RECORD_INGESTED_EXCHANGE,
+    NormalizationDeps, PostgresFingerprintRepository, PostgresMappingRepository,
+    RabbitMqDeadLetterManager, RabbitMqEventPublisher, MAPPING_CHANGED_EXCHANGE,
+    RECORD_INGESTED_EXCHANGE,
 };
 use std::sync::Arc;
 
@@ -50,7 +51,7 @@ async fn main() {
     let dead_letter_channel = connection.create_channel().await.expect("failed to open channel");
 
     let deps = NormalizationDeps {
-        mapping_repository: Arc::new(PostgresMappingRepository::new(pool)),
+        mapping_repository: Arc::new(PostgresMappingRepository::new(pool.clone())),
         record_client: Arc::new(HttpRecordClient::new(
             reqwest::Client::new(),
             ingestion_service_url,
@@ -58,6 +59,7 @@ async fn main() {
         publisher: Arc::new(
             RabbitMqEventPublisher::new(publish_channel).await.expect("failed to declare exchange"),
         ),
+        fingerprint_repository: Arc::new(PostgresFingerprintRepository::new(pool)),
     };
 
     consume_channel

@@ -60,12 +60,31 @@ impl PostgresNormalizationMappingRepository {
     }
 }
 
-type MappingRow = (Uuid, Uuid, String, sqlx::types::Json<BTreeMap<String, String>>, i32);
+type MappingRow = (
+    Uuid,
+    Uuid,
+    String,
+    sqlx::types::Json<BTreeMap<String, String>>,
+    i32,
+    sqlx::types::Json<Vec<String>>,
+    Option<i64>,
+);
 
 fn row_to_mapping(row: MappingRow) -> NormalizationMapping {
-    let (id, tenant_id, source_type, field_map, version) = row;
-    NormalizationMapping { id, tenant_id, source_type, field_map: field_map.0, version }
+    let (id, tenant_id, source_type, field_map, version, dedup_fields, dedup_window_seconds) = row;
+    NormalizationMapping {
+        id,
+        tenant_id,
+        source_type,
+        field_map: field_map.0,
+        version,
+        dedup_fields: dedup_fields.0,
+        dedup_window_seconds,
+    }
 }
+
+const MAPPING_COLUMNS: &str =
+    "id, tenant_id, source_type, field_map, version, dedup_fields, dedup_window_seconds";
 
 #[async_trait]
 impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
@@ -81,13 +100,15 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
             .map_err(|e| NormalizationMappingRepositoryError::Backend(e.to_string()))?;
 
         sqlx::query(
-            "INSERT INTO normalization_mappings (id, tenant_id, source_type, field_map, version) VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO normalization_mappings (id, tenant_id, source_type, field_map, version, dedup_fields, dedup_window_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7)",
         )
         .bind(mapping.id)
         .bind(mapping.tenant_id)
         .bind(&mapping.source_type)
         .bind(sqlx::types::Json(&mapping.field_map))
         .bind(mapping.version)
+        .bind(sqlx::types::Json(&mapping.dedup_fields))
+        .bind(mapping.dedup_window_seconds)
         .execute(&mut *tx)
         .await
         .map_err(|e| NormalizationMappingRepositoryError::Backend(e.to_string()))?;
@@ -126,9 +147,9 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
             .await
             .map_err(|e| NormalizationMappingRepositoryError::Backend(e.to_string()))?;
 
-        let existing: Option<MappingRow> = sqlx::query_as(
-            "SELECT id, tenant_id, source_type, field_map, version FROM normalization_mappings WHERE id = $1 AND tenant_id = $2",
-        )
+        let existing: Option<MappingRow> = sqlx::query_as(&format!(
+            "SELECT {MAPPING_COLUMNS} FROM normalization_mappings WHERE id = $1 AND tenant_id = $2"
+        ))
         .bind(mapping.id)
         .bind(mapping.tenant_id)
         .fetch_optional(&mut *tx)
@@ -141,11 +162,13 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
         let before = row_to_mapping(existing);
 
         sqlx::query(
-            "UPDATE normalization_mappings SET source_type = $1, field_map = $2, version = $3 WHERE id = $4 AND tenant_id = $5",
+            "UPDATE normalization_mappings SET source_type = $1, field_map = $2, version = $3, dedup_fields = $4, dedup_window_seconds = $5 WHERE id = $6 AND tenant_id = $7",
         )
         .bind(&mapping.source_type)
         .bind(sqlx::types::Json(&mapping.field_map))
         .bind(mapping.version)
+        .bind(sqlx::types::Json(&mapping.dedup_fields))
+        .bind(mapping.dedup_window_seconds)
         .bind(mapping.id)
         .bind(mapping.tenant_id)
         .execute(&mut *tx)
@@ -180,9 +203,9 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
         tenant_id: Uuid,
         id: Uuid,
     ) -> Result<Option<NormalizationMapping>, NormalizationMappingRepositoryError> {
-        let row: Option<MappingRow> = sqlx::query_as(
-            "SELECT id, tenant_id, source_type, field_map, version FROM normalization_mappings WHERE id = $1 AND tenant_id = $2",
-        )
+        let row: Option<MappingRow> = sqlx::query_as(&format!(
+            "SELECT {MAPPING_COLUMNS} FROM normalization_mappings WHERE id = $1 AND tenant_id = $2"
+        ))
         .bind(id)
         .bind(tenant_id)
         .fetch_optional(&self.pool)
@@ -195,9 +218,9 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
         &self,
         tenant_id: Uuid,
     ) -> Result<Vec<NormalizationMapping>, NormalizationMappingRepositoryError> {
-        let rows: Vec<MappingRow> = sqlx::query_as(
-            "SELECT id, tenant_id, source_type, field_map, version FROM normalization_mappings WHERE tenant_id = $1 ORDER BY source_type, version",
-        )
+        let rows: Vec<MappingRow> = sqlx::query_as(&format!(
+            "SELECT {MAPPING_COLUMNS} FROM normalization_mappings WHERE tenant_id = $1 ORDER BY source_type, version"
+        ))
         .bind(tenant_id)
         .fetch_all(&self.pool)
         .await
@@ -217,9 +240,9 @@ impl NormalizationMappingRepository for PostgresNormalizationMappingRepository {
             .await
             .map_err(|e| NormalizationMappingRepositoryError::Backend(e.to_string()))?;
 
-        let existing: Option<MappingRow> = sqlx::query_as(
-            "SELECT id, tenant_id, source_type, field_map, version FROM normalization_mappings WHERE id = $1 AND tenant_id = $2",
-        )
+        let existing: Option<MappingRow> = sqlx::query_as(&format!(
+            "SELECT {MAPPING_COLUMNS} FROM normalization_mappings WHERE id = $1 AND tenant_id = $2"
+        ))
         .bind(id)
         .bind(tenant_id)
         .fetch_optional(&mut *tx)
