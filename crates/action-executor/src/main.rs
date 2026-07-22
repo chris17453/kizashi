@@ -51,6 +51,9 @@ async fn main() {
     // it calls trigger-engine, a Kizashi-owned service, not an external one.
     let egress_proxy_url = std::env::var("EGRESS_PROXY_URL").ok();
 
+    let ontology_service_url = std::env::var("ONTOLOGY_SERVICE_URL")
+        .unwrap_or_else(|_| "http://ontology-service:8080".to_string());
+
     let execution_repository = Arc::new(PostgresExecutionRepository::new(pool));
     let deps = ActionDeps {
         trigger_client: Arc::new(HttpTriggerClient::new(
@@ -60,6 +63,9 @@ async fn main() {
         )),
         dispatcher: Arc::new(RoutingActionDispatcher::new(egress_proxy_url)),
         execution_repository: execution_repository.clone(),
+        ontology_service_url,
+        http_client: reqwest::Client::new(),
+        internal_secret: internal_secret.clone(),
     };
 
     consume_channel

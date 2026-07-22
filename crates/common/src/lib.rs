@@ -51,3 +51,8 @@ pub use trigger_definition::{
     ActionRef, ActionType, CorrelatedCondition, ThresholdDirection, TriggerCondition,
     TriggerDefinition,
 };
+pub mod ontology;
+
+pub use ontology::{
+    ActionInvocation, ActionType as OntologyActionType, Link, LinkType, Object, ObjectType,
+};

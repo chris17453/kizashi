@@ -53,6 +53,9 @@ async fn dispatches_every_action_and_writes_a_sent_execution_row_for_each() {
         trigger_client: Arc::new(InMemoryTriggerClient::with_trigger(trigger.clone())),
         dispatcher: dispatcher.clone(),
         execution_repository: execution_repo.clone(),
+        ontology_service_url: "".to_string(),
+        http_client: reqwest::Client::new(),
+        internal_secret: "".to_string(),
     };
 
     let executed = process_event(&deps, &event).await.unwrap();
@@ -79,6 +82,9 @@ async fn a_dispatch_failure_is_recorded_as_a_failed_execution_not_swallowed() {
         trigger_client: Arc::new(InMemoryTriggerClient::with_trigger(trigger)),
         dispatcher: Arc::new(FailingActionDispatcher),
         execution_repository: execution_repo.clone(),
+        ontology_service_url: "".to_string(),
+        http_client: reqwest::Client::new(),
+        internal_secret: "".to_string(),
     };
 
     let executed = process_event(&deps, &event).await.unwrap();
@@ -97,6 +103,9 @@ async fn event_with_no_triggered_by_field_is_rejected() {
         trigger_client: Arc::new(InMemoryTriggerClient::default()),
         dispatcher: Arc::new(InMemoryActionDispatcher::default()),
         execution_repository: Arc::new(InMemoryExecutionRepository::default()),
+        ontology_service_url: "".to_string(),
+        http_client: reqwest::Client::new(),
+        internal_secret: "".to_string(),
     };
 
     let err = process_event(&deps, &event).await.unwrap_err();
@@ -112,6 +121,9 @@ async fn event_pointing_at_an_unknown_trigger_is_rejected() {
         trigger_client: Arc::new(InMemoryTriggerClient::default()),
         dispatcher: Arc::new(InMemoryActionDispatcher::default()),
         execution_repository: Arc::new(InMemoryExecutionRepository::default()),
+        ontology_service_url: "".to_string(),
+        http_client: reqwest::Client::new(),
+        internal_secret: "".to_string(),
     };
 
     let err = process_event(&deps, &event).await.unwrap_err();
@@ -127,6 +139,9 @@ async fn trigger_with_no_actions_executes_nothing() {
         trigger_client: Arc::new(InMemoryTriggerClient::with_trigger(trigger)),
         dispatcher: Arc::new(InMemoryActionDispatcher::default()),
         execution_repository: Arc::new(InMemoryExecutionRepository::default()),
+        ontology_service_url: "".to_string(),
+        http_client: reqwest::Client::new(),
+        internal_secret: "".to_string(),
     };
 
     let executed = process_event(&deps, &event).await.unwrap();
@@ -146,6 +161,9 @@ async fn propagates_execution_write_failure() {
         trigger_client: Arc::new(InMemoryTriggerClient::with_trigger(trigger)),
         dispatcher: Arc::new(InMemoryActionDispatcher::default()),
         execution_repository: Arc::new(FailingExecutionRepository),
+        ontology_service_url: "".to_string(),
+        http_client: reqwest::Client::new(),
+        internal_secret: "".to_string(),
     };
 
     let err = process_event(&deps, &event).await.unwrap_err();
@@ -159,6 +177,9 @@ async fn propagates_trigger_lookup_failure() {
         trigger_client: Arc::new(FailingTriggerClient),
         dispatcher: Arc::new(InMemoryActionDispatcher::default()),
         execution_repository: Arc::new(InMemoryExecutionRepository::default()),
+        ontology_service_url: "".to_string(),
+        http_client: reqwest::Client::new(),
+        internal_secret: "".to_string(),
     };
 
     let err = process_event(&deps, &event).await.unwrap_err();

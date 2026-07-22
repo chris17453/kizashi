@@ -27,6 +27,7 @@ fn gateway_state(dashboard_api_url: String, token: &str, tenant_id: Uuid) -> Gat
         token_store: Arc::new(InMemoryTokenStore::with_token(token, tenant_id)),
         http_client: reqwest::Client::new(),
         dashboard_api_url,
+        ontology_service_url: "http://unused".to_string(),
         internal_secret: "test-internal-secret".to_string(),
     }
 }

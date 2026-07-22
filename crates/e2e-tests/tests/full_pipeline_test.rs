@@ -327,6 +327,9 @@ async fn a_raw_record_flows_all_the_way_from_ingestion_to_a_dispatched_action() 
     let stub_trigger_engine_url = spawn_stub_trigger_engine(trigger).await;
     let execution_repository = Arc::new(PostgresExecutionRepository::new(action_pool));
     let action_deps = ActionDeps {
+        ontology_service_url: "http://localhost:8080".to_string(),
+        http_client: reqwest::Client::new(),
+        internal_secret: "secret".to_string(),
         trigger_client: Arc::new(HttpTriggerClient::new(
             reqwest::Client::new(),
             stub_trigger_engine_url,

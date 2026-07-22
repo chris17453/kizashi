@@ -13,6 +13,7 @@ pub struct GatewayState {
     pub token_store: Arc<dyn TokenStore>,
     pub http_client: reqwest::Client,
     pub dashboard_api_url: String,
+    pub ontology_service_url: String,
     pub internal_secret: String,
 }
 
@@ -54,7 +55,13 @@ pub async fn proxy_get(
         }
     };
 
-    let upstream_url = format!("{}{}", state.dashboard_api_url, uri);
+    let upstream_base = if uri.path().starts_with("/api/ontology") {
+        &state.ontology_service_url
+    } else {
+        &state.dashboard_api_url
+    };
+
+    let upstream_url = format!("{}{}", upstream_base, uri);
     let upstream = state
         .http_client
         .get(&upstream_url)
@@ -70,8 +77,8 @@ pub async fn proxy_get(
             (status, bytes).into_response()
         }
         Err(e) => {
-            tracing::error!(error = %e, "dashboard-api unreachable");
-            error_response(StatusCode::BAD_GATEWAY, "upstream dashboard API unavailable")
+            tracing::error!(error = %e, "upstream unreachable");
+            error_response(StatusCode::BAD_GATEWAY, "upstream API unavailable")
         }
     }
 }

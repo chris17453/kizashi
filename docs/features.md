@@ -5269,3 +5269,11 @@ architectural decision.
   (nothing silently dropped) even though the second's `record.normalized` was suppressed.
 - **PR:** #144
 - **ADR:** docs/adr/0112-alert-fingerprint-dedup.md
+
+## [2026-07-22] feature/0114-ontology-layer — Add Ontology Layer (Objects, Links, Actions)
+- **Type:** feature
+- **Branch:** feature/0114-ontology-layer
+- **Summary:** Introduces a Palantir Foundry-style Ontology layer on top of `normalized_payload`. Includes `object_type`, `object`, `link_type`, `link`, `action_type`, and `action_invocation` tables. Added an ontology mapping engine to process normalized messages into objects. Integrated `action_invocation` audit logging into `action-executor` and extended Query Gateway to proxy `/api/ontology` routes.
+- **Tests:** Ran `cargo check` and updated `process_event_test.rs` to verify action-executor audit logging extension builds and passes. Included an end-to-end mapping example for Zendesk in `examples/zendesk_ontology.rs`.
+- **PR:** pending
+- **ADR:** n/a

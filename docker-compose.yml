@@ -240,6 +240,7 @@ services:
       BIND_ADDR: "0.0.0.0:8080"
       DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
       DASHBOARD_API_URL: http://dashboard-api:8080
+      ONTOLOGY_SERVICE_URL: http://ontology-service:8080
       INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
     ports: ["8083:8080"]
     depends_on:
@@ -474,3 +475,15 @@ volumes:
   rabbitmq_data:
   clickhouse_data:
   minio_data:
+
+  ontology-service:
+    build: { context: ., args: { BIN: ontology-service } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/kizashi
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2f
+    ports: ["8093:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck: *healthz

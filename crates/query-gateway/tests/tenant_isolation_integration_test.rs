@@ -122,6 +122,7 @@ async fn a_session_token_for_one_tenant_cannot_retrieve_another_tenants_event_th
         token_store.mint_token(tenant_b, Role::Viewer, "isolation-test-b").await.unwrap();
 
     let gateway_state = GatewayState {
+        ontology_service_url: "http://localhost:8080".to_string(),
         token_store,
         http_client: reqwest::Client::new(),
         dashboard_api_url,
@@ -180,6 +181,7 @@ async fn listing_events_through_the_real_proxy_never_returns_another_tenants_row
         token_store.mint_token(tenant_a, Role::Viewer, "isolation-list-test-a").await.unwrap();
 
     let gateway_state = GatewayState {
+        ontology_service_url: "http://localhost:8080".to_string(),
         token_store,
         http_client: reqwest::Client::new(),
         dashboard_api_url,
@@ -223,6 +225,7 @@ async fn an_invalid_bearer_token_is_rejected_by_the_real_proxy_before_reaching_d
     let pool = query_gateway_pool().await;
     let token_store = Arc::new(PostgresTokenStore::new(pool));
     let gateway_state = GatewayState {
+        ontology_service_url: "http://localhost:8080".to_string(),
         token_store,
         http_client: reqwest::Client::new(),
         dashboard_api_url,

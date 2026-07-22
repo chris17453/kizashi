@@ -117,6 +117,9 @@ async fn a_real_event_created_message_results_in_a_dispatched_action_and_an_exec
 
     let execution_repository = Arc::new(PostgresExecutionRepository::new(pool));
     let deps = ActionDeps {
+        ontology_service_url: "http://localhost:8080".to_string(),
+        http_client: reqwest::Client::new(),
+        internal_secret: "secret".to_string(),
         trigger_client: Arc::new(HttpTriggerClient::new(
             reqwest::Client::new(),
             trigger_engine_url,
