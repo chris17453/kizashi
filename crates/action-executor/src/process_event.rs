@@ -27,6 +27,9 @@ pub struct ActionDeps {
     pub trigger_client: Arc<dyn TriggerClient>,
     pub dispatcher: Arc<dyn ActionDispatcher>,
     pub execution_repository: Arc<dyn ExecutionRepository>,
+    pub ontology_service_url: String,
+    pub http_client: reqwest::Client,
+    pub internal_secret: String,
 }
 
 fn extract_trigger_id(event: &Event) -> Option<Uuid> {
@@ -72,6 +75,27 @@ pub async fn process_event(deps: &ActionDeps, event: &Event) -> Result<usize, Pr
             .insert(&execution)
             .await
             .map_err(|e| ProcessError::ExecutionWrite(e.to_string()))?;
+
+        // Also log to ontology service action_invocations
+        let invocation = common::ontology::ActionInvocation {
+            id: Uuid::new_v4(),
+            tenant_id: event.tenant_id,
+            action_type_id: Uuid::nil(), // Since old ActionType is enum, map to nil for now or map properly.
+            target_object_ids: serde_json::json!([]),
+            parameters: action.config.clone(),
+            outcome: format!("{:?}", status),
+            triggering_event_ref: serde_json::json!({"event_id": event.id, "trigger_id": trigger_id}),
+            executed_at: chrono::Utc::now(),
+        };
+
+        let _ = deps
+            .http_client
+            .post(&format!("{}/api/internal/action-invocations", deps.ontology_service_url))
+            .header("Authorization", format!("Bearer {}", deps.internal_secret))
+            .json(&invocation)
+            .send()
+            .await;
+
         executed += 1;
     }
 

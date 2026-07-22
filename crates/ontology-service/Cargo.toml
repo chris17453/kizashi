@@ -1,0 +1,30 @@
+[package]
+name = "ontology-service"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[dependencies]
+common = { path = "../common" }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+sqlx = { workspace = true }
+futures-util = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+lapin = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }
+
+
+[[example]]
+name = "zendesk_ontology"
+path = "examples/zendesk_ontology.rs"
