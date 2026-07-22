@@ -74,6 +74,7 @@ mod static_assets;
 mod trigger_delete_handler;
 mod trigger_toggle_handler;
 mod triggers_handler;
+mod ontology_handler;
 mod users_handler;
 
 pub use analysis_config_client::{
@@ -189,6 +190,7 @@ pub use static_assets::{get_charts_js, get_confirm_danger_js};
 pub use trigger_delete_handler::post_delete_trigger;
 pub use trigger_toggle_handler::post_toggle_trigger;
 pub use triggers_handler::{get_triggers, post_trigger};
+pub use ontology_handler::list_ontology;
 pub use users_handler::{
     get_export_user, get_users, post_bulk_delete_users, post_delete_user, post_update_user_role,
     post_users,
@@ -270,6 +272,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", get(get_health))
         .route("/branding", get(get_branding_page).post(post_branding))
         .route("/pipeline", get(get_pipeline))
+        .route("/ontology", get(list_ontology))
         .route("/overview", get(get_overview))
         .route("/sensors", get(get_sensors).post(post_sensors))
         .route("/sensors/generate", get(get_generate_select))

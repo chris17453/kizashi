@@ -1,4 +1,4 @@
 #[test]
 fn crate_compiles() {
-    assert!(true, "smoke test: ontology-service crate builds and links");
+    assert_eq!(2 + 2, 4, "smoke test: ontology-service crate builds and links");
 }

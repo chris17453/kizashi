@@ -90,7 +90,7 @@ pub async fn process_event(deps: &ActionDeps, event: &Event) -> Result<usize, Pr
 
         let _ = deps
             .http_client
-            .post(&format!("{}/api/internal/action-invocations", deps.ontology_service_url))
+            .post(format!("{}/api/internal/action-invocations", deps.ontology_service_url))
             .header("Authorization", format!("Bearer {}", deps.internal_secret))
             .json(&invocation)
             .send()

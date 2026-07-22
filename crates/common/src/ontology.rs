@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ObjectType {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -18,7 +18,7 @@ pub struct ObjectType {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Object {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -29,7 +29,7 @@ pub struct Object {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct LinkType {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -42,7 +42,7 @@ pub struct LinkType {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Link {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -54,7 +54,7 @@ pub struct Link {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ActionType {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -66,7 +66,7 @@ pub struct ActionType {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ActionInvocation {
     pub id: Uuid,
     pub tenant_id: Uuid,

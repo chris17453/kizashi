@@ -4,9 +4,8 @@ use lapin::options::{BasicAckOptions, BasicConsumeOptions, QueueBindOptions, Que
 use lapin::types::FieldTable;
 use std::sync::Arc;
 
-mod mapping_engine;
-
-use ontology_service::build_router;
+use ontology_service::api::ApiState;
+use ontology_service::{build_router, ontology_router, PostgresOntologyRepository};
 
 const QUEUE_NAME: &str = "ontology-service.record.normalized";
 
@@ -28,6 +27,8 @@ async fn main() {
         .run(&pool)
         .await
         .expect("failed to run migrations");
+
+    let repo = Arc::new(PostgresOntologyRepository::new(pool.clone()));
 
     let connection =
         lapin::Connection::connect(&rabbitmq_url, lapin::ConnectionProperties::default())
@@ -54,7 +55,7 @@ async fn main() {
         .await
         .expect("failed to bind queue");
 
-    let engine = Arc::new(mapping_engine::OntologyMappingEngine::new(pool.clone()));
+    let engine = Arc::new(ontology_service::mapping_engine::OntologyMappingEngine::new(repo.clone()));
 
     let mut consumer = consume_channel
         .basic_consume(
@@ -99,6 +100,8 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "ontology-service listening");
 
-    // Pass pool to router so it can be used for API queries
-    axum::serve(listener, build_router(pool)).await.expect("server error");
+    let state = ApiState { repository: repo.clone() };
+    let app = build_router(state.clone()).merge(ontology_router(state));
+
+    axum::serve(listener, app).await.expect("server error");
 }

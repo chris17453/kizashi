@@ -14,6 +14,8 @@ fn state(
         token_store,
         http_client: reqwest::Client::new(),
         dashboard_api_url: "http://unused".to_string(),
+        ontology_service_url: "http://unused".to_string(),
+
         internal_secret: internal_secret.to_string(),
     }
 }

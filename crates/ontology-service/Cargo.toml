@@ -20,9 +20,11 @@ chrono = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 lapin = { workspace = true }
+sha2.workspace = true
 
 [dev-dependencies]
 reqwest = { workspace = true }
+tower.workspace = true
 
 
 [[example]]

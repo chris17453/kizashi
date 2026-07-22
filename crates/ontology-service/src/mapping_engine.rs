@@ -2,59 +2,30 @@
 #[cfg(test)]
 mod mapping_engine_test;
 
-use common::ontology::ObjectType;
+use common::ontology::Object;
 use common::RawRecord;
-use sqlx::{PgPool, Row};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
+use std::sync::Arc;
+use crate::repository::{OntologyRepository, RepositoryError};
 
 pub struct OntologyMappingEngine {
-    pool: PgPool,
+    pub repository: Arc<dyn OntologyRepository>,
 }
 
-type ObjectTypeRow = (
-    Uuid,
-    Uuid,
-    String,
-    i32,
-    serde_json::Value,
-    serde_json::Value,
-    chrono::DateTime<chrono::Utc>,
-    chrono::DateTime<chrono::Utc>,
-);
-
 impl OntologyMappingEngine {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(repository: Arc<dyn OntologyRepository>) -> Self {
+        Self { repository }
     }
 
-    pub async fn process_record(&self, record: RawRecord) -> Result<(), sqlx::Error> {
+    pub async fn process_record(&self, record: RawRecord) -> Result<(), RepositoryError> {
         if record.normalized_payload.is_none() {
             return Ok(());
         }
 
         let normalized = record.normalized_payload.as_ref().unwrap();
 
-        // 1. Fetch object types and their mapping rules
-        let rows: Vec<ObjectTypeRow> = sqlx::query_as(
-            "SELECT id, tenant_id, name, version, property_schema, mapping_rules, created_at, updated_at FROM object_types WHERE tenant_id = $1",
-        )
-        .bind(record.tenant_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        let object_types = rows
-            .into_iter()
-            .map(|row| ObjectType {
-                id: row.0,
-                tenant_id: row.1,
-                name: row.2,
-                version: row.3,
-                property_schema: row.4,
-                mapping_rules: row.5,
-                created_at: row.6,
-                updated_at: row.7,
-            })
-            .collect::<Vec<_>>();
+        let object_types = self.repository.get_object_types(record.tenant_id).await?;
 
         let source_type_str = match record.source_type {
             common::SourceType::Message => "message",
@@ -70,29 +41,45 @@ impl OntologyMappingEngine {
                 for rule in rules {
                     if rule.get("source_type").and_then(|v| v.as_str()) == Some(source_type_str) {
                         let mut properties = serde_json::Map::new();
+                        let mut identity_val = None;
+
                         if let Some(mappings) = rule.get("fields").and_then(|v| v.as_object()) {
                             for (target_prop, source_path) in mappings {
                                 if let Some(path) = source_path.as_str() {
                                     if let Some(val) = normalized.get(path) {
                                         properties.insert(target_prop.clone(), val.clone());
+                                        if rule.get("identity_field").and_then(|v| v.as_str())
+                                            == Some(target_prop.as_str())
+                                        {
+                                            identity_val = Some(val.clone());
+                                        }
                                     }
                                 }
                             }
                         }
 
-                        let obj_id = Uuid::new_v4();
+                        let obj_id = if let Some(id_val) = identity_val {
+                            let hash_input = format!("{}:{}:{}", record.tenant_id, ot.id, id_val);
+                            let hash = Sha256::digest(hash_input.as_bytes());
+                            Uuid::from_bytes(hash[..16].try_into().unwrap())
+                        } else {
+                            let hash_input =
+                                format!("{}:{}:{}", record.tenant_id, ot.id, record.id);
+                            let hash = Sha256::digest(hash_input.as_bytes());
+                            Uuid::from_bytes(hash[..16].try_into().unwrap())
+                        };
 
-                        sqlx::query(
-                            "INSERT INTO objects (id, tenant_id, object_type_id, properties, source_lineage) 
-                             VALUES ($1, $2, $3, $4, $5)"
-                        )
-                        .bind(obj_id)
-                        .bind(record.tenant_id)
-                        .bind(ot.id)
-                        .bind(serde_json::Value::Object(properties))
-                        .bind(serde_json::json!([record.id]))
-                        .execute(&self.pool)
-                        .await?;
+                        let object = Object {
+                            id: obj_id,
+                            tenant_id: record.tenant_id,
+                            object_type_id: ot.id,
+                            properties: serde_json::Value::Object(properties),
+                            source_lineage: serde_json::json!([record.id]),
+                            created_at: chrono::Utc::now(),
+                            updated_at: chrono::Utc::now(),
+                        };
+
+                        self.repository.upsert_object(object).await?;
                     }
                 }
             }
