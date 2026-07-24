@@ -1,12 +1,31 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Branding</h1>
+<style>
+  .branding-posture { display:grid; grid-template-columns:1.1fr .9fr; gap:1rem; margin:0 0 1.25rem; }
+  .branding-preview { padding:1rem; display:grid; gap:.85rem; }
+  .branding-preview-shell { display:flex; align-items:center; gap:.7rem; padding:1rem; border:1px solid var(--border); border-radius:8px; background:var(--surface-raised); }
+  .branding-preview-mark { width:2.2rem; height:2.2rem; border-radius:7px; display:grid; place-items:center; background:var(--accent); color:#07121c; font-weight:900; }
+  .branding-preview-logo { width:2.2rem; height:2.2rem; object-fit:contain; border-radius:7px; background:var(--surface); border:1px solid var(--border); padding:.2rem; }
+  .branding-preview-name { font-weight:800; font-size:1.05rem; }
+  .branding-preview-url { color:var(--text-dim); font-size:.75rem; overflow-wrap:anywhere; }
+  .branding-posture-card { padding:1rem; }
+  .branding-posture-card h2 { margin:.2rem 0 .35rem; font-size:1rem; }
+  .branding-posture-value { font:700 1.5rem ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); }
+  .branding-posture-card small { color:var(--text-dim); }
+  @media(max-width:760px){.branding-posture{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Platform / workspace identity</div><h1>Branding</h1><p class="page-description">White-label this workspace’s Console UI with a product name, logo, and accent color.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/configuration">Control center</a><a class="btn btn-secondary" href="/audit-log">Audit history &rarr;</a></div></div>
 <p class="muted">White-label this workspace's Console UI — product name, logo, and accent
 color. Applies to the login page and takes effect immediately; existing signed-in sessions pick
 it up on next page load.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 {% if saved %}<p class="status-up">Saved.</p>{% endif %}
 <p><a href="/audit-log/auth/{{ tenant_id }}">View change history</a></p>
+
+<section class="branding-posture" aria-label="Workspace identity posture">
+  <div class="panel branding-preview"><div class="page-kicker">Live identity preview</div><div class="branding-preview-shell"><span class="branding-preview-mark" data-brand-preview-mark>&#9670;</span><img class="branding-preview-logo" data-brand-preview-image alt="Workspace logo preview" hidden><div><div class="branding-preview-name" data-brand-preview-name>{% if product_name.is_empty() %}Kizashi{% else %}{{ product_name }}{% endif %}</div><div class="branding-preview-url" data-brand-preview-logo>{% if logo_url.is_empty() %}Platform default identity{% else %}{{ logo_url }}{% endif %}</div></div></div><small>Preview updates as you edit the fields below; it does not save until you submit. Only HTTP(S) logo URLs are previewed.</small></div>
+  <div class="panel branding-posture-card"><div class="page-kicker">Identity coverage</div><h2>{{ configured_count }}/3 custom fields configured</h2><div class="branding-posture-value">{% if configured_count == 3 %}Fully branded{% else if configured_count > 0 %}Partially branded{% else %}Platform default{% endif %}</div><small>Product name, logo URL, and accent color each remain optional and safely fall back to platform defaults.</small></div>
+</section>
 
 <div class="form-row">
   <div class="panel">
@@ -48,4 +67,29 @@ it up on next page load.</p>
     </ul>
   </div>
 </div>
+<script>
+  (function () {
+    var name = document.getElementById('product_name');
+    var logo = document.getElementById('logo_url');
+    var accent = document.getElementById('accent_color');
+    var previewName = document.querySelector('[data-brand-preview-name]');
+    var previewLogo = document.querySelector('[data-brand-preview-logo]');
+    var previewMark = document.querySelector('[data-brand-preview-mark]');
+    var previewImage = document.querySelector('[data-brand-preview-image]');
+    function render() {
+      if (previewName) previewName.textContent = (name && name.value.trim()) || 'Kizashi';
+      var logoValue = (logo && logo.value.trim()) || '';
+      if (previewLogo) previewLogo.textContent = logoValue || 'Platform default identity';
+      if (previewImage) {
+        var safeLogo = /^https?:\/\//i.test(logoValue) ? logoValue : '';
+        previewImage.hidden = !safeLogo;
+        if (safeLogo && previewImage.src !== safeLogo) previewImage.src = safeLogo;
+      }
+      if (previewMark && accent && /^#[0-9a-f]{6}$/i.test(accent.value.trim())) previewMark.style.backgroundColor = accent.value.trim();
+    }
+    if (previewImage) previewImage.addEventListener('error', function () { previewImage.hidden = true; });
+    [name, logo, accent].forEach(function (field) { if (field) field.addEventListener('input', render); });
+    render();
+  }());
+</script>
 {% endblock %}

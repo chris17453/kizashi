@@ -2,12 +2,12 @@
 #[cfg(test)]
 mod mapping_engine_test;
 
+use crate::repository::{OntologyRepository, RepositoryError};
 use common::ontology::Object;
 use common::RawRecord;
 use sha2::{Digest, Sha256};
-use uuid::Uuid;
 use std::sync::Arc;
-use crate::repository::{OntologyRepository, RepositoryError};
+use uuid::Uuid;
 
 pub struct OntologyMappingEngine {
     pub repository: Arc<dyn OntologyRepository>,

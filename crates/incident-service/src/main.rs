@@ -1,4 +1,6 @@
-use incident_service::{build_router, IncidentState, PostgresIncidentRepository};
+use incident_service::{
+    build_router, IncidentState, PostgresAuditLogReader, PostgresIncidentRepository,
+};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -19,8 +21,10 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
-    let state =
-        IncidentState { incident_repository: Arc::new(PostgresIncidentRepository::new(pool)) };
+    let state = IncidentState {
+        incident_repository: Arc::new(PostgresIncidentRepository::new(pool.clone())),
+        audit_log_reader: Arc::new(PostgresAuditLogReader::new(pool)),
+    };
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "incident-service listening");

@@ -7,7 +7,7 @@ use crate::session_guard::require_session;
 use crate::users_client::PasswordPolicySummary;
 use crate::AppState;
 use askama::Template;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use chrono::{Duration, Utc};
@@ -36,7 +36,35 @@ struct ComplianceReportTemplate {
     last_backup_status: Option<String>,
     last_backup_at: Option<String>,
     recent_backup_failure_count: usize,
+    enabled_connector_count: usize,
+    stale_connector_count: usize,
+    total_record_count: usize,
+    normalized_record_count: usize,
     errors: Vec<String>,
+    control_score: usize,
+    control_total: usize,
+    controls: Vec<ComplianceControlView>,
+    state: String,
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct ComplianceQuery {
+    #[serde(default)]
+    state: String,
+}
+
+fn normalize_control_state(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "ready" | "attention" | "unknown" => value.trim().to_ascii_lowercase(),
+        _ => String::new(),
+    }
+}
+
+struct ComplianceControlView {
+    label: String,
+    state: String,
+    detail: String,
+    href: String,
 }
 
 async fn require_admin_session(
@@ -79,7 +107,11 @@ async fn recent_admin_activity_count(
 /// clients never folded into a dashboard before now — no new data-gathering, just assembled into
 /// one auditor-facing document instead of five separate pages. `Admin`-only, since it aggregates
 /// the same admin-gated data (login attempts, backup status) those pages already restrict.
-pub async fn get_compliance_report(State(state): State<AppState>, headers: HeaderMap) -> Response {
+pub async fn get_compliance_report(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ComplianceQuery>,
+) -> Response {
     let session = match require_admin_session(&state, &headers).await {
         Ok(session) => session,
         Err(response) => return response,
@@ -134,6 +166,71 @@ pub async fn get_compliance_report(State(state): State<AppState>, headers: Heade
             }
         };
 
+    let (enabled_connector_count, stale_connector_count) = {
+        let (sensors, stats) = tokio::join!(
+            state.sensors_client.list_sensors(session.tenant_id, 1000, 0),
+            state.stats_client.connector_stats(session.tenant_id),
+        );
+        match (sensors, stats) {
+            (Ok(page), Ok(stats)) => {
+                let now = Utc::now();
+                let enabled =
+                    page.sensors.iter().filter(|sensor| sensor.enabled).collect::<Vec<_>>();
+                let stale = enabled
+                    .iter()
+                    .filter(|sensor| {
+                        stats
+                            .iter()
+                            .find(|stat| stat.connector_id == sensor.name)
+                            .map(|stat| now - stat.last_ingested_at > Duration::hours(1))
+                            .unwrap_or(true)
+                    })
+                    .count();
+                (enabled.len(), stale)
+            }
+            (sensors, stats) => {
+                if let Err(error) = sensors {
+                    errors.push(format!("connectors: {error}"));
+                }
+                if let Err(error) = stats {
+                    errors.push(format!("connector stats: {error}"));
+                }
+                (0, 0)
+            }
+        }
+    };
+
+    let (total_record_count, normalized_record_count) = {
+        let mappings = state.normalization_mappings_client.list_mappings(session.tenant_id).await;
+        let records = state
+            .stats_client
+            .search_records(
+                session.tenant_id,
+                &crate::ingestion_stats_client::RecordSearchFilter {
+                    limit: 1000,
+                    ..Default::default()
+                },
+            )
+            .await;
+        match (mappings, records) {
+            (Ok(_mappings), Ok(result)) => {
+                let total = result.records.len();
+                let normalized =
+                    result.records.iter().filter(|record| record.is_normalized()).count();
+                (total, normalized)
+            }
+            (mappings, records) => {
+                if let Err(error) = mappings {
+                    errors.push(format!("normalization mappings: {error}"));
+                }
+                if let Err(error) = records {
+                    errors.push(format!("normalization records: {error}"));
+                }
+                (0, 0)
+            }
+        }
+    };
+
     let recent_admin_activity_count =
         recent_admin_activity_count(&state, session.tenant_id, &mut errors).await;
 
@@ -166,6 +263,88 @@ pub async fn get_compliance_report(State(state): State<AppState>, headers: Heade
         Err(e) => errors.push(format!("backup status: {e}")),
     }
 
+    let mut controls = vec![];
+    let mfa_state = if total_user_count == 0 {
+        "unknown"
+    } else if mfa_enabled_count == total_user_count {
+        "ready"
+    } else {
+        "attention"
+    };
+    controls.push(ComplianceControlView {
+        label: "MFA adoption".to_string(),
+        state: mfa_state.to_string(),
+        detail: format!("{mfa_enabled_count} of {total_user_count} accounts protected"),
+        href: "/users".to_string(),
+    });
+    controls.push(ComplianceControlView {
+        label: "Password policy".to_string(),
+        state: if password_policy.is_some() { "ready" } else { "unknown" }.to_string(),
+        detail: if password_policy.is_some() { "Policy loaded" } else { "Unavailable" }.to_string(),
+        href: "/security/password".to_string(),
+    });
+    controls.push(ComplianceControlView {
+        label: "Retention enforcement".to_string(),
+        state: if retention_enabled_count > 0 { "ready" } else { "attention" }.to_string(),
+        detail: format!("{retention_enabled_count} of {retention_policy_count} policies enabled"),
+        href: "/retention-policies".to_string(),
+    });
+    controls.push(ComplianceControlView {
+        label: "Egress boundary".to_string(),
+        state: if egress_domain_count > 0 { "ready" } else { "attention" }.to_string(),
+        detail: format!("{egress_domain_count} allowed domain entries"),
+        href: "/egress-allowlist".to_string(),
+    });
+    let connector_state = if enabled_connector_count == 0 {
+        "unknown"
+    } else if stale_connector_count == 0 {
+        "ready"
+    } else {
+        "attention"
+    };
+    controls.push(ComplianceControlView {
+        label: "Connector freshness".to_string(),
+        state: connector_state.to_string(),
+        detail: format!(
+            "{enabled_connector_count} enabled · {stale_connector_count} stale or silent"
+        ),
+        href: "/sensors?health=stale".to_string(),
+    });
+    let normalization_state = if total_record_count == 0 {
+        "unknown"
+    } else if normalized_record_count == total_record_count {
+        "ready"
+    } else {
+        "attention"
+    };
+    controls.push(ComplianceControlView {
+        label: "Normalization completeness".to_string(),
+        state: normalization_state.to_string(),
+        detail: format!("{normalized_record_count} of {total_record_count} records normalized"),
+        href: "/normalization-mappings?coverage=pending".to_string(),
+    });
+    let backup_ready = last_backup_status.as_deref() == Some("success");
+    controls.push(ComplianceControlView {
+        label: "Backup recovery".to_string(),
+        state: if backup_ready { "ready" } else { "attention" }.to_string(),
+        detail: last_backup_status.clone().unwrap_or_else(|| "No run recorded".to_string()),
+        href: "/security/backups".to_string(),
+    });
+    controls.push(ComplianceControlView {
+        label: "Login anomaly signal".to_string(),
+        state: if failed_login_count_7d == 0 { "ready" } else { "attention" }.to_string(),
+        detail: format!("{failed_login_count_7d} failed attempts in 7 days"),
+        href: "/security/login-attempts".to_string(),
+    });
+    let control_total = controls.len();
+    let control_score = controls.iter().filter(|control| control.state == "ready").count();
+    let state = normalize_control_state(&query.state);
+    let controls = if state.is_empty() {
+        controls
+    } else {
+        controls.into_iter().filter(|control| control.state == state).collect()
+    };
+
     Html(
         ComplianceReportTemplate {
             show_nav: true,
@@ -185,7 +364,15 @@ pub async fn get_compliance_report(State(state): State<AppState>, headers: Heade
             last_backup_status,
             last_backup_at,
             recent_backup_failure_count,
+            enabled_connector_count,
+            stale_connector_count,
+            total_record_count,
+            normalized_record_count,
             errors,
+            control_score,
+            control_total,
+            controls,
+            state,
         }
         .render()
         .unwrap(),

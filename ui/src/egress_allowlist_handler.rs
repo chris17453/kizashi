@@ -8,6 +8,7 @@ use askama::Template;
 use axum::extract::{Form, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
+use std::collections::HashSet;
 use uuid::Uuid;
 
 #[derive(Template)]
@@ -20,6 +21,14 @@ struct EgressAllowlistTemplate {
     can_write: bool,
     saved: bool,
     error: Option<String>,
+    domain_count: usize,
+    duplicate_count: usize,
+    restricted: bool,
+}
+
+fn allowlist_posture(domains: &[String]) -> (usize, usize, bool) {
+    let unique: HashSet<&str> = domains.iter().map(String::as_str).collect();
+    (domains.len(), domains.len().saturating_sub(unique.len()), !domains.is_empty())
 }
 
 fn parse_domains(raw: &str) -> Vec<String> {
@@ -39,20 +48,26 @@ pub async fn get_egress_allowlist(State(state): State<AppState>, headers: Header
     let can_write = session.role.at_least(common::Role::Operator);
 
     match state.egress_allowlist_client.get_allowlist(session.tenant_id).await {
-        Ok(domains) => Html(
-            EgressAllowlistTemplate {
-                show_nav: true,
-                is_admin,
-                tenant_id: session.tenant_id,
-                domains,
-                can_write,
-                saved: false,
-                error: None,
-            }
-            .render()
-            .unwrap(),
-        )
-        .into_response(),
+        Ok(domains) => {
+            let (domain_count, duplicate_count, restricted) = allowlist_posture(&domains);
+            Html(
+                EgressAllowlistTemplate {
+                    show_nav: true,
+                    is_admin,
+                    tenant_id: session.tenant_id,
+                    domains,
+                    can_write,
+                    saved: false,
+                    error: None,
+                    domain_count,
+                    duplicate_count,
+                    restricted,
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response()
+        }
         Err(e) => Html(
             EgressAllowlistTemplate {
                 show_nav: true,
@@ -62,6 +77,9 @@ pub async fn get_egress_allowlist(State(state): State<AppState>, headers: Header
                 can_write,
                 saved: false,
                 error: Some(e.to_string()),
+                domain_count: 0,
+                duplicate_count: 0,
+                restricted: false,
             }
             .render()
             .unwrap(),
@@ -101,20 +119,26 @@ pub async fn post_egress_allowlist(
         .put_allowlist(session.tenant_id, session.role, domains, &session.username)
         .await
     {
-        Ok(domains) => Html(
-            EgressAllowlistTemplate {
-                show_nav: true,
-                is_admin,
-                tenant_id: session.tenant_id,
-                domains,
-                can_write: true,
-                saved: true,
-                error: None,
-            }
-            .render()
-            .unwrap(),
-        )
-        .into_response(),
+        Ok(domains) => {
+            let (domain_count, duplicate_count, restricted) = allowlist_posture(&domains);
+            Html(
+                EgressAllowlistTemplate {
+                    show_nav: true,
+                    is_admin,
+                    tenant_id: session.tenant_id,
+                    domains,
+                    can_write: true,
+                    saved: true,
+                    error: None,
+                    domain_count,
+                    duplicate_count,
+                    restricted,
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response()
+        }
         Err(e) => Html(
             EgressAllowlistTemplate {
                 show_nav: true,
@@ -124,6 +148,9 @@ pub async fn post_egress_allowlist(
                 can_write: true,
                 saved: false,
                 error: Some(e.to_string()),
+                domain_count: parse_domains(&form.domains).len(),
+                duplicate_count: 0,
+                restricted: !parse_domains(&form.domains).is_empty(),
             }
             .render()
             .unwrap(),

@@ -16,6 +16,14 @@ pub struct BackupRun {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct BackupTriggerResult {
+    pub id: uuid::Uuid,
+    pub status: String,
+    pub size_bytes: Option<i64>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Error)]
 pub enum BackupStatusClientError {
     #[error("backup service unreachable: {0}")]
@@ -36,6 +44,10 @@ pub trait BackupStatusClient: Send + Sync {
         role: common::Role,
         before: Option<DateTime<Utc>>,
     ) -> Result<Vec<BackupRun>, BackupStatusClientError>;
+
+    async fn trigger_backup(&self) -> Result<BackupTriggerResult, BackupStatusClientError> {
+        Err(BackupStatusClientError::Rejected(501))
+    }
 }
 
 pub struct HttpBackupStatusClient {
@@ -68,6 +80,19 @@ impl BackupStatusClient for HttpBackupStatusClient {
             .await
             .map_err(|e| BackupStatusClientError::Unreachable(e.to_string()))?;
 
+        if !response.status().is_success() {
+            return Err(BackupStatusClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| BackupStatusClientError::Unreachable(e.to_string()))
+    }
+
+    async fn trigger_backup(&self) -> Result<BackupTriggerResult, BackupStatusClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/backup/run", self.backup_service_url))
+            .send()
+            .await
+            .map_err(|e| BackupStatusClientError::Unreachable(e.to_string()))?;
         if !response.status().is_success() {
             return Err(BackupStatusClientError::Rejected(response.status().as_u16()));
         }

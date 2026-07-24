@@ -42,6 +42,24 @@ pub enum RetentionPoliciesClientError {
     Rejected(u16),
 }
 
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct ReimportSummary {
+    pub records_reimported: usize,
+    pub records_failed: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ComplianceHold {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub data_class: DataClass,
+    pub reason: String,
+    pub active: bool,
+    pub created_by: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub released_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 /// Reads/writes RetentionPolicy via retention-service directly — same direct-call trust
 /// boundary as `TriggersClient`/`NormalizationMappingsClient` (`x-tenant-id`/`x-role` headers,
 /// no gateway in front of retention-service, ADR-0011). This entity previously had zero
@@ -80,6 +98,40 @@ pub trait RetentionPoliciesClient: Send + Sync {
         id: Uuid,
         actor: &str,
     ) -> Result<(), RetentionPoliciesClientError>;
+
+    async fn reimport_archive(
+        &self,
+        _tenant_id: Uuid,
+        _archive_key: &str,
+    ) -> Result<ReimportSummary, RetentionPoliciesClientError> {
+        Err(RetentionPoliciesClientError::Rejected(501))
+    }
+
+    async fn list_holds(
+        &self,
+        _tenant_id: Uuid,
+    ) -> Result<Vec<ComplianceHold>, RetentionPoliciesClientError> {
+        Err(RetentionPoliciesClientError::Rejected(501))
+    }
+    async fn create_hold(
+        &self,
+        _role: Role,
+        _tenant_id: Uuid,
+        _data_class: DataClass,
+        _reason: &str,
+        _actor: &str,
+    ) -> Result<ComplianceHold, RetentionPoliciesClientError> {
+        Err(RetentionPoliciesClientError::Rejected(501))
+    }
+    async fn release_hold(
+        &self,
+        _role: Role,
+        _tenant_id: Uuid,
+        _id: Uuid,
+        _actor: &str,
+    ) -> Result<ComplianceHold, RetentionPoliciesClientError> {
+        Err(RetentionPoliciesClientError::Rejected(501))
+    }
 }
 
 pub struct HttpRetentionPoliciesClient {
@@ -180,5 +232,78 @@ impl RetentionPoliciesClient for HttpRetentionPoliciesClient {
             return Err(RetentionPoliciesClientError::Rejected(response.status().as_u16()));
         }
         Ok(())
+    }
+
+    async fn reimport_archive(
+        &self,
+        tenant_id: Uuid,
+        archive_key: &str,
+    ) -> Result<ReimportSummary, RetentionPoliciesClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/reimport", self.retention_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .json(&serde_json::json!({"archive_key": archive_key}))
+            .send()
+            .await
+            .map_err(|e| RetentionPoliciesClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(RetentionPoliciesClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| RetentionPoliciesClientError::Unreachable(e.to_string()))
+    }
+
+    async fn list_holds(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ComplianceHold>, RetentionPoliciesClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/compliance-holds", self.retention_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .send()
+            .await
+            .map_err(|e| RetentionPoliciesClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(RetentionPoliciesClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| RetentionPoliciesClientError::Unreachable(e.to_string()))
+    }
+
+    async fn create_hold(
+        &self,
+        role: Role,
+        tenant_id: Uuid,
+        data_class: DataClass,
+        reason: &str,
+        actor: &str,
+    ) -> Result<ComplianceHold, RetentionPoliciesClientError> {
+        let response = self.client.post(format!("{}/v1/compliance-holds", self.retention_service_url)).header("x-tenant-id", tenant_id.to_string()).header("x-role", role.to_string()).header("x-username", actor).json(&serde_json::json!({"tenant_id": tenant_id, "data_class": data_class, "reason": reason})).send().await.map_err(|e| RetentionPoliciesClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(RetentionPoliciesClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| RetentionPoliciesClientError::Unreachable(e.to_string()))
+    }
+
+    async fn release_hold(
+        &self,
+        role: Role,
+        tenant_id: Uuid,
+        id: Uuid,
+        actor: &str,
+    ) -> Result<ComplianceHold, RetentionPoliciesClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/compliance-holds/{id}/release", self.retention_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
+            .header("x-username", actor)
+            .send()
+            .await
+            .map_err(|e| RetentionPoliciesClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(RetentionPoliciesClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| RetentionPoliciesClientError::Unreachable(e.to_string()))
     }
 }

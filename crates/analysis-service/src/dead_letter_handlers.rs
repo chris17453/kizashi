@@ -3,6 +3,7 @@
 mod dead_letter_handlers_test;
 
 use crate::dead_letter::DeadLetterManager;
+use crate::health::ConsumerHeartbeat;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
@@ -14,6 +15,8 @@ use std::sync::Arc;
 pub struct DeadLetterState {
     pub dead_letter_manager: Arc<dyn DeadLetterManager>,
     pub internal_secret: String,
+    pub consumer_heartbeat: Arc<ConsumerHeartbeat>,
+    pub fallback_configured: bool,
 }
 
 #[derive(serde::Serialize)]
@@ -38,7 +41,39 @@ pub fn build_router(state: DeadLetterState) -> Router {
     Router::new()
         .route("/v1/dead-letter", get(get_dead_letter_count))
         .route("/v1/dead-letter/replay", post(post_dead_letter_replay))
+        .route("/v1/resilience", get(get_resilience))
         .with_state(state)
+}
+
+#[derive(serde::Serialize)]
+struct ResilienceResponse {
+    consumer_alive: bool,
+    fallback_configured: bool,
+    dead_letter_count: u32,
+}
+
+/// GET /v1/resilience — safe operational posture for the model consumer. It intentionally
+/// exposes configuration state, liveness, and backlog only; provider credentials and endpoint
+/// values never cross this boundary.
+pub async fn get_resilience(State(state): State<DeadLetterState>, headers: HeaderMap) -> Response {
+    if !has_valid_internal_secret(&state, &headers) {
+        return error_response(StatusCode::UNAUTHORIZED, "invalid internal secret");
+    }
+    match state.dead_letter_manager.count().await {
+        Ok(dead_letter_count) => Json(ResilienceResponse {
+            consumer_alive: state.consumer_heartbeat.is_alive(),
+            fallback_configured: state.fallback_configured,
+            dead_letter_count,
+        })
+        .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "resilience telemetry failed");
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "an internal error occurred; check server logs for details",
+            )
+        }
+    }
 }
 
 #[derive(serde::Serialize)]

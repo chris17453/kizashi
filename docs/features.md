@@ -5277,3 +5277,3078 @@ architectural decision.
 - **Tests:** Ran `cargo check` and updated `process_event_test.rs` to verify action-executor audit logging extension builds and passes. Included an end-to-end mapping example for Zendesk in `examples/zendesk_ontology.rs`.
 - **PR:** pending
 - **ADR:** n/a
+
+## [2026-07-23] feature/0115-console-operational-surfaces — Work focus queues and health backlog visibility
+- **Type:** feature
+- **Branch:** feature/0115-console-operational-surfaces
+- **Summary:** Extends the operator console with shareable My Work focus queues (`assigned`, `unassigned`, and `review`) and promotes live pipeline queue pressure into Platform Health. Health now shows classified queue cards beside service availability, with direct links back to the Pipeline Map; the existing seeded telemetry remains the source of truth.
+- **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 548 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified operator login, `/work?focus=assigned|unassigned|review`, and `/health` queue-pressure cards against the rebuilt local stack.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0116-ontology-object-sets — Multi-object governed execution from Ontology
+- **Type:** feature
+- **Branch:** feature/0116-ontology-object-sets
+- **Summary:** The Ontology object view now supports selecting the visible object set and passing that set into the existing governed action workbench. Each action intersects the selected IDs with its eligible targets before submission; the server continues to parse the multi-target field through the audited `InvokeActionRequest` path, preserving single-object execution as a fallback.
+- **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 548 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified the rebuilt Ontology page with 10 object selectors, 3 selection controls, and 4 multi-target fields rendered for the seeded operator workspace.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0117-ontology-saved-views — Shareable Ontology object views
+- **Type:** feature
+- **Branch:** feature/0117-ontology-saved-views
+- **Summary:** Adds durable, tenant-scoped Ontology views backed by the existing saved-search persistence. Operators can save the current type/search scope, reopen it through a shareable URL, and remove it without affecting saved views on Data, Events, Incidents, Actions, or Reports; an explicit `surface=ontology` discriminator keeps each surface's filter contract isolated.
+- **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 549 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified operator save redirect, saved-view rendering, shareable `/ontology?q=Contoso` link, and delete redirect against the rebuilt local stack.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0118-console-attention-summary — Live workspace attention indicator
+- **Type:** feature
+- **Branch:** feature/0118-console-attention-summary
+- **Summary:** Adds an authenticated `/work/summary` endpoint that combines active/critical/unassigned cases, non-completed governed actions, and critical pipeline queues into one shell-safe summary. Every console page now shows a live Attention indicator linking directly to My Work, so operators discover urgent work without first navigating to a specific surface.
+- **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 550 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified `/work/summary` returned seeded counts (`open_incidents=3`, `critical_incidents=1`, `unassigned_incidents=1`, `review_actions=6`) and the Attention link/script rendered on Overview, Ontology, Incidents, and Reports.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0119-attention-routing — Actionable shell attention popover
+- **Type:** feature
+- **Branch:** feature/0119-attention-routing
+- **Summary:** Extends the global Attention indicator into a compact triage popover. Live counts now route directly to critical cases, unassigned work, governed action review, and critical pipeline queues; the popover is keyboard-dismissible and closes when focus leaves the control.
+- **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 550 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified `/work/summary`, the popover markup, all category links, and `aria-expanded` state on Overview.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0120-overview-signal-trend — Executive signal volume trend
+- **Type:** feature
+- **Branch:** feature/0120-overview-signal-trend
+- **Summary:** Overview now includes a server-rendered 30-day event-volume trend sourced from Query Gateway's daily aggregation. Each bar is accessible with a date/count title and drills directly into the Events explorer for that day, giving executive operators temporal context instead of only point-in-time totals.
+- **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 551 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified Overview rendered without trend errors with a populated trend panel and date-scoped Events drill-through link.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0121-configurable-overview — Per-user draggable Overview dashboard
+- **Type:** feature
+- **Branch:** feature/0121-configurable-overview
+- **Summary:** Closes the configurable-dashboard gap in the console spec. Overview widgets can now be reordered in a drag mode, with the arrangement persisted in browser storage under the authenticated tenant/user key and a visible reset control; the widgets themselves remain server-rendered from live platform data.
+- **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 551 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified Overview rendered the customization/reset controls, seven dashboard widgets, a tenant/user-scoped storage key, and the live signal trend.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0122-console-light-theme — Persistent light/dark shell theme
+- **Type:** feature
+- **Branch:** feature/0122-console-light-theme
+- **Summary:** Implements the Console UI spec's full light-mode requirement. The shared shell now offers a no-reload Light/Dark toggle, applies the stored choice before first paint, persists it per browser, and overrides the complete surface/text/status palette while preserving tenant accent theming and the existing dark default.
+- **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 551 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified the authenticated shell rendered the theme button, pre-paint storage read, toggle persistence write, and light palette variables.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0123-event-type-catalog — Live event contract catalog
+- **Type:** feature
+- **Branch:** feature/0123-event-type-catalog
+- **Summary:** Adds an authenticated Event Types workspace that groups the live signal stream into observed contracts, shows volume and recency, infers payload field paths/types from real event samples, and identifies the governed triggers consuming each type. Every card links back to the relevant event evidence and rule surface; empty/unconsumed contracts are called out for operator follow-up.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 552 passed; `cargo check -p kizashi-ui`. Live-verified `/event-types` returned HTTP 200 with 102809 bytes, 11 seeded event-type cards, observed contracts, and sample links against the rebuilt local stack.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0124-versioned-event-contract-governance — Auditable event schema registry
+- **Type:** feature
+- **Branch:** feature/0124-versioned-event-contract-governance
+- **Summary:** Adds a tenant-scoped Config/Admin event-contract registry with immutable schema versions, same-transaction config audit entries, operator RBAC, and Console UI create/publish-version forms. Event Types now distinguishes observed-only signals from explicitly governed contracts and exposes the current schema plus version history beside live evidence.
+- **Tests:** `cargo test -p config-admin-service --lib --quiet` — 127 passed; `cargo test -p kizashi-ui --lib --quiet` — 552 passed; `cargo check -p config-admin-service -p kizashi-ui`; `git diff --check`. Live-verified UI publication of `demo.contract` v1 and v2, HTTP 303 redirects, catalog HTTP 200, and rendered `Governed v2`/version history after the migration-backed rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0125-console-archive-reimport — Tenant-safe lifecycle replay
+- **Type:** feature
+- **Branch:** feature/0125-console-archive-reimport
+- **Summary:** Extends the Data Retention Console with an explicit archive reimport workflow backed by retention-service's replay endpoint. Operators can submit an archive batch for replay through the full pipeline; the Console validates the archive namespace against the signed-in tenant and rejects traversal/cross-tenant keys before any backend call, then reports the number of records reimported.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 552 passed; `cargo check -p kizashi-ui`; `git diff --check`. Live-verified the retention page rendered the replay controls and a cross-tenant archive key redirected with `notice=invalid-archive` without reaching retention-service.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0126-compliance-hold-governance — Auditable retention holds
+- **Type:** feature
+- **Branch:** feature/0126-compliance-hold-governance
+- **Summary:** Replaces the previously descriptive compliance-hold promise with a real tenant-scoped hold registry. Operators can place and release holds by data class in the Data Retention console; holds are immutable-audit-backed and the retention sweep checks active holds before archiving or deleting aged records.
+- **Tests:** `cargo test -p retention-service --lib --quiet` — 68 passed, including active-hold sweep protection; `cargo test -p kizashi-ui --lib --quiet` — 552 passed; `cargo check -p retention-service -p kizashi-ui`; `git diff --check`. Live-verified Postgres-backed hold create/release, rendered Active/Released states, audit rows for both mutations, and healthy platform services.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0127-report-schedule-control-plane — Persistent recurring reports
+- **Type:** feature
+- **Branch:** feature/0127-report-schedule-control-plane
+- **Summary:** Adds a dedicated Report Schedules workspace backed by the tenant-scoped saved-query store. Operators can define daily/weekly/monthly report windows and recipients, pause/resume or remove schedules, and open the exact CSV artifact behind a schedule; Reports and the global navigation now link directly to the control plane.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 553 passed; `cargo check -p kizashi-ui`; `git diff --check`. Live-verified schedule create, enabled rendering, pause/resume persistence, CSV export (`text/csv`, HTTP 200), delete, and empty-state recovery against the rebuilt local stack.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0128-auditable-report-runs — Generated report run ledger
+- **Type:** feature
+- **Branch:** feature/0128-auditable-report-runs
+- **Summary:** Makes report generation observable and verifiable instead of leaving schedules as definitions only. Config/Admin now persists tenant-scoped report runs with running/generated/failed states, timestamps, errors, and CSV artifact URLs; Report Schedules adds an operator-only Run now action and a complete run-history table.
+- **Tests:** `cargo test -p config-admin-service --lib --quiet` — 128 passed; `cargo test -p kizashi-ui --lib --quiet` — 553 passed; `cargo check` completed during the local-stack rebuild; `git diff --check`. Live-verified a seeded schedule run redirect, generated run history row, artifact link, and CSV download (`text/csv`, HTTP 200, 3769 bytes).
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0129-server-persisted-dashboards — User-scoped dashboard layouts
+- **Type:** feature
+- **Branch:** feature/0129-server-persisted-dashboards
+- **Summary:** Upgrades Overview customization from browser-only localStorage to an authenticated, tenant-scoped saved layout. Drag/reorder remains immediate in the browser, while every completed arrangement is persisted for the signed-in user and restored on a new browser/session; reset removes the server copy and restores the canonical widget order. The server validates the complete known widget set before saving.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `cargo check` completed during the rebuilt local-stack compile; `git diff --check`. Live-verified authenticated save (`HTTP 204`), Config/Admin persistence of `dashboard_layout` for `demo`, cross-request restoration of the six-widget order, and reset (`HTTP 303`) back to the canonical layout.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0130-report-run-retry — Operational report recovery
+- **Type:** feature
+- **Branch:** feature/0130-report-run-retry
+- **Summary:** Failed report generations in Run history now expose a direct operator Retry action linked to the originating schedule, keeping recovery inside the same governed workflow and preserving each attempt as its own ledger row.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `git diff --check`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0131-recurring-report-executor — Live due-schedule execution
+- **Type:** feature
+- **Branch:** feature/0131-recurring-report-executor
+- **Summary:** Adds a dedicated `report-scheduler` service that reads enabled tenant-scoped report schedules, evaluates daily/weekly/monthly cadence from durable run history, mints a service-scoped Query Gateway token per tenant, verifies the report data path, and persists generated/failed runs with artifacts and completion timestamps. It runs in the local launcher and Docker Compose, exposes health to Platform Health, and keeps the existing Console history as the operator surface.
+- **Tests:** `cargo test -p report-scheduler --quiet` — 2 passed; `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `cargo check -p report-scheduler -p kizashi-ui`; `git diff --check`. Live-verified service health on `8098`, creation of a new daily schedule, automatic execution after the 10-second local interval, persisted `generated` run, scheduler log completion, and the run appearing in `/reports/schedules`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0132-smtp-report-delivery — Scheduled CSV email delivery
+- **Type:** feature
+- **Branch:** feature/0132-smtp-report-delivery
+- **Summary:** Extends the recurring report executor with optional SMTP delivery. The scheduler now fetches the tenant-scoped report data, renders the CSV attachment, sends it to the configured schedule recipient, and persists `delivered` or `delivery_failed` separately from `generated`; the Console exposes both states and offers retry for delivery failures. SMTP remains opt-in so local development continues to generate auditable Console artifacts without a mail server.
+- **Tests:** `cargo test -p report-scheduler --quiet` — 3 passed; `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `cargo check -p report-scheduler -p kizashi-ui`; `git diff --check`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0133-real-pdf-report-artifacts — PDF executive summaries
+- **Type:** feature
+- **Branch:** feature/0133-real-pdf-report-artifacts
+- **Summary:** Closes the scheduled PDF gap with a real authenticated PDF 1.4 report artifact, not a renamed CSV or printable HTML response. Reports now offer PDF export, schedules can select CSV or PDF, scheduled PDF runs persist `format=pdf`, and optional SMTP delivery attaches the matching PDF bytes; run history exposes the selected format and artifact.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `cargo test -p report-scheduler --quiet` — 3 passed; `cargo check -p report-scheduler -p kizashi-ui`; `git diff --check`. Live-verified authenticated PDF download (`application/pdf`, one-page PDF recognized by `file`), a new PDF schedule, persisted `format=pdf`, scheduler completion, and Platform Health `report-scheduler=up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0134-workspace-context-switching — Explicit tenant context
+- **Type:** feature
+- **Branch:** feature/0134-workspace-context-switching
+- **Summary:** Makes tenant scope visible in the Console shell and adds a safe workspace-switch workflow. Login and SSO persist the selected workspace label for shell context, `/session/context` exposes it to the live identity chip, and switching first revokes the current UI session and clears workspace/session cookies before returning to workspace login.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `cargo check -p kizashi-ui`; `git diff --check`. Live-verified `acme` login context, workspace chip wiring, switch redirect (`303 /login`), and post-switch context rejection (`401`); Platform Health remained up.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0135-event-contract-source-mapping — Governed source-to-event mappings
+- **Type:** feature
+- **Branch:** feature/0135-event-contract-source-mapping
+- **Summary:** Completes Event Type governance with an explicit source-field mapping editor. Contract publication and versioning now validate and persist an `x-kizashi-source-mapping` extension in the governed schema, and each Event Type card renders the mapping alongside observed fields, schema versions, and consuming triggers.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 555 passed; `cargo check -p kizashi-ui`; `git diff --check`. Live-verified publishing `demo.mapping.contract` with `score → $.analysis.score` and `entity_ref → $.customer.id`, then confirmed both the contract and mapping rendered from Config/Admin-backed Event Types.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0136-ontology-action-feedback — Governed action execution feedback
+- **Type:** feature
+- **Branch:** feature/0136-ontology-action-feedback
+- **Summary:** Completes the ontology action workbench loop by preserving the result of a default-surface action redirect. Successful, rejected, and invalid-parameter outcomes now render explicit operator feedback, while the successful path remains backed by the existing immutable action invocation ledger.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 555 passed; `git diff --check`. Live-verified a governed `Escalate support ticket` invocation with a typed `reason`, `303 /ontology?notice=executed`, rendered success feedback, action ledger activity, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0137-audit-evidence-expansion — Inline immutable change evidence
+- **Type:** feature
+- **Branch:** feature/0137-audit-evidence-expansion
+- **Summary:** Upgrades the global Audit Log from an activity index into an investigation surface. Each merged entry now exposes its immutable entry/entity IDs and expandable before/after JSON evidence inline, preserving the existing tenant-scoped merge, cursor pagination, and CSV export.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 555 passed; `git diff --check`. Live-verified `/audit-log` HTTP 200 with 50 evidence rows, 50 Before/After panels, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0138-global-search-audit-routing — Searchable governed changes
+- **Type:** feature
+- **Branch:** feature/0138-global-search-audit-routing
+- **Summary:** Extends global search across the full operating model to include tenant-scoped audit entries. Search now matches entry/entity IDs, change metadata, actors, and after-payload values; results route to the filtered Audit Log where the inline immutable evidence panel can be expanded.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 555 passed; `git diff --check`. Live-verified `/search?q=created` with 22 audit hits, routed an entity ID to `/audit-log?q=…`, rendered filtered evidence, and confirmed Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0139-overview-signal-windows — Executive signal-window control
+- **Type:** feature
+- **Branch:** feature/0139-overview-signal-windows
+- **Summary:** Makes Overview’s executive signal picture time-scoped instead of permanently fixed to an implicit 30-day window. Date controls now drive the event KPI, recent activity query, daily trend, displayed window label, and event-explorer drilldown links; invalid or reversed ranges normalize safely.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/overview?from=2026-07-01&to=2026-07-07` HTTP 200, rendered window label and controls, matching event-explorer link, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0140-overview-kpi-drilldowns — Navigable executive KPIs
+- **Type:** feature
+- **Branch:** feature/0140-overview-kpi-drilldowns
+- **Summary:** Turns Overview’s seven executive KPI tiles into direct scoped drilldowns: sensors, records, events, incidents, platform health, ontology, and governed actions. The Events tile preserves the currently selected signal window so the landing dashboard and explorer stay aligned.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified seven KPI links on the rebuilt Overview, custom-window event routing, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0141-case-action-parameter-forms — Typed incident response controls
+- **Type:** feature
+- **Branch:** feature/0141-case-action-parameter-forms
+- **Summary:** Brings the Incident case response workbench up to parity with Event and Ontology action surfaces. Governed actions now derive typed string/number/boolean/array/object fields from their parameter contract and serialize them into the existing audited invocation request without requiring operators to hand-edit raw JSON.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified seeded incident `00000000-0000-0000-0000-000000000060` with 4 typed case-action forms and 4 rendered parameter fields; Platform Health remained `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0142-incident-action-outcome-feedback — Visible case response results
+- **Type:** feature
+- **Branch:** feature/0142-incident-action-outcome-feedback
+- **Summary:** Completes the Incident response workbench loop by preserving governed action outcomes on the case route. Executed, rejected, and invalid-parameter redirects now render distinct inline operator feedback while the case timeline and immutable action ledger remain the source of response history.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified a typed case action returned `303 /incidents/00000000-0000-0000-0000-000000000060?notice=executed`, rendered the success banner, preserved 4 typed action forms, and confirmed Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0143-ontology-mapping-authoring — Structured object derivation rules
+- **Type:** feature
+- **Branch:** feature/0143-ontology-mapping-authoring
+- **Summary:** Replaces the object-type mapping-rule-only JSON workflow with a guided authoring surface. Operators can add source rules, choose the normalized source type, declare the identity property, and build target-property/source-path mappings; the advanced JSON editor remains available for richer contracts.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/ontology` HTTP 200 with 6 mapping editors, 6 add-rule controls, 5 advanced mapping fallbacks, 15 seeded object cards, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0144-normalization-mapping-authoring — Structured pipeline field mappings
+- **Type:** feature
+- **Branch:** feature/0144-normalization-mapping-authoring
+- **Summary:** Upgrades the Field Mappings control plane from line-oriented text entry to structured normalized-field and raw-payload-path rows. Existing mappings load into editable rows, duplicate targets are rejected client-side, and the original advanced text format remains available for compatibility.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/normalization-mappings` HTTP 200 with 3 mapping-builder forms, 3 add-field controls, 2 advanced text fallbacks, seeded mapping lines, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+
+## [2026-07-23] feature/0145-normalization-mapping-preview — Mapping validation loop
+- **Type:** feature
+- **Branch:** feature/0145-normalization-mapping-preview
+- **Summary:** Adds an in-form preview loop to Field Mappings. Operators can paste representative raw JSON and inspect the normalized payload produced by the current structured rows, including nested JSONPath-lite resolution and explicit nulls for missing paths, before saving a mapping version.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/normalization-mappings` HTTP 200 with 3 preview controls, 3 sample payload editors, 3 preview outputs, advanced mapping fallback, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0146-ontology-action-contract-authoring — Structured safety contracts
+- **Type:** feature
+- **Branch:** feature/0146-ontology-action-contract-authoring
+- **Summary:** Brings Ontology action authoring into the same guided workflow as action parameters. Preconditions now edit as property/value checks, effects edit as property changes with literal or `$parameter` bindings, and advanced JSON remains available for complex contracts; submit synchronization preserves the existing governed API payloads.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/ontology` HTTP 200 with 4 action authoring forms, 5 precondition payloads, 5 effect payloads, 15 seeded objects, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0147-ontology-mutation-feedback — Auditable authoring outcomes
+- **Type:** feature
+- **Branch:** feature/0147-ontology-mutation-feedback
+- **Summary:** Completes the Ontology authoring feedback loop. Object, object-type, relationship type/instance, and governed action CRUD redirects now preserve explicit success notices, so operators can distinguish a committed model change from a silent return to the page; backend failures remain surfaced as HTTP errors.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/ontology?notice=action_created` HTTP 200 with the rendered action success notice, 15 seeded objects, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0148-event-contract-authoring — Typed event schema publication
+- **Type:** feature
+- **Branch:** feature/0148-event-contract-authoring
+- **Summary:** Upgrades Event Type Governance from raw JSON-only publication to a typed field editor. Operators can add event fields, choose string/number/integer/boolean/array/object types, mark required fields, and synchronize the result into the existing JSON Schema/versioning API while retaining advanced JSON editing.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/event-types` HTTP 200 with 4 schema payloads, 5 version forms, typed schema editor script, 2 advanced JSON toggles, 15 observed event cards, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0149-event-source-mapping-authoring — Structured contract provenance
+- **Type:** feature
+- **Branch:** feature/0149-event-source-mapping-authoring
+- **Summary:** Completes the Event Type authoring workflow with structured event-field-to-source-path mapping rows for initial publication and versioning. Operators can add and validate unique mappings while retaining the raw JSON escape hatch used by the existing governed schema extension.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/event-types` HTTP 200 with 4 source-mapping payloads, 4 advanced JSON toggles, 15 observed event cards, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0150-audit-log-scoped-filters — Reviewer evidence routing
+- **Type:** feature
+- **Branch:** feature/0150-audit-log-scoped-filters
+- **Summary:** Adds audit-source and change-category filters to the merged Audit Log. Reviewers can narrow mixed configuration, access, incident, retention, and ontology evidence without losing the existing free-text search, inline before/after evidence, or cursor pagination context.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/audit-log?service=ontology-service&change_type=invoked` HTTP 200 with filter controls, evidence panels, and Platform Health `up`.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0151-data-record-compare — Side-by-side evidence review
+- **Type:** feature
+- **Branch:** feature/0151-data-record-compare
+- **Summary:** Adds bounded comparison to Data Explorer. Investigators can select up to four source records from the current result page and review their raw and normalized payloads side by side, with direct links back to each record's downstream journey and modeling context.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0152-data-selected-reprocess — Targeted evidence recovery
+- **Type:** feature
+- **Branch:** feature/0152-data-selected-reprocess
+- **Summary:** Extends Data Explorer selection into targeted recovery. Operators can reprocess up to 25 explicitly selected records from the current evidence window, while preserving the ingestion service's tenant boundary and per-record normalized no-op behavior.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 557 passed; `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0153-ontology-property-filters — Object set investigation
+- **Type:** feature
+- **Branch:** feature/0153-ontology-property-filters
+- **Summary:** Adds property-aware ontology object filtering alongside free-text search and type scoping. Investigators can narrow an object set by property name and value, preserve the filter through pagination and type navigation, and save/reopen the complete view.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 558 expected after the focused regression; `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0154-ontology-object-set-export — Governed object-set handoff
+- **Type:** feature
+- **Branch:** feature/0154-ontology-object-set-export
+- **Summary:** Adds CSV export for the complete active Ontology object set. Exports honor type, free-text, property, and value filters, include object type/provenance fields, and are scoped to the authenticated workspace.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 559 passed; `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0155-sensor-detail-controls — Connector lifecycle workspace
+- **Type:** feature
+- **Branch:** feature/0155-sensor-detail-controls
+- **Summary:** Completes connector detail operations with operator-gated editing of opaque connector configuration and enabled state. Updates use Config Admin's existing audited sensor mutation path; connector identity/type remain immutable.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 560 passed; `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0156-event-contract-version-diff — Contract review context
+- **Type:** feature
+- **Branch:** feature/0156-event-contract-version-diff
+- **Summary:** Adds readable Event Type version review. Immutable contract versions now show added, removed, and changed fields plus source-mapping changes, with expandable published JSON for exact reviewer evidence before the next version is published.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 561 expected after the focused regression; `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0157-action-ledger-export — Governed decision handoff
+- **Type:** feature
+- **Branch:** feature/0157-action-ledger-export
+- **Summary:** Adds complete filtered CSV export for the Action Ledger, including immutable invocation IDs, action/outcome, resolved target labels, parameters, audit context, and execution timestamps.
+- **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 562 expected after the focused regression; `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0158-events-live-refresh — Incident command awareness
+- **Type:** feature
+- **Branch:** feature/0158-events-live-refresh
+- **Summary:** Adds a bounded live-refresh mode to the Events signal explorer. Operators can refresh immediately or enable a 30-second refresh loop that preserves the current filtered URL and can be paused locally at any time.
+- **Tests:** `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0159-incident-view-scope-preservation — Case navigation integrity
+- **Type:** fix
+- **Branch:** feature/0159-incident-view-scope-preservation
+- **Summary:** Preserves status, severity, owner, text search, sorting, and direction when switching the Incident Queue between Table and Board views. Saved board views continue to round-trip the same scope.
+- **Tests:** pending after implementation; `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0160-user-mfa-posture — Membership security visibility
+- **Type:** feature
+- **Branch:** feature/0160-user-mfa-posture
+- **Summary:** Adds MFA enrollment posture to the administrator Users table, making identity risk visible alongside username and role without exposing secrets or changing authentication enforcement.
+- **Tests:** pending after implementation; `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+
+## [2026-07-23] feature/0161-user-mfa-filter — Security review workflow
+- **Type:** feature
+- **Branch:** feature/0161-user-mfa-filter
+- **Summary:** Adds an MFA posture filter to workspace Users. Administrators can isolate enrolled or not-enrolled accounts while preserving username search and role sorting, turning security posture visibility into an actionable review workflow.
+- **Tests:** pending after implementation; `git diff --check`. Live verification follows the UI rebuild.
+- **PR:** pending
+- **ADR:** n/a
+### feature/0162-user-bulk-role-assignment
+
+The Users administration surface supports governed bulk role assignment for selected workspace
+members, while preserving the Auth Service's per-user authorization and last-admin protections.
+
+Tests: `cargo test -p kizashi-ui --lib` (566 passed); live verification completed against the local UI.
+
+### feature/0164-action-contract-filter
+
+Action Center reviewers can filter the immutable invocation ledger by governed action contract,
+with the selected contract preserved through saved views, pagination, retries, and CSV export.
+
+Tests: `cargo test -p kizashi-ui --lib` (566 passed); live verification follows UI rebuild.
+
+### feature/0163-security-overview-mfa-posture
+
+Security Overview now reports workspace MFA coverage and links directly to the administrator's
+not-enrolled review filter, making identity risk visible in the executive control-plane view.
+
+Tests: `cargo test -p kizashi-ui --lib` (566 passed); live verification completed against the local UI.
+
+### feature/0165-my-work-filters
+
+My Work now supports text and severity filtering across assigned cases, unassigned exposure, and
+governed decision review, while retaining the existing focus tabs and ownership actions.
+
+Tests: `cargo test -p kizashi-ui --lib` (567 passed); live verification completed against the local UI.
+
+### feature/0166-my-work-export
+
+My Work can export the active filtered queue as a CSV handoff artifact, including assigned and
+unassigned cases plus governed decisions requiring review, with the current focus, text, and
+severity scope applied.
+
+Tests: `cargo test -p kizashi-ui --lib` (568 passed); live verification completed against the local UI.
+
+### feature/0167-my-work-saved-views
+
+My Work supports named, tenant-scoped saved queue views that preserve focus, text, and severity
+filters for repeatable operator and executive review.
+
+Tests: `cargo test -p kizashi-ui --lib` (569 passed); live verification completed against the local UI.
+
+### feature/0168-incident-queue-export
+
+Incident Queue now exports the complete filtered case set—not only the visible page—with title,
+summary, severity, lifecycle, ownership, linked-signal count, and timestamps for review handoff.
+
+Tests: `cargo test -p kizashi-ui --lib` (570 passed); live verification follows UI rebuild.
+
+### feature/0169-incident-queue-sla-posture
+
+Incident Queue now surfaces computed SLA posture at triage time, including breach count, per-case
+SLA labels/details, and the same metadata in the queue export.
+
+Tests: `cargo test -p kizashi-ui --lib` (572 passed); live verification follows UI rebuild.
+
+### feature/0172-reports-sla-posture
+
+Reports now includes the live SLA breach count as an executive KPI with a direct drilldown into
+the breached Incident Queue scope, keeping leadership reporting aligned with operations.
+
+Tests: `cargo test -p kizashi-ui --lib` (572 passed); live verification completed against the local UI.
+
+### feature/0171-overview-sla-drilldown
+
+Overview now reports SLA breaches as an executive KPI and routes directly into the Incident Queue
+with the breached posture filter applied, aligning the landing dashboard with case triage.
+
+Tests: `cargo test -p kizashi-ui --lib` (572 passed); live verification completed against the local UI.
+
+### feature/0170-incident-sla-filter
+
+Incident Queue supports filtering by SLA posture—breached, at-risk, on-track, or resolved—and
+preserves the scope in saved views and exact-scope exports.
+
+Tests: `cargo test -p kizashi-ui --lib` (572 passed); live verification completed against the local UI.
+
+### feature/0173-health-console-live-mode
+
+Platform Health now exposes an explicit refresh control and persisted live-mode toggle, with a
+bounded 30-second refresh cadence for operators monitoring service and queue degradation.
+
+Tests: `cargo test -p kizashi-ui --lib` (572 passed); live verification completed against the local UI.
+
+### feature/0174-scoped-global-search
+
+Workspace Search now supports source facets for records, modeled entities, incidents, events,
+governed actions, and audit evidence. Scoped requests only load the selected operational sources,
+normalize invalid scopes to the safe all-sources view, and keep the result surface bounded.
+
+Tests: `cargo test -p kizashi-ui --lib` (575 passed); live verification completed against the local UI.
+
+### feature/0175-ontology-neighborhood-graph
+
+Ontology deep links now keep the selected object and its immediate relationship neighborhood in
+the bounded graph viewport, even when the object falls beyond the first page of the model. The
+graph also discloses its bounded scope so operators can distinguish the visible neighborhood from
+the full matching object set.
+
+Tests: `cargo test -p kizashi-ui --lib` (575 passed); live verification completed against the local UI.
+
+### feature/0176-audit-filtered-history-search
+
+Global Audit Log filters now walk bounded cursor pages instead of searching only the first visible
+page. Matching evidence remains capped to the operator result window while older-history cursors
+continue to work for compliance review.
+
+Tests: `cargo test -p kizashi-ui --lib` (575 passed); live verification completed against the local UI.
+
+### feature/0177-saved-global-search-views
+
+Workspace Search now supports tenant-scoped named views that preserve both the query and source
+facet, with server-backed load and delete controls for repeatable operational discovery.
+
+Tests: `cargo test -p kizashi-ui --lib` (575 passed); live verification completed against the local UI.
+
+### feature/0178-attention-sla-routing
+
+The global Attention control now includes live SLA breach counts and routes directly to the
+breached Incident Queue scope, aligning operator triage with the executive SLA posture.
+
+Tests: `cargo test -p kizashi-ui --lib` (576 passed); live verification completed against the local UI.
+
+### feature/0179-live-attention-refresh
+
+The shell Attention control now refreshes its operational summary every 30 seconds while the page
+is visible, preserving the popover state and surfacing unavailable-summary failures explicitly.
+
+Tests: `cargo test -p kizashi-ui --lib` (576 passed); live verification completed against the local UI.
+
+### feature/0180-audit-filtered-export
+
+Audit Log CSV handoffs now preserve the active query, service, and change filters, including when
+continuing from an older-history cursor, so exported evidence matches the reviewed scope.
+
+Tests: `cargo test -p kizashi-ui --lib` (577 passed); live verification follows the UI rebuild.
+
+### feature/0181-events-filtered-export-scope
+
+Events CSV export now carries the active text and lifecycle filters in addition to its date
+window, so signal handoffs match the queue currently being reviewed.
+
+Tests: `cargo test -p kizashi-ui --lib` (577 passed); live verification completed against the local UI.
+
+### feature/0209-live-executive-overview
+
+The executive Overview now supports an operator-controlled live posture with refresh-now and a
+persisted 30-second mode. Refreshes preserve the selected signal window, dashboard layout, and
+pinned operational views, keeping the command center current without disrupting executive review.
+
+Tests: `cargo test -p kizashi-ui --lib` (585 passed); live verification follows the UI rebuild.
+
+### feature/0185-action-ledger-time-window
+
+Action Center history now supports inclusive execution-date windows. The selected window is
+preserved through filtered CSV export, bulk retry, saved review views, and pagination so an
+executive review can be reproduced without silently widening the ledger scope.
+
+Tests: `cargo test -p kizashi-ui --lib` (578 passed); live verification follows the UI rebuild.
+
+### feature/0188-contextual-incident-search
+
+Incident Queue search now matches the investigation brief and linked signal context (event type,
+group key, and lifecycle status), not just the case title. Queue rows also surface the brief, and
+the filtered CSV exporter applies the same contextual predicate so triage and executive handoffs
+cannot silently diverge.
+
+Tests: `cargo test -p kizashi-ui --lib` (579 passed); live verification follows the UI rebuild.
+
+### feature/0208-live-evidence-explorer
+
+Data Explorer now supports operator-controlled live refresh with refresh-now and persisted
+30-second mode. Active evidence filters, pagination, persistent selections, compare, reprocess,
+and bulk ontology modeling remain intact as new records arrive.
+
+Tests: `cargo test -p kizashi-ui --lib` (585 passed); live verification follows the UI rebuild.
+
+### feature/0207-governed-ontology-object-history
+
+Ontology object creation, updates, and deletion now write immutable actor-attributed snapshots to
+the ontology service's history store, with a tenant-scoped history API and migration backfill for
+existing objects. Selected object investigations expose before/after JSON snapshots directly in
+the console.
+
+Tests: `cargo test -p ontology-service --lib` (7 passed); `cargo test -p kizashi-ui --lib` (585 passed).
+
+### feature/0206-live-trigger-inventory
+
+Triggers now supports operator-controlled live inventory refresh with refresh-now and persisted
+30-second mode. Search, sort, pagination, and the existing dry-run trigger test remain encoded in
+the current URL and continue to work while detection rules change.
+
+Tests: `cargo test -p kizashi-ui --lib` (585 passed); live verification follows the UI rebuild.
+
+### feature/0205-live-sensor-telemetry
+
+Sensors now supports an operator-controlled 30-second live mode and refresh-now control. The
+current connector search, sort, and pagination URL remains intact while ingest counts, last-seen
+timestamps, and enabled state update from the live catalog and stats services.
+
+Tests: `cargo test -p kizashi-ui --lib` (585 passed); live verification follows the UI rebuild.
+
+### feature/0204-event-lineage-object-handoff
+
+Event Detail now resolves modeled ontology context through contributing-record lineage when the
+signal entity reference does not equal the object's identity field. Signal pages also link into
+the Action Center by event ID, preserving the complete evidence → object → response path.
+
+Tests: `cargo test -p kizashi-ui --lib` (585 passed); live verification follows the UI rebuild.
+
+### feature/0203-dashboard-data-view-discovery
+
+Overview saved-view discovery now recognizes Data Explorer bookmarks, whose persisted filter
+contract predates the common surface marker. Connector, source-type, subject, normalization, and
+attachment filters now produce valid `/data` command-center links instead of disappearing.
+
+Tests: `cargo test -p kizashi-ui --lib` (584 passed); live verification follows the UI rebuild.
+
+### feature/0202-pinnable-operational-dashboard-views
+
+Overview now discovers saved Data, Event, Ontology, Action, Work, Search, and Report views and
+renders them as deep-linked operational cards. Operators can pin or remove views per tenant and
+user in the dashboard, while the original saved filters remain the source of truth.
+
+Tests: `cargo test -p kizashi-ui --lib`; live verification follows the UI rebuild.
+
+### feature/0201-live-persistent-my-work
+
+My Work now keeps unassigned-case selections across queue filters and refreshes, with an explicit
+clear control and bounded bulk-claim submission. Operators can also enable a persisted 30-second
+live mode or refresh immediately while preserving the current work focus and filters.
+
+Tests: `cargo test -p kizashi-ui --lib`; live verification follows the UI rebuild.
+
+### feature/0200-entity-action-ledger-handoff
+
+Action Center search now matches governed invocation IDs and target object IDs, not only action
+names, parameters, and audit text. Ontology activity cards expose a direct object-scoped ledger
+handoff, so investigators can move from an entity's response history into the exact action set.
+
+Tests: `cargo test -p kizashi-ui --lib` (582 passed); live verification follows the UI rebuild.
+
+### feature/0199-entity-investigation-context
+
+Ontology object cards now join source lineage to live signals and linked cases. Investigators can
+open the originating event or incident directly from an entity detail, making the object model a
+working operational surface rather than an isolated property catalog.
+
+Tests: `cargo test -p kizashi-ui --lib` (581 passed); live verification follows the UI rebuild.
+
+### feature/0198-live-ontology-investigation
+
+Ontology now provides an explicit operator-controlled live mode with refresh-now and persisted
+30-second refresh behavior. The active type, object search, property filters, and deep-link
+selection remain encoded in the URL while the model and relationship graph update.
+
+Tests: `cargo test -p kizashi-ui --lib`; live verification follows the UI rebuild.
+
+### feature/0197-live-action-review
+
+Action Center now provides the same explicit operator-controlled live mode as the incident,
+event, report, pipeline, and health consoles. Refresh-now and a persisted 30-second refresh
+keep the current filtered review URL intact while new governed outcomes arrive.
+
+Tests: `cargo test -p kizashi-ui --lib`; live verification follows the UI rebuild.
+
+### feature/0196-action-retry-scope-preservation
+
+Individual governed-action retries now return to the exact Action Center review scope, preserving
+search, outcome, contract, and execution-date filters alongside the success/rejection notice.
+This aligns inline retry with bulk retry and prevents review context from disappearing after a
+single remediation.
+
+Tests: `cargo test -p kizashi-ui --lib` (580 passed); live verification follows the UI rebuild.
+
+### feature/0195-persistent-action-review-selection
+
+Action Center review selections now persist across ledger pagination and feed the existing governed
+bulk-retry operation. Completed invocations remain unselectable, and operators can clear the
+retained review set explicitly before choosing a new remediation batch.
+
+Tests: `cargo test -p kizashi-ui --lib` (579 passed); live verification follows the UI rebuild.
+
+### feature/0194-live-incident-triage
+
+Incident Queue now provides persisted case selection across pagination plus operator-controlled
+30-second live refresh, refresh-now, and pause controls. The active queue URL remains intact so
+status, severity, SLA, owner, sorting, and board/table scope survive refreshes.
+
+Tests: `cargo test -p kizashi-ui --lib` (579 passed); live verification follows the UI rebuild.
+
+### feature/0193-live-executive-reporting
+
+Reports now has an explicit operator-controlled live mode with refresh-now and persisted 60-second
+refresh behavior. The current URL remains the source of truth, so a selected executive date window
+survives each refresh.
+
+Tests: `cargo test -p kizashi-ui --lib` (579 passed); live verification follows the UI rebuild.
+
+### feature/0192-window-consistent-connector-reporting
+
+Reports now recompute connector volume and last-ingested timestamps from the selected record
+window. The no-window view retains the fast all-time connector aggregate, while date-scoped
+reports and their Data Explorer drilldowns now describe the same evidence set.
+
+Tests: `cargo test -p kizashi-ui --lib` (579 passed); live verification follows the UI rebuild.
+
+### feature/0191-persistent-event-triage-selection
+
+Event Queue selections now persist across pagination and feed bulk lifecycle updates, incident
+creation, and linking to an existing case. Operators can clear the retained evidence set without
+losing the current filter or live-refresh posture.
+
+Tests: `cargo test -p kizashi-ui --lib` (579 passed); live verification follows the UI rebuild.
+
+### feature/0190-persistent-ontology-selection
+
+Ontology entity selections now persist across pagination, including object-type metadata needed
+by the bulk relationship workbench. Operators can clear the persisted set explicitly, while
+governed action compatibility filtering remains active for every selected entity.
+
+Tests: `cargo test -p kizashi-ui --lib` (579 passed); live verification follows the UI rebuild.
+
+### feature/0189-persistent-evidence-selection
+
+Data Explorer selections now persist across pagination in the browser, allowing a bounded set of
+records to flow into compare, reprocess, or bulk ontology modeling without forcing investigators
+to complete the operation on one page. Compare remains capped to four records and mutation
+endpoints retain their server-side 25-record safety bound.
+
+Tests: `cargo test -p kizashi-ui --lib` (579 passed); live verification follows the UI rebuild.
+
+### feature/0187-bulk-ontology-relationships
+
+Ontology now includes a relationship workbench for linking up to 25 compatible selected source
+entities to one governed target. Link-type compatibility is reflected in the UI, the ontology
+service remains the final validation boundary, and partial success is reported explicitly.
+
+Tests: `cargo test -p kizashi-ui --lib` (578 passed); live verification follows the UI rebuild.
+
+### feature/0186-bulk-evidence-modeling
+
+Data Explorer selections can now be promoted into ontology objects in one bounded operator
+workflow. The normalized payload is used when available, every object keeps source-record
+lineage, and the result reports modeled versus failed records with a direct ontology handoff.
+
+Tests: `cargo test -p kizashi-ui --lib` (578 passed); live verification follows the UI rebuild.
+
+### feature/0182-incident-sla-scope-preservation
+
+Incident Queue’s primary export shortcut and Board/Table view toggles now preserve the active SLA
+posture alongside the other queue filters, preventing scope loss during triage handoffs.
+
+Tests: `cargo test -p kizashi-ui --lib` (577 passed); live verification completed against the local UI.
+
+### feature/0183-pipeline-queue-drilldown-live-mode
+
+Pipeline queue-pressure cards are now direct links into the relevant data, event, or action
+control surface, and the map exposes a persisted operator-controlled 30-second live-refresh mode.
+
+Tests: `cargo test -p kizashi-ui --lib` (577 passed); live verification completed against the local UI.
+
+### feature/0184-pipeline-filtered-queue-drilldowns
+
+Pipeline hops now route to actionable backlog scopes: unnormalized/normalized records, new
+signals, and action review, reducing the distance from observed queue pressure to remediation.
+
+Tests: `cargo test -p kizashi-ui --lib` (577 passed); live verification completed against the local UI.
+
+### feature/0210-governed-action-library
+
+Action authoring is now a first-class Action Library workspace instead of being discoverable only
+inside the Ontology page. Operators can publish and update target-scoped contracts with typed
+parameters, preconditions, and effects; admins can retire them; eligible targets can be executed
+directly from the contract card; and execution counts and latest outcomes link back to the
+immutable Action Center ledger.
+
+Tests: `cargo test -p kizashi-ui --lib` (589 passed); live verification completed against the
+rebuilt local UI and ontology service.
+
+### feature/0211-trigger-provider-authoring
+
+Trigger authoring now exposes the platform's real response providers instead of presenting a
+webhook-only field: Webhook/HTTP relay, Email, Microsoft Teams, Create Ticket, and Custom. Each
+provider accepts governed JSON configuration and optional body templates, while the legacy URL
+submission remains compatible and the action executor continues to own dispatch and auditability.
+
+Tests: `cargo test -p kizashi-ui --lib` (591 passed); live verification completed against the
+rebuilt local trigger console.
+
+### feature/0338-cohesive-responsive-console-shell
+
+The shared Console shell now marks the active workspace surface with `aria-current`, resolves
+nested routes to their most specific navigation destination, and provides a real mobile menu
+toggle instead of forcing the full sidebar into a horizontal scroll strip. This keeps Overview,
+Ontology, incidents, security, and detail pages legible as one product across viewport sizes.
+
+Tests: `cargo test -p kizashi-ui overview_handler_test --lib` (18 passed) and
+`cargo check -p kizashi-ui`; live shell verification completed after rebuilding the local console.
+
+### feature/0339-platform-health-heatmap
+
+Platform Health now includes service availability totals, total and peak backlog, critical queue
+count, and a normalized queue-pressure heatmap linked into the Pipeline Map. Operators can see
+the pressure distribution and its severity before opening the lower-level queue cards.
+
+Tests: `cargo test -p kizashi-ui health_handler_test --lib` (4 passed) and
+`cargo check -p kizashi-ui`; live verification completed after rebuilding the local console.
+
+### feature/0340-connector-ingestion-activity-chart
+
+Connector detail now includes a clickable ingestion activity chart grouped by source-record day,
+with exact counts, normalized bar heights, and a direct link back to the connector-filtered Data
+Explorer. This makes connector freshness and volume inspectable without forcing operators to scan
+the raw-record table.
+
+Tests: `cargo test -p kizashi-ui sensor_detail_handler_test --lib` (5 passed) and
+`cargo check -p kizashi-ui`; live verification completed after rebuilding the local console.
+
+### feature/0341-entity-audit-posture
+
+Entity-scoped Audit History now leads with recorded-change count, distinct actor count, mutation
+type count, latest-write date, and a normalized mutation-distribution chart. The immutable
+before/after diff table remains the evidence source, while the posture layer makes governance
+activity legible before an operator opens each diff.
+
+Tests: `cargo test -p kizashi-ui audit_log_handler_test --lib` (24 passed, including the merged
+recent-audit module) and `cargo check -p kizashi-ui`; live verification completed after rebuild.
+
+### feature/0342-ontology-audit-drilldown
+
+Ontology action invocations are now available through the entity-scoped Audit History route,
+matching the global audit feed’s `ontology-service` entries. Operators can open a target entity’s
+immutable invocation history and see the same posture counts, mutation distribution, and JSON
+evidence used by the other audit domains.
+
+Tests: `cargo test -p kizashi-ui audit_log_handler_test --lib` (24 passed) and live ontology audit
+route verification after rebuild.
+
+### feature/0343-audit-feed-entity-links
+
+The global Audit Log now links each supported service/entity row directly to its entity-scoped
+history, including config, retention, auth, incidents, and ontology action invocations. The
+global activity feed is now a navigable evidence graph rather than a list of IDs operators must
+copy into another URL.
+
+Tests: `cargo test -p kizashi-ui recent_audit_log_handler_test --lib` (17 passed) and
+`cargo check -p kizashi-ui`; live link rendering verified against the seeded audit feed.
+
+### feature/0344-pipeline-pressure-distribution
+
+Pipeline Map now summarizes total queued messages, critical boundaries, and peak hop backlog,
+then renders a normalized pressure distribution linked to each downstream control surface. The
+topology remains the system map; the new pressure layer makes live operational load comparable
+across hops without opening each queue one at a time.
+
+Tests: `cargo test -p kizashi-ui pipeline_handler_test --lib` (5 passed) and
+`cargo check -p kizashi-ui`; live pipeline verification completed after rebuild.
+
+### feature/0345-report-decision-drilldowns
+
+Executive Reports now links every governed-response row to its immutable Action Center decision
+record, preserving the existing target, event, incident, and evidence handoffs. A report can now
+be used as an investigation launchpad instead of ending at aggregate charts and summary tables.
+
+Tests: `cargo test -p kizashi-ui reports_handler_test --lib` (11 passed) and
+`cargo check -p kizashi-ui`; live report verification completed after rebuild.
+
+### feature/0346-shared-theme-token-aliases
+
+The shared Console theme now defines the visual aliases used by page-level modules (`panel`,
+`panel-raised`, `muted`, `text-muted`, `surface-3`, and `mono`). Connector cards, security
+posture, work queues, and configuration panels now resolve against the same dark/light theme
+tokens instead of silently falling back when a page-local alias was missing.
+
+Tests: full `cargo test -p kizashi-ui --lib` and `cargo check -p kizashi-ui`; live dark-theme
+shell verification completed after rebuild.
+
+### feature/0288-connector-downstream-context
+
+Sensor detail now traces connector records into downstream signals and modeled entities. Each
+connector record links to its evidence detail and Record Journey, while signal and ontology links
+make the source-to-model path inspectable from the connector itself.
+
+Tests: `cargo test -p kizashi-ui sensor_detail_handler` (4 passed), `cargo build -p kizashi-ui`,
+and live verification showing 4 signals, 7 entities, and clickable record/journey links for the
+seeded `support-intake` connector.
+
+### feature/0289-connector-operating-posture
+
+Connector detail now exposes an explicit operating posture derived from persisted configuration
+and ingestion evidence: healthy, stale, disabled, or no data. Operators can see all-time volume,
+last activity, recent normalization coverage, and a connector-scoped recovery action that
+republishes unnormalized records through the existing Data pipeline.
+
+Tests: `cargo test -p kizashi-ui sensor_detail_handler` (4 passed), UI build, and live verification
+of the seeded connector’s stale posture, volume, normalization sample, and recovery control.
+
+### feature/0290-ontology-graph-inspector
+
+The Ontology relationship graph now includes a live selection inspector. Selecting a node shows
+its modeled type and identity plus direct relationship neighbors with relationship labels and
+deep links into the neighboring object records; zoom, pan, neighbor isolation, keyboard access,
+and double-click navigation remain available.
+
+Tests: `cargo test -p kizashi-ui ontology_handler` (13 passed), `cargo check -p kizashi-ui`, and
+live verification of the selected-object graph route with 8 nodes and 10 rendered graph edges.
+
+### feature/0291-ontology-deep-link-context
+
+Ontology graph deep links now preserve their selected object in the rendered graph state. Links
+from records, signals, cases, and governed decisions open with the corresponding node selected,
+highlighted, and loaded into the graph inspector rather than requiring a second manual click.
+
+Tests: `cargo test -p kizashi-ui ontology_handler` (13 passed), UI build, and live verification of
+the Northwind object deep link carrying `data-graph-selected` into the graph surface.
+
+### feature/0292-connector-inventory-health
+
+Connector inventory status now uses the same freshness semantics as connector detail. Historical
+records no longer make a stale connector appear active: inventory rows distinguish healthy, stale,
+disabled, and no-data states while preserving volume and last-ingested evidence.
+
+Tests: `cargo test -p kizashi-ui sensors_handler` (24 passed), `cargo check -p kizashi-ui`, and
+live verification of the seeded `support-intake` row rendering as stale.
+
+### feature/0293-case-decision-deep-links
+
+Incident response-review rows now link directly to their exact immutable action invocation rather
+than the generic Action Center. Case investigators can move from review posture to the precise
+decision record, contract snapshot, target, and source context in one step.
+
+Tests: `cargo test -p kizashi-ui incident_handlers` (29 passed), UI build, and live verification
+of the seeded case linking its governed responses to exact `/actions/:id` records.
+
+### feature/0294-trigger-contract-detail
+
+Detection rules now have a first-class detail surface. Operators can inspect the exact event
+contract, condition shape, threshold/count/correlation semantics, evaluation window, response
+providers, serialized payload, audit history, and a read-only dry run against real entity history.
+The trigger inventory links rule names and matching event types into this view.
+
+Tests: `cargo check -p kizashi-ui`, trigger-handler tests (24 passed), UI build, and live
+verification of the seeded `Identity ticket escalation` contract plus dry-run result.
+
+### feature/0295-trigger-contract-editing
+
+Trigger detail now supports audited contract editing for operators. Rule name, event match,
+evaluation window, Trigger DSL condition, and response-provider JSON are validated server-side,
+tenant-scoped, and persisted through the existing Config/Admin update path; malformed condition or
+provider payloads are rejected without mutation.
+
+Tests: `cargo check -p kizashi-ui`, trigger-handler tests (24 passed), and live verification of
+the edit form plus a malformed-condition `303` rejection for the seeded rule.
+
+### feature/0296-configuration-connector-freshness
+
+Configuration Center now incorporates connector freshness into executive control posture. Enabled
+connectors with stale or missing ingestion evidence are counted as needing attention, the Connect
+stage exposes that count, and the Connectors card moves to risk state until the inventory is
+healthy.
+
+Tests: `cargo test -p kizashi-ui configuration_handler` (0 focused tests; compilation passed),
+`cargo check -p kizashi-ui`, and live verification showing `1 enabled sensor · 1 needs attention`
+and a risk-state Connectors card for the seeded stale connector.
+
+### feature/0297-sensor-health-filter
+
+Sensors inventory now supports a health-state queue filter for healthy, stale, no-data, and
+disabled connectors. The selected health scope survives name search, sort links, and pagination,
+turning the freshness posture into a direct operator work queue instead of a passive badge.
+
+Tests: `cargo test -p kizashi-ui sensors_handler` (24 passed), `cargo check -p kizashi-ui`, and
+live verification of `/sensors?health=stale` returning the seeded `support-intake` connector with
+the stale filter and sort links preserved.
+
+### feature/0298-search-evidence-handoffs
+
+Global Search now exposes the next evidence hop directly: source-record hits link to Record
+Journey and connector-scoped Data Explorer, while event hits show how many source records support
+the signal. Search results therefore preserve the evidence chain from discovery into investigation.
+
+Tests: `cargo test -p kizashi-ui search_handler` (4 passed), `cargo check -p kizashi-ui`, and live
+verification of an `SSO` search showing Record Journey, connector scope, and source-record counts.
+
+### feature/0299-overview-connector-freshness
+
+The Overview landing dashboard now promotes connector freshness into its executive KPI row. When
+an enabled connector is stale or has no ingestion evidence, the Sensors KPI turns risk-colored,
+shows the attention count, and links directly to the stale connector queue.
+
+Tests: `cargo test -p kizashi-ui overview_handler` (22 passed), `cargo check -p kizashi-ui`, and
+live verification of the seeded Overview KPI linking to `/sensors?health=stale`.
+
+### feature/0300-sensor-connector-library
+
+Sensors now opens with a connector library rather than a bare registration table. Zendesk,
+Microsoft Graph Mail/Teams, SQL, Fabric, and generic webhook cards explain the integration,
+protocol, and authentication posture. Each card opens an install modal linked to the existing
+deployment-script generator, API-key console, and registration handoff.
+
+### feature/0301-sensor-operational-visuals
+
+The Sensors workspace now includes a live-stats connector activity chart and clickable health
+heatmap. Both are derived from the connector inventory and ingestion statistics, with links into
+connector-scoped data and health queues. The seeded `support-intake` connector renders with six
+records and stale posture in the live console.
+
+Tests: `cargo test -p kizashi-ui sensors_handler` (24 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/sensors` on port 8093.
+
+### feature/0302-ontology-model-telemetry
+
+Ontology now surfaces model shape before the operator enters the deeper workbench. Object-type
+population bars and relationship-volume cards are derived from live ontology objects and link
+instances, and each visualization links directly into its corresponding type or relationship
+scope. The live tenant renders 5 object types, 11 objects, 3 relationship types, and 7 link
+instances.
+
+### feature/0303-data-evidence-composition
+
+Data Explorer now visualizes the active evidence window with source-type composition bars and a
+normalization posture panel. The summary follows the current filters and page, so the chart is
+an honest view of the records currently being investigated rather than an unrelated aggregate.
+
+Tests: `cargo test -p kizashi-ui ontology_handler` (13 passed), `cargo test -p kizashi-ui data_handler`
+(27 passed), `cargo check -p kizashi-ui`, `cargo build -p kizashi-ui`, and live verification of
+`/ontology` and `/data` on port 8093.
+
+### feature/0304-workload-telemetry
+
+My Work now presents active workload posture as data-backed operator telemetry: severity
+distribution bars and an SLA heatmap link directly into the corresponding filtered queues. The
+visuals use the same ownership, severity, and SLA calculations as the case lists, while the
+existing unassigned bulk-claim and governed-decision review controls remain in the same command
+surface. Live verification shows 2 assigned cases, 1 unassigned case, 7 review actions, and 3
+breached cases.
+
+Tests: `cargo test -p kizashi-ui work_handler` (11 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/work` on port 8093.
+
+### feature/0305-security-posture-board
+
+Security Overview now presents live control coverage as a visual posture board. MFA enrollment,
+retention coverage, RBAC distribution, egress controls, active sessions, and recent administrative
+activity are shown as linked metrics with risk coloring and direct paths to the owning control
+surface. The live tenant currently exposes 0/3 MFA enrollment, 1/1 retention coverage, 2 egress
+domains, and 11 administrative actions in the last seven days.
+
+Tests: `cargo test -p kizashi-ui security_overview_handler` (7 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/security` on port 8093.
+
+### feature/0306-action-ledger-telemetry
+
+Action Center now exposes the shape of the governed response ledger before the operator enters
+the detailed table. Outcome posture shows completed versus non-completed invocations, while the
+human-review panel shows overdue, unreviewed, and assigned decisions. Every metric is derived from
+the active ledger scope and links into the corresponding filter. The live tenant renders 35
+invocations: 28 completed, 7 needing review, 1 overdue, and 32 unreviewed.
+
+Tests: `cargo test -p kizashi-ui actions_handler` (9 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/actions` on port 8093.
+
+### feature/0307-incident-triage-telemetry
+
+Incident Queue now leads with a live severity mix and SLA heatmap derived from the current case
+scope. Each segment links into the corresponding severity or SLA filter, while the existing board,
+table, ownership, bulk lifecycle, and evidence workflows remain available below. The live tenant
+renders 4 cases: 1 critical, 2 high, 1 low, and 3 SLA breaches.
+
+Tests: `cargo test -p kizashi-ui incident_handlers` (29 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/incidents` on port 8093.
+
+### feature/0308-executive-report-visual-cards
+
+Reports now presents its real connector and event charts as explicit executive visualization
+cards. Each card states its signal-window scope, keeps the server-backed chart and table together,
+and links directly into Data Explorer or the event stream for evidence follow-through. The live
+report renders connector counts for `support-intake` and `operator-replay-check`, plus four live
+event classes.
+
+Tests: `cargo test -p kizashi-ui reports_handler` (11 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/reports` on port 8093.
+
+### feature/0309-event-stream-posture
+
+Events now surfaces lifecycle posture and signal composition above the evidence table. New,
+triggered, actioned, and dismissed counts are derived from the visible result window, while the
+top event contracts link directly into scoped searches. The existing 30-day trend, source-record
+journeys, case linking, cluster suggestions, and bulk lifecycle controls remain intact. The live
+tenant renders 4 signals: 2 new, 1 triggered, and 1 actioned across four event classes.
+
+Tests: `cargo test -p kizashi-ui events_handler` (24 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/events` on port 8093.
+
+### feature/0310-trigger-rule-posture
+
+Triggers now opens with a detection-posture view showing enabled and disabled rule counts with
+direct inventory sorting links. The view is derived from the current trigger scope and sits above
+the existing rule authoring, condition-shape builders, provider configuration, dry-run test, bulk
+toggle, and audit-history workflows. The live tenant currently has 1 enabled rule and 0 disabled.
+
+Tests: `cargo test -p kizashi-ui triggers_handler` (24 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/triggers` on port 8093.
+
+### feature/0311-user-identity-posture
+
+Users now opens with live identity posture telemetry: MFA enrolled versus missing and Admin versus
+Operator distribution, each rendered as a proportional bar with a direct filtered or sorted link.
+The existing search, MFA filter, role updates, bulk operations, history, export, and admin-only
+controls remain the operational surface below it.
+
+Tests: `cargo test -p kizashi-ui users_handler` (26 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/users` on port 8093.
+
+### feature/0312-command-search-posture
+
+Global Search now has valid, accessible scope controls and a live result-distribution strip for
+source records, modeled entities, incidents, events, governed actions, and audit evidence. Each
+count is a direct handoff into the same query, making the command surface useful for triage instead
+of requiring users to scan every result panel. The underlying cross-domain lineage links remain
+available from each hit.
+
+Tests: `cargo test -p kizashi-ui search_handler` (4 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/search` on port 8093.
+
+### feature/0313-evidence-analytics
+
+Data Explorer now includes a clickable ingestion timeline and a connector-by-normalization
+heatmap derived from the active evidence window. Operators can jump from a daily volume bar into
+that date or from a connector's posture directly into its filtered records, while the existing
+source composition, normalization KPIs, lineage, compare, reprocess, and model-promotion flows
+remain in place.
+
+Tests: `cargo test -p kizashi-ui data_handler` (27 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/data` on port 8093.
+
+### feature/0314-case-response-outcomes
+
+Incident detail now exposes a response-outcome distribution for the visible governed-response
+history, with proportional Completed, Rejected, and Other bars and direct handoffs into the Action
+Center. This complements the existing case timeline, source-record lineage, modeled impact,
+relationship neighborhood, review posture, notes, and in-context governed response workbench.
+
+Tests: `cargo test -p kizashi-ui incident_handlers` (29 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of an incident detail page on port 8093.
+
+### feature/0315-control-plane-readiness
+
+Configuration Center now computes a live readiness score across connector freshness, detection,
+normalization, analysis, retention, and egress controls. Risk domains are routed into a dedicated
+attention list with direct links to the responsible control surface, alongside the existing
+connect-to-respond flow and control cards.
+
+Tests: `cargo check -p kizashi-ui`, `cargo build -p kizashi-ui`, and live verification of
+`/configuration` on port 8093.
+
+### feature/0316-normalization-coverage
+
+Field Mappings now includes live source-type coverage: each row shows normalized versus pending
+records, marks source types with no mapping as unmapped, and links into the matching Data Explorer
+scope. Coverage respects the active source-type search and sort context while the existing
+structured mapping editor, preview, deduplication guard, CRUD, and audit flows remain intact.
+
+Tests: `cargo test -p kizashi-ui normalization_mappings_handler` (10 passed),
+`cargo check -p kizashi-ui`, `cargo build -p kizashi-ui`, and live verification of
+`/normalization-mappings` on port 8093.
+
+### feature/0317-action-capability-posture
+
+Action Library now surfaces execution readiness for the published contracts: eligible versus
+blocked contracts based on live target preconditions, total ledger executions, and decisions that
+used older contract definitions. The posture links back to the governed library and complements
+the existing typed execution forms, contract JSON, history, edit, retire, and immutable ledger
+handoffs.
+
+Tests: `cargo test -p kizashi-ui actions_library_handler` (6 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/actions/library` on port 8093.
+
+### feature/0318-event-contract-posture
+
+Event Types now quantifies contract governance and detection coverage from the live event window:
+governed versus observed-only definitions, triggerless contract count, and sampled signal volume.
+The posture bars sit above the existing evidence-backed schema cards, version history, source
+mapping editors, sample links, and trigger handoffs.
+
+Tests: `cargo test -p kizashi-ui event_types_handler` (5 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/event-types` on port 8093.
+
+### feature/0319-report-delivery-posture
+
+Report Schedules now surfaces delivery outcomes and artifact mix from the live scheduler ledger:
+generated, failed, and in-progress runs are visualized with drill-through to run history, while
+CSV and PDF schedule counts make executive delivery coverage immediately legible.
+
+Tests: `cargo test -p kizashi-ui report_schedules` (1 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/reports/schedules` on port 8093.
+
+### feature/0320-audit-activity-posture
+
+The workspace Audit Log now adds an evidence-backed activity posture layer above the immutable
+ledger: source distribution and mutation-type concentration are rendered as compact drillable
+bars, preserving the existing search, service/change filters, before/after inspection, paging,
+and CSV export workflows.
+
+Tests: `cargo test -p kizashi-ui recent_audit_log_handler` (16 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/audit-log` on port 8093.
+
+### feature/0321-backup-recovery-posture
+
+The Backups console now turns the raw DR run table into a recovery-readiness view: successful,
+failed, and running distributions are visualized alongside the visible run count and recorded
+artifact bytes, while the existing admin boundary and keyset history remain intact.
+
+Tests: `cargo test -p kizashi-ui backup_status_handler` (8 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/security/backups` on port 8093.
+
+### feature/0322-api-key-lifecycle-posture
+
+API Keys now surfaces credential lifecycle posture above the governed table: active versus
+revoked exposure, visible inventory, and credentials issued in the last 30 days. Search and sort
+filters feed the same posture counts, while create-once, revoke, bulk revoke, and audit-history
+controls remain unchanged.
+
+Tests: `cargo test -p kizashi-ui api_keys_handler` (17 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/api-keys` on port 8093.
+
+### feature/0323-egress-enforcement-posture
+
+Egress Allowlist now makes the outbound security boundary explicit: restricted versus
+unrestricted enforcement, configured domain inventory, and duplicate-entry hygiene are visible
+before the operator edits the singleton list. The existing whole-list save, role gate, and
+tenant-scoped audit-history link remain the source of truth.
+
+Tests: `cargo test -p kizashi-ui egress_allowlist_handler` (7 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/egress-allowlist` on port 8093.
+
+### feature/0324-analysis-readiness-posture
+
+AI Analysis now presents configuration readiness before the operator edits the form: platform
+default versus tenant policy, provider identity and field-level connection readiness, plus
+write-only secret posture. The cards explicitly distinguish configuration completeness from
+upstream model availability and preserve the existing provider switching, secret handling,
+resilience guidance, save, and audit workflows.
+
+Tests: `cargo test -p kizashi-ui analysis_config_handler` (11 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/analysis-config` on port 8093.
+
+### feature/0325-retention-lifecycle-posture
+
+Data Retention now surfaces lifecycle governance before the CRUD controls: enabled versus
+disabled policy state, active compliance holds, data-class coverage across raw/normalized/event,
+and the configured TTL range. Archive replay, hold management, inline editing, bulk removal,
+toggle actions, and immutable history remain connected to the same tenant-scoped backend.
+
+Tests: `cargo test -p kizashi-ui retention_policies_handler` (19 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/retention-policies` on port 8093.
+
+### feature/0326-session-security-posture
+
+Active Sessions now adds security-review telemetry above the revocation table: role concentration,
+recent sign-ins, sessions older than 30 days, and current-session identification. Search and sort
+continue to drive the visible table and posture together, while tenant scoping, current-session
+protection, bulk revoke, single revoke, and revocation audit recording remain enforced.
+
+Tests: `cargo test -p kizashi-ui sessions_handler` (21 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/security/sessions` on port 8093.
+
+### feature/0327-login-attempt-posture
+
+Login Attempts now exposes the access-signal shape above the evidence table: success versus
+failure balance, distinct usernames targeted, and the most common failed-attempt reasons. Failed
+counts are now computed after the active username filter, so the posture and the rows agree;
+admin-only access, keyset pagination, and CSV export remain unchanged.
+
+Tests: `cargo test -p kizashi-ui login_attempts_handler` (11 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/security/login-attempts` on port 8093.
+
+### feature/0328-compliance-control-board
+
+Compliance Snapshot now turns its existing multi-service evidence into an executive control board:
+an explicit readiness score, six routed control checks, attention/ready/unknown states, and
+direct links to the underlying users, password, retention, egress, backup, and login evidence.
+The score is deliberately labeled as a readiness signal rather than a certification.
+
+Tests: `cargo test -p kizashi-ui compliance_report_handler` (3 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/security/compliance-report` on port 8093.
+
+### feature/0329-mfa-control-posture
+
+Two-Factor Authentication now presents an explicit account-factor posture: protected, needs
+enrollment, or enrollment in progress; the TOTP standard and self-service control boundary are
+also visible before setup. QR enrollment, verification, password-gated disable, and account-only
+scope remain unchanged.
+
+Tests: `cargo test -p kizashi-ui mfa_settings_handler` (9 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/security/mfa` on port 8093.
+
+### feature/0330-record-comparison-posture
+
+Data Compare now adds transformation telemetry to each side-by-side evidence card: raw and
+normalized top-level field counts, normalization readiness, and a visible raw-to-normalized
+evidence transition. The bounded tenant-scoped comparison and full payload inspection remain
+unchanged, with live verification using two seeded source records.
+
+Tests: `cargo check -p kizashi-ui`, `cargo build -p kizashi-ui`, and live verification of
+`/data/compare` on port 8093 with two real tenant record IDs.
+
+### feature/0331-permission-capability-map
+
+Permissions Reference now adds a role capability overview and semantic access styling: read-only,
+write/govern, and denied states are visually distinct while the exact backend-derived wording and
+notes remain authoritative. Role cards summarize how many documented areas each role can access,
+and the table remains the detailed contract with no authorization behavior changed.
+
+Tests: `cargo test -p kizashi-ui permissions_reference_handler` (3 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/security/permissions` on port 8093.
+
+### feature/0332-branding-identity-preview
+
+Branding now includes a live client-side identity preview and explicit white-label coverage:
+product name, logo URL, and accent color are shown as the operator edits them, while the page
+reports platform-default, partially branded, or fully branded state. The preview is non-persistent
+until save, uses safe fallback behavior, and preserves Admin-only writes plus audit history.
+
+Tests: `cargo test -p kizashi-ui branding_handler` (6 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/branding` on port 8093.
+
+### feature/0333-record-detail-evidence-posture
+
+Record Detail now surfaces the current evidence state before the raw payloads: raw and normalized
+field counts, downstream signal count, and modeled-object lineage count. This makes the decision
+to reprocess or model immediately visible while preserving the existing journey, normalization,
+model-authoring, and payload inspection actions.
+
+Tests: `cargo test -p kizashi-ui data_detail_handler` (3 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/data/:id` on port 8093.
+
+### feature/0334-journey-impact-summary
+
+Record Journey now opens with impact telemetry across the full source-to-response chain: derived
+events, action executions, incident cases, modeled ontology objects, and governed decisions. The
+summary is computed from the same live lineage data as the existing waterfall and drill-through
+links, so investigators can assess breadth before inspecting each hop.
+
+Tests: `cargo test -p kizashi-ui record_journey_handler` (10 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/data/:id/journey` on port 8093.
+
+### feature/0335-ontology-comparison-posture
+
+Ontology Compare now quantifies the selected investigation set: shared properties versus
+divergent properties are summarized above the typed side-by-side table, with divergent sets
+visually flagged as requiring investigation. Existing bounded selection, missing-property
+handling, object links, and detailed value comparison remain unchanged.
+
+Tests: `cargo test -p kizashi-ui ontology_handler` (13 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/ontology/compare` on port 8093.
+
+### feature/0336-password-policy-interaction
+
+Change Password now presents credential scope, policy floor, and MFA adjacency as an identity
+control strip, plus live client-side feedback for the visible length and username checks while a
+new password is typed. Backend validation remains authoritative; the existing self-service
+rotation, confirmation, and error flows are unchanged.
+
+Tests: `cargo test -p kizashi-ui password_change_handler` (6 passed), `cargo check -p kizashi-ui`,
+`cargo build -p kizashi-ui`, and live verification of `/security/password` on port 8093.
+
+### feature/0213-case-source-evidence-handoff
+
+Incident detail now materializes the raw-record lineage behind every linked signal. Investigators
+can see the contributing record set, the signal types that referenced each record, and open the
+existing Data Explorer evidence journey directly from the case workspace.
+
+Tests: `cargo test -p kizashi-ui --lib` (591 passed); live verification completed against the
+rebuilt local incident console.
+
+### feature/0214-signal-case-correlation
+
+Creating a case from a signal now checks the tenant's active investigations for matching entity
+or group context. Matching signals are appended to the existing open case through the audited
+link path, while resolved cases are never reused and unrelated signals still create a new case.
+
+Tests: `cargo test -p kizashi-ui --lib` (592 passed); live verification completed against the
+rebuilt local incident console.
+
+### feature/0215-live-event-contract-registry
+
+The Event Types registry now supports tenant/user-scoped operator-controlled live refresh with
+refresh-now and a persisted 30-second mode. Contract search, observed payload samples, version
+review, and trigger-consumer context remain intact across refreshes.
+
+Tests: `cargo test -p kizashi-ui --lib` (593 passed); live verification completed against the
+rebuilt local contract registry.
+
+### feature/0216-valid-executive-card-links
+
+Executive overview KPI cards no longer contain nested anchors. Card-level navigation remains
+keyboard- and click-safe, with regression coverage preventing the invalid markup from returning.
+
+Tests: `cargo test -p kizashi-ui --lib` (593 passed); rebuilt UI and live overview verification
+completed successfully.
+
+### feature/0217-ontology-neighborhood-investigation
+
+The ontology graph now includes a keyboard-accessible neighborhood isolation control. Operators can
+select an entity, show only its directly related objects and edges, restore the full model, and
+continue to open the selected object or use the existing zoom/pan controls without leaving context.
+
+Tests: `cargo test -p kizashi-ui --lib` (594 passed); rebuilt UI and live ontology verification
+completed successfully.
+
+### feature/0218-valid-report-action-handoff
+
+The Reports response-assurance KPI now links at the card level to the Action Center. The executive
+handoff remains visible while avoiding nested anchors that could make clicks and keyboard focus
+unreliable.
+
+Tests: `cargo test -p kizashi-ui --lib` (595 passed); rebuilt Reports and verified the live action
+handoff and platform health.
+
+### feature/0219-sla-aware-operator-work-queue
+
+My Work now carries the same severity-based response-target calculation used by the Incident Queue.
+Assigned and unassigned cases display on-track, at-risk, or breached posture with the remaining or
+elapsed target detail, keeping prioritization visible while operators claim and investigate work.
+
+Tests: `cargo test -p kizashi-ui --lib` (596 passed); rebuilt My Work and verified live SLA labels
+against the populated incident data.
+
+### feature/0220-work-queue-sla-filtering
+
+My Work now filters by SLA posture (`breached`, `at-risk`, or `on-track`) and carries that scope
+through saved views, bulk-claim context, and CSV export. The live queue, persisted view definition,
+and handoff artifact now describe the same operator workload.
+
+Tests: `cargo test -p kizashi-ui --lib` (597 passed); verified `/work?sla=breached` against live
+case data and confirmed platform health.
+
+### feature/0221-preserved-incident-queue-scope
+
+Incident Queue sort links and pagination now preserve the full active scope, including SLA posture,
+owner, view mode, and all existing filters. Operators can sort or page through a focused breach
+queue without silently widening or changing the investigation set.
+
+Tests: `cargo test -p kizashi-ui --lib` (598 passed); verified a live `sla=breached` queue and
+platform health after the rebuild.
+
+### feature/0222-preserved-work-focus-scope
+
+My Work focus tabs now preserve the active text, severity, and SLA filters when switching between
+Assigned, Unassigned, and Decision Review. The queue remains one coherent investigation scope
+instead of silently resetting when an operator changes work mode.
+
+Tests: `cargo test -p kizashi-ui --lib` (599 passed); verified live filtered focus links and
+platform health.
+
+### feature/0223-preserved-incident-board-scope
+
+Incident board lifecycle actions now preserve the active search, status, severity, SLA, owner,
+sort, and board context. Direct status buttons and drag-and-drop transitions return to the same
+focused board instead of resetting operators to an unfiltered view.
+
+Tests: `cargo test -p kizashi-ui --lib` (600 passed); verified the live filtered board and platform
+health after rebuilding the UI.
+
+### feature/0224-preserved-data-mutation-scope
+
+Data Explorer reprocessing and record-modeling actions now carry the active connector, source type,
+free-text, email, date-range, and normalization filters through their redirect. Selected-record
+operations return operators to the same evidence window instead of dropping them at the root of the
+Explorer.
+
+Tests: `cargo test -p kizashi-ui --lib` (601 passed); verified a live filtered Data Explorer and
+platform health after rebuilding the UI.
+
+### feature/0225-governed-action-target-gating
+
+Action Library execution controls now distinguish between “no target objects” and “targets exist
+but every one fails the contract preconditions.” In the latter case the contract explains the
+blocked posture and the execute control remains disabled, preventing an impossible invocation from
+being presented as an available operator action.
+
+Tests: `cargo test -p kizashi-ui --lib` (602 passed); verified the live Action Library and platform
+health after rebuilding the UI.
+
+### feature/0226-preserved-action-library-scope
+
+Executing a governed contract from a filtered Action Library now returns to that same contract
+search scope. Operators can review a subset of automation definitions, execute one, and continue
+the review without being dropped into the unfiltered library.
+
+Tests: `cargo test -p kizashi-ui --lib` (603 passed); verified live execution forms preserve the
+Action Library query and platform health.
+
+### feature/0227-preserved-event-contract-scope
+
+Event Types publication and versioning forms now preserve the active contract search scope through
+success, validation, permission, and service-error redirects. Operators can review a filtered
+registry and continue publishing or versioning without being dropped into the unfiltered catalog.
+
+Tests: `cargo test -p kizashi-ui --lib` (604 passed); verified the live filtered Event Types page
+and platform health after rebuilding the UI.
+
+### feature/0228-ontology-object-comparison
+
+Ontology selections now open a dedicated comparison surface for up to six entities. The view
+renders the selected objects side by side, aligns their complete property sets, makes missing
+properties explicit, and links each comparison column back to the object investigation record.
+
+Tests: `cargo test -p kizashi-ui --lib` (606 passed); verified live comparison of the seeded
+Northwind Health and Contoso Logistics objects and platform health after rebuilding the UI.
+
+### feature/0229-ontology-relationship-scoping
+
+Ontology relationship instances can now be scoped by relationship type. The selected scope drives
+the live instance list, graph edges, connected-object context, and saved ontology views, making
+large models practical to investigate without losing the surrounding object search context.
+
+Tests: `cargo test -p kizashi-ui --lib` (608 passed); verified the live “Raised by” scope showing
+four matching instances and platform health after rebuilding the UI.
+
+### feature/0230-executive-attention-posture
+
+The Overview command center now includes a server-rendered attention posture built from live
+incidents, ownership, governed action outcomes, SLA calculations, and pipeline queue health. Each
+pressure category is directly linked to the operator surface that can resolve it, giving executives
+an explainable path from aggregate risk to accountable work.
+
+Tests: `cargo test -p kizashi-ui --lib` (609 passed); verified the live seeded posture reporting
+12 attention items and platform health after rebuilding the UI.
+
+### feature/0231-preserved-work-claim-scope
+
+Bulk claiming from My Work now preserves the active focus, severity, and SLA filters through the
+claim mutation and redirect. Operators can claim filtered unassigned work without being dropped
+into a different queue or losing the response-target context they were acting on.
+
+Tests: `cargo test -p kizashi-ui --lib` (610 passed); verified the live unassigned/high/breached
+queue and platform health after rebuilding the UI.
+
+### feature/0232-preserved-case-mutation-scope
+
+Single-case claims from My Work and bulk lifecycle updates from Incident Queue now preserve the
+operator’s active filters through the mutation. Queue status, severity, SLA, owner, sorting, board
+view, and My Work focus all survive the handoff, keeping case operations anchored to the exact
+investigation set the operator chose.
+
+Tests: `cargo test -p kizashi-ui --lib` (611 passed); verified live filtered Incident Queue and My
+Work forms plus platform health after rebuilding the UI.
+
+### feature/0233-search-action-object-handoff
+
+Unified Search governed-action results now expose the modeled entities targeted by each invocation
+as direct Ontology links. Source-signal, case, ledger, and target-object context can be followed
+from one result without re-running a separate search or nesting invalid interactive markup.
+
+Tests: `cargo test -p kizashi-ui --lib` (612 passed); verified live action search results expose
+seeded support-ticket targets and platform health after rebuilding the UI.
+
+### feature/0234-search-entity-operational-posture
+
+Unified Search entity results now include compact live posture before the operator opens the full
+object record: current modeled state, relationship count, and governed-action count. The result
+still links directly into the Ontology investigation surface, making discovery useful for triage
+as well as navigation.
+
+Tests: `cargo test -p kizashi-ui --lib` (612 passed); verified live Northwind Health search showing
+its “At risk” posture, one relationship, one governed action, and platform health.
+
+### feature/0235-report-object-handoffs
+
+Executive Reports governed-response rows now expose each action’s actual modeled targets as
+Ontology links, while retaining the source event, case, or action-ledger link. Report consumers can
+move from a summarized response posture directly into the object investigation behind it.
+
+Tests: `cargo test -p kizashi-ui --lib` (612 passed); verified live report rows link seeded support
+ticket targets and platform health after rebuilding the UI.
+
+### feature/0236-preserved-report-view-scope
+
+Saving an executive report view now preserves the active signal window and returns feedback inside
+the Reports surface. Successful and failed saves remain tied to the exact date range under review,
+so the operator keeps both context and an explicit outcome after the mutation.
+
+Tests: `cargo test -p kizashi-ui --lib` (613 passed); build and diff validation clean.
+
+### feature/0237-report-incident-evidence-handoffs
+
+Executive Reports incident posture rows now expose the linked signals inside the active report
+window as direct Event links. Case posture can move from the summary into the exact evidence chain
+without losing the report’s selected operational scope.
+
+Tests: `cargo test -p kizashi-ui --lib` (614 passed); verified live seeded incident rows expose
+direct event handoffs and platform health remains green.
+
+### feature/0238-report-ontology-coverage
+
+Executive Reports now makes modeled knowledge inspectable by object type instead of collapsing it
+into one total. Each type reports its live entity count and defined-property coverage with a direct
+handoff into the filtered Ontology investigation view.
+
+Tests: `cargo test -p kizashi-ui --lib` (615 passed); verified live seeded type rows and platform
+health after rebuilding the UI.
+
+### feature/0239-report-ontology-graph-coverage
+
+Ontology coverage in Executive Reports now includes live relationship-type participation per
+object type. Leaders can distinguish modeled entity volume from connected graph coverage before
+opening the corresponding filtered Ontology investigation.
+
+Tests: `cargo test -p kizashi-ui --lib` (615 passed); build, diff, live seeded graph coverage, and
+platform health verified.
+
+### feature/0240-search-entity-evidence-chain
+
+Unified Search modeled-entity results now surface source-lineage signals and related cases beside
+the ontology investigation link. Search consumers can see the entity’s operational context and
+jump directly to the signal or case that explains it, instead of treating the object as an
+isolated catalog record.
+
+Tests: `cargo test -p kizashi-ui --lib` (615 passed); verified live Northwind Health results expose
+linked signal and case handoffs with platform health green.
+
+### feature/0241-search-incident-evidence-chain
+
+Unified Search incident results now include linked-signal posture and direct Event handoffs. Case
+search also matches linked event types, allowing an operator to move from a signal class to the
+case containing it without leaving the discovery surface.
+
+Tests: `cargo test -p kizashi-ui --lib` (615 passed); verified live event-type search returns a
+seeded case and its direct signal handoff with platform health green.
+
+### feature/0242-case-level-governed-response-history
+
+Incident investigations now retain governed invocations whose trigger belongs to the case even
+when the target object is not present in the currently resolved impact set. These responses appear
+in the decision chain as explicit case-level responses, preserving the complete audit posture
+instead of silently dropping a valid decision.
+
+Tests: `cargo test -p kizashi-ui --lib` (616 passed); verified live case decision chain rendering
+and platform health after rebuilding the UI.
+
+### feature/0243-case-scoped-signal-attachment
+
+Incident investigations now provide an explicit Attach signals handoff into Events. The target
+case is carried into the Events console, preselected in the existing-case control, and accompanied
+by inline guidance, making evidence-linking a discoverable governed operation.
+
+Tests: `cargo test -p kizashi-ui --lib` (617 passed); verified live case-scoped Events preselection
+and platform health after rebuilding the UI.
+
+### feature/0244-event-queue-lineage-posture
+
+The Events queue now separates source evidence from response posture. Every signal exposes its
+contributing record journeys, including signals already linked to a case, so operators can review
+lineage before attaching, unlinking, or escalating evidence.
+
+Tests: `cargo test -p kizashi-ui --lib` (618 passed); verified live record-journey handoffs and
+platform health after rebuilding the UI.
+
+### feature/0245-record-journey-modeled-entity-stage
+
+Record Journey now shows the modeled ontology entities derived from a source record as a
+first-class stage between evidence and governed decisions. Each object links directly into
+Ontology, completing the operational path from raw record to signal, case, model, and response.
+
+Tests: `cargo test -p kizashi-ui --lib` (619 passed); verified live seeded modeled-object handoff
+and platform health after rebuilding the UI.
+
+### feature/0246-overview-decision-target-handoffs
+
+The command center’s Governed decisions widget now resolves action target IDs into modeled entity
+labels and direct Ontology links. Executive review can move from a recent decision to the object it
+changed, while unresolved target metadata still retains the numeric target count.
+
+Tests: `cargo test -p kizashi-ui --lib` (620 passed); verified live seeded target links and platform
+health after rebuilding the UI.
+
+### feature/0247-data-explorer-lineage-handoffs
+
+Data Explorer rows now expose a dedicated Lineage action that opens the full record journey. A
+filtered source-data set can move directly into downstream signals, cases, modeled entities, and
+governed decisions without reopening each record detail page first.
+
+Tests: `cargo test -p kizashi-ui --lib` (621 passed); verified live seeded journey links and
+platform health after rebuilding the UI.
+
+### feature/0248-preserved-action-review-scope
+
+Bulk action retries now preserve the active ledger query, outcome filter, contract filter, and
+execution window through empty, failed, and completed retry redirects. Operators remain anchored
+to the exact review set they selected, with retry feedback rendered in that same scope.
+
+Tests: `cargo test -p kizashi-ui --lib` (622 passed); verified live filtered retry redirect and
+platform health after rebuilding the UI.
+
+### feature/0249-preserved-action-view-scope
+
+Saving an Action Center review view now returns to the exact active ledger scope and renders
+success or failure feedback in place. Filtered review work no longer falls back to an unscoped
+ledger or an opaque gateway error after the save mutation.
+
+Tests: `cargo test -p kizashi-ui --lib` (623 passed); verified live filtered save redirect,
+in-scope banner, and platform health after rebuilding the UI.
+
+### feature/0250-preserved-ontology-view-scope
+
+Saving an Ontology view now preserves the active object type, text, property/value, and
+relationship filters through invalid, failed, and successful redirects. Operators return to the
+same graph and object set they were examining, with the existing feedback banner still visible.
+
+Tests: `cargo test -p kizashi-ui --lib` (624 passed); verified live scoped save redirect and
+platform health after rebuilding the UI.
+
+### feature/0251-preserved-work-view-scope
+
+My Work saved-view mutations now preserve the active query, severity, SLA posture, and focus
+queue through invalid, failed, and successful redirects. Operators return to the same ownership or
+decision-review slice they were working in, with feedback still visible.
+
+Tests: `cargo test -p kizashi-ui --lib` (625 passed); verified live scoped save redirect and
+platform health after rebuilding the UI.
+
+### feature/0252-preserved-data-search-scope
+
+Saving a Data Explorer search now returns to the exact connector, source type, text, email,
+attachment, date, and normalization scope, with explicit in-page success or failure feedback.
+Source-data investigation no longer falls back to an unscoped explorer after bookmarking a
+filtered evidence set.
+
+Tests: `cargo test -p kizashi-ui --lib` (626 passed); verified live filtered save redirect and
+platform health after rebuilding the UI.
+
+### feature/0253-preserved-event-view-scope
+
+Saving an Events investigation view now preserves the active query, lifecycle status, date range,
+sort, and direction through success and failure redirects. Signal investigation remains anchored
+to the exact stream scope that was bookmarked.
+
+Tests: `cargo test -p kizashi-ui --lib` (627 passed); verified live filtered save redirect and
+platform health after rebuilding the UI.
+
+### feature/0254-preserved-incident-view-scope
+
+Incident Queue saved views now preserve the active search, lifecycle, severity, owner, SLA,
+sorting, direction, and board/table mode through success and failure redirects. Case review stays
+anchored to the exact operational slice that was saved.
+
+Tests: `cargo test -p kizashi-ui --lib` (628 passed); verified live scoped save redirect and
+platform health after rebuilding the UI.
+
+### feature/0255-work-review-target-handoffs
+
+My Work decision-review items now resolve governed target IDs into modeled entity labels with
+direct Ontology links. Operators can inspect the impacted object before retrying a non-completed
+decision, while raw target IDs remain preserved for the retry contract.
+
+Tests: `cargo test -p kizashi-ui --lib` (629 passed); live verification follows after relaunching
+the rebuilt UI.
+
+### feature/0256-executive-operating-brief
+
+The Overview now includes an executive operating brief that interprets the live workspace state
+into signal velocity, ownership coverage, and governed response readiness. Each posture links
+directly to the underlying Events or Work queue, keeping the summary actionable instead of
+creating a disconnected dashboard metric.
+
+Tests: `cargo test -p kizashi-ui --lib` (630 passed); verified the seeded live Overview renders
+the brief and platform health remains up after rebuilding the UI.
+
+### feature/0257-login-first-run-reliability
+
+The local login flow no longer reloads the page when the workspace field loses focus, preventing
+operators from losing the form context while entering credentials. Authentication failures now
+distinguish invalid credentials from an unavailable Auth Service, and the form explains the
+first-run branding behavior. Seeded login, intentional wrong-password handling, and platform
+health were verified against the rebuilt live console.
+
+Tests: `cargo test -p kizashi-ui --lib` (631 passed).
+
+### feature/0258-analysis-model-fallback
+
+Analysis Service now supports one explicit alternate OpenAI-compatible model for transient
+primary-provider failures. Timeouts, connection failures, overload/rate-limit responses, and
+upstream 5xx responses are attempted once against the fallback before the normalized message
+enters the existing retry/dead-letter path; permanent 4xx responses and result-contract
+mismatches remain visible failures. A tenant using an OpenAI-compatible primary automatically
+falls back to the platform-default Foundry client, while Foundry-primary deployments can opt in
+to the environment-configured alternate. Local and Docker launchers expose the fallback
+endpoint, model, API key, and concurrency settings.
+
+Tests: `cargo test -p analysis-service --lib` (49 passed); integration targets compile with
+`cargo test -p analysis-service --tests --no-run`; `cargo check --workspace` passes.
+
+### feature/0259-visible-analysis-resilience
+
+The AI Analysis control surface now explains the model-failure policy operators are relying on:
+compatible tenant models fall back to platform Foundry for transient overloads, timeouts,
+rate-limits, and upstream failures, while Foundry-primary deployments can configure a separate
+alternate model. The page makes the retry/dead-letter boundary explicit and keeps the behavior
+discoverable next to provider selection.
+
+Tests: `cargo test -p kizashi-ui --lib analysis_config` (17 passed); verified the rebuilt live
+Analysis page and platform health remains up.
+
+### feature/0260-deduplicated-attention-posture
+
+Overview and the global attention popover now count unique cases rather than summing overlapping
+critical, unassigned, and SLA-breached categories. The category cards remain visible for routing,
+but the headline total represents distinct case pressure plus independent action-review and
+pipeline-queue signals. Resolved cases are excluded from active SLA pressure consistently.
+
+Tests: `cargo test -p kizashi-ui --lib` (633 passed); verified the rebuilt live attention endpoint,
+Overview headline, and platform health.
+
+### feature/0261-report-period-comparison
+
+Reports now compares the selected signal window with the immediately preceding equal-length
+window. Executive readers can distinguish new activity, rising or falling percentage change, no
+change, and unavailable baselines without leaving the report. Unscoped reports retain an explicit
+"select a window" state rather than implying a comparison that was never calculated.
+
+Tests: `cargo test -p kizashi-ui --lib` (634 passed); verified the seeded live Reports page shows
+"New activity vs prior window" and platform health remains up.
+
+### feature/0262-scheduled-report-pagination
+
+Scheduled CSV/PDF reports now consume the full selected event window through the Query Gateway
+instead of requesting a one-event page. The scheduler follows bounded pagination (up to 20
+1000-event pages), preserves the original date filter on every page, and only marks the report
+generated after the full artifact is assembled.
+
+Tests: `cargo test -p report-scheduler` (4 passed); verified the rebuilt scheduler health endpoint
+and live PDF export (`application/pdf`, PDF 1.4).
+
+### feature/0263-ontology-multi-hop-neighborhoods
+
+Ontology deep links now accept a bounded graph depth and expand the selected entity's relationship
+neighborhood up to three hops. The graph keeps the selected object centered, preserves the depth
+when operators move between nodes, and exposes an explicit expansion control so longer chains do
+not disappear during investigation.
+
+Tests: `cargo test -p kizashi-ui --lib` (635 passed); verified the rebuilt live
+Ontology page renders the 2-hop control and platform health remains up.
+
+### feature/0264-case-relationship-context
+
+Incident investigations now surface the modeled relationship neighborhood around directly
+impacted entities. The case page expands up to two hops, labels each relationship with its
+source and target types, and deep-links both endpoints back into the ontology graph, keeping
+customer, support-team, and other operational context visible during response.
+
+Tests: `cargo test -p kizashi-ui --lib incident_handlers` (29 passed); verified the seeded live
+Contoso case renders the Relationship context section with Raised by and Supported by links.
+
+### feature/0265-governed-decision-detail
+
+Each Action Center invocation now opens a focused decision-evidence page. Operators can inspect
+the immutable outcome, governed contract, exact submitted parameters, audit context, source signal
+or case, and target entities without parsing the ledger table; non-completed decisions retain the
+same-input retry path while preserving the original record.
+
+Tests: `cargo test -p kizashi-ui --lib actions_handler` (6 passed); verified the live seeded
+invocation detail route and platform health.
+
+### feature/0266-action-review-handoffs
+
+Governed action review is now durable and tenant-scoped instead of being inferred from an
+invocation outcome. Operators can mark a decision open, in progress, approved, declined, or
+handed off; assign an owner; record a review note; and see reviewer/timestamp metadata. The
+immutable action invocation remains unchanged, while Action Center detail and My Work expose the
+review state and handoff target.
+
+Tests: `cargo test -p ontology-service --lib` (7 passed), `cargo test -p query-gateway --lib`
+(14 passed), and focused UI tests pass; verified a live `handed_off` review with an `operator`
+assignee and note through the Console.
+
+### feature/0267-action-review-queue-filters
+
+Action Center review work can now be filtered by human-review state or assignment independently
+of the immutable invocation outcome. The selected review scope survives saved views, pagination,
+bulk retry redirects, and CSV export, while My Work and the action ledger link directly to the
+focused decision record.
+
+Tests: `cargo test -p kizashi-ui --lib actions_handler` (7 passed); verified live
+`/actions?review=handed_off` and its filtered CSV return the seeded handed-off invocation.
+
+### feature/0268-role-scoped-action-approval
+
+Final action-review transitions are now governed by role: Operators can triage, assign, annotate,
+and hand off decisions, while only Admins can mark a review approved or declined. The ontology
+service enforces the boundary at its tenant-scoped write API, and the decision page explains the
+policy instead of presenting approval as an implicit operator capability.
+
+Tests: `cargo test -p ontology-service --lib` (8 passed); verified the live Operator rejection,
+Admin approval, filtered approved queue, and platform health.
+
+### feature/0269-action-review-deadlines
+
+Human action reviews now receive a durable default deadline, expose overdue posture in the
+Action Center and decision detail, and support stale-review filtering alongside assignment and
+handoff scopes. The deadline is additive and migration-safe, while completed approvals and
+declines clear their due time.
+
+Tests: `cargo test -p kizashi-ui --lib actions_handler` (7 passed), `cargo test -p kizashi-ui --lib
+work_handler` (11 passed), `cargo test -p ontology-service --lib` (8 passed), and
+`cargo check --workspace`; verified the live migration, health endpoint, stale filter, and My
+Work review queue.
+
+### feature/0270-executive-review-posture
+
+Overview now reads the durable human-review records used by Action Center and My Work, so the
+executive operating brief exposes awaiting-review and overdue-review counts from the same source
+of truth. The posture cards deep-link directly into stale reviews and the operator decision queue.
+
+Tests: `cargo test -p kizashi-ui --lib overview_handler` (22 passed) and `cargo check --workspace`;
+verified the live Overview after rebuilding the UI.
+
+### feature/0271-case-response-review-context
+
+Incident detail now carries human-review state into the operational picture: each governed
+response can show its review status, assignee, and overdue posture alongside modeled impact and
+the response chain. Operators can jump from the case directly to the corresponding decision
+queue without reconstructing review context in Action Center.
+
+Tests: `cargo test -p kizashi-ui --lib incident_handlers` (29 passed); verified the live incident
+detail route and platform health after rebuilding the UI.
+
+### feature/0272-ontology-decision-context
+
+Ontology object 360° views now expose human-review posture for governed activity alongside
+outcomes, signals, cases, lineage, and connected objects. Investigators can see whether an
+object's response is unreviewed, assigned, approved, or overdue and jump to its decision record.
+
+Tests: `cargo test -p kizashi-ui --lib ontology_handler` (13 passed); verified the live ontology
+object view and platform health after rebuilding the UI.
+
+### feature/0273-invocation-deep-links
+
+Governed activity in ontology objects and incident response context now links directly to the
+immutable invocation record that produced the decision. Investigators no longer lose their exact
+action context by landing on a generic ledger search.
+
+Tests: `cargo test -p kizashi-ui --lib ontology_handler` (13 passed), `cargo test -p kizashi-ui
+--lib incident_handlers` (29 passed), and `cargo check --workspace`; verified live invocation
+links on the ontology workspace and platform health.
+
+### feature/0274-search-decision-deep-links
+
+Global Search now opens governed action hits at their exact immutable invocation record, with
+direct links to source signals, case context, and target entities. Search is therefore an
+investigation entry point rather than a second generic ledger view.
+
+Tests: `cargo check -p kizashi-ui`; verified the live action-scoped Search result and platform
+health after rebuilding the UI.
+
+### feature/0275-search-review-posture
+
+Global Search action results now carry the shared human-review posture—status, assignee, and
+overdue state—while retaining exact invocation, signal, case, and ontology links. Search can now
+answer both “what happened?” and “what decision still needs attention?” from one result.
+
+Tests: `cargo test -p kizashi-ui --lib search_handler` (4 passed), `cargo check -p kizashi-ui`,
+and live action-scoped Search verification with platform health.
+
+### feature/0276-action-ledger-review-strip
+
+Action Center now keeps its immutable ledger table while adding a visible human-review posture
+strip for the loaded invocations. Operators can see review status, ownership, overdue posture,
+and exact decision links without opening each row, with a direct stale-review queue handoff.
+
+Tests: `cargo test -p kizashi-ui --lib actions_handler` (8 passed), `cargo check -p kizashi-ui`,
+and live Action Center verification with platform health.
+
+### feature/0277-bulk-action-review-transitions
+
+Action Center now supports governed bulk human-review transitions for selected invocations. An
+operator can apply open, in-progress, handed-off, approved, or declined state with a shared
+assignee and note; tenant scope and role enforcement remain server-side, and immutable outcomes
+are never modified. The result returns to the filtered review queue with saved/failed counts.
+
+Tests: `cargo test -p kizashi-ui --lib actions_handler` (9 passed), `cargo check -p kizashi-ui`,
+and live bulk handoff verification on a seeded invocation with platform health.
+
+### feature/0278-bulk-review-governance-boundary
+
+Bulk review transitions now enforce the final-state policy at the UI boundary and the server
+boundary: Operators can triage, assign, and hand off, while only Admins can approve or decline.
+The Operator form explains the policy and the endpoint returns `403` for a forbidden final
+transition instead of silently delegating the decision.
+
+Tests: `cargo test -p kizashi-ui --lib actions_handler` (9 passed); verified live Operator `403`,
+Admin controls, and platform health.
+
+### feature/0279-overview-data-readiness
+
+Overview now exposes a live pipeline-to-ontology readiness posture: normalized records, records
+awaiting normalization, and sampled model coverage. Each metric links into the corresponding Data
+Explorer scope so executives can see whether the operating model is ready for investigation and
+operators can recover the exact unnormalized records.
+
+Tests: `cargo test -p kizashi-ui --lib overview_handler` (22 passed), `cargo check -p kizashi-ui`,
+and live Overview verification with seeded counts and platform health.
+
+### feature/0287-bulk-action-review-deadlines
+
+The Action Center bulk review workbench now accepts an optional shared UTC deadline alongside
+status, assignee, and note. The backend preserves tenant scope and role enforcement for every
+selected invocation, while final approval/decline semantics still clear deadlines server-side.
+
+Tests: Action Center tests (9 passed), UI build, and live workbench rendering verification.
+
+### feature/0286-action-review-deadline-control
+
+Focused action decisions now expose an operator-editable UTC review deadline. The deadline flows
+through the UI form, ontology client, and tenant-scoped API; non-final reviews retain or accept an
+explicit deadline, while approval and decline clear it. This makes stale-review queues actionable
+from the decision record itself.
+
+Tests: `cargo test -p ontology-service --lib` (8 passed), Action Center tests (9 passed), and a
+live review write/render verification with assignee, note, and deadline.
+
+### feature/0285-completed-invocation-review-selection
+
+Action Center bulk review selection now includes completed invocations, while retry selection
+remains restricted to non-completed outcomes. The UI adds completed review controls dynamically,
+keeps retry-only rows separate, and the existing server-side Admin boundary remains authoritative
+for final approval or decline.
+
+Tests: `cargo check -p kizashi-ui`, Action Center tests (9 passed), and live ledger verification
+with seeded completed and non-completed invocations.
+
+### feature/0284-action-contract-drift-posture
+
+Action Library cards now compare immutable invocation snapshots with the current contract and
+surface how many decisions used a superseded definition. This turns contract history into an
+operational control: operators can identify affected decisions before editing or retiring a
+governed action.
+
+Tests: `cargo check -p kizashi-ui`, Action Library tests (6 passed), and live library verification
+against the seeded invocation ledger.
+
+### feature/0283-record-journey-review-context
+
+Record Journey now carries human governance context through the full source-evidence chain.
+Governed decisions derived from a raw record include exact invocation links, outcomes, review
+status, overdue state, and reviewer ownership alongside the target ontology object.
+
+Tests: `cargo check -p kizashi-ui`, Record Journey tests (10 passed), and live seeded record
+journey verification.
+
+### feature/0282-event-response-review-context
+
+Event detail now joins governed ontology invocations and human review state into the signal’s
+response panel. Operators can distinguish an eligible contract from an executed decision, open
+the exact invocation record, see review status/owner, and spot overdue review without leaving
+the source signal investigation.
+
+Tests: `cargo check -p kizashi-ui`, event-detail tests (6 passed), and live seeded event-detail
+verification.
+
+### feature/0281-immutable-action-contract-snapshots
+
+Every ontology action invocation now stores the exact action contract evaluated at execution time,
+including parameters, preconditions, effects, target type, and contract timestamps. Decision
+detail renders that immutable snapshot and clearly labels legacy rows that predate the migration,
+closing the gap where a later contract edit could make an old decision appear to have used new
+logic.
+
+Tests: `cargo check -p ontology-service -p action-executor -p kizashi-ui`, ontology-service
+tests (8 passed), Action Center tests (9 passed), migration verification, and a live governed
+invocation rendered as an execution snapshot in the decision detail page.
+
+### feature/0280-action-contract-history
+
+Action contracts now have a durable tenant-scoped change trail. Create, update, and retire
+operations record actor, timestamp, change type, and before/after snapshots; pre-existing
+contracts are backfilled as system-published definitions. The Action Library exposes the trail
+beside each executable contract so governance review can distinguish current behavior from its
+history.
+
+Tests: `cargo check -p ontology-service -p query-gateway -p kizashi-ui`, ontology-service
+tests (8 passed), Action Library tests (6 passed), migration/backfill verification, and live
+history endpoint verification.
+
+### feature/0212-provider-specific-trigger-forms
+
+Trigger configuration now includes provider-specific controls for SMTP and Microsoft Graph email,
+Teams card titles, HTTP relays, and custom/ticket payloads. The form composes those fields into
+the same governed JSON action configuration, keeping advanced templates available while making
+the real dispatcher contract understandable to operators.
+
+Tests: `cargo test -p kizashi-ui --lib` (591 passed); live verification completed against the
+rebuilt local trigger console.
+
+### feature/0337-event-evidence-posture
+
+Event Detail now opens with a compact evidence-to-response posture strip: attached source-record
+count, downstream execution count, linked investigation count, and ontology handoff readiness.
+The metrics are derived from the same tenant-scoped data already used by the page, making the
+signal’s investigation depth legible before an operator reads the payload and timeline.
+
+Tests: `cargo test -p kizashi-ui event_detail_handler_test --lib` (6 passed); full UI check/build
+and live Event Detail verification completed against the rebuilt local console.
+
+### feature/0347-identity-investigation-record
+
+Users now open into an identity investigation record with role and MFA posture, active-session
+context, recent-session count, auth-history count, direct audit navigation, and data export. The
+users library links each account into this record so identity review is a connected workflow
+instead of a flat administration table.
+
+Tests: `cargo check -p kizashi-ui`, focused users handler suite (26 passed), and live seeded
+verification of `/users/:id` completed against the rebuilt local console.
+
+### feature/0348-case-neighborhood-map
+
+Incident Detail now renders a clickable ontology neighborhood map alongside the evidence chain.
+The map derives modeled impact entities and their adjacent relationship context from the same
+tenant-scoped data as the case synthesis, labels each relationship, and deep-links every node
+back into the ontology investigation view.
+
+Tests: `cargo check -p kizashi-ui`, full UI library suite (643 passed), and live seeded case
+verification showing 3 entities and 2 relationships completed against the rebuilt console.
+
+### feature/0349-report-signal-trend
+
+Reports now includes a daily signal-volume chart for the active reporting window. The trend is
+derived from the same tenant-scoped event query used by the report totals, honors the existing
+from/to filters, and links directly into filtered signal investigation so an executive spike is
+an actionable starting point rather than a static number.
+
+Tests: `cargo check -p kizashi-ui`, Reports tests (11 passed), and live seeded verification with
+the chart rendering `2026-07-23: 4` signals completed against the rebuilt console.
+
+### feature/0350-event-concentration-heatmap
+
+Events now includes a filter-aware event-class-by-day concentration heatmap. The visualization
+is built from the same tenant-scoped signal window as the explorer, respects text and lifecycle
+filters, and each cell deep-links to the exact class/day investigation scope. This makes signal
+bursts and composition changes visible without sacrificing the existing evidence workflow.
+
+Tests: `cargo check -p kizashi-ui`, Events tests (24 passed), and live verification of both the
+unfiltered 4-class map and a narrowed 1-class query completed against the rebuilt console.
+
+### feature/0351-overview-operating-chain
+
+Overview now presents an end-to-end operating chain from ingestion through normalization,
+detection, investigation, and governed response. Each stage is backed by live workspace counts,
+uses the active signal window where applicable, and deep-links to the underlying control surface.
+The responsive chain turns the command center from a collection of KPIs into an explorable system
+of action.
+
+Tests: `cargo check -p kizashi-ui`, Overview tests (22 passed), and live seeded verification of
+the chain (`7 → 6 → 4 → 3 → 28`) with preserved date-scoped links completed.
+
+### feature/0357-reports-incident-control-board
+
+Reports now includes a severity-by-lifecycle control board for incidents. Each severity row shows
+total, open, acknowledged, resolved, and SLA-breached cases, with direct links into the matching
+triage scope. This exposes risk concentration and response debt without requiring executives to
+reconcile separate KPI cards and incident rows.
+
+Tests: `cargo check -p kizashi-ui`, Reports tests (11 passed), and live seeded verification of
+critical/high/low severity rows and SLA drill-down links completed.
+
+### feature/0352-action-review-control-board
+
+Action Center now includes an outcome-by-review control board. Completed and non-completed
+invocations are split into total, unreviewed, assigned, and overdue cells, with every cell
+deep-linking to the corresponding ledger filter. This makes human-review debt visible against
+execution outcomes before an operator opens individual decision records.
+
+Tests: `cargo check -p kizashi-ui`, Action Center tests (9 passed), and live seeded verification
+of the `28 completed / 7 needs review` board completed against the rebuilt console.
+
+### feature/0353-login-activity-timeline
+
+Security Login Attempts now includes an hourly access-activity timeline for the visible page,
+with successful and failed authentication stacked separately and the page scope made explicit.
+This surfaces concentrated access bursts while preserving the existing paginated feed and CSV
+export semantics.
+
+Tests: `cargo check -p kizashi-ui`, Login Attempts tests (11 passed), and live seeded verification
+of real hourly activity (`24` and `26` successful attempts across two hours) completed.
+
+### feature/0354-login-attempt-activity-bars
+
+Login Attempts now visualizes the current page's access activity by hour, with successful and
+failed authentication stacked independently. The page explicitly labels this as page scope so
+the chart remains consistent with the feed's keyset pagination and older-page navigation.
+
+Tests: `cargo check -p kizashi-ui`, Login Attempts tests (11 passed), and live verification of
+the rendered hourly bars and success/failure legend completed.
+
+### feature/0355-ontology-type-relationship-matrix
+
+Ontology now includes a model-level type relationship matrix in addition to the object graph.
+Rows and columns represent live object types, populated cells show relationship-instance volume,
+and each populated cell deep-links to the governing link type for inspection and authoring.
+
+Tests: `cargo check -p kizashi-ui`, Ontology tests (13 passed), and live seeded verification of
+7 relationship instances across populated Customer/Support Ticket/Support Team cells completed.
+
+### feature/0356-health-dependency-impact-lanes
+
+Platform Health now pairs each pipeline service with its adjacent queue pressure in dependency
+lanes. Operators can see service status, queue name, backlog, and severity together and follow
+the lane into the owning service control surface or pipeline map. Exact service-name matching is
+preferred over fuzzy fallback so similarly named gateway and pipeline services are not conflated.
+
+Tests: `cargo check -p kizashi-ui`, Health tests (4 passed), and live verification of all five
+pipeline lanes with correct service attribution completed.
+
+### feature/0358-action-execution-trend
+
+Action Center now includes a daily stacked execution trend for the active ledger scope. Completed
+and needs-review outcomes are visually separated, and each segment deep-links to that exact day
+and outcome filter so the visualization opens into the underlying governed records.
+
+Tests: `cargo check -p kizashi-ui` and Action Center tests (9 passed) completed. Live seeded
+verification confirmed two daily bars (`26 completed / 6 needs review` on July 23 and
+`2 completed / 1 needs review` on July 24), with segment links opening the exact date/outcome
+scope.
+
+### feature/0359-audit-control-plane-timeline
+
+The global Audit Log now includes a daily stacked control-plane activity timeline. Config/admin,
+retention, auth, incident, and governed-action activity each have a distinct visual segment, and
+segments link directly into the owning service filter so operators can move from concentration
+to evidence without losing the audit context.
+
+Tests: `cargo check -p kizashi-ui`, Audit Log tests (17 passed), and live seeded verification of
+the two-day / 50-event timeline plus the ontology-service filtered drill-down completed.
+
+### feature/0360-incident-severity-sla-control-board
+
+Incident Queue now includes a severity-by-SLA control board. Critical, high, medium, and low
+rows are crossed with breached, at-risk, on-track, and resolved response states, and every cell
+opens the exact combined queue scope. This exposes response debt concentration at a glance while
+preserving the existing board, table, bulk lifecycle, and evidence workflows.
+
+Tests: `cargo check -p kizashi-ui`, Incident Handler tests (29 passed), and live seeded
+verification of the 4-case matrix with exact severity/SLA drill-down links completed.
+
+### feature/0361-event-response-waterfall
+
+Event investigation now includes a response waterfall that scales each downstream execution by
+its observed latency from signal occurrence. Completed steps use the healthy response color while
+failed or non-completed outcomes are highlighted, and the original chronological evidence table
+remains available below the visualization.
+
+Tests: `cargo check -p kizashi-ui`, Event Detail tests (6 passed), and live seeded verification
+of a four-step signal response chain with execution latency labels completed.
+
+### feature/0362-record-journey-timing-profile
+
+Record Journey now includes a clickable pipeline timing profile alongside its lineage map. Event
+and action steps are normalized against the slowest observed hop from ingestion, show real latency
+labels, and preserve failure highlighting and links back to the underlying event evidence. The
+zero-duration case is handled safely for deterministic or same-timestamp records.
+
+Tests: `cargo check -p kizashi-ui`, Record Journey tests (10 passed), and live verification of
+seeded journey timing bars completed.
+
+### feature/0363-record-compare-field-coverage
+
+Data Compare now includes a field-level coverage diff for every selected record. Operators can
+see which top-level fields are preserved, raw-only, or normalized-only before inspecting the full
+payloads or creating modeled entities. This turns comparison from a side-by-side JSON reader into
+a practical normalization review surface.
+
+Tests: `cargo check -p kizashi-ui` and live seeded verification of rendered field dispositions
+completed.
+
+### feature/0364-trigger-signal-activity-profile
+
+Trigger Detail now includes a live daily activity profile for the rule’s event contract. Each bar
+links to the exact day and event-type scope in Events, giving operators runtime evidence of what
+the detection rule is actually seeing before they dry-run, edit, or disable it.
+
+Tests: `cargo check -p kizashi-ui` and live seeded verification of a one-day activity profile with
+event-scope drill-down completed.
+
+### feature/0365-permissions-matrix-navigation
+
+Permissions Reference now supports role-focused matrix navigation: Viewer, Operator, and Admin
+cards focus the corresponding capability column, while every governed area links directly to its
+own control surface. Authorization review can now move from policy comparison into action without
+manually translating area names into routes.
+
+Tests: Permissions Reference tests (3 passed), `cargo check -p kizashi-ui`, and live verification
+of the Operator-focused matrix plus Sensors/Sessions control links completed.
+
+### feature/0366-ontology-model-shape-posture
+
+Ontology now includes a clickable Model shape panel for every object type. It visualizes exact
+field-contract, source-mapping, and relationship-definition counts with relative bars and links
+each type back into its live object scope, making structurally thin or richly modeled areas visible
+without inventing a synthetic quality score.
+
+Tests: `cargo check -p kizashi-ui` and ontology handler tests (13 passed) completed.
+
+### feature/0367-sensor-library-inventory-bridge
+
+The Sensors connector library now derives its catalog cards from a server-side connector
+definition and joins each card to the tenant's registered sensor inventory. Cards expose exact
+registered and healthy counts, while the existing About & install modal carries those counts into
+the deployment handoff alongside the real generator, API key, and registration routes.
+
+Tests: Sensors handler tests (24 passed), `cargo check -p kizashi-ui`, and live seeded verification
+of the rendered connector counts and install metadata completed.
+
+### feature/0368-sensor-deployment-runbook
+
+Sensor script output now behaves like an operational deployment handoff instead of a raw dump of
+shell text. The generated page provides preflight, launch, and Console verification steps, direct
+registration and inventory links, and copy controls for Docker Compose, Bash, and PowerShell
+variants while preserving the existing generated credentials and commands.
+
+Tests: Sensor script handler tests (7 passed), `cargo check -p kizashi-ui`, and live verification
+of the generated Zendesk runbook and three copy targets completed.
+
+### feature/0369-security-activity-timeline
+
+Security Overview now includes a live seven-day administrative activity timeline derived from
+tenant-scoped Auth, Config/Admin, and Retention audit entries. Daily bars expose exact counts and
+link into the full audit log, giving reviewers temporal context instead of only an aggregate
+activity number.
+
+Tests: Security Overview tests (7 passed), `cargo check -p kizashi-ui`, and live seeded
+verification of the rendered 2026-07-23 activity bar completed.
+
+### feature/0370-work-case-age-profile
+
+My Work now includes a case age profile derived from each active incident's persisted creation
+timestamp. Four exact age bands expose new, recent, aging, and long-running backlog proportions,
+so operators and executives can see response debt alongside severity and SLA posture without
+changing the underlying queue state.
+
+Tests: Work handler tests (11 passed), `cargo check -p kizashi-ui`, and live seeded verification
+of the rendered age bands completed.
+
+### feature/0371-sensor-library-iconography-guidance
+
+The connector library now uses purpose-built inline SVG symbols for ticketing, mail, Teams,
+database, Fabric, and webhook integrations instead of text abbreviations. The installation modal
+also provides connector-specific credential and setup guidance while preserving the real generator,
+registration, API-key, and inventory handoffs.
+
+Tests: Sensors handler tests (24 passed), `cargo check -p kizashi-ui`, and live verification of
+all six rendered connector symbols and setup guidance metadata completed.
+
+### feature/0372-global-search-result-distribution
+
+Global Search now includes a clickable distribution bar across source records, modeled entities,
+incidents, events, governed actions, and audit evidence. The bar is computed from the live result
+set, uses the existing scope filters for drill-down, and gives operators an immediate sense of
+where a cross-domain investigation is concentrated.
+
+Tests: Search handler tests (4 passed), `cargo check -p kizashi-ui`, and live seeded verification
+of the Northwind cross-domain result distribution completed.
+
+### feature/0373-ontology-graph-type-legend
+
+The ontology graph now assigns a distinct visual color to each live object type and renders a
+type legend above the graph. Colors are derived in the browser from the server-provided node type
+metadata, so the legend stays accurate as the model changes while focus, neighbor isolation, zoom,
+and object drill-down continue to operate on the same graph.
+
+Tests: Ontology handler tests (13 passed), `cargo check -p kizashi-ui`, and live seeded
+verification of Support Ticket, Customer, Support Team, and Risk Signal graph metadata completed.
+
+### feature/0374-event-contract-activity-timeline
+
+Event Types now includes a live daily signal activity timeline beneath the contract registry.
+Each bar is backed by the event stream, shows the exact count for that day, and links to the
+date-scoped Events explorer so contract governance can be evaluated against actual runtime use.
+
+Tests: Event Types tests (5 passed), `cargo check -p kizashi-ui`, and live seeded verification
+of the 2026-07-23 four-event activity bar completed.
+
+### feature/0375-api-key-lifecycle-posture
+
+API Keys now exposes a live credential posture panel with active versus revoked distribution and
+recent issuance signal. The panel respects the current label filter, keeps create/revoke controls
+and audit-history links intact, and gives access reviewers a compact view of credential lifecycle
+risk before they inspect individual rows.
+
+Tests: API Keys handler tests (17 passed), `cargo check -p kizashi-ui`, and live seeded verification
+of the rendered posture panel and revoke controls completed.
+
+### feature/0376-api-key-age-distribution
+
+The API key posture view now includes an interactive four-band age distribution (0–7, 8–30,
+31–90, and 90+ days) derived from persisted creation timestamps. Each band scopes the same
+credential inventory and preserves label/search context, making stale credential review directly
+operable from the visualization.
+
+Tests: API Keys handler tests (17 passed), live verification of all four age bands and the 0–7-day
+scope link completed.
+
+### feature/0377-shared-navigation-icon-system
+
+The authenticated console shell now uses a consistent inline SVG icon vocabulary for all primary,
+configuration, security, compliance, and platform navigation entries. Icons inherit the active
+theme and hover/active state, remain decorative for screen readers, and preserve the existing
+responsive navigation behavior. This removes the mixed Unicode/emoji treatment that made the
+navigation feel visually inconsistent with the data-dense workspace.
+
+Verification: `cargo check -p kizashi-ui`, `git diff --check`, and live `/ontology` rendering with
+33 SVG navigation icons and zero legacy glyph-based nav icons completed.
+
+### feature/0378-event-volume-drilldown
+
+The Events workspace daily volume chart is now an investigation control, not a decorative chart.
+Every populated day bar is an accessible link into the exact date-scoped Events explorer, while
+the existing lifecycle filters, heatmap cells, saved views, and bulk case workflows remain intact.
+
+Tests: Events handler tests (24 passed), live `/events` verification of the 2026-07-23 four-event
+bar and its date-scoped link completed.
+
+### feature/0379-sensor-activity-drilldown
+
+Sensor detail ingestion bars are now clickable diagnostic controls. Each day opens Data Explorer
+with both the connector identity and inclusive date window preserved, turning connector health
+review into a direct evidence workflow while retaining the downstream signal/entity context and
+reprocessing controls on the detail page.
+
+Tests: Sensor detail tests (5 passed), live seeded verification of support-intake day bars and
+their connector/date-scoped Data Explorer links completed.
+
+### feature/0380-backup-recovery-timeline
+
+Backups now includes a chronological recovery-run timeline and a freshness classification for the
+latest successful artifact. The timeline distinguishes successful, failed, and in-flight work and
+shows artifact coverage per run, while the existing pagination and compliance/health handoffs
+remain unchanged.
+
+Tests: Backup status tests (8 passed), live seeded verification of four recovery runs, one
+successful artifact, one failed run, and two in-flight runs completed.
+
+### feature/0381-compliance-evidence-visualization
+
+The Compliance Snapshot now presents the existing control score as a readiness ring and adds
+evidence-backed distributions for workspace roles, MFA coverage, retention, egress, failed logins,
+and recent administrative activity. The visual layer remains explicitly a readiness signal rather
+than a certification, and every control still routes to its authoritative operational page.
+
+Tests: Compliance report tests (3 passed), live seeded verification of the 4/6 readiness ring,
+role/MFA bars, and evidence signal counters completed.
+
+### feature/0382-health-queue-evidence-routing
+
+Platform Health queue heatmap rows and queue cards now route to the evidence surface that can
+resolve the pressure: unnormalized/normalized Data Explorer scopes, new Events, or action-review
+work. The generic Pipeline Map remains the fallback for unknown boundaries, while service impact
+lanes continue to route to their owning operational controls.
+
+Tests: Health handler tests (4 passed), live seeded verification of Data, Events, and Actions queue
+handoffs completed.
+
+### feature/0383-branding-asset-preview
+
+Workspace Branding now previews a configured logo asset in addition to the product name and accent
+color. The browser only loads HTTP(S) URLs, hides failed assets gracefully, and keeps the existing
+default identity fallback, admin-only save boundary, and audit history intact.
+
+Tests: Branding handler tests (6 passed), live verification of the preview markup and safe logo
+loading behavior completed.
+
+### feature/0384-session-role-drilldown
+
+Active Sessions now supports a role filter and turns the role-concentration bars into direct
+evidence links for Admin, Operator, and Viewer sessions. Search, sorting, current-session safety,
+bulk revoke, per-session history, and tenant scoping are preserved while access review can now
+move from aggregate posture to a narrowed session set.
+
+Tests: Sessions handler tests (21 passed), live verification of the role selector and Admin scope
+completed.
+
+### feature/0385-login-attempt-outcome-drilldown
+
+Login Attempts now supports an outcome filter alongside username search. The access activity
+timeline, posture cards, failed-reason view, and paginated evidence feed reflect the selected
+scope, and older-page links preserve both filters so an investigation does not silently widen.
+
+Tests: Login attempts handler tests (12 passed), including failed-only filtering and live route
+verification completed.
+
+### feature/0386-audit-timeline-day-drilldown
+
+Audit Log timeline segments now carry both their owning service and exact calendar day into the
+feed. Operators can move from a visual activity spike to the matching evidence set without
+manually reconstructing the date; the day scope is preserved through search, pagination, posture
+links, and CSV export.
+
+Tests: Recent audit log handler tests (18 passed), including exact-day filtering and preserved
+pagination/export scope completed.
+
+### feature/0387-global-search-connector-scope
+
+Global Search now treats registered connectors as first-class operational results. Connector
+search matches name, connector type, or identity, exposes enabled/disabled posture, links directly
+to connector controls, and participates in the all-sources result distribution alongside records,
+entities, incidents, events, actions, and audit evidence.
+
+Tests: Search handler tests (4 passed), live verification of the connector scope completed.
+
+### feature/0388-global-search-identity-scope
+
+Global Search now includes tenant identities as operational results. Identity search matches
+username, role, or ID, displays role and MFA posture, links directly to the identity record, and
+adds identity results to the all-sources distribution so access investigations can start from the
+same command surface as evidence and cases.
+
+Tests: Search handler tests (4 passed), including identity-scope normalization and live seeded
+verification completed.
+
+### feature/0389-event-case-linkage-filter
+
+Events now has a case-linkage filter with Any case state, Needs a case, and Case-linked scopes.
+The filter is applied after joining signals to tenant incidents, so the triage counts, potential
+cluster suggestions, selection table, saved views, pagination, bulk lifecycle redirects, and
+filtered CSV export all operate on the same investigation scope.
+
+Tests: Event handler tests (25 passed), including linked/unlinked scope behavior and live route
+verification completed.
+
+### feature/0390-work-age-filter-drilldown
+
+My Work case-age bands are now operational filters rather than static summaries. Under-one-day,
+1–7-day, 8–30-day, and 31+ day scopes combine with severity, SLA posture, ownership focus, text
+search, saved views, bulk claim redirects, and CSV export. Age bars and severity/SLA posture links
+retain the active queue context so an aging-backlog signal leads directly to accountable work.
+
+Tests: Work handler tests (12 passed), including non-overlapping age bands and saved-scope
+preservation completed.
+
+### feature/0391-sensor-install-workbench
+
+The Sensor Library connector cards now open an interactive installation workbench instead of a
+generic informational modal. Operators can switch between Docker, Bash, and PowerShell previews,
+copy a connector-specific starter command, review connector-specific credential guidance, see
+registered/healthy inventory context, and hand off directly to the full deployment generator or
+API-key console.
+
+Tests: Sensor handler tests (24 passed), rebuilt live UI verification of the authenticated `/sensors`
+route and rendered deployment workbench completed.
+
+### feature/0392-ontology-canvas-navigation
+
+The Ontology entity graph now supports direct canvas navigation in addition to the toolbar: drag
+the graph background to pan, use the mouse wheel to zoom around the cursor, and retain the existing
+type-aware legend, node selection, neighbor isolation, keyboard controls, and record deep links.
+
+Tests: Ontology handler tests (13 passed), rebuilt live verification of the populated 11-object graph
+and canvas interaction markup completed.
+
+### feature/0393-sensor-posture-language
+
+Sensor Library cards now distinguish connector types that are ready to deploy from registered
+connectors needing attention and operational connectors. The install workbench also follows the
+shared light theme instead of forcing dark-only surfaces, keeping the catalog readable across
+workspace appearance settings.
+
+Tests: Sensor handler tests (24 passed), rebuilt live verification of the rendered connector posture
+labels and themed installation workbench completed.
+
+### feature/0394-sensor-preview-generator-parity
+
+The Sensor Library installation preview now matches the repository's real deployment generator:
+Docker Compose service names, gateway URL, gateway API key, and connector-specific `cargo run`
+packages are shown for the three runtime tabs. The modal no longer suggests a fictional registry
+image that the generator does not produce.
+
+Tests: Sensor handler tests (24 passed), rebuilt live verification of `/sensors` with the rendered
+preview contract completed.
+
+### feature/0395-incident-board-scope-counts
+
+The Incident Queue Kanban board now displays exact Open, Acknowledged, and Resolved counts for the
+active filtered scope. Counts are calculated before pagination, so search, severity, SLA, owner,
+and saved-view filters produce a board whose lane totals agree with the queue telemetry and table
+scope.
+
+Tests: Incident handler tests (29 passed), including rendered board lane counts, plus live seeded
+verification of `/incidents?view=board` completed.
+
+### feature/0396-incident-active-scope-cohesion
+
+Incident Queue now has an explicit `Active (open + acknowledged)` scope. The Active cases KPI,
+Kanban board, table, saved views, filter selector, and CSV export all exclude resolved cases and
+share the same filtered counts. This prevents the headline posture from diverging from the visual
+queue when severity, SLA, owner, or search filters are applied.
+
+Tests: Incident handler tests (30 passed), including active-scope exclusion of resolved cases and
+rendered KPI links; live verification of `/incidents?status=active&view=board` completed.
+### feature/0397-action-library-operational-posture
+- Action Library cards now show target eligibility coverage and completed-vs-review execution mix with direct drill-through links into ontology and the immutable action ledger.
+- Added contract-specific readiness bars so operators can see whether a published action is deployable before opening its execution form.
+
+### feature/0398-console-telemetry-theme-cohesion
+- Shared light-theme overrides now normalize the dark-only surfaces used by telemetry tracks, heatmaps, workload cards, security controls, ontology visuals, and posture panels.
+- Rebuilt and live-verified Overview, Sensors, and Action Library after the shell token update; seeded operational data remains rendered on all three routes.
+
+### feature/0399-command-surface-navigation
+- Expanded the command palette to cover My Work, Sensors, Events, and Security Overview, and removed its duplicate shortcut label.
+- Implemented the displayed `G` then key navigation shortcuts so they route directly to the corresponding console surface while ignoring focused form controls.
+
+### feature/0400-health-dependency-drillthrough
+- Platform Health dependency lanes now expose separate service-control and queue-backlog links, making each displayed relationship directly actionable.
+- Added rendered coverage for the queue inspection handoff while preserving the existing topology and health posture data.
+
+### feature/0401-report-run-outcome-truthfulness
+- Manual report generation now routes to the success banner only for generated/delivered runs; failed or delivery-failed runs correctly surface the failure state.
+- Update failures in the persisted run record also return the failure notice instead of claiming an artifact completed.
+
+### feature/0402-backup-run-now-control
+- Added the admin-only Console control for triggering the existing Backup Service run endpoint directly from the Backups page.
+- The action records the backend outcome and routes to explicit success/failure feedback, while the recovery timeline remains the source of truth.
+
+### feature/0403-state-token-cohesion
+- Added shared good/warning/danger state tokens for dark and light themes.
+- Analysis readiness, MFA posture, and egress boundary badges now use the same semantic palette in both themes instead of fixed light-mode colors.
+
+### feature/0404-data-compare-coverage-matrix
+- Data Compare now includes a cross-record field coverage matrix, showing shared, partial, and unique fields across the selected evidence set.
+- Each comparison column links back to the record detail page, while the summary exposes how much of the selected shape is common before operators inspect raw and normalized payloads.
+
+### feature/0405-detached-local-stack-launch
+- The local full-stack launcher now starts each service with `nohup` and detached standard input so a stack launched from an IDE, CI task, or non-interactive shell remains alive after the launcher exits.
+- Process ownership remains explicit through the existing `run/<service>.pid` files used by `stop-local.sh` and `status-local.sh`.
+- Rebuilt and seeded the full local stack, then live-verified login plus the major Console surfaces against real service ports and seeded tenant data.
+
+### feature/0406-local-stack-status-truthfulness
+- `status-local.sh` now reports a healthy service as `up (untracked process, port …)` when a stale PID file disagrees with the live health endpoint, instead of falsely reporting the service as not running.
+- The status output now reflects the actual full stack: all 16 application services plus the Console are healthy on their assigned ports.
+
+### feature/0407-shared-analytical-chart-renderer
+- The dependency-free shared bar-chart renderer now adds scale gridlines, numeric context, hover titles, keyboard-focusable bars, accessible value labels, and a graceful no-data state.
+- Chart entry animation respects `prefers-reduced-motion`, while the existing server-rendered tables remain the authoritative fallback and all existing report drill-through links are preserved.
+
+### feature/0408-report-chart-drillthrough
+- Report charts now carry server-generated links on their bars: daily signal bars open the exact event day, connector bars open the connector/date scope, and event-class bars open the matching event filter.
+- The Overview attention grid now gives all six attention domains equal first-class space on wide screens while retaining the existing responsive two-column layout.
+
+### feature/0409-overview-signal-heatmap
+- Overview now includes a real date-aligned signal activity heatmap for the selected 30-day window, with intensity encoding, weekday alignment, peak-day/window totals, and an explicit low-to-high legend.
+- Every populated cell links to the exact day in the Events explorer, turning the visualization into an investigation entry point rather than a decorative chart.
+
+### feature/0410-multi-source-demo-operating-dataset
+- Expanded the deterministic local demo workspace from a single-connector/single-day sample into a multi-source operating dataset spanning Zendesk, Graph Mail, Graph Teams, SQL, Fabric, and the existing replay connector.
+- Added records across seven dates with normalized and pending-normalization states, plus eight additional event classes/dates so connector distributions, timelines, event concentration maps, and heatmaps show meaningful data immediately after seeding.
+- The seed remains idempotent and was rerun successfully against the live local Postgres and ClickHouse services; Overview, Data, and Events all returned 200 with the expanded dataset visible.
+
+### feature/0411-theme-token-cohesion-pass
+- Rebased the primary Sensor Library cards, install dialog, deployment preview, connector activity, and connector health cells onto the shared shell surface, border, text, accent, and semantic-state tokens.
+- Rebased the high-use Work and Action telemetry cards and Event Explorer metric/heatmap surfaces onto the same tokens, including light-theme-safe hover, count, and track states.
+- Rebuilt and verified the complete UI test suite after the visual pass; all 651 UI tests pass.
+
+### feature/0412-data-visual-drillthrough
+- Data Explorer source-composition bars now open the corresponding `source_type` filter instead of acting as static telemetry.
+- Normalization posture cards now open `normalized=true` or `normalized=false` evidence scopes, and both handoffs preserve real tenant-scoped Data Explorer behavior.
+- Rebuilt and live-verified the visual links plus both filtered routes against the expanded demo dataset.
+
+### feature/0413-operator-surface-theme-cohesion
+- Security Overview and Triggers telemetry now use shared surface, text, accent, and state tokens for tracks, counts, controls, and activity charts.
+- Incident Detail's case ontology neighborhood graph now uses the shell tokens for its background, nodes, edges, labels, hover state, and SVG arrow marker.
+- Rebuilt and live-verified Security, Triggers, Incidents, and an incident detail route after the cohesion pass.
+
+### feature/0414-governed-action-library-demo-depth
+- Expanded the deterministic demo ontology with executive notification and ticket-lifecycle action contracts alongside the existing escalation contract.
+- Added completed and needs-review invocations tied to seeded events, cases, and ontology targets so Action Library readiness bars and Action Center review queues represent multiple governed workflows.
+- Re-seeded the live stack successfully; Action Library and Action Center now expose the expanded contract and ledger set with direct target/source links.
+
+### feature/0415-sensor-install-direct-handoff
+- Fixed the Sensor Library modal's deployment handoff so the selected connector opens its connector-specific configuration form directly instead of sending the operator back to the generic picker.
+- Preserved the existing install modal, copyable preview, API-key handoff, and registration paths while making the primary action context-preserving.
+- Rebuilt the UI suite and live-verified Sensors plus the Zendesk-specific deployment form after the fix.
+
+### feature/0416-control-center-ontology-posture
+- Configuration Center now reads live Ontology Service counts for object types, modeled entities, and governed action contracts.
+- Ontology model and Action contract domains are now included in the control readiness score with direct links to the relevant operator surfaces.
+- Rebuilt and live-verified the expanded Configuration Center against the seeded workspace: 5 object types, 11 modeled entities, and 5 action contracts.
+
+### feature/0417-control-center-operating-flow
+- Configuration Center’s live flow explicitly includes Ontology modeling between analysis and detection, carrying live model and governed-action counts through to the response stage.
+
+### feature/0418-report-signal-line-visualization
+- Reports now render the selected-window signal trend as an accessible SVG line/area chart with scale guides, hover/focus points, and one-click links from each daily point into the exact Events date scope.
+- The existing server-rendered report tables remain the authoritative fallback, and the dependency-free chart asset continues to work without external runtime dependencies.
+
+### feature/0419-high-use-theme-cohesion
+- Rebased Data Explorer evidence composition, normalization posture, ingestion timeline, and connector heatmap colors onto shared shell and semantic-state tokens.
+- Rebased Ontology telemetry, relationship cards, model-shape bars, and relationship matrix states onto the shared theme palette.
+- Rebased Incident Queue severity/SLA telemetry and matrix states onto the same semantic tokens; live-verified filtered Data, Ontology, and Incident routes after the full UI test/build gate.
+
+### feature/0420-admin-surface-theme-cohesion
+- Rebased API Key lifecycle posture, age distribution, and credential inventory cards onto shared surface and semantic-state tokens.
+- Rebased Backup recovery posture/timeline, Retention lifecycle posture, and Report Schedule delivery telemetry onto the same theme system.
+- Live-verified API Keys, Backups, Retention Policies, Report Schedules, and Egress Allowlist after the full UI test/build gate.
+
+### feature/0421-filtered-event-trend
+- Replaced the Events workspace-wide bar chart with the shared interactive line/area renderer scoped to the active date, text, and lifecycle filters.
+- Daily points retain direct drill-throughs into the exact Events day scope, while a server-rendered SVG fallback preserves useful no-JavaScript behavior.
+- Live-verified unfiltered, lifecycle-filtered, text-filtered, and date-filtered signal trend payloads against the seeded workspace.
+
+### feature/0422-command-surface-theme-cohesion
+- Rebased Work, Action Center, Events, Security Overview, Pipeline Map, and Global Search visual states onto shared surface, accent, and semantic-status tokens.
+- Preserved category distinctions in search distributions and queue severity while eliminating the remaining dark-only telemetry islands.
+- Full UI suite passes with 652 tests; all six live command surfaces plus Overview return 200 after relaunch.
+
+### feature/0423-record-journey-evidence-handoff
+- Added direct operator handoffs to Record Journey: promote the source record into a selected governed ontology type with preserved lineage, or replay it through normalization, analysis, detection, and downstream actions.
+- Exposed the available ontology types from the live model service so the journey page is an actionable evidence-to-model surface rather than a read-only trace.
+- Full UI suite passes with 652 tests; live-verified the seeded journey route with both handoff forms rendered.
+
+### feature/0424-overview-signal-velocity-chart
+- Added a linked SVG signal-velocity line chart to the Overview command center, driven by the same selected date window as the activity heatmap.
+- Every point drills into the exact Events day scope, keeping the executive visualization connected to investigation evidence.
+
+### feature/0425-incident-response-clock
+- Added a response-clock visualization to Incident Detail showing elapsed handoffs from case creation through first signal, first governed response, and current/resolved state.
+- Signal and response milestones link back to their underlying evidence while preserving the chronological investigation timeline below.
+
+### feature/0426-sensor-impact-handoff
+- Extended Sensor Detail downstream context from records → signals → modeled entities to include tenant-scoped incident cases containing those signals.
+- Connector operators can now open the affected case directly from the sensor control surface, closing the source-health-to-response investigation path.
+
+### feature/0427-sensor-response-lineage
+- Extended the sensor lineage join through governed ontology action invocations, with direct action-ledger links and target/outcome context.
+- Sensor Detail now exposes the full operational chain: source records → signals → cases → modeled entities → responses.
+
+### feature/0428-action-source-evidence
+- Extended Action Detail backward from governed invocation → originating signal → raw source records, using the event’s persisted record lineage.
+- Each source record opens its full Record Journey, completing the auditable round trip from evidence to response and back.
+
+### feature/0429-compare-downstream-impact
+- Extended Data Compare beyond raw/normalized field coverage with per-record downstream signal and ontology-object impact.
+- Each derived signal and modeled entity is directly navigable, allowing operators to compare both evidence shape and operational consequence.
+
+### feature/0430-event-multi-entity-context
+- Event Detail now resolves every ontology object supported by the event’s source lineage instead of stopping at the first match.
+- The primary modeled entity remains the action target while additional entities are exposed as direct ontology links for fan-out investigations.
+
+### feature/0431-work-queue-complete-ownership
+- Fixed My Work to retain active cases assigned to other tenant operators instead of silently dropping them from the workload model.
+- Added an Other ownership queue and KPI while preserving personal, unassigned, severity, SLA, and age scopes.
+
+### feature/0432-work-ownership-load
+- Added linked ownership-load telemetry to My Work, showing active case concentration by operator and unassigned exposure.
+- Each owner bar opens the exact personal, unassigned, or tenant case scope for coordination and escalation.
+
+### feature/0433-event-model-count-truth
+- Corrected Event Detail’s modeled-handoff KPI to report the actual number of ontology entities matched by source lineage rather than a boolean ready/missing state.
+
+### feature/0434-health-data-plane-operating-picture
+- Extended Platform Health with a live tenant data-plane strip covering registered connectors, ingested records, generated signals, and active cases.
+- Each data-plane metric links directly to its owning investigation or control surface, making infrastructure health and operational throughput visible in one snapshot.
+- The operating picture also includes modeled ontology entities and governed action contracts, closing the visible ingest → signal → case → model → response chain.
+- Full UI suite passes with 653 tests; live-verified the seeded workspace renders 6 connectors, 19 records, 12 signals, 3 active cases, 11 modeled entities, and 5 action contracts.
+
+### feature/0435-overview-decision-funnel
+- Added proportional stage bars to the Overview operating chain so executive users can see relative operating volume from ingest through normalization, detection, investigation, and governed response without implying one-to-one conversion.
+- Preserved a direct evidence handoff on every stage; the funnel is derived from the same live counts and selected signal window already used by the command center.
+
+### feature/0436-demo-connector-credential-posture
+- Filled the local demo workspace's connector credential inventory with a clearly labeled `demo-support-poller` API key so the Sensor Library installation path lands on a real credential posture instead of an empty state.
+- Live-verified API Keys now renders 3 active keys, lifecycle distribution, age bands, and the new connector credential in the auditable inventory.
+
+### feature/0437-demo-control-plane-coverage
+- Completed the local demo retention posture across raw, normalized, and event data classes, with enabled TTLs of 90, 30, and 180 days respectively.
+- Applied a four-domain outbound allowlist for Zendesk, Microsoft Graph, Microsoft identity, and the configured analysis provider; Configuration now reports restricted egress and 3/3 retention coverage.
+- Refreshed the idempotent demo seed so one connector remains live while five historical connectors intentionally surface stale-source attention, making the health heatmap operationally meaningful.
+- Made the three retention policies and four-domain egress boundary canonical seed data so a clean `scripts/run-local.sh --seed` launch reproduces the same control-plane posture.
+
+### feature/0438-identity-mfa-handoff
+- Added a current-principal MFA handoff to Users, showing the signed-in account’s live enrollment state and linking directly to the self-service authenticator flow.
+- Preserved tenant-wide role/MFA telemetry and query filtering while deriving the current state before filters are applied.
+
+### feature/0439-action-contract-lifecycle
+- Added a compact lifecycle visualization to every Action Library contract card: target population → eligible targets → immutable executions → human review debt.
+- The lifecycle uses the same live contract and ledger counts as the existing readiness bars, with direct links preserved for ontology targets and execution history.
+
+### feature/0440-report-case-posture-visualization
+- Added a linked Case posture chart to the executive Reports surface, aggregating open, acknowledged, resolved, and SLA-breached incident states from the live incident population.
+- Each chart segment routes directly into the corresponding incident queue scope so executive review can move into triage without losing context.
+
+### feature/0441-semantic-console-theme-cohesion
+- Replaced dark-only telemetry tracks, relationship cards, model-shape panels, and action posture bars with shared semantic theme tokens.
+- Ontology and Action Center now retain the same visual hierarchy in light and dark modes instead of rendering isolated dark islands inside the global shell.
+
+### feature/0442-canonical-event-contract-seed
+- Added four canonical, versioned event contracts to the local demo workspace: degraded health, critical health, role-mapping review, and completed certificate rotation.
+- Each contract includes a typed payload schema and source-field mapping, so Event Types now presents a real governed-vs-observed posture instead of a registry populated only by test-created definitions.
+
+### feature/0443-ontology-operational-posture
+- Added an object-centric attention score to live Ontology entities, derived from linked active case severity, signal state, and unresolved or overdue governed decisions.
+- Each entity now exposes a semantic posture label, 0–100 score, and direct evidence reasons inside its expandable investigation card; the score is read-only telemetry over existing lineage and control data.
+
+### feature/0444-ontology-attention-map
+- Added an ontology-level attention map that aggregates the entity posture scores into Critical, Needs attention, Monitored, and Stable bands.
+- Bands are interactive client-side filters over the live object list, preserving the model context while giving operators a fast prioritization loop.
+
+### feature/0445-overview-entity-command
+- Promoted object-centric risk into Overview with aggregate attention bands and a top-five ranked entity list.
+- Every ranked entity links directly into its Ontology investigation card, keeping executive triage on the same live posture model as the operator console.
+
+### feature/0446-ontology-risk-scopes
+- Added a server-side `risk=` Ontology scope for the four attention bands surfaced by the model.
+- Overview and Ontology attention links now preserve prioritization context and return a bounded object set; live verification of `risk=critical` returns four critical entities.
+
+### feature/0447-risk-scope-persistence
+- Preserved the selected Ontology risk band through active-state rendering and saved object views.
+- Risk-scoped views now reopen with the selected filter visible, keeping operator context across navigation.
+
+### feature/0448-cross-surface-risk-handoffs
+- Overview entity-attention bands now open the corresponding server-side Ontology risk scope.
+- Ontology search, export, clear, and pagination controls retain the selected risk band so investigation context is not silently discarded.
+
+### feature/0449-search-investigation-chain
+- Added an evidence → signal → case → model → response chain to global Search.
+- Each stage is backed by the live result counts and links back into the same query scope, making cross-domain discovery an operational handoff rather than a collection of isolated result lists.
+
+### feature/0450-ontology-graph-workspace
+- Ontology graph nodes can now be dragged into analyst-defined positions while relationship edges and labels update live.
+- Existing pan, zoom, focus, neighbor isolation, keyboard selection, and double-click investigation behavior remains available alongside the new layout interaction.
+
+### feature/0451-ontology-layout-persistence
+- Persisted analyst-defined graph positions per rendered entity set in local browser storage, so a composed investigation layout survives reloads and scope navigation.
+- The graph Reset control now restores the server layout and clears the saved arrangement explicitly.
+
+### feature/0452-chart-investigation-tooltips
+- Added a shared hover and keyboard tooltip layer to the dependency-free SVG chart renderer.
+- Report and Overview charts now expose exact label/value readouts while retaining direct drill-through links and server-rendered fallback content.
+
+### feature/0508-ontology-property-coverage
+- Added a live property-coverage heatmap to Ontology, measuring declared-field population across every modeled object type.
+- Coverage cells expose exact populated/total counts, completeness bands, and direct type drill-throughs for data-quality investigation.
+
+### feature/0509-work-claim-preflight
+- Added a live ownership-impact preflight to My Work bulk claim controls.
+- Selected cases now show critical/high exposure, breached and at-risk SLA counts, off-page selection scope, and audited per-case ownership changes before submission.
+
+### feature/0510-event-contract-coverage-map
+- Added a contract coverage map to Event Types, combining observed signal volume with schema governance and consuming-trigger posture.
+- Each contract row drills into its live signal slice and makes high-volume schema or detection gaps visible before they become blind spots.
+
+### feature/0511-trigger-toggle-preflight
+- Added a live preflight to Triggers bulk state controls.
+- Operators now see the selected rule count and pending enabled/disabled state before submission, with explicit no-change-before-submit and audited-change language.
+
+### feature/0512-report-run-preflight
+- Added an in-context run preflight to recurring report definitions.
+- Manual report runs now show the selected format, recipient, report window, and run-history destination beside the execution control.
+
+### feature/0513-action-target-readiness-map
+- Added a cross-contract target-type readiness map to Action Library.
+- Operators can now see eligible versus blocked response contracts by ontology target class and drill into the matching library scope.
+
+### feature/0514-action-review-transition-preflight
+- Added a live preflight to Action Center bulk human-review transitions.
+- Selected invocation count, pending review state, assignee, immutable-outcome boundary, and audit behavior are now visible before submission.
+
+### feature/0515-ontology-shortest-path-explorer
+- Added a bounded shortest-path explorer to the Ontology graph.
+- Operators can choose live origin and destination entities, inspect the relationship hop chain, and open any path step directly in its object investigation view.
+
+### feature/0516-event-case-handoff-preflight
+- Added case-response preflight controls to Event Detail.
+- Creating or linking a case now previews severity/target scope and makes evidence preservation and no-source-payload-change behavior explicit before submission.
+
+### feature/0498-action-target-preflight
+- Added a live preflight state to multi-target Action Library forms.
+- Operators now see the selected governed object count and an explicit no-state-change-until-submit message before execution.
+
+### feature/0499-connector-deployment-readiness
+- Added connector-specific deployment readiness states to the Sensor Library install workbench.
+- Each install modal now distinguishes catalog registration, recent ingestion health, and first-record verification using the live connector inventory counts.
+
+### feature/0500-report-window-presets
+- Added one-click 24-hour, 7-day, and 30-day signal-window presets to Reports.
+- Presets submit the existing defended reporting window, refreshing every KPI, funnel, matrix, chart, and export link together.
+
+### feature/0501-report-prior-window-comparison
+- Added a current-versus-prior comparison module to Reports for signals and source records.
+- Deltas use the immediately preceding equal-duration window and link back into the scoped evidence surfaces.
+
+### feature/0502-data-selection-preflight
+- Added a live preflight summary to Data Explorer batch selection.
+- Selected evidence now reports the visible normalized/unnormalized split, off-page persisted selections, and the exact batch-action boundary before reprocessing or modeling.
+
+### feature/0503-action-execution-preflight
+- Added a live execution preflight to Action Center target pickers.
+- Governed action cards now show the eligible target count and explicit no-state-change-until-submit boundary as selections change.
+
+### feature/0504-incident-transition-preflight
+- Added a live preflight to Incident Queue bulk lifecycle controls.
+- Operators now see the selected case count, chosen status transition, owner assignment, and per-case audit boundary before applying a queue-wide change.
+
+### feature/0505-case-response-preflight
+- Added target-level execution preflight to the inline governed-response workbench on Incident Detail.
+- Case actions now distinguish eligible targets from contract-blocked targets and state the submission boundary before changing the modeled object.
+
+### feature/0506-data-compare-value-variance
+- Extended source-record comparison with cross-record value-variance analysis.
+- The comparison matrix now highlights fields with multiple observed values, alongside presence coverage and downstream signal/model impact.
+
+### feature/0507-event-batch-linkage-preflight
+- Added linkage-aware preflight to Events batch controls.
+- Selected signals now show linked versus unlinked counts and the selected lifecycle operation before case creation, linking, or status transitions.
+
+### feature/0489-security-activity-drilldown
+- Made each Security Overview activity bar a true day-scoped investigation handoff into the audit log.
+- Added explicit timeline guidance so administrators can move from aggregate activity posture to the exact records behind a daily spike.
+
+### feature/0490-coherent-report-window
+- Made Reports apply the selected signal window consistently to cases and ontology coverage instead of mixing windowed evidence with all-time workspace totals.
+- Case metrics now follow linked window signals or case creation time; model coverage follows source-record lineage, with direct tests protecting the scoping rule.
+
+### feature/0491-analysis-recovery-posture
+- Added analysis dead-letter telemetry to the AI Analysis surface so model overloads and exhausted retries are visible as an operational state.
+- Linked the AI configuration page directly to the Action Center’s per-service replay controls, preserving one governed recovery path for failed analysis messages.
+
+### feature/0492-analysis-resilience-posture
+- Added an internal-secret-protected Analysis Service resilience endpoint exposing only consumer liveness, fallback availability, and dead-letter depth.
+- Surfaced fallback-route and consumer-health posture on AI Analysis, so operators can tell whether overload protection is active before sending more records into the pipeline.
+
+### feature/0493-case-correlation-clusters
+- Added a live Cross-case correlation panel to Incident Queue, grouping cases that share signal group keys in the active triage scope.
+- Each cluster shows concentrated case/signal volume and highest observed severity, with a direct filtered queue handoff for investigation.
+
+### feature/0494-correlation-demo-depth
+- Extended the deterministic local demo seed with a second Northwind-linked case so cross-case correlation is exercised with visible data rather than only a zero-state.
+
+### feature/0495-local-analysis-fallback-detection
+- Made the local launcher detect a healthy Ollama installation and automatically configure `qwen3:8b` as the alternate analysis model when explicit fallback settings are absent.
+- Kept explicit deployment configuration authoritative and documented the Docker networking distinction, so local overload recovery is demonstrable without making Ollama a hard dependency.
+
+### feature/0496-action-library-multi-targets
+- Extended Action Library execution from one target to an eligibility-aware target set, using the existing audited `target_object_ids` invocation path.
+- Added guarded client-side selection state and explicit target counts so operators can execute one governed contract across a coherent set without bypassing preconditions.
+
+### feature/0497-action-contract-version-diffs
+- Added expandable before/after JSON diffs to Action Library contract history entries.
+- Operators can now inspect the exact policy, precondition, and effect state behind a version change before executing a current contract or reviewing an older decision.
+
+### feature/0487-event-bulk-scope-continuity
+- Preserved search, date, lifecycle, case, and sort scopes through invalid and empty bulk event status submissions.
+- Operators now return to the same event investigation context even when a bulk action requires correction.
+
+### feature/0488-report-operating-funnel
+- Added a live Evidence → Signals → Cases → Model → Response conversion funnel to Reports.
+- Each stage is clickable, window-aware, and backed by the current tenant data so executive users can locate conversion gaps instead of reading disconnected KPI totals.
+
+### feature/0458-ontology-graph-export
+- Added an analyst-facing SVG export for the current filtered and positioned Ontology graph.
+- The export preserves the graph’s current investigative arrangement for handoff outside the console.
+
+### feature/0459-connector-library-filtering
+- Added client-side connector-library search across integration names, descriptions, protocols, and authentication methods.
+- Added operational, needs-attention, and ready-to-deploy readiness filters with visible result counts and an explicit no-match state.
+- Existing connector cards, installation guidance, deployment previews, and registration handoffs remain available within the filtered workspace.
+
+### feature/0460-data-visual-scope-handoffs
+- Updated Data Explorer’s source bars, ingestion timeline, normalization posture, and connector heatmap links to preserve the full active filter scope.
+- Selecting a visual dimension now narrows the current investigation without silently dropping connector, text, email, date, or normalization context.
+
+### feature/0461-event-visual-scope-handoffs
+- Updated Events trend points and signal-concentration heatmap cells to preserve the active query, lifecycle, case-linkage, sort, and date context.
+- Visual signal drill-throughs now narrow the current investigation to a day or event class without resetting the operator’s triage scope.
+
+### feature/0462-event-posture-scope-handoffs
+- Applied the same scoped handoff behavior to Events lifecycle-posture and event-type composition metrics.
+- Every Events telemetry link now carries the operator’s active query, status, case-linkage, date, and sort context while changing only the selected posture dimension.
+
+### feature/0463-report-window-handoffs
+- Updated the Reports severity × lifecycle matrix to preserve the selected report window on every incident triage link.
+- Executive review now carries its date boundary into case investigation instead of silently switching to an unbounded queue.
+
+### feature/0464-security-rbac-visualization
+- Added a proportional RBAC distribution visualization to Security Overview for administrators, operators, and viewers.
+- Each role bar links into the member-control surface while retaining the existing identity, MFA, lifecycle, egress, and activity telemetry.
+
+### feature/0465-rbac-role-filter-handoff
+- Added server-side role filtering to the Users identity console for administrators, operators, and viewers.
+- Security Overview role bars now open the corresponding filtered member slice, with role state preserved alongside username, MFA, and sort controls.
+
+### feature/0466-retention-ttl-profile
+- Added a comparative TTL profile to the retention console for raw, normalized, and event data classes.
+- Disabled policies remain visible in the profile, making lifecycle gaps explicit while preserving the existing policy, hold, and archive-reimport controls.
+
+### feature/0467-retention-class-scope
+- Made retention TTL bars actionable with data-class-scoped lifecycle views.
+- Scoped views recompute policy and compliance-hold posture for the selected class and provide an explicit clear-scope handoff.
+
+### feature/0468-egress-destination-inventory
+- Added a searchable visual inventory of allowed egress destinations alongside the policy editor.
+- Operators can inspect the effective host boundary quickly without parsing a raw multiline configuration, while the existing enforcement posture and audit handoff remain intact.
+
+### feature/0469-login-reason-handoffs
+- Added failure-reason filtering to Login Attempts and made reason-posture bars open the matching attempt scope.
+- Brute-force investigation can now move from a reason class such as `wrong_password` directly into the affected authentication rows.
+
+### feature/0470-session-age-triage
+- Added server-side freshness scopes to Active Sessions for sessions started in the last 24 hours and sessions older than 30 days.
+- Made freshness KPIs clickable and preserved the selected age and role scopes through posture links and table sorting, turning session-age telemetry into a usable access-review workflow.
+
+### feature/0471-global-connector-attention
+- Extended the live global Attention rail with enabled connectors that have gone stale or have no observed ingestion heartbeat.
+- Added a direct `Stale connectors` handoff into the Sensors health scope so ingestion silence is visible before it propagates into misleading downstream posture.
+
+### feature/0472-health-data-plane-funnel
+- Added a live six-stage Data Plane Conversion funnel to Platform Health: Connect → Normalize → Understand → Detect → Model → Respond.
+- Each stage carries an exact current count, proportional visual weight, and direct evidence handoff into the responsible workspace surface.
+
+### feature/0473-report-run-outcome-scopes
+- Added server-side run-outcome filtering to Report Schedules for successful delivery, failed delivery, and in-flight runs.
+- Made scheduler posture bars actionable and shareable, with the selected outcome preserved in the run-history control.
+
+### feature/0474-backup-outcome-scopes
+- Added server-side outcome filtering to Backups for successful, failed, and running recovery runs.
+- Made recovery posture bars actionable and preserved the selected outcome through the backup history and pagination handoff.
+
+### feature/0475-compliance-control-scopes
+- Added server-side Compliance Snapshot filtering for ready, attention, and unknown controls.
+- Preserved the overall readiness score while allowing auditors and executives to isolate the exact control state under review with a shareable URL.
+
+### feature/0476-pipeline-pressure-scopes
+- Added server-side Pipeline Map queue-pressure scopes for critical, warning, and nominal boundaries.
+- Preserved the full topology and stage diagnostics while narrowing the pressure distribution to the selected operational state.
+
+### feature/0477-normalization-coverage-scopes
+- Added server-side Field Mappings coverage scopes for unmapped sources, pending normalization, and fully normalized sources.
+- Coverage scopes now narrow both the visual source coverage list and the corresponding mapping inventory, making normalization blind spots directly triageable.
+
+### feature/0478-event-contract-coverage-scopes
+- Added server-side Event Types scopes for governed contracts, observed-only contracts, and triggerless contracts.
+- Made detection blind spots actionable from the posture panel while preserving live payload evidence and contract authoring controls.
+
+### feature/0479-compliance-connector-freshness
+- Added live connector freshness to the Compliance Snapshot readiness model.
+- Enabled connectors with stale or silent ingestion heartbeats now produce an evidence-backed attention control with a direct stale-Sensors handoff.
+
+### feature/0480-compliance-normalization-completeness
+- Added normalization completeness to the Compliance Snapshot readiness model using live record evidence.
+- Partially normalized records now produce an evidence-backed attention control with a direct pending-mappings handoff, distinguishing data arrival from data usability.
+
+### feature/0481-event-contract-scope-persistence
+- Preserved Event Types governance scopes through contract creation and version publication.
+- Scoped triggerless and observed-only investigations now return to the same catalog context after authoring changes.
+
+### feature/0482-connector-install-deep-links
+- Made connector installation guides addressable through `/sensors?install=<connector>` URLs.
+- Install context now survives refresh and inventory pagination, while closing the modal clears the temporary scope without disturbing other sensor filters.
+
+### feature/0483-decision-lineage-rail
+- Added a clickable five-stage lineage rail to governed action detail: source signal, investigation case, modeled target, immutable action contract, and human review.
+- Decision records now present the operational chain as one navigable control surface instead of disconnected evidence sections.
+
+### feature/0484-record-lifecycle-rail
+- Added a state-aware lifecycle rail to source record detail: ingest, normalize, detect, model, and respond.
+- Each stage now routes directly to the relevant payload, pending mapping, record journey, ontology, or downstream decision context.
+
+### feature/0485-trigger-coverage-visualization
+- Added a live detection-coverage bar visualization grouped by governed event type.
+- Coverage rows link directly into the matching trigger scope, making blind spots and rule concentration visible before operators inspect the full inventory.
+
+### feature/0486-report-readiness-gates
+- Added an executive Readiness to Act scorecard to Reports for signal evidence, case control, model coverage, and response assurance.
+- Each gate is live, window-aware, visually weighted, and linked to the evidence surface needed to resolve the gap.
+
+### feature/0453-event-lineage-command
+- Added a five-stage Evidence → Signal → Response → Model → Decision handoff to Event Detail.
+- Each stage uses the live signal context and links into source records, case response, ontology, or the governed action ledger without abandoning the event investigation.
+
+### feature/0454-ontology-navigation-cohesion
+- Removed the duplicate post-graph Ontology pagination control so object navigation has one authoritative location.
+- Graph nodes, connected objects, and graph expansion links now retain the active server-side risk scope during investigation handoffs.
+
+### feature/0455-configuration-control-flow
+- Rebuilt Configuration’s operating flow as data-driven Connect → Normalize → Understand → Model → Detect → Respond stages.
+- Each stage now carries live good/risk posture, real control-domain detail, and a direct handoff into the owning control surface.
+
+### feature/0456-ontology-relationship-filter
+- Added a live relationship-type selector to the Ontology graph.
+- Filtering narrows nodes and edges together while preserving drag layout, neighbor isolation, zoom/pan, and investigation handoffs.
+
+### feature/0457-ontology-graph-preferences
+- Persisted the active graph search and relationship-type filter per rendered entity set alongside analyst-defined node positions.
+- Reset now clears both layout and graph filter preferences, making the analyst workspace recoverable and explicit.
+
+### feature/0452-chart-investigation-tooltips
+- Added a shared hover and keyboard tooltip layer to the dependency-free SVG chart renderer.
+- Report and Overview charts now expose exact label/value readouts while retaining direct drill-through links and server-rendered fallback content.

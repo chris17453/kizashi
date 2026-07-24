@@ -1,6 +1,23 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Login Attempts</h1>
+<style>
+  .login-posture { display:grid; grid-template-columns:1.25fr 1fr; gap:1rem; margin:0 0 1.25rem; }
+  .login-posture-panel { padding:1rem; }
+  .login-posture-panel h2 { margin:0 0 .25rem; font-size:1rem; }
+  .login-posture-list { display:grid; gap:.65rem; margin-top:1rem; }
+  .login-posture-row { display:grid; grid-template-columns:7rem 1fr auto; gap:.65rem; align-items:center; }
+  .login-posture-track { height:.55rem; overflow:hidden; border-radius:99px; background:var(--surface-3,#e8edf3); }
+  .login-posture-fill { height:100%; border-radius:inherit; background:#16a34a; }
+  .login-posture-fill.risk { background:#dc2626; }
+  .login-posture-count { font:700 .8rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .login-posture-kpis { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; margin-top:1rem; }
+  .login-posture-kpi { display:grid; gap:.2rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .login-posture-kpi strong { font:700 1.25rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .login-posture-kpi small { color:var(--text-dim); }
+  .login-activity{margin:0 0 1.25rem}.login-activity-chart{display:flex;align-items:flex-end;gap:.35rem;min-height:145px;overflow-x:auto;padding:1rem .5rem .2rem;border:1px solid var(--border);border-radius:8px;background:var(--surface)}.login-activity-bar{display:grid;align-content:end;gap:.2rem;min-width:3.1rem;height:120px;text-decoration:none}.login-activity-stack{display:flex;flex-direction:column;justify-content:flex-end;height:100%}.login-activity-success{background:#16a34a;min-height:2px}.login-activity-failure{background:#dc2626;min-height:2px}.login-activity-label{font-size:.6rem;color:var(--text-dim);writing-mode:vertical-rl;transform:rotate(180deg);height:3.2rem;white-space:nowrap}.login-activity-legend{display:flex;gap:1rem;margin-top:.7rem;font-size:.75rem;color:var(--text-dim)}.login-activity-legend span::before{content:'';display:inline-block;width:.55rem;height:.55rem;border-radius:2px;margin-right:.3rem;background:#16a34a}.login-activity-legend .failure::before{background:#dc2626}
+  @media(max-width:760px){.login-posture{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / access signals</div><h1>Login Attempts</h1><p class="page-description">Review local-login and two-factor challenge outcomes for brute-force and account-targeting patterns.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/security">Security overview</a><a class="btn btn-secondary" href="/security/sessions">Active sessions &rarr;</a></div></div>
 <p class="muted">Every recent local-login and two-factor challenge attempt for this workspace,
 successful or not — a brute-force pattern or a specific account under repeated attack shows up
 here. This only covers local username/password logins; SSO logins are your identity provider's
@@ -11,9 +28,25 @@ responsibility to monitor.</p>
 <form class="inline" method="get" action="/security/login-attempts" style="margin-bottom:1rem;">
   <label for="q">Search</label>
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by username&hellip;">
+  <label for="status">Outcome</label>
+  <select id="status" name="status">
+    <option value="" {% if status.is_empty() %}selected{% endif %}>All outcomes</option>
+    <option value="failed" {% if status == "failed" %}selected{% endif %}>Failed only</option>
+    <option value="success" {% if status == "success" %}selected{% endif %}>Successful only</option>
+  </select>
+  <label for="reason">Failure reason</label>
+  <input type="text" id="reason" name="reason" value="{{ reason }}" placeholder="invalid credentials">
   <button type="submit">Search</button>
-  {% if !q.is_empty() %}<a href="/security/login-attempts" class="btn-link">Clear</a>{% endif %}
+  {% if !q.is_empty() || !status.is_empty() || !reason.is_empty() %}<a href="/security/login-attempts" class="btn-link">Clear</a>{% endif %}
 </form>
+
+{% if !attempts.is_empty() %}
+<section class="panel login-activity"><div class="panel-heading"><div><h2>Hourly access activity</h2><p class="muted">Attempts grouped by hour in the currently visible page. Red segments show failures; green segments show successful authentication.</p></div><span class="pill pill-muted">{% if status.is_empty() %}all outcomes{% else %}{{ status }} only{% endif %}</span></div><div class="login-activity-chart" role="img" aria-label="Hourly login success and failure activity">{% for bar in activity %}<div class="login-activity-bar" title="{{ bar.label }} · {{ bar.success_count }} successful · {{ bar.failed_count }} failed"><div class="login-activity-stack" style="height:{{ bar.height_pct }}%"><span class="login-activity-failure" style="flex:{{ bar.failed_count }}"></span><span class="login-activity-success" style="flex:{{ bar.success_count }}"></span></div><span class="login-activity-label">{{ bar.label }}</span></div>{% endfor %}</div><div class="login-activity-legend"><span>successful</span><span class="failure">failed</span></div></section>
+<section class="login-posture" aria-label="Login attempt posture">
+  <div class="panel login-posture-panel"><div class="page-kicker">Access outcomes</div><h2>Success and failure balance</h2><p class="muted">The currently visible attempt window, after any username filter.</p><div class="login-posture-list"><div class="login-posture-row"><span>Successful</span><span class="login-posture-track"><span class="login-posture-fill" style="width:{% if attempts.len() > 0 %}{{ success_count * 100 / attempts.len() }}{% else %}0{% endif %}%"></span></span><strong class="login-posture-count">{{ success_count }}</strong></div><div class="login-posture-row"><span>Failed</span><span class="login-posture-track"><span class="login-posture-fill risk" style="width:{% if attempts.len() > 0 %}{{ failed_count * 100 / attempts.len() }}{% else %}0{% endif %}%"></span></span><strong class="login-posture-count">{{ failed_count }}</strong></div></div></div>
+  <div class="panel login-posture-panel"><div class="page-kicker">Target concentration</div><h2>Account exposure</h2><div class="login-posture-kpis"><div class="login-posture-kpi"><strong>{{ attempts.len() }}</strong><small>attempts in view</small></div><div class="login-posture-kpi"><strong>{{ distinct_user_count }}</strong><small>usernames targeted</small></div></div>{% if reason_posture.is_empty() %}<p class="muted">No failed-attempt reason classes in this window.</p>{% else %}<div class="login-posture-list">{% for row in reason_posture %}<a class="login-posture-row" href="{{ row.href }}"><span>{{ row.label }}</span><span class="login-posture-track"><span class="login-posture-fill risk" style="width:{{ row.percentage }}%"></span></span><strong class="login-posture-count">{{ row.count }}</strong></a>{% endfor %}</div>{% endif %}</div>
+</section>
+{% endif %}
 
 {% if attempts.is_empty() %}
 <div class="empty-state">
@@ -21,7 +54,7 @@ responsibility to monitor.</p>
   {% if q.is_empty() %}
   <p>No recent login attempts.</p>
   {% else %}
-  <p>No login attempts match &ldquo;{{ q }}&rdquo;.</p>
+  <p>No login attempts match the current username and outcome filters.</p>
   {% endif %}
 </div>
 {% else %}
@@ -48,7 +81,7 @@ responsibility to monitor.</p>
   </tbody>
 </table>
 {% if let Some(before) = next_before %}
-<p><a href="/security/login-attempts?before={{ before|urlencode }}">Load older &rarr;</a></p>
+<p><a href="/security/login-attempts?q={{ q|urlencode }}&amp;status={{ status|urlencode }}&amp;before={{ before|urlencode }}">Load older &rarr;</a></p>
 {% endif %}
 {% endif %}
 {% endblock %}

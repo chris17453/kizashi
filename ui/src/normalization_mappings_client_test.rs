@@ -12,6 +12,7 @@ pub struct InMemoryNormalizationMappingsClient {
     pub mappings: Mutex<Vec<NormalizationMapping>>,
     pub created: Mutex<Vec<NormalizationMapping>>,
     pub deleted: Mutex<Vec<Uuid>>,
+    pub updated: Mutex<Vec<NormalizationMapping>>,
 }
 
 #[async_trait]
@@ -49,6 +50,19 @@ impl NormalizationMappingsClient for InMemoryNormalizationMappingsClient {
         self.deleted.lock().unwrap().push(id);
         Ok(())
     }
+
+    async fn update_mapping(
+        &self,
+        role: Role,
+        _actor: &str,
+        mapping: NormalizationMapping,
+    ) -> Result<NormalizationMapping, NormalizationMappingsClientError> {
+        if !role.at_least(Role::Operator) {
+            return Err(NormalizationMappingsClientError::Rejected(403));
+        }
+        self.updated.lock().unwrap().push(mapping.clone());
+        Ok(mapping)
+    }
 }
 
 pub struct FailingNormalizationMappingsClient;
@@ -78,6 +92,15 @@ impl NormalizationMappingsClient for FailingNormalizationMappingsClient {
         _tenant_id: Uuid,
         _id: Uuid,
     ) -> Result<(), NormalizationMappingsClientError> {
+        Err(NormalizationMappingsClientError::Unreachable("simulated failure".to_string()))
+    }
+
+    async fn update_mapping(
+        &self,
+        _role: Role,
+        _actor: &str,
+        _mapping: NormalizationMapping,
+    ) -> Result<NormalizationMapping, NormalizationMappingsClientError> {
         Err(NormalizationMappingsClientError::Unreachable("simulated failure".to_string()))
     }
 }
@@ -120,7 +143,10 @@ async fn spawn_stub_server() -> String {
     }
     let app = Router::new()
         .route("/v1/normalization-mappings", get(list_handler).post(create_handler))
-        .route("/v1/normalization-mappings/:id", axum::routing::delete(delete_handler));
+        .route(
+            "/v1/normalization-mappings/:id",
+            axum::routing::put(create_handler).delete(delete_handler),
+        );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {

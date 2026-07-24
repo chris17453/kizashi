@@ -15,6 +15,23 @@ use common::Role;
 use std::sync::Arc;
 use tower::ServiceExt;
 
+#[test]
+fn install_scope_accepts_only_catalog_connector_types() {
+    assert_eq!(normalize_install_type("GRAPH-MAIL"), "graph-mail");
+    assert_eq!(normalize_install_type("sql"), "sql");
+    assert!(normalize_install_type("unknown").is_empty());
+}
+
+#[test]
+fn connector_install_modal_exposes_operational_readiness_states() {
+    let template = include_str!("../templates/sensors.html");
+    assert!(template.contains("data-readiness-registration"));
+    assert!(template.contains("data-readiness-health"));
+    assert!(template.contains("data-readiness-records"));
+    assert!(template.contains("setReadiness"));
+    assert!(template.contains("Ready to inspect"));
+}
+
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/sensors", get(get_sensors).post(post_sensors))
@@ -267,6 +284,8 @@ async fn get_sensors_renders_the_sensors_table_when_signed_in() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("support-poller"));
+    assert!(body.contains("data-sensors-live-status"));
+    assert!(body.contains("kizashi.sensors.live-refresh"));
 }
 
 #[tokio::test]

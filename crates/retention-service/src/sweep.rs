@@ -3,6 +3,7 @@
 mod sweep_test;
 
 use crate::archive_store::ArchiveStore;
+use crate::compliance_hold::ComplianceHoldRepository;
 use crate::raw_record_client::RawRecordClient;
 use crate::retention_policy::{DataClass, RetentionPolicyRepository};
 use chrono::{DateTime, Utc};
@@ -14,6 +15,7 @@ pub struct SweepState {
     pub policy_repository: Arc<dyn RetentionPolicyRepository>,
     pub record_client: Arc<dyn RawRecordClient>,
     pub archive_store: Arc<dyn ArchiveStore>,
+    pub hold_repository: Option<Arc<dyn ComplianceHoldRepository>>,
 }
 
 #[derive(Debug, Error)]
@@ -47,6 +49,16 @@ pub async fn sweep(
     let mut summary = SweepSummary::default();
 
     for policy in policies.into_iter().filter(|p| p.data_class == DataClass::Raw) {
+        if let Some(holds) = &state.hold_repository {
+            if holds
+                .has_active(policy.tenant_id, policy.data_class)
+                .await
+                .map_err(|e| SweepError::PolicyList(e.to_string()))?
+            {
+                tracing::info!(tenant_id = %policy.tenant_id, data_class = ?policy.data_class, "retention sweep skipped by active compliance hold");
+                continue;
+            }
+        }
         let cutoff = now - chrono::Duration::days(policy.ttl_days as i64);
         let window_start = cutoff - chrono::Duration::days(policy.ttl_days as i64);
 

@@ -18,9 +18,21 @@ pub struct Incident {
     pub summary: String,
     pub severity: IncidentSeverity,
     pub status: IncidentStatus,
+    #[serde(default)]
+    pub assigned_to: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub resolved_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct IncidentNote {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub incident_id: Uuid,
+    pub author: String,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

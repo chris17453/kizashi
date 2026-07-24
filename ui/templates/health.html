@@ -1,7 +1,22 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Platform Health</h1>
+<div class="page-header"><div><div class="page-kicker">Platform operations</div><h1>Platform Health</h1><p class="page-description">Service availability across the runtime. Keep this console open during an incident to watch dependencies and queue pressure.</p></div><div class="quick-actions"><span class="console-live" data-health-live-status>Live refresh paused</span><button type="button" class="btn btn-secondary" data-health-refresh-now>Refresh now</button><button type="button" class="btn btn-secondary" data-health-toggle-live>Enable live mode</button><a class="btn btn-secondary" href="/pipeline">Open pipeline map &rarr;</a></div></div>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+<style>
+  .health-posture { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.6rem; margin-bottom:1.5rem; }
+  .health-posture-card { display:grid; gap:.15rem; padding:.75rem .85rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .health-posture-card strong { font:700 1.35rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .health-posture-card small { color:var(--text-dim); font-size:.7rem; }
+  .health-heatmap { display:grid; gap:.45rem; margin-bottom:1.5rem; }
+  .health-heat-row { display:grid; grid-template-columns:minmax(150px,.75fr) minmax(120px,2fr) 70px; align-items:center; gap:.7rem; padding:.45rem .6rem; border:1px solid var(--border-subtle); border-radius:6px; background:var(--surface); }
+  .health-heat-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; }
+  .health-heat-track { height:.55rem; overflow:hidden; border-radius:999px; background:var(--surface-raised); }
+  .health-heat-fill { height:100%; min-width:2px; border-radius:inherit; background:var(--accent); }
+  .health-heat-fill.warn { background:var(--warning); } .health-heat-fill.critical { background:var(--danger); }
+  .dependency-lanes{display:grid;gap:.55rem;margin:0 0 1.5rem}.dependency-lane{display:grid;grid-template-columns:1.1fr 1fr 1.2fr auto;gap:.8rem;align-items:center;padding:.7rem .8rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface);color:var(--text)}.dependency-lane:hover{border-color:var(--accent);background:var(--surface-hover)}.dependency-lane-stage,.dependency-lane-queue{display:grid;gap:.15rem;min-width:0;text-decoration:none;color:var(--text)}.dependency-lane-stage strong,.dependency-lane-queue strong{font-size:.82rem}.dependency-lane-stage small,.dependency-lane-queue small{color:var(--text-dim);font-size:.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dependency-lane-queue strong{font:700 1rem ui-monospace,SFMono-Regular,Menlo,monospace}.dependency-lane-stage:hover strong,.dependency-lane-queue:hover strong{color:var(--accent)}.dependency-lane-status{justify-self:end}.dependency-lane-arrow{color:var(--accent);font-size:1.3rem}@media(max-width:700px){.dependency-lane{grid-template-columns:1fr auto}.dependency-lane-queue{grid-column:1}.dependency-lane-arrow{grid-column:2;grid-row:1 / span 2}.dependency-lane-status{grid-column:1;justify-self:start}}
+  .health-funnel{display:grid;gap:.55rem;margin:0 0 1.5rem}.health-funnel-stage{display:grid;grid-template-columns:7rem minmax(0,1fr) 4rem;gap:.7rem;align-items:center;padding:.55rem .7rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface);color:var(--text);text-decoration:none}.health-funnel-stage:hover{border-color:var(--accent);background:var(--surface-hover);text-decoration:none}.health-funnel-stage strong{font-size:.8rem}.health-funnel-stage small{display:block;color:var(--text-dim);font-size:.68rem;margin-top:.1rem}.health-funnel-track{height:.7rem;overflow:hidden;border-radius:99px;background:var(--surface-raised)}.health-funnel-track span{display:block;height:100%;min-width:3px;border-radius:inherit;background:linear-gradient(90deg,var(--accent-dim),var(--accent))}.health-funnel-count{text-align:right;font:700 .85rem ui-monospace,SFMono-Regular,Menlo,monospace}@media(max-width:600px){.health-funnel-stage{grid-template-columns:6rem minmax(0,1fr) 3rem}}
+  @media (max-width:700px) { .health-posture { grid-template-columns:repeat(2,minmax(0,1fr)); } .health-heat-row { grid-template-columns:1fr 70px; } .health-heat-track { grid-column:1 / -1; grid-row:2; } }
+</style>
 {% if let Some(status) = platform_status %}
 <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 240px)); margin-bottom: 1.5rem;">
   <div class="kpi-card {% if status == "up" %}kpi-success{% else %}kpi-danger{% endif %}">
@@ -10,13 +25,75 @@
     <div class="kpi-sub">{{ services.len() }} services monitored</div>
   </div>
 </div>
+<section class="health-posture" aria-label="Platform health posture">
+  <div class="health-posture-card"><span class="detail-label">Services online</span><strong>{{ services_up }}</strong><small>{{ services_down }} degraded or unavailable</small></div>
+  <div class="health-posture-card"><span class="detail-label">Queued messages</span><strong>{{ queue_total }}</strong><small>across monitored boundaries</small></div>
+  <div class="health-posture-card"><span class="detail-label">Critical queues</span><strong>{{ critical_queue_count }}</strong><small>requiring immediate inspection</small></div>
+  <div class="health-posture-card"><span class="detail-label">Peak queue</span><strong>{{ max_queue }}</strong><small>highest single-stage backlog</small></div>
+</section>
+<section class="health-data-plane" aria-label="Tenant data plane">
+  <a class="health-data-plane-card" href="/sensors"><span class="detail-label">Connectors</span><strong>{{ connector_count }}</strong><small>registered sources</small><span class="health-data-plane-arrow">Open inventory &rarr;</span></a>
+  <a class="health-data-plane-card" href="/data"><span class="detail-label">Records</span><strong>{{ record_count }}</strong><small>ingested evidence</small><span class="health-data-plane-arrow">Inspect evidence &rarr;</span></a>
+  <a class="health-data-plane-card" href="/events"><span class="detail-label">Signals</span><strong>{{ signal_count }}</strong><small>generated events</small><span class="health-data-plane-arrow">Open event stream &rarr;</span></a>
+  <a class="health-data-plane-card {% if open_case_count > 0 %}health-data-plane-risk{% endif %}" href="/incidents?status=active"><span class="detail-label">Open cases</span><strong>{{ open_case_count }}</strong><small>active investigations</small><span class="health-data-plane-arrow">Open triage &rarr;</span></a>
+  <a class="health-data-plane-card" href="/ontology"><span class="detail-label">Modeled entities</span><strong>{{ modeled_object_count }}</strong><small>ontology objects</small><span class="health-data-plane-arrow">Open ontology &rarr;</span></a>
+  <a class="health-data-plane-card" href="/actions/library"><span class="detail-label">Action contracts</span><strong>{{ action_contract_count }}</strong><small>governed responses</small><span class="health-data-plane-arrow">Open action library &rarr;</span></a>
+</section>
+<div class="section-heading"><div><div class="section-title">Data plane conversion</div><p class="muted">A live operating-model funnel from connector intake through governed response. Each stage opens its underlying evidence.</p></div><span class="pill pill-muted">cross-layer posture</span></div>
+<div class="health-funnel" aria-label="Data plane conversion funnel">{% for stage in data_plane_funnel %}<a class="health-funnel-stage" href="{{ stage.href }}"><span><strong>{{ stage.label }}</strong><small>{{ stage.detail }}</small></span><span class="health-funnel-track"><span style="width:{{ stage.percent }}%"></span></span><strong class="health-funnel-count">{{ stage.count }}</strong></a>{% endfor %}</div>
 <div class="status-grid">
   {% for service in services %}
-  <div class="status-card">
-    <span class="status-name">{{ service.name }}</span>
-    <span class="pill {% if service.status == "up" %}pill-up{% else %}pill-down{% endif %}">{{ service.status }}</span>
-  </div>
+  <a class="status-card status-card-link" href="{{ service.href }}">
+    <div class="status-card-header"><span class="status-name">{{ service.name }}</span><span class="pill {% if service.status == "up" %}pill-up{% else %}pill-down{% endif %}">{{ service.status }}</span></div>
+    <span class="status-description">{{ service.description }}</span>
+    <span class="status-next-step">{{ service.next_step }} &rarr;</span>
+  </a>
   {% endfor %}
 </div>
+<div class="section-heading"><div><div class="section-title">Dependency impact lanes</div><p class="muted">Runtime state paired with the adjacent pipeline backlog. Follow a lane into its service or the full pipeline map.</p></div><a class="section-link" href="/pipeline">Open dependency map &rarr;</a></div>
+<div class="dependency-lanes" aria-label="Pipeline dependency impact lanes">{% for lane in dependency_lanes %}<div class="dependency-lane"><a class="dependency-lane-stage" href="{{ lane.service_href }}"><strong>{{ lane.stage }}</strong><small>{{ lane.service_name }} · open service control</small></a><a class="dependency-lane-queue" href="{{ lane.queue_href }}"><strong>{{ lane.queue_messages }}</strong><small>{{ lane.queue_label }} · {{ lane.queue_severity_label }} · inspect backlog</small></a><span class="dependency-lane-status"><span class="pill {% if lane.service_status == "up" %}pill-up{% else %}pill-down{% endif %}">{{ lane.service_status }}</span></span><span class="dependency-lane-arrow">&rarr;</span></div>{% endfor %}</div>
+<div class="section-heading"><div><div class="section-title">Queue pressure heatmap</div><p class="muted">Relative pressure is normalized to the busiest queue in this health snapshot.</p></div></div>
+<div class="health-heatmap" aria-label="Queue pressure heatmap">
+  {% for queue in queues %}<a class="health-heat-row" href="{{ queue.href }}"><span class="health-heat-label">{{ queue.label }} · {{ queue.queue_name }}</span><span class="health-heat-track"><span class="health-heat-fill {{ queue.severity }}" style="width:{{ queue.pressure_pct }}%"></span></span><strong>{{ queue.messages }}</strong></a>{% endfor %}
+</div>
+<div class="section-heading"><div><div class="section-title">Queue pressure</div><p class="muted">Backlog between pipeline stages is surfaced alongside service availability.</p></div>{% if let Some(e) = backlog_error %}<span class="error-inline">{{ e }}</span>{% else %}<a class="section-link" href="/pipeline">Open pipeline map &rarr;</a>{% endif %}</div>
+<div class="pipeline-queue-grid health-queue-grid">{% for queue in queues %}<a class="pipeline-queue-card queue-{{ queue.severity }}" href="{{ queue.href }}"><div><div class="detail-label">{{ queue.label }}</div><strong>{{ queue.messages }}</strong><small>{{ queue.queue_name }}</small></div><span class="pill {% if queue.severity == "critical" %}pill-down{% else if queue.severity == "warn" %}pill-muted{% else %}pill-up{% endif %}">{{ queue.severity_label }}</span></a>{% endfor %}</div>
 {% endif %}
+<script>
+  (function () {
+    var storageKey = 'kizashi.health.live-refresh';
+    var status = document.querySelector('[data-health-live-status]');
+    var toggle = document.querySelector('[data-health-toggle-live]');
+    var refresh = document.querySelector('[data-health-refresh-now]');
+    var enabled = false;
+    try { enabled = window.localStorage.getItem(storageKey) === 'on'; } catch (_) {}
+    function render() {
+      if (status) status.textContent = enabled ? 'Live · 30s refresh' : 'Live refresh paused';
+      if (toggle) {
+        toggle.textContent = enabled ? 'Pause live mode' : 'Enable live mode';
+        toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      }
+    }
+    if (refresh) refresh.addEventListener('click', function () { window.location.reload(); });
+    if (toggle) toggle.addEventListener('click', function () {
+      enabled = !enabled;
+      try { window.localStorage.setItem(storageKey, enabled ? 'on' : 'off'); } catch (_) {}
+      render();
+    });
+    render();
+    if (enabled) window.setTimeout(function () { window.location.reload(); }, 30000);
+  }());
+</script>
+<style>
+  .health-data-plane{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.6rem;margin:0 0 1.5rem}
+  .health-data-plane-card{display:grid;gap:.15rem;padding:.8rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface);color:var(--text);text-decoration:none;min-width:0}
+  .health-data-plane-card:hover{border-color:var(--accent);background:var(--surface-hover);text-decoration:none}
+  .health-data-plane-card strong{font:700 1.45rem ui-monospace,SFMono-Regular,Menlo,monospace}
+  .health-data-plane-card small{color:var(--text-dim);font-size:.7rem}
+  .health-data-plane-arrow{margin-top:.45rem;color:var(--accent);font-size:.7rem}
+  .health-data-plane-risk{border-color:color-mix(in srgb,var(--danger) 48%,var(--border))}
+  @media(max-width:1050px){.health-data-plane{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media(max-width:760px){.health-data-plane{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:450px){.health-data-plane{grid-template-columns:1fr}}
+</style>
 {% endblock %}

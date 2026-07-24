@@ -35,6 +35,8 @@ pub struct TriggersQuery {
     pub sort: String,
     #[serde(default)]
     pub dir: String,
+    #[serde(default)]
+    pub notice: String,
 }
 
 /// Case-insensitive substring match on name -- same shape as Users/API Keys search (ADR-0062),
@@ -67,6 +69,74 @@ struct TestResultView {
     contributing_record_count: usize,
 }
 
+struct TriggerPostureMetric {
+    label: String,
+    count: usize,
+    percent: i32,
+    href: String,
+    tone: String,
+}
+
+struct TriggerCoverageRow {
+    label: String,
+    count: usize,
+    percent: i32,
+    href: String,
+}
+
+fn trigger_coverage(triggers: &[TriggerSummary]) -> Vec<TriggerCoverageRow> {
+    let mut counts = std::collections::BTreeMap::<String, usize>::new();
+    for trigger in triggers {
+        let label = if trigger.event_type_match.trim().is_empty() {
+            "Correlated sources".to_string()
+        } else {
+            trigger.event_type_match.clone()
+        };
+        *counts.entry(label).or_default() += 1;
+    }
+    let max = counts.values().copied().max().unwrap_or(1);
+    counts
+        .into_iter()
+        .take(8)
+        .map(|(label, count)| TriggerCoverageRow {
+            href: if label == "Correlated sources" {
+                "/triggers".to_string()
+            } else {
+                format!(
+                    "/triggers?{}",
+                    serde_urlencoded::to_string([("q", label.clone())]).unwrap_or_default()
+                )
+            },
+            percent: ((count * 100) / max).max(8) as i32,
+            label,
+            count,
+        })
+        .collect()
+}
+
+fn trigger_posture_metrics(triggers: &[TriggerSummary]) -> Vec<TriggerPostureMetric> {
+    let total = triggers.len();
+    let enabled = triggers.iter().filter(|trigger| trigger.enabled).count();
+    let disabled = total.saturating_sub(enabled);
+    let percent = |count| if total == 0 { 0 } else { (count * 100 / total) as i32 };
+    vec![
+        TriggerPostureMetric {
+            label: "Enabled".into(),
+            count: enabled,
+            percent: percent(enabled),
+            href: "/triggers?sort=enabled&dir=asc".into(),
+            tone: "good".into(),
+        },
+        TriggerPostureMetric {
+            label: "Disabled".into(),
+            count: disabled,
+            percent: percent(disabled),
+            href: "/triggers?sort=enabled&dir=desc".into(),
+            tone: "risk".into(),
+        },
+    ]
+}
+
 #[derive(Template)]
 #[template(path = "triggers.html")]
 struct TriggersTemplate {
@@ -82,6 +152,9 @@ struct TriggersTemplate {
     q: String,
     sort: String,
     dir: String,
+    notice: String,
+    posture_metrics: Vec<TriggerPostureMetric>,
+    trigger_coverage: Vec<TriggerCoverageRow>,
 }
 
 pub async fn get_triggers(
@@ -120,6 +193,8 @@ pub async fn get_triggers(
             let mut triggers: Vec<TriggerSummary> =
                 result.triggers.into_iter().filter(|t| matches_query(t, &query.q)).collect();
             sort_rows(&mut triggers, &query.sort, &query.dir);
+            let posture_metrics = trigger_posture_metrics(&triggers);
+            let trigger_coverage = trigger_coverage(&triggers);
             Html(
                 TriggersTemplate {
                     show_nav: true,
@@ -134,6 +209,9 @@ pub async fn get_triggers(
                     q: query.q,
                     sort: query.sort,
                     dir: query.dir,
+                    notice: query.notice,
+                    posture_metrics,
+                    trigger_coverage,
                 }
                 .render()
                 .unwrap(),
@@ -154,6 +232,9 @@ pub async fn get_triggers(
                 q: query.q,
                 sort: query.sort,
                 dir: query.dir,
+                notice: query.notice,
+                posture_metrics: vec![],
+                trigger_coverage: vec![],
             }
             .render()
             .unwrap(),
@@ -169,7 +250,7 @@ pub async fn get_triggers(
 /// shows both condition shapes' inputs at once with the unused ones left blank — `Option<u32>`
 /// etc. would reject `""` as an invalid number, so every field the browser might leave blank
 /// is a plain `String`/`Option<String>`, parsed by hand in `build_condition`.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, Default)]
 pub struct PostTriggerForm {
     name: String,
     event_type_match: String,
@@ -180,6 +261,10 @@ pub struct PostTriggerForm {
     threshold: String,
     direction: Option<String>,
     action_url: Option<String>,
+    #[serde(default)]
+    action_type: Option<String>,
+    #[serde(default)]
+    action_config: String,
     // ADR-0027: a correlated trigger's legs — event/chat was just the illustrative example in
     // the ADR, this is generic to any event types. Up to 6 (event_type, min_count) pairs — a
     // form can't submit a truly variable-length list without JS, so this is a fixed number of
@@ -212,6 +297,35 @@ pub struct PostTriggerForm {
     correlated_event_type_6: String,
     #[serde(default)]
     correlated_min_count_6: String,
+}
+
+fn build_action_refs(form: &PostTriggerForm) -> Result<Vec<common::ActionRef>, &'static str> {
+    let action_type = form.action_type.as_deref().unwrap_or("").trim();
+    if action_type.is_empty() && form.action_url.as_deref().unwrap_or("").trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let action_type = if action_type.is_empty() { "webhook" } else { action_type };
+    let action_type = match action_type {
+        "email" => common::ActionType::Email,
+        "webhook" => common::ActionType::Webhook,
+        "teams_alert" => common::ActionType::TeamsAlert,
+        "create_ticket" => common::ActionType::CreateTicket,
+        "custom" => common::ActionType::Custom,
+        _ => return Err("choose a supported action provider"),
+    };
+    let mut config = if form.action_config.trim().is_empty() {
+        serde_json::json!({})
+    } else {
+        serde_json::from_str(&form.action_config)
+            .map_err(|_| "action configuration must be valid JSON")?
+    };
+    if let Some(url) = form.action_url.as_deref().filter(|url| !url.trim().is_empty()) {
+        if !config.is_object() {
+            return Err("action configuration must be a JSON object");
+        }
+        config["url"] = serde_json::Value::String(url.trim().to_string());
+    }
+    Ok(vec![common::ActionRef { action_type, config }])
 }
 
 fn build_correlated_conditions(
@@ -308,7 +422,7 @@ pub async fn post_trigger(
                 TriggersTemplate {
                     show_nav: true,
                     is_admin,
-                    triggers: result.triggers,
+                    triggers: result.triggers.clone(),
                     page: 0,
                     has_more: result.has_more,
                     can_write,
@@ -318,6 +432,9 @@ pub async fn post_trigger(
                     q: String::new(),
                     sort: String::new(),
                     dir: String::new(),
+                    notice: String::new(),
+                    posture_metrics: trigger_posture_metrics(&result.triggers),
+                    trigger_coverage: trigger_coverage(&result.triggers),
                 }
                 .render()
                 .unwrap(),
@@ -326,12 +443,37 @@ pub async fn post_trigger(
         }
     };
 
-    let actions = match form.action_url.filter(|u| !u.is_empty()) {
-        Some(url) => vec![common::ActionRef {
-            action_type: common::ActionType::Webhook,
-            config: serde_json::json!({"url": url}),
-        }],
-        None => vec![],
+    let actions = match build_action_refs(&form) {
+        Ok(actions) => actions,
+        Err(msg) => {
+            let result = state
+                .triggers_client
+                .list_triggers(session.tenant_id, DEFAULT_PAGE_SIZE, 0)
+                .await
+                .unwrap_or(crate::TriggersPage { triggers: vec![], has_more: false });
+            return Html(
+                TriggersTemplate {
+                    show_nav: true,
+                    is_admin,
+                    triggers: result.triggers.clone(),
+                    page: 0,
+                    has_more: result.has_more,
+                    can_write,
+                    error: None,
+                    form_error: Some(msg.to_string()),
+                    test_result: None,
+                    q: String::new(),
+                    sort: String::new(),
+                    dir: String::new(),
+                    notice: String::new(),
+                    posture_metrics: trigger_posture_metrics(&result.triggers),
+                    trigger_coverage: trigger_coverage(&result.triggers),
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response();
+        }
     };
 
     // ADR-0027: a CorrelatedOverWindow trigger's `event_type_match` is just a display/audit
@@ -365,7 +507,7 @@ pub async fn post_trigger(
                 TriggersTemplate {
                     show_nav: true,
                     is_admin,
-                    triggers: result.triggers,
+                    triggers: result.triggers.clone(),
                     page: 0,
                     has_more: result.has_more,
                     can_write,
@@ -375,6 +517,9 @@ pub async fn post_trigger(
                     q: String::new(),
                     sort: String::new(),
                     dir: String::new(),
+                    notice: String::new(),
+                    posture_metrics: trigger_posture_metrics(&result.triggers),
+                    trigger_coverage: trigger_coverage(&result.triggers),
                 }
                 .render()
                 .unwrap(),

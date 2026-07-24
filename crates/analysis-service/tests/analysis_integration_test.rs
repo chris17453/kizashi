@@ -75,6 +75,7 @@ async fn processing_a_batch_publishes_record_analyzed_over_real_rabbitmq() {
             foundry_endpoint,
             "test-key".to_string(),
         )),
+        fallback_analysis_client: None,
         publisher: Arc::new(publisher),
         analysis_config_repository: Arc::new(NoAnalysisConfig),
         http_client: reqwest::Client::new(),

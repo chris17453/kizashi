@@ -36,6 +36,7 @@ fn sample_incident(tenant_id: Uuid) -> Incident {
         summary: String::new(),
         severity: IncidentSeverity::High,
         status: IncidentStatus::Open,
+        assigned_to: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
         resolved_at: None,

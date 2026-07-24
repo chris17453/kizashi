@@ -4,7 +4,7 @@ pub(crate) mod incident_repository_test;
 
 use crate::audit_log::{record_audit_entry, AuditLogEntry, ChangeType};
 use async_trait::async_trait;
-use common::{Incident, IncidentSeverity, IncidentStatus};
+use common::{Incident, IncidentNote, IncidentSeverity, IncidentStatus};
 use std::str::FromStr;
 use thiserror::Error;
 use uuid::Uuid;
@@ -63,6 +63,18 @@ pub trait IncidentRepository: Send + Sync {
         &self,
         incident_id: Uuid,
     ) -> Result<Vec<Uuid>, IncidentRepositoryError>;
+    async fn list_notes(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+    ) -> Result<Vec<IncidentNote>, IncidentRepositoryError>;
+    async fn add_note(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        author: &str,
+        body: &str,
+    ) -> Result<IncidentNote, IncidentRepositoryError>;
 }
 
 pub struct PostgresIncidentRepository {
@@ -82,14 +94,25 @@ type IncidentRow = (
     String,
     String,
     String,
+    Option<String>,
     chrono::DateTime<chrono::Utc>,
     chrono::DateTime<chrono::Utc>,
     Option<chrono::DateTime<chrono::Utc>>,
 );
 
 fn row_to_incident(row: IncidentRow) -> Incident {
-    let (id, tenant_id, title, summary, severity, status, created_at, updated_at, resolved_at) =
-        row;
+    let (
+        id,
+        tenant_id,
+        title,
+        summary,
+        severity,
+        status,
+        assigned_to,
+        created_at,
+        updated_at,
+        resolved_at,
+    ) = row;
     Incident {
         id,
         tenant_id,
@@ -97,6 +120,7 @@ fn row_to_incident(row: IncidentRow) -> Incident {
         summary,
         severity: IncidentSeverity::from_str(&severity).unwrap_or(IncidentSeverity::Low),
         status: IncidentStatus::from_str(&status).unwrap_or(IncidentStatus::Open),
+        assigned_to,
         created_at,
         updated_at,
         resolved_at,
@@ -104,7 +128,7 @@ fn row_to_incident(row: IncidentRow) -> Incident {
 }
 
 const INCIDENT_COLUMNS: &str =
-    "id, tenant_id, title, summary, severity, status, created_at, updated_at, resolved_at";
+    "id, tenant_id, title, summary, severity, status, assigned_to, created_at, updated_at, resolved_at";
 
 #[async_trait]
 impl IncidentRepository for PostgresIncidentRepository {
@@ -120,8 +144,8 @@ impl IncidentRepository for PostgresIncidentRepository {
         sqlx::query(
             r#"
             INSERT INTO incidents
-                (id, tenant_id, title, summary, severity, status, created_at, updated_at, resolved_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                (id, tenant_id, title, summary, severity, status, assigned_to, created_at, updated_at, resolved_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(incident.id)
@@ -130,6 +154,7 @@ impl IncidentRepository for PostgresIncidentRepository {
         .bind(&incident.summary)
         .bind(incident.severity.to_string())
         .bind(incident.status.to_string())
+        .bind(&incident.assigned_to)
         .bind(incident.created_at)
         .bind(incident.updated_at)
         .bind(incident.resolved_at)
@@ -236,14 +261,15 @@ impl IncidentRepository for PostgresIncidentRepository {
         sqlx::query(
             r#"
             UPDATE incidents
-            SET title = $1, summary = $2, severity = $3, status = $4, updated_at = $5, resolved_at = $6
-            WHERE id = $7 AND tenant_id = $8
+            SET title = $1, summary = $2, severity = $3, status = $4, assigned_to = $5, updated_at = $6, resolved_at = $7
+            WHERE id = $8 AND tenant_id = $9
             "#,
         )
         .bind(&incident.title)
         .bind(&incident.summary)
         .bind(incident.severity.to_string())
         .bind(incident.status.to_string())
+        .bind(&incident.assigned_to)
         .bind(incident.updated_at)
         .bind(incident.resolved_at)
         .bind(incident.id)
@@ -386,5 +412,70 @@ impl IncidentRepository for PostgresIncidentRepository {
         .await
         .map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
         Ok(rows.into_iter().map(|(id,)| id).collect())
+    }
+
+    async fn list_notes(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+    ) -> Result<Vec<IncidentNote>, IncidentRepositoryError> {
+        sqlx::query_as(
+            "SELECT id, tenant_id, incident_id, author, body, created_at FROM incident_notes WHERE tenant_id = $1 AND incident_id = $2 ORDER BY created_at DESC",
+        )
+        .bind(tenant_id)
+        .bind(incident_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| IncidentRepositoryError::Backend(e.to_string()))
+    }
+
+    async fn add_note(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        author: &str,
+        body: &str,
+    ) -> Result<IncidentNote, IncidentRepositoryError> {
+        let mut tx =
+            self.pool.begin().await.map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
+        let exists: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM incidents WHERE id = $1 AND tenant_id = $2")
+                .bind(incident_id)
+                .bind(tenant_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
+        if exists.is_none() {
+            return Err(IncidentRepositoryError::NotFound(incident_id));
+        }
+        let note = IncidentNote {
+            id: Uuid::new_v4(),
+            tenant_id,
+            incident_id,
+            author: author.to_string(),
+            body: body.to_string(),
+            created_at: chrono::Utc::now(),
+        };
+        sqlx::query("INSERT INTO incident_notes (id, tenant_id, incident_id, author, body, created_at) VALUES ($1,$2,$3,$4,$5,$6)")
+            .bind(note.id).bind(note.tenant_id).bind(note.incident_id).bind(&note.author).bind(&note.body).bind(note.created_at)
+            .execute(&mut *tx).await.map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
+        record_audit_entry(
+            &mut tx,
+            &AuditLogEntry {
+                id: Uuid::new_v4(),
+                tenant_id,
+                entity_type: "incident_note".to_string(),
+                entity_id: incident_id,
+                change_type: ChangeType::Created,
+                actor: author.to_string(),
+                before: None,
+                after: serde_json::to_value(&note).unwrap_or_default(),
+                changed_at: note.created_at,
+            },
+        )
+        .await
+        .map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
+        tx.commit().await.map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
+        Ok(note)
     }
 }

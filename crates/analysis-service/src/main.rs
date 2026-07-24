@@ -37,6 +37,27 @@ fn openai_compatible_concurrency() -> usize {
     std::env::var("ANALYSIS_OPENAI_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(4)
 }
 
+fn fallback_analysis_client(
+    http_client: &reqwest::Client,
+    concurrency: usize,
+) -> Option<Arc<dyn analysis_service::AnalysisClient>> {
+    let endpoint = std::env::var("ANALYSIS_FALLBACK_ENDPOINT").ok()?;
+    let model = std::env::var("ANALYSIS_FALLBACK_MODEL").ok()?;
+    if endpoint.trim().is_empty() || model.trim().is_empty() {
+        return None;
+    }
+    let api_key = std::env::var("ANALYSIS_FALLBACK_API_KEY").ok().filter(|key| !key.is_empty());
+    Some(Arc::new(
+        analysis_service::OpenAiCompatibleAnalysisClient::new(
+            http_client.clone(),
+            endpoint,
+            api_key,
+            model,
+        )
+        .with_concurrency(concurrency),
+    ))
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -78,18 +99,25 @@ async fn main() {
         .build()
         .expect("failed to build AI/ML HTTP client");
 
+    let openai_concurrency = openai_compatible_concurrency();
+    let fallback_analysis_client = fallback_analysis_client(&ai_http_client, openai_concurrency);
+    let fallback_configured = fallback_analysis_client.is_some();
+    if fallback_configured {
+        tracing::info!("alternate analysis model configured for transient provider failures");
+    }
     let deps = AnalysisDeps {
         analysis_client: Arc::new(FoundryAnalysisClient::new(
             ai_http_client.clone(),
             foundry_endpoint,
             foundry_api_key,
         )),
+        fallback_analysis_client,
         publisher: Arc::new(
             RabbitMqEventPublisher::new(publish_channel).await.expect("failed to declare exchange"),
         ),
         analysis_config_repository: analysis_config_repository.clone(),
         http_client: ai_http_client,
-        openai_compatible_concurrency: openai_compatible_concurrency(),
+        openai_compatible_concurrency: openai_concurrency,
     };
 
     consume_channel
@@ -193,13 +221,16 @@ async fn main() {
 
     let heartbeat = Arc::new(ConsumerHeartbeat::new());
 
+    let dead_letter_manager = Arc::new(RabbitMqDeadLetterManager::new(
+        dead_letter_channel,
+        DEAD_LETTER_QUEUE_NAME.to_string(),
+        QUEUE_NAME.to_string(),
+    ));
     let dead_letter_state = DeadLetterState {
-        dead_letter_manager: Arc::new(RabbitMqDeadLetterManager::new(
-            dead_letter_channel,
-            DEAD_LETTER_QUEUE_NAME.to_string(),
-            QUEUE_NAME.to_string(),
-        )),
+        dead_letter_manager,
         internal_secret,
+        consumer_heartbeat: heartbeat.clone(),
+        fallback_configured,
     };
     let app = health_router(heartbeat.clone()).merge(dead_letter_router(dead_letter_state));
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");

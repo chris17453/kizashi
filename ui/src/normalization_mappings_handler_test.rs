@@ -26,6 +26,10 @@ fn router(state: AppState) -> Router {
             "/normalization-mappings",
             get(get_normalization_mappings).post(post_normalization_mapping),
         )
+        .route(
+            "/normalization-mappings/:id/edit",
+            axum::routing::post(post_edit_normalization_mapping),
+        )
         .with_state(state)
 }
 
@@ -118,6 +122,32 @@ async fn shows_an_empty_state_with_no_mappings_configured() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("No normalization mappings"));
+}
+
+#[test]
+fn coverage_scope_classifies_unmapped_pending_and_complete_sources() {
+    assert_eq!(normalize_coverage_scope("PENDING"), "pending");
+    assert_eq!(normalize_coverage_scope("unmapped"), "unmapped");
+    assert!(matches_coverage_scope(
+        &MappingCoverageRow {
+            source_type: "email".into(),
+            total: 2,
+            normalized: 1,
+            normalized_percent: 50,
+            mapped: true
+        },
+        "pending"
+    ));
+    assert!(!matches_coverage_scope(
+        &MappingCoverageRow {
+            source_type: "email".into(),
+            total: 2,
+            normalized: 2,
+            normalized_percent: 100,
+            mapped: true
+        },
+        "pending"
+    ));
 }
 
 #[tokio::test]
@@ -251,6 +281,38 @@ async fn post_creates_a_mapping_and_redirects() {
     assert_eq!(created[0].source_type, "ticket");
     assert_eq!(created[0].field_map.get("text"), Some(&"$.description".to_string()));
     assert_eq!(created[0].field_map.get("urgency"), Some(&"$.priority".to_string()));
+}
+
+#[tokio::test]
+async fn post_edits_a_mapping_with_a_validated_dedup_guard() {
+    let (mut state, session_id, tenant_id) = state_with_session(common::Role::Operator).await;
+    let mappings_client = Arc::new(InMemoryNormalizationMappingsClient::default());
+    let mut field_map = BTreeMap::new();
+    field_map.insert("text".to_string(), "$.description".to_string());
+    let mapping = NormalizationMapping::new(tenant_id, "ticket", field_map);
+    let mapping_id = mapping.id;
+    mappings_client.mappings.lock().unwrap().push(mapping);
+    state.normalization_mappings_client = mappings_client.clone();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/normalization-mappings/{mapping_id}/edit"))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("source_type=ticket&field_map=text+%3D+%24.description&dedup_fields=text&dedup_window_seconds=3600&version=2"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let updated = mappings_client.updated.lock().unwrap();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].version, 2);
+    assert_eq!(updated[0].dedup_fields, vec!["text"]);
+    assert_eq!(updated[0].dedup_window_seconds, Some(3600));
 }
 
 #[tokio::test]

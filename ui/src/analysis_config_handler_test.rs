@@ -330,6 +330,26 @@ async fn get_shows_an_error_when_the_backend_fails() {
     assert!(body.contains("simulated failure") || body.contains("error"));
 }
 
+#[test]
+fn analysis_config_page_explains_model_failure_resilience() {
+    let template = include_str!("../templates/analysis_config.html");
+    assert!(template.contains("Resilience posture"));
+    assert!(template.contains("Transient model failures do not stop the pipeline."));
+    assert!(template.contains("retry and dead-letter policy"));
+}
+
+#[test]
+fn resilience_labels_distinguish_fallback_and_consumer_posture() {
+    let summary = AnalysisResilienceSummary {
+        consumer_alive: true,
+        fallback_configured: true,
+        dead_letter_count: 0,
+    };
+    assert_eq!(resilience_labels(Some(&summary)), ("configured".into(), "online".into()));
+    let unavailable = resilience_labels(None);
+    assert_eq!(unavailable, ("unavailable".into(), "unavailable".into()));
+}
+
 #[tokio::test]
 async fn redirects_to_login_when_not_signed_in() {
     let (state, _session_id, _tenant_id) = state_with_session(common::Role::Operator).await;

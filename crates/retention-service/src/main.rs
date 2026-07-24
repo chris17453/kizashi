@@ -1,6 +1,6 @@
 use retention_service::{
     build_router, AppState, HttpRawRecordClient, PostgresAuditLogReader,
-    PostgresRetentionPolicyRepository, S3ArchiveStore,
+    PostgresComplianceHoldRepository, PostgresRetentionPolicyRepository, S3ArchiveStore,
 };
 use std::sync::Arc;
 
@@ -49,13 +49,14 @@ async fn main() {
 
     let state = AppState {
         policy_repository: Arc::new(PostgresRetentionPolicyRepository::new(pool.clone())),
-        audit_reader: Arc::new(PostgresAuditLogReader::new(pool)),
+        audit_reader: Arc::new(PostgresAuditLogReader::new(pool.clone())),
         record_client: Arc::new(HttpRawRecordClient::new(
             reqwest::Client::new(),
             ingestion_service_url,
         )),
         archive_store: Arc::new(archive_store),
         internal_secret,
+        hold_repository: Some(Arc::new(PostgresComplianceHoldRepository::new(pool))),
     };
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");

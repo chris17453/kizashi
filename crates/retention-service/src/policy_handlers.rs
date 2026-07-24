@@ -28,7 +28,9 @@ fn error_response(status: StatusCode, message: impl Into<String>) -> Response {
 
 /// Every handler trusts `X-Tenant-Id` as set by whatever gateway sits in front of this service
 /// (spec §8), same convention as config-admin-service and dashboard-api.
-fn tenant_id_from_headers(headers: &HeaderMap) -> Result<Uuid, (StatusCode, &'static str)> {
+pub(crate) fn tenant_id_from_headers(
+    headers: &HeaderMap,
+) -> Result<Uuid, (StatusCode, &'static str)> {
     let raw = headers
         .get("x-tenant-id")
         .and_then(|v| v.to_str().ok())
@@ -36,7 +38,7 @@ fn tenant_id_from_headers(headers: &HeaderMap) -> Result<Uuid, (StatusCode, &'st
     Uuid::parse_str(raw).map_err(|_| (StatusCode::BAD_REQUEST, "X-Tenant-Id is not a valid UUID"))
 }
 
-fn tenant_mismatch(headers: &HeaderMap, entity_tenant_id: Uuid) -> Option<Response> {
+pub(crate) fn tenant_mismatch(headers: &HeaderMap, entity_tenant_id: Uuid) -> Option<Response> {
     match tenant_id_from_headers(headers) {
         Ok(tenant_id) if tenant_id == entity_tenant_id => None,
         Ok(_) => {
@@ -60,7 +62,9 @@ fn role_from_headers(headers: &HeaderMap) -> Result<Role, (StatusCode, &'static 
 /// service — distinct from `X-Tenant-Id` (which identifies the tenant, not the person), so audit
 /// log rows (CLAUDE.md §5) can actually answer "who did this," not just "which tenant." Same
 /// convention as auth-service, config-admin-service, and ingestion-gateway.
-fn username_from_headers(headers: &HeaderMap) -> Result<String, (StatusCode, &'static str)> {
+pub(crate) fn username_from_headers(
+    headers: &HeaderMap,
+) -> Result<String, (StatusCode, &'static str)> {
     headers
         .get("x-username")
         .and_then(|v| v.to_str().ok())
@@ -68,7 +72,7 @@ fn username_from_headers(headers: &HeaderMap) -> Result<String, (StatusCode, &'s
         .ok_or((StatusCode::UNAUTHORIZED, "missing X-Username header"))
 }
 
-fn require_operator(headers: &HeaderMap) -> Option<Response> {
+pub(crate) fn require_operator(headers: &HeaderMap) -> Option<Response> {
     match role_from_headers(headers) {
         Ok(role) if role.at_least(Role::Operator) => None,
         Ok(_) => Some(error_response(
@@ -85,7 +89,7 @@ fn require_operator(headers: &HeaderMap) -> Option<Response> {
 /// straight at it). Gate every policy route behind the same `X-Internal-Secret` shared-secret
 /// check `ops_handlers.rs` already uses for `/v1/sweep` and `/v1/reimport`, in addition to (not
 /// instead of) the tenant/role/username checks below.
-fn require_internal_secret(state: &AppState, headers: &HeaderMap) -> Option<Response> {
+pub(crate) fn require_internal_secret(state: &AppState, headers: &HeaderMap) -> Option<Response> {
     if has_valid_internal_secret(state, headers) {
         None
     } else {

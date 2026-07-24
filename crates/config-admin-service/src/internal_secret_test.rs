@@ -24,6 +24,8 @@ fn test_router() -> Router {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
         mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+        event_type_repository: None,
+        report_run_repository: None,
     };
     let sensor_state = SensorState {
         sensor_repository: Arc::new(InMemorySensorRepository::default()),

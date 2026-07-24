@@ -15,7 +15,10 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/triggers/:id/toggle", post(post_toggle_trigger)).with_state(state)
+    Router::new()
+        .route("/triggers/:id/toggle", post(post_toggle_trigger))
+        .route("/triggers/bulk-toggle", post(post_bulk_toggle_triggers))
+        .with_state(state)
 }
 
 async fn state_with_session(role: common::Role) -> (AppState, String, Uuid) {
@@ -145,6 +148,39 @@ async fn viewer_role_cannot_toggle_a_trigger() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn bulk_toggle_sets_explicit_state_and_updates_each_selected_trigger() {
+    let (mut state, session_id, tenant_id) = state_with_session(common::Role::Operator).await;
+    let first_id = Uuid::new_v4();
+    let second_id = Uuid::new_v4();
+    let triggers_client = Arc::new(InMemoryTriggersClient::default());
+    triggers_client.full_triggers.lock().unwrap().extend([
+        sample_trigger(first_id, tenant_id, true),
+        sample_trigger(second_id, tenant_id, false),
+    ]);
+    state.triggers_client = triggers_client.clone();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/triggers/bulk-toggle")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("target_enabled=disabled&ids={first_id}&ids={second_id}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers().get("location").unwrap(), "/triggers?notice=bulk_updated");
+    let updated = triggers_client.updated.lock().unwrap();
+    assert_eq!(updated.len(), 1);
+    assert_eq!(updated[0].id, first_id);
+    assert!(!updated[0].enabled);
 }
 
 #[tokio::test]

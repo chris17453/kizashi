@@ -1,7 +1,6 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Deploy a Sensor</h1>
-<p class="muted">Generate a ready-to-run deploy script for a connector, using your own credentials — nothing here is stored or invented for you.</p>
+<div class="page-header"><div><div class="page-kicker">Control plane / deployment</div><h1>Deploy a Sensor</h1><p class="page-description">Generate a ready-to-run connector deployment using your own credentials. Nothing is stored or invented for you.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/sensors">Back to connectors</a><a class="btn btn-secondary" href="/api-keys">API keys &rarr;</a></div></div>
 
 <h2 class="section-title">1. Choose a connector type</h2>
 {% for category in categories %}

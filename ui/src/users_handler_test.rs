@@ -283,6 +283,39 @@ async fn get_users_filters_by_the_q_query_param_case_insensitively() {
 }
 
 #[tokio::test]
+async fn get_users_filters_by_role() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "operator-user", "pw", Role::Operator, "test-actor")
+        .await
+        .unwrap();
+    state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "viewer-user", "pw", Role::Viewer, "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/users?role=operator")
+                .header("cookie", cookie(&session_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    assert!(text.contains("operator-user"));
+    assert!(!text.contains("viewer-user"));
+    assert!(text.contains("value=\"operator\" selected"));
+}
+
+#[tokio::test]
 async fn get_users_shows_a_no_match_empty_state_for_an_unmatched_query() {
     let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
     state

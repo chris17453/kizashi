@@ -6,7 +6,9 @@
 
 mod archive_store;
 mod audit_log;
+mod compliance_hold;
 mod health;
+mod hold_handlers;
 mod manifest;
 mod ops_handlers;
 mod policy_handlers;
@@ -20,7 +22,12 @@ pub use audit_log::{
     record_audit_entry, AuditLogEntry, AuditLogError, AuditLogReader, ChangeType,
     PostgresAuditLogReader,
 };
+pub use compliance_hold::{
+    ComplianceHold, ComplianceHoldRepository, ComplianceHoldRepositoryError,
+    PostgresComplianceHoldRepository,
+};
 pub use health::healthz;
+pub use hold_handlers::{create_hold, list_holds, release_hold};
 pub use manifest::{archive_key, ArchiveManifest};
 pub use ops_handlers::{trigger_reimport, trigger_sweep, ReimportRequest};
 pub use policy_handlers::{
@@ -50,6 +57,7 @@ pub struct AppState {
     /// service-to-service operational triggers (an external CronJob-equivalent, ADR-0011 point
     /// 5), not end-user-role-gated actions, so there's no `X-Role`/session to check against.
     pub internal_secret: String,
+    pub hold_repository: Option<Arc<dyn ComplianceHoldRepository>>,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -60,6 +68,8 @@ pub fn build_router(state: AppState) -> Router {
             "/v1/retention-policies/:id",
             get(get_policy).put(update_policy).delete(delete_policy),
         )
+        .route("/v1/compliance-holds", post(create_hold).get(list_holds))
+        .route("/v1/compliance-holds/:id/release", post(release_hold))
         .route("/v1/audit-log", get(get_recent_audit_log))
         .route("/v1/audit-log/:entity_id", get(get_audit_log))
         .route("/v1/sweep", post(trigger_sweep))

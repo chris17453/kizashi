@@ -31,6 +31,8 @@ fn state_with_reader(reader: impl AuditLogReader + 'static) -> AdminState {
         audit_reader: Arc::new(reader),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
         mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+        event_type_repository: None,
+        report_run_repository: None,
     }
 }
 

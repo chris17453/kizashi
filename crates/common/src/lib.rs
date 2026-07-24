@@ -17,6 +17,7 @@ pub mod incident;
 pub mod mapping_change_event;
 pub mod normalization_mapping;
 pub mod raw_record;
+pub mod report_run;
 pub mod role;
 pub mod saved_search_query;
 pub mod sensor;
@@ -38,10 +39,13 @@ pub use egress_client::{build_outbound_client, EgressClientError};
 pub use email_payload::{EmailAttachment, EmailPayload};
 pub use event::{Event, EventStatus};
 pub use event_type_definition::EventTypeDefinition;
-pub use incident::{Incident, IncidentSeverity, IncidentStatus, ParseIncidentFieldError};
+pub use incident::{
+    Incident, IncidentNote, IncidentSeverity, IncidentStatus, ParseIncidentFieldError,
+};
 pub use mapping_change_event::MappingChangeEvent;
 pub use normalization_mapping::NormalizationMapping;
 pub use raw_record::{RawRecord, SourceType};
+pub use report_run::ReportRun;
 pub use role::{ParseRoleError, Role};
 pub use saved_search_query::SavedSearchQuery;
 pub use sensor::Sensor;

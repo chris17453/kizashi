@@ -1,84 +1,947 @@
 {% extends "layout.html" %}
-
 {% block content %}
-<div class="space-y-6">
-    <div class="sm:flex sm:items-center sm:justify-between">
-        <div>
-            <h1 class="text-2xl font-bold text-gray-900">Ontology</h1>
-            <p class="mt-2 text-sm text-gray-700">Explore object types, objects, and relationships mapped from normalized data.</p>
-        </div>
-    </div>
-
-    <!-- Object Types -->
-    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
-        <div class="px-4 py-5 sm:px-6">
-            <h2 class="text-lg leading-6 font-medium text-gray-900">Object Types</h2>
-            <p class="mt-1 max-w-2xl text-sm text-gray-500">Schema definitions for derived entities.</p>
-        </div>
-        <div class="border-t border-gray-200">
-            {% if object_types.is_empty() %}
-            <div class="p-4 text-sm text-gray-500 text-center">No object types defined.</div>
-            {% else %}
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Version</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    {% for ot in object_types %}
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ ot.name }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">v{{ ot.version }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ ot.created_at.format("%Y-%m-%d %H:%M") }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="/ontology/objects?type_id={{ ot.id }}" class="text-indigo-600 hover:text-indigo-900">View Objects</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- Action Types -->
-    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
-        <div class="px-4 py-5 sm:px-6">
-            <h2 class="text-lg leading-6 font-medium text-gray-900">Action Types</h2>
-            <p class="mt-1 max-w-2xl text-sm text-gray-500">Available kinetic actions in the system.</p>
-        </div>
-        <div class="border-t border-gray-200">
-            {% if action_types.is_empty() %}
-            <div class="p-4 text-sm text-gray-500 text-center">No action types defined.</div>
-            {% else %}
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parameters</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    {% for at in action_types %}
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ at.name }}</td>
-                        <td class="px-6 py-4 text-sm text-gray-500">
-                            <pre class="text-xs">{{ at.parameter_schema }}</pre>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="/ontology/actions/invocations?type_id={{ at.id }}" class="text-indigo-600 hover:text-indigo-900">View Invocations</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% endif %}
-        </div>
-    </div>
+<style>
+  .ontology-model-telemetry{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;margin:18px 0}.ontology-telemetry-panel{min-height:210px}.ontology-telemetry-list{display:grid;gap:12px;margin-top:16px}.ontology-telemetry-row{display:grid;grid-template-columns:minmax(120px,1fr) 2fr 42px;gap:12px;align-items:center}.ontology-telemetry-name{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ontology-telemetry-track{height:8px;border-radius:99px;background:var(--surface-raised);overflow:hidden}.ontology-telemetry-fill{height:100%;min-width:3px;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-dim))}.ontology-telemetry-count{text-align:right;color:var(--text);font-variant-numeric:tabular-nums}.ontology-relationship-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:16px}.ontology-relationship-card{display:block;padding:13px;border:1px solid var(--border);border-radius:10px;background:var(--surface-raised);text-decoration:none}.ontology-relationship-card:hover{border-color:var(--accent);background:var(--surface-hover)}.ontology-relationship-card strong{display:block;font-size:13px}.ontology-relationship-card small{display:block;margin-top:6px;color:var(--text-dim);font-size:11px}.ontology-relationship-volume{float:right;color:var(--accent);font-size:17px;font-weight:650}@media(max-width:850px){.ontology-model-telemetry{grid-template-columns:1fr}}@media(max-width:520px){.ontology-relationship-grid{grid-template-columns:1fr}.ontology-telemetry-row{grid-template-columns:1fr 2fr 32px}}
+  .ontology-matrix-wrap{overflow:auto;border:1px solid var(--border);border-radius:9px}.ontology-matrix{min-width:620px;width:100%;border-collapse:separate;border-spacing:3px;background:transparent}.ontology-matrix th{padding:.5rem;color:var(--text-dim);font-size:.68rem;text-align:center;white-space:nowrap}.ontology-matrix th:first-child{text-align:left}.ontology-matrix td{padding:0;text-align:center}.ontology-matrix-label{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left!important;color:var(--text);font-size:.76rem}.ontology-matrix-cell{display:block;min-width:44px;height:30px;border-radius:5px;line-height:30px;background:rgba(75,130,182,.08);color:var(--text-dim);text-decoration:none}.ontology-matrix-cell.active{background:rgba(75,130,182,.72);color:#fff;font-weight:700}.ontology-matrix-cell:hover{outline:1px solid var(--accent);color:#fff}.ontology-matrix-diagonal{background:rgba(120,130,150,.12)}
+  .ontology-shape-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}.ontology-shape-card{display:block;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-raised);text-decoration:none}.ontology-shape-card:hover{border-color:var(--accent)}.ontology-shape-title{display:flex;justify-content:space-between;gap:10px;align-items:baseline}.ontology-shape-title strong{font-size:13px}.ontology-shape-title small{color:var(--text-dim);font-size:11px}.ontology-shape-row{display:grid;grid-template-columns:74px 1fr 32px;gap:9px;align-items:center;margin-top:11px;font-size:11px;color:var(--text-dim)}.ontology-shape-track{height:7px;background:var(--surface);border-radius:99px;overflow:hidden}.ontology-shape-fill{height:100%;min-width:2px;border-radius:99px;background:var(--accent)}.ontology-shape-fill.mapping{background:var(--accent-secondary,#8d79dc)}.ontology-shape-fill.relationship{background:var(--success)}.ontology-shape-value{text-align:right;color:var(--text);font-variant-numeric:tabular-nums}@media(max-width:850px){.ontology-shape-grid{grid-template-columns:1fr}}
+  .ontology-coverage-wrap{overflow:auto;border:1px solid var(--border);border-radius:9px;margin-top:16px}.ontology-coverage{min-width:760px;width:100%;border-collapse:separate;border-spacing:3px}.ontology-coverage th{padding:.5rem;color:var(--text-dim);font-size:.68rem;text-align:center;white-space:nowrap}.ontology-coverage th:first-child{text-align:left}.ontology-coverage-type{min-width:150px;text-align:left!important}.ontology-coverage-type a{color:var(--text);text-decoration:none}.ontology-coverage-type a:hover{color:var(--accent)}.ontology-coverage-cell{position:relative;min-width:64px;height:38px;border-radius:5px;text-align:center;vertical-align:middle;background:color-mix(in srgb,var(--danger) 15%,var(--surface-raised));color:var(--text-dim);font:600 .7rem var(--mono)}.ontology-coverage-cell.warning{background:color-mix(in srgb,var(--warning) 28%,var(--surface-raised));color:var(--text)}.ontology-coverage-cell.good{background:color-mix(in srgb,var(--success) 34%,var(--surface-raised));color:var(--text)}.ontology-coverage-cell small{display:block;font:normal .6rem var(--sans);color:var(--text-dim)}.ontology-coverage-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;color:var(--text-dim);font-size:.68rem}.ontology-coverage-key{display:inline-flex;align-items:center;gap:5px}.ontology-coverage-swatch{width:10px;height:10px;border-radius:3px;background:color-mix(in srgb,var(--danger) 35%,var(--surface-raised))}.ontology-coverage-swatch.warning{background:color-mix(in srgb,var(--warning) 55%,var(--surface-raised))}.ontology-coverage-swatch.good{background:color-mix(in srgb,var(--success) 60%,var(--surface-raised))}
+  .graph-type-legend{display:flex;flex-wrap:wrap;gap:7px 12px;padding:8px 10px;border:1px solid var(--border-subtle);border-bottom:0;border-radius:8px 8px 0 0;background:var(--surface);font-size:11px;color:var(--muted)}.graph-type-legend-item{display:inline-flex;align-items:center;gap:5px}.graph-type-legend-swatch{width:8px;height:8px;border-radius:50%;box-shadow:0 0 7px currentColor}
+  .ontology-graph-wrap{touch-action:none;cursor:grab}.ontology-graph-wrap.is-panning{cursor:grabbing;user-select:none}.ontology-graph-wrap.is-dragging{cursor:grabbing;user-select:none}.ontology-graph .graph-node{cursor:grab}.ontology-graph .graph-node:active{cursor:grabbing}
+  .ontology-path-form{display:flex;flex-wrap:wrap;align-items:end;gap:.55rem;padding:.7rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface);margin:.7rem 0}.ontology-path-form label{display:grid;gap:.2rem;min-width:13rem;flex:1;font-size:.7rem;color:var(--text-dim)}.ontology-path-form select{width:100%}.ontology-path-result{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:.7rem 0;padding:.7rem;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:7px;background:var(--surface-raised)}.ontology-path-step{display:inline-flex;align-items:center;gap:.35rem;padding:.35rem .5rem;border:1px solid var(--border-subtle);border-radius:5px;color:var(--text);text-decoration:none;font-size:.72rem}.ontology-path-step:hover{border-color:var(--accent);color:var(--accent)}.ontology-path-step small{color:var(--text-dim);font-size:.62rem}.ontology-path-arrow{color:var(--accent);font-size:1rem}.ontology-path-empty{color:var(--text-dim);font-size:.75rem}
+  .object-posture{display:inline-flex;align-items:center;gap:.35rem;margin-top:.35rem;padding:.18rem .42rem;border:1px solid var(--border-subtle);border-radius:99px;font-size:.65rem;color:var(--text-dim)}.object-posture-dot{width:.42rem;height:.42rem;border-radius:50%;background:var(--text-dim)}.object-posture strong{font-family:var(--mono);font-size:.65rem}.object-posture-good{border-color:color-mix(in srgb,var(--success) 35%,var(--border));color:var(--success)}.object-posture-good .object-posture-dot{background:var(--success)}.object-posture-neutral{border-color:color-mix(in srgb,var(--accent) 35%,var(--border));color:var(--accent)}.object-posture-neutral .object-posture-dot{background:var(--accent)}.object-posture-warning{border-color:color-mix(in srgb,var(--warning) 45%,var(--border));color:var(--warning)}.object-posture-warning .object-posture-dot{background:var(--warning)}.object-posture-critical{border-color:color-mix(in srgb,var(--danger) 45%,var(--border));color:var(--danger)}.object-posture-critical .object-posture-dot{background:var(--danger)}.object-risk-panel{display:grid;gap:.55rem;margin:.8rem 0;padding:.75rem;border:1px solid var(--border-subtle);border-radius:8px;background:var(--surface-raised)}.object-risk-header{display:flex;align-items:center;justify-content:space-between;gap:.7rem}.object-risk-header strong{font-family:var(--mono);font-size:1rem}.object-risk-reasons{display:flex;flex-wrap:wrap;gap:.35rem}.object-risk-reason{padding:.28rem .45rem;border-radius:5px;background:var(--surface);font-size:.68rem;color:var(--text-dim)}
+  .ontology-risk-overview{margin:0 0 1.25rem}.ontology-risk-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem}.ontology-risk-metric{display:grid;gap:.3rem;padding:.7rem;border:1px solid var(--border-subtle);border-radius:8px;background:var(--surface);color:var(--text);text-align:left;cursor:pointer}.ontology-risk-metric:hover,.ontology-risk-metric.active{border-color:var(--accent);background:var(--surface-hover)}.ontology-risk-metric strong{font:700 1.25rem var(--mono)}.ontology-risk-metric small{color:var(--text-dim);font-size:.68rem}.ontology-risk-track{height:.35rem;overflow:hidden;border-radius:99px;background:var(--surface-raised)}.ontology-risk-fill{display:block;height:100%;border-radius:inherit;background:var(--accent)}.ontology-risk-fill.critical{background:var(--danger)}.ontology-risk-fill.warning{background:var(--warning)}.ontology-risk-fill.neutral{background:var(--accent)}.ontology-risk-fill.good{background:var(--success)}@media(max-width:700px){.ontology-risk-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="page-header">
+  <div>
+    <div class="page-kicker">Data model</div>
+    <h1>Ontology</h1>
+    <p class="page-description">Explore the entities, relationships, and actions Kizashi has derived from your normalized records.</p>
+  </div>
+  <div class="quick-actions"><span class="console-live" data-ontology-live-status>Live refresh paused</span><button type="button" class="btn btn-secondary" data-ontology-refresh>Refresh now</button><button type="button" class="btn btn-secondary" data-ontology-toggle-live>Enable live mode</button><a class="btn btn-secondary" href="/data">Inspect source data</a></div>
 </div>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if notice == "view_saved" %}<p class="success-banner">Ontology view saved for this workspace.</p>{% endif %}{% if notice == "view_deleted" %}<p class="success-banner">Ontology view removed.</p>{% endif %}{% if notice == "view_invalid" %}<p class="warning-banner">Name the ontology view before saving it.</p>{% endif %}{% if notice == "view_failed" %}<p class="error">The ontology view could not be changed.</p>{% endif %}
+{% if notice == "executed" %}<p class="success-banner">Governed ontology action executed and recorded in the action ledger.</p>{% endif %}{% if notice == "rejected" %}<p class="error">The governed action was rejected. Check target eligibility, preconditions, and parameters.</p>{% endif %}{% if notice == "invalid-parameters" %}<p class="warning-banner">Action parameters must be valid JSON.</p>{% endif %}
+{% if notice == "object_created" %}<p class="success-banner">Ontology object created and added to the live model.</p>{% endif %}{% if notice == "object_updated" %}<p class="success-banner">Ontology object updated and recorded in the model history.</p>{% endif %}{% if notice == "object_deleted" %}<p class="success-banner">Ontology object removed from the live model.</p>{% endif %}{% if notice == "type_created" %}<p class="success-banner">Object type created. Its schema and mapping contract are now available.</p>{% endif %}{% if notice == "type_updated" %}<p class="success-banner">Object type definition updated and versioned.</p>{% endif %}{% if notice == "type_deleted" %}<p class="success-banner">Object type removed from the ontology.</p>{% endif %}{% if notice == "relationship_type_created" %}<p class="success-banner">Relationship type created and available for live instances.</p>{% endif %}{% if notice == "relationship_type_updated" %}<p class="success-banner">Relationship type updated.</p>{% endif %}{% if notice == "relationship_type_deleted" %}<p class="success-banner">Relationship type removed.</p>{% endif %}{% if notice == "relationship_created" %}<p class="success-banner">Relationship instance created between the selected objects.</p>{% endif %}{% if notice == "relationship_updated" %}<p class="success-banner">Relationship instance updated.</p>{% endif %}{% if notice == "relationship_deleted" %}<p class="success-banner">Relationship instance removed.</p>{% endif %}{% if notice == "action_created" %}<p class="success-banner">Governed action contract created.</p>{% endif %}{% if notice == "action_updated" %}<p class="success-banner">Governed action contract updated.</p>{% endif %}{% if notice == "action_deleted" %}<p class="success-banner">Governed action contract removed.</p>{% endif %}
+
+<div class="kpi-grid ontology-kpis">
+  <div class="kpi-card kpi-accent"><div class="kpi-label">Object types</div><div class="kpi-value">{{ object_types.len() }}</div><div class="kpi-sub">schema definitions</div></div>
+  <div class="kpi-card"><div class="kpi-label">Objects</div><div class="kpi-value">{{ matching_count }}</div><div class="kpi-sub">{% if selected_type.is_some() %}in selected type{% else %}across this workspace{% endif %}{% if !q.is_empty() %} · filtered{% endif %}</div></div>
+  <div class="kpi-card"><div class="kpi-label">Relationships</div><div class="kpi-value">{{ link_types.len() }}</div><div class="kpi-sub">link types available</div></div>
+  <div class="kpi-card"><div class="kpi-label">Actions run</div><div class="kpi-value">{{ action_invocations.len() }}</div><div class="kpi-sub">recorded invocations</div></div>
+</div>
+
+<section class="ontology-model-telemetry" aria-label="Ontology model telemetry">
+  <div class="panel ontology-telemetry-panel"><div class="panel-heading"><div><h2>Object distribution</h2><p class="muted">How the live model is populated by type.</p></div><span class="pill pill-muted">{{ matching_count }} in scope</span></div>
+    {% if object_types.is_empty() %}<div class="empty-state compact"><p>No type distribution yet.</p></div>{% else %}<div class="ontology-telemetry-list">{% for ot in object_types %}<a class="ontology-telemetry-row" href="/ontology?type_id={{ ot.id }}"><span class="ontology-telemetry-name">{{ ot.name }}</span><span class="ontology-telemetry-track"><span class="ontology-telemetry-fill" style="width:{% if ot.object_percent > 0 %}{{ ot.object_percent }}{% else %}2{% endif %}%"></span></span><strong class="ontology-telemetry-count">{{ ot.object_count }}</strong></a>{% endfor %}</div>{% endif %}
+  </div>
+  <div class="panel ontology-telemetry-panel"><div class="panel-heading"><div><h2>Relationship activity</h2><p class="muted">Live instances connecting modeled entities.</p></div><span class="pill pill-muted">{{ matching_link_count }} instances</span></div>
+    {% if link_types.is_empty() %}<div class="empty-state compact"><p>No relationship types defined.</p></div>{% else %}<div class="ontology-relationship-grid">{% for link_type in link_types %}<a class="ontology-relationship-card" href="/ontology?link_type_id={{ link_type.id }}"><span class="ontology-relationship-volume">{{ link_type.instance_count }}</span><strong>{{ link_type.name }}</strong><small>{{ link_type.source_name }} &rarr; {{ link_type.target_name }}</small></a>{% endfor %}</div>{% endif %}
+  </div>
+</section>
+<section class="panel ontology-relationship-matrix"><div class="panel-heading"><div><h2>Type relationship matrix</h2><p class="muted">Live relationship instances by source and target object type. Select a populated cell to inspect its link type.</p></div><span class="pill pill-muted">{{ matching_link_count }} instances</span></div>{% if relationship_matrix.is_empty() %}<div class="empty-state compact"><p>No type relationships are available yet.</p></div>{% else %}<div class="ontology-matrix-wrap"><table class="ontology-matrix"><thead><tr><th>Source \ Target</th>{% for name in relationship_matrix_types %}<th title="{{ name }}">{{ name }}</th>{% endfor %}</tr></thead><tbody>{% for row in relationship_matrix %}<tr><th class="ontology-matrix-label" title="{{ row.source_name }}">{{ row.source_name }}</th>{% for cell in row.cells %}<td>{% if cell.count > 0 %}<a class="ontology-matrix-cell active" href="{{ cell.href }}" title="{{ cell.count }} relationship instances">{{ cell.count }}</a>{% else %}<span class="ontology-matrix-cell">·</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% endif %}</section>
+
+<section class="panel ontology-shape-panel"><div class="panel-heading"><div><h2>Model shape</h2><p class="muted">Compare the real structure behind each object type. Bars are relative to the largest type in this workspace; counts are exact.</p></div><span class="pill pill-muted">schema · mappings · topology</span></div>{% if object_types.is_empty() %}<div class="empty-state compact"><p>No model shape to visualize yet.</p></div>{% else %}<div class="ontology-shape-grid">{% for ot in object_types %}<a class="ontology-shape-card" href="/ontology?type_id={{ ot.id }}"><div class="ontology-shape-title"><strong>{{ ot.name }}</strong><small>v{{ ot.version }} · {{ ot.object_count }} objects</small></div><div class="ontology-shape-row"><span>Fields</span><span class="ontology-shape-track"><span class="ontology-shape-fill" style="width:{{ ot.property_percent }}%"></span></span><strong class="ontology-shape-value">{{ ot.property_count }}</strong></div><div class="ontology-shape-row"><span>Mappings</span><span class="ontology-shape-track"><span class="ontology-shape-fill mapping" style="width:{{ ot.mapping_percent }}%"></span></span><strong class="ontology-shape-value">{{ ot.mapping_count }}</strong></div><div class="ontology-shape-row"><span>Relations</span><span class="ontology-shape-track"><span class="ontology-shape-fill relationship" style="width:{{ ot.link_percent }}%"></span></span><strong class="ontology-shape-value">{{ ot.link_type_count }}</strong></div></a>{% endfor %}</div>{% endif %}</section>
+
+<section class="panel ontology-coverage-panel" aria-label="Ontology property coverage"><div class="panel-heading"><div><h2>Property coverage</h2><p class="muted">Completeness of declared fields across live objects. Click a type to inspect the underlying entities.</p></div><span class="pill pill-muted">{{ property_coverage_fields.len() }} tracked fields</span></div>{% if property_coverage.is_empty() || property_coverage_fields.is_empty() %}<div class="empty-state compact"><p>No declared properties are available to measure.</p></div>{% else %}<div class="ontology-coverage-wrap"><table class="ontology-coverage"><thead><tr><th class="ontology-coverage-type">Object type</th>{% for field in property_coverage_fields %}<th title="{{ field }}">{{ field }}</th>{% endfor %}</tr></thead><tbody>{% for row in property_coverage %}<tr><th class="ontology-coverage-type"><a href="/ontology?type_id={{ row.type_id }}">{{ row.type_name }}</a><small class="muted">{{ row.object_count }} objects</small></th>{% for cell in row.cells %}<td class="ontology-coverage-cell {{ cell.tone }}" title="{{ cell.present }} of {{ row.object_count }} objects populated">{{ cell.percent }}%<small>{{ cell.present }}/{{ row.object_count }}</small></td>{% endfor %}</tr>{% endfor %}</tbody></table></div><div class="ontology-coverage-legend"><span class="ontology-coverage-key"><span class="ontology-coverage-swatch good"></span>90–100% populated</span><span class="ontology-coverage-key"><span class="ontology-coverage-swatch warning"></span>60–89% populated</span><span class="ontology-coverage-key"><span class="ontology-coverage-swatch"></span>below 60% populated</span></div>{% endif %}</section>
+
+<section class="panel ontology-risk-overview" aria-label="Entity attention map"><div class="panel-heading"><div><h2>Entity attention map</h2><p class="muted">Prioritize modeled entities by live case, signal, and decision pressure. Select a band to filter the object list below.</p></div><span class="pill pill-muted">{{ objects.len() }} visible entities</span></div><div class="ontology-risk-metrics"><a class="ontology-risk-metric{% if risk.is_empty() %} active{% endif %}" href="/ontology"><strong>{{ objects.len() }}</strong><small>All entities</small><span class="ontology-risk-track"><span class="ontology-risk-fill" style="width:100%"></span></span></a>{% for metric in risk_metrics %}<a class="ontology-risk-metric{% if risk == metric.key %} active{% endif %}" href="/ontology?risk={{ metric.key }}"><strong>{{ metric.count }}</strong><small>{{ metric.label }}</small><span class="ontology-risk-track"><span class="ontology-risk-fill {{ metric.key }}" style="width:{{ metric.percent }}%"></span></span></a>{% endfor %}</div></section>
+<script>
+  (function () {
+    var filters = document.querySelectorAll('[data-object-risk-filter]');
+    var cards = document.querySelectorAll('[data-object-risk]');
+    filters.forEach(function (filter) {
+      filter.addEventListener('click', function () {
+        var selected = filter.getAttribute('data-object-risk-filter');
+        filters.forEach(function (item) { item.classList.toggle('active', item === filter); });
+        cards.forEach(function (card) {
+          card.hidden = selected !== 'all' && card.getAttribute('data-object-risk') !== selected;
+        });
+      });
+    });
+  }());
+</script>
+{% if notice == "bulk_relationship_created" %}<p class="success-banner">Created {{ created_count }} relationship instance{% if created_count != 1 %}s{% endif %}.{% if failed_count > 0 %} {{ failed_count }} source{% if failed_count != 1 %}s{% endif %} were rejected and remain available for review.{% endif %}</p>{% endif %}{% if notice == "bulk_relationship_empty" %}<p class="warning-banner">Select at least one source entity before creating relationships.</p>{% endif %}{% if notice == "bulk_relationship_failed" %}<p class="error">The ontology service was unavailable; no bulk relationships were created.</p>{% endif %}
+{% if can_manage && !link_types.is_empty() %}<section class="panel ontology-bulk-link-panel"><div class="panel-heading"><div><h2>Bulk relationship workbench</h2><p class="muted">Select source entities below, choose one governed target, and create up to 25 validated instances.</p></div><span class="pill pill-muted">operator control</span></div><form method="post" action="/ontology/links/instances/bulk" data-bulk-link-form><label for="bulk-link-type">Relationship type</label><select id="bulk-link-type" name="link_type_id" data-bulk-link-type required>{% for link_type in link_types %}<option value="{{ link_type.id }}" data-source-type="{{ link_type.source_id }}" data-target-type="{{ link_type.target_id }}">{{ link_type.name }} · {{ link_type.source_name }} → {{ link_type.target_name }}</option>{% endfor %}</select><label for="bulk-link-target">Target entity</label><select id="bulk-link-target" name="target_object_id" data-bulk-link-target required>{% for object in relationship_objects %}<option value="{{ object.id }}" data-object-type="{{ object.object_type_id }}">{{ object.type_name }} · {{ object.summary }}</option>{% endfor %}</select><label for="bulk-link-properties">Relationship properties <span class="muted">JSON, optional</span></label><textarea id="bulk-link-properties" name="properties" rows="2">{}</textarea><input type="hidden" name="source_object_ids" data-bulk-link-sources><button class="btn" type="submit">Create relationships from selection &rarr;</button><span class="muted" data-bulk-link-status>Select source entities in the object list.</span></form></section>{% endif %}
+<script>
+  (function () {
+    var form = document.querySelector('[data-bulk-link-form]'); if (!form) return;
+    var type = form.querySelector('[data-bulk-link-type]'); var target = form.querySelector('[data-bulk-link-target]');
+    var sourceField = form.querySelector('[data-bulk-link-sources]'); var status = form.querySelector('[data-bulk-link-status]');
+    function selected() { var visible = Array.prototype.slice.call(document.querySelectorAll('[data-ontology-object-id]')); var visibleIds = visible.map(function (box) { return box.dataset.ontologyObjectId; }); var persisted = []; var types = {}; try { persisted = JSON.parse(localStorage.getItem('kizashi.ontology.selection') || '[]'); types = JSON.parse(localStorage.getItem('kizashi.ontology.selection-types') || '{}'); } catch (_) {} return persisted.filter(function (id) { return visibleIds.indexOf(id) === -1; }).map(function (id) { return { dataset: { ontologyObjectId: id, ontologyObjectType: types[id] || '' } }; }).concat(visible.filter(function (box) { return box.checked; })); }
+    function applyTargetFilter() { var targetType = type.selectedOptions[0] && type.selectedOptions[0].dataset.targetType; var first = null; Array.prototype.slice.call(target.options).forEach(function (option) { var allowed = option.dataset.objectType === targetType; option.hidden = !allowed; option.disabled = !allowed; if (allowed && !first) first = option; }); if (!target.selectedOptions.length || target.selectedOptions[0].disabled) { if (first) first.selected = true; } }
+    function update() { var sourceType = type.selectedOptions[0] && type.selectedOptions[0].dataset.sourceType; var ids = selected().filter(function (box) { return box.dataset.ontologyObjectType === sourceType; }).slice(0, 25).map(function (box) { return box.dataset.ontologyObjectId; }); sourceField.value = ids.join(','); status.textContent = ids.length ? ids.length + ' compatible source entit' + (ids.length === 1 ? 'y' : 'ies') + ' selected.' : 'Select compatible source entities in the object list.'; }
+    type.addEventListener('change', function () { applyTargetFilter(); update(); }); document.addEventListener('change', function (event) { if (event.target && event.target.matches && event.target.matches('[data-ontology-object-id]')) update(); });
+    form.addEventListener('submit', function (event) { update(); if (!sourceField.value) { event.preventDefault(); window.alert('Select at least one compatible source entity first.'); } }); applyTargetFilter();
+  }());
+</script>
+<script>
+  (function () {
+    var storageKey = 'kizashi.ontology.live-refresh';
+    var status = document.querySelector('[data-ontology-live-status]');
+    var toggle = document.querySelector('[data-ontology-toggle-live]');
+    var refresh = document.querySelector('[data-ontology-refresh]');
+    var enabled = false;
+    try { enabled = localStorage.getItem(storageKey) === '1'; } catch (_) {}
+    function setState(next) {
+      enabled = next;
+      try { localStorage.setItem(storageKey, enabled ? '1' : '0'); } catch (_) {}
+      if (status) status.textContent = enabled ? 'Live · refreshes every 30s' : 'Live refresh paused';
+      if (toggle) toggle.textContent = enabled ? 'Pause live mode' : 'Enable live mode';
+    }
+    if (refresh) refresh.addEventListener('click', function () { window.location.reload(); });
+    if (toggle) toggle.addEventListener('click', function () { setState(!enabled); });
+    setState(enabled);
+    if (enabled) window.setInterval(function () { window.location.reload(); }, 30000);
+  }());
+</script>
+<div class="ontology-layout">
+  <section class="panel ontology-types-panel">
+    <div class="panel-heading"><div><h2>Object types</h2><p class="muted">Choose a type to inspect its live objects.</p></div>{% if can_manage %}<a class="btn btn-secondary panel-action" href="#new-object-type">New type</a>{% endif %}</div>
+    {% if object_types.is_empty() %}
+    <div class="empty-state compact"><div class="empty-icon">◇</div><p>No object types have been derived yet.</p><p>Ingest and normalize a record to populate the ontology.</p></div>
+    {% else %}
+    <div class="ontology-type-list">
+      <a class="ontology-type {% if selected_type.is_none() %}selected{% endif %}" href="/ontology{% if !q.is_empty() || !property.is_empty() || !value.is_empty() %}?q={{ q|urlencode }}&property={{ property|urlencode }}&value={{ value|urlencode }}{% endif %}">
+        <span><strong>All objects</strong><small>Workspace overview</small></span><span class="type-chevron">›</span>
+      </a>
+      {% for ot in object_types %}
+      <a class="ontology-type {% if ot.selected %}selected{% endif %}" href="/ontology?type_id={{ ot.id }}{% if !q.is_empty() %}&q={{ q|urlencode }}{% endif %}{% if !property.is_empty() %}&property={{ property|urlencode }}{% endif %}{% if !value.is_empty() %}&value={{ value|urlencode }}{% endif %}">
+        <span><strong>{{ ot.name }} <em class="type-count">{{ ot.object_count }}</em></strong><small>Version {{ ot.version }} · {{ ot.property_count }} properties · {{ ot.mapping_count }} mapping rules</small></span><span class="type-chevron">›</span>
+      </a>
+      {% if is_admin %}<form class="type-delete" method="post" action="/ontology/types/{{ ot.id }}/delete"><button class="btn-link" type="submit">Delete</button></form>{% endif %}
+      {% if can_manage %}<details class="type-edit"><summary>Edit definition</summary><form class="inline ontology-form schema-builder-form mapping-builder-form" method="post" action="/ontology/types/{{ ot.id }}/edit" data-schema-builder><label>Name</label><input name="name" value="{{ ot.name }}" required><label>Version</label><input name="version" type="number" min="1" value="{{ ot.version }}" required><div class="schema-builder" data-schema-editor><div class="detail-label">Property contract <span class="muted">structured</span></div></div><button type="button" class="btn-link schema-add-property" data-add-schema-property>+ Add property</button><details class="advanced-json-editor"><summary>Advanced property schema JSON</summary><textarea name="property_schema" rows="7" data-schema-json>{{ ot.schema }}</textarea><p class="muted">Each property is sent as a typed contract. Advanced JSON is available for richer definitions.</p></details><div class="mapping-builder" data-mapping-editor><div class="detail-label">Source mappings <span class="muted">structured</span></div></div><button type="button" class="btn-link mapping-add-rule" data-add-mapping-rule>+ Add source mapping</button><details class="advanced-json-editor"><summary>Advanced mapping rules JSON</summary><textarea name="mapping_rules" rows="5" data-mapping-json>{{ ot.mapping }}</textarea><p class="muted">Rules map normalized source paths into object properties. Advanced JSON is available for richer definitions.</p></details><button class="btn" type="submit">Save definition</button></form></details>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if can_manage %}
+    <details class="authoring-drawer" id="new-object-type"><summary>Define an object type</summary>
+      <form class="inline ontology-form schema-builder-form mapping-builder-form" method="post" action="/ontology/types" data-schema-builder>
+        <label for="ontology-name">Name</label><input id="ontology-name" name="name" placeholder="Customer" required>
+        <label for="ontology-version">Version</label><input id="ontology-version" name="version" type="number" value="1" min="1" required>
+        <div class="schema-builder" data-schema-editor><div class="detail-label">Property contract <span class="muted">structured</span></div></div><button type="button" class="btn-link schema-add-property" data-add-schema-property>+ Add property</button><details class="advanced-json-editor"><summary>Advanced property schema JSON</summary><textarea id="ontology-schema" name="property_schema" rows="7" data-schema-json>{"id":{"type":"string"}}</textarea><p class="muted">Use structured rows for common fields or edit the JSON contract directly.</p></details>
+        <div class="mapping-builder" data-mapping-editor><div class="detail-label">Source mappings <span class="muted">structured</span></div><p class="muted">Connect normalized source fields to the object properties above.</p></div><button type="button" class="btn-link mapping-add-rule" data-add-mapping-rule>+ Add source mapping</button><details class="advanced-json-editor"><summary>Advanced mapping rules JSON</summary><textarea id="ontology-rules" name="mapping_rules" rows="5" data-mapping-json>[]</textarea><p class="muted">A rule selects a source type, an identity field, and normalized paths such as <code>requester_name</code>.</p></details>
+        <button class="btn" type="submit">Create object type</button>
+      </form>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="panel ontology-objects-panel">
+<div class="panel-heading"><div><h2>{% if selected_type.is_some() %}Objects in selected type{% else %}Recent objects{% endif %}</h2><p class="muted">Properties captured from normalized records. Select a set to run a governed action below.</p></div><div class="panel-heading-actions"><span class="pill pill-muted">{{ objects.len() }} shown{% if objects.len() != matching_count %} of {{ matching_count }}{% endif %}</span>{% if can_manage %}<button type="button" class="btn btn-secondary panel-action" id="ontology-select-visible">Select visible</button><a class="btn btn-secondary panel-action is-disabled" id="ontology-compare-selected" href="/ontology/compare" aria-disabled="true">Compare selected</a><a class="btn btn-secondary panel-action" href="#new-object">New object</a>{% endif %}</div></div>
+    <form class="ontology-object-search" method="get" action="/ontology">
+      {% if let Some(type_id) = selected_type %}<input type="hidden" name="type_id" value="{{ type_id }}">{% endif %}
+      {% if let Some(object_id) = selected_object %}<input type="hidden" name="object_id" value="{{ object_id }}">{% endif %}
+      <input type="hidden" name="risk" value="{{ risk }}">
+      <label for="ontology-object-q">Find an entity in this scope</label>
+      <div><input id="ontology-object-q" name="q" type="search" value="{{ q }}" placeholder="Search names, subjects, properties, or IDs..."><input name="property" type="text" value="{{ property }}" placeholder="Property (e.g. status)" aria-label="Property name"><input name="value" type="search" value="{{ value }}" placeholder="Value (e.g. open)" aria-label="Property value"><button class="btn btn-secondary" type="submit">Find</button>{% if !q.is_empty() || !property.is_empty() || !value.is_empty() %}<a class="btn-link" href="/ontology{% if let Some(type_id) = selected_type %}?type_id={{ type_id }}{% if !risk.is_empty() %}&amp;risk={{ risk }}{% endif %}{% else %}{% if !risk.is_empty() %}?risk={{ risk }}{% endif %}{% endif %}">Clear</a>{% endif %}</div>
+    </form>
+    <form class="inline ontology-export-form" method="get" action="/ontology/export.csv"><input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="property" value="{{ property }}"><input type="hidden" name="value" value="{{ value }}"><input type="hidden" name="risk" value="{{ risk }}">{% if let Some(type_id) = selected_type %}<input type="hidden" name="type_id" value="{{ type_id }}">{% endif %}<button type="submit" class="btn-link">Export this object set as CSV ↓</button><span class="muted">All matching objects, not only this page.</span></form>
+    <form class="inline ontology-save-view-form" method="post" action="/ontology/saved-views"><input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="property" value="{{ property }}"><input type="hidden" name="value" value="{{ value }}"><input type="hidden" name="risk" value="{{ risk }}">{% if let Some(type_id) = selected_type %}<input type="hidden" name="type_id" value="{{ type_id }}">{% endif %}{% if let Some(link_type_id) = link_type_filter %}<input type="hidden" name="link_type_id" value="{{ link_type_id }}">{% endif %}<label for="save-ontology-view-name">Save this object view as</label><input id="save-ontology-view-name" name="name" placeholder="At-risk customers" required><button class="btn btn-secondary" type="submit">Save view</button></form>
+    {% if !saved_views.is_empty() %}<div class="saved-view-strip"><span class="detail-label">Saved object views</span>{% for view in saved_views %}<span class="saved-view-chip"><a href="{{ view.load_url }}">{{ view.name }}</a><form method="post" action="/ontology/saved-views/{{ view.id }}/delete"><button class="btn-link btn-danger-link" type="submit" aria-label="Remove {{ view.name }}">&times;</button></form></span>{% endfor %}</div>{% endif %}
+    {% if objects.is_empty() %}
+    <div class="empty-state compact"><div class="empty-icon">◌</div><p>{% if !q.is_empty() || !property.is_empty() || !value.is_empty() %}No entities match this filter in the current scope.{% else %}No objects to display.{% endif %}</p><p>{% if !q.is_empty() || !property.is_empty() || !value.is_empty() %}<a href="/ontology{% if let Some(type_id) = selected_type %}?type_id={{ type_id }}{% endif %}">Clear the search</a> or broaden the selected type.{% else %}Select a type or ingest data to see derived entities here.{% endif %}</p></div>
+    {% else %}
+    {% if can_manage %}<div class="ontology-selection-status"><span id="ontology-selection-count" class="muted">No persisted entities selected.</span><button type="button" class="btn-link" id="ontology-clear-selection">Clear selection</button></div>{% endif %}
+    <div class="object-list">
+      {% for object in objects %}
+      <details class="object-card" id="object-{{ object.id }}" data-object-risk="{{ object.risk_tone }}"{% if let Some(selected) = selected_object %}{% if selected.to_string() == object.id.to_string() %} open{% endif %}{% endif %}>
+        <summary>{% if can_manage %}<input type="checkbox" class="ontology-object-select" data-ontology-object-id="{{ object.id }}" data-ontology-object-type="{{ object.object_type_id }}" aria-label="Select {{ object.summary }}" onclick="event.stopPropagation()">{% endif %}<span class="object-dot"></span><span><strong class="object-type-name">{{ object.type_name }}</strong><strong class="object-summary">{{ object.summary }}</strong><span class="object-posture object-posture-{{ object.risk_tone }}"><span class="object-posture-dot"></span>{{ object.risk_label }} <strong>{{ object.risk_score }}</strong></span><small class="object-id">{{ object.id }}</small></span><span class="object-time">{{ object.updated_at.format("%Y-%m-%d %H:%M") }}</span></summary>
+        <div class="object-detail"><div class="object-risk-panel"><div class="object-risk-header"><span><div class="detail-label">Operational posture</div><strong>{{ object.risk_label }}</strong></span><span class="object-posture object-posture-{{ object.risk_tone }}"><span class="object-posture-dot"></span>risk {{ object.risk_score }}/100</span></div>{% if object.risk_reasons.is_empty() %}<p class="muted">No active cases, signal pressure, or unresolved governed decisions are linked to this entity.</p>{% else %}<div class="object-risk-reasons">{% for reason in object.risk_reasons %}<span class="object-risk-reason">{{ reason }}</span>{% endfor %}</div>{% endif %}</div><div class="detail-label">Properties</div><div class="object-property-grid">{% for property in object.property_rows %}<div class="object-property"><span class="object-property-key">{{ property.key }}</span><strong>{{ property.value }}</strong></div>{% endfor %}</div><details class="raw-object-payload"><summary>View raw object payload</summary><pre>{{ object.properties }}</pre></details>
+          {% if !object.related.is_empty() %}<div class="detail-label">Connected objects</div><div class="connected-object-list">{% for related in object.related %}<a class="connected-object" href="/ontology?object_id={{ related.id }}&amp;risk={{ risk }}#object-{{ related.id }}"><span class="connected-line"></span><span><strong>{{ related.relationship }}</strong><small>{{ related.type_name }} · {{ related.summary }}</small></span><code>{{ related.id }}</code></a>{% endfor %}</div>{% endif %}
+          <div class="object-investigation-context"><div class="detail-label">Investigation context <span class="muted">lineage → signals → cases</span></div><div class="object-context-grid"><div><strong class="object-context-heading">Signals</strong>{% if object.signals.is_empty() %}<p class="muted">No linked signals found for this object's source lineage.</p>{% else %}<div class="object-context-list">{% for signal in object.signals %}<a class="object-context-row" href="/events/{{ signal.id }}"><span class="posture-dot {% if signal.status == "new" %}posture-bad{% else %}posture-good{% endif %}"></span><span><strong>{{ signal.event_type }}</strong><small>{{ signal.status }} · {{ signal.occurred_at.format("%Y-%m-%d %H:%M") }}</small></span><span class="context-arrow">&rarr;</span></a>{% endfor %}</div>{% endif %}</div><div><strong class="object-context-heading">Cases</strong>{% if object.incidents.is_empty() %}<p class="muted">No case currently contains a linked signal.</p>{% else %}<div class="object-context-list">{% for incident in object.incidents %}<a class="object-context-row" href="/incidents/{{ incident.id }}"><span class="posture-dot {% if incident.severity == "critical" || incident.severity == "high" %}posture-bad{% else %}posture-good{% endif %}"></span><span><strong>{{ incident.title }}</strong><small>{{ incident.severity }} · {{ incident.status }}</small></span><span class="context-arrow">&rarr;</span></a>{% endfor %}</div>{% endif %}</div></div></div>
+          <div class="detail-label">Source lineage</div><pre>{{ object.lineage }}</pre>{% if !object.lineage_ids.is_empty() %}<div class="lineage-links">{% for source_id in object.lineage_ids %}<a href="/data/{{ source_id }}/journey">Open source record journey &rarr;</a>{% endfor %}</div>{% endif %}
+          {% if !object.history.is_empty() %}<div class="object-history-panel"><div class="detail-label">Object history <span class="muted">immutable snapshots</span></div><div class="object-history-list">{% for entry in object.history %}<details class="object-history-entry"{% if loop.first %} open{% endif %}><summary><span class="pill pill-muted">{{ entry.change_type }}</span><strong>{{ entry.actor }}</strong><time>{{ entry.changed_at.format("%Y-%m-%d %H:%M") }}</time></summary><div class="object-history-diff"><div><span class="detail-label">Before</span><pre>{{ entry.before_state }}</pre></div><div><span class="detail-label">After</span><pre>{{ entry.after_state }}</pre></div></div></details>{% endfor %}</div></div>{% endif %}
+          <div class="object-360-panel"><div class="detail-label">Operational activity <span class="muted">governed decisions on this object</span>{% if !object.activity.is_empty() %}<a class="btn-link" href="/actions?q={{ object.id }}">Open action ledger &rarr;</a>{% endif %}</div>{% if object.activity.is_empty() %}<p class="muted">No governed actions have targeted this object yet.</p>{% else %}<div class="object-activity-list">{% for activity in object.activity %}<div class="object-activity-row"><span class="posture-dot {% if activity.outcome == "Completed" %}posture-good{% else %}posture-bad{% endif %}"></span><span class="object-activity-main"><strong>{{ activity.action_name }}</strong><small>{{ activity.outcome }} · {{ activity.executed_at }}</small></span>{% if let Some(event_id) = activity.event_id %}<a class="btn-link" href="/events/{{ event_id }}">Open signal &rarr;</a>{% else %}<span class="muted">console</span>{% endif %}</div>{% endfor %}</div>{% endif %}</div>
+          {% if !object.activity.is_empty() %}<div class="object-review-context"><div class="detail-label">Decision review posture</div>{% for activity in object.activity %}<div class="object-activity-row"><span class="posture-dot {% if activity.review_stale %}posture-risk{% else if activity.review_status == "approved" %}posture-good{% else %}posture-neutral{% endif %}"></span><span class="object-activity-main"><strong>{{ activity.action_name }}</strong><small>Review: {{ activity.review_status }}{% if activity.review_stale %} · overdue{% endif %}{% if let Some(owner) = activity.review_assignee %} · owner {{ owner }}{% endif %}</small></span><a class="btn-link" href="/actions/{{ activity.id }}">Decision record &rarr;</a></div>{% endfor %}</div>{% endif %}
+          {% if can_manage %}<details class="inline-edit" id="edit-object-{{ object.id }}"><summary>Edit object</summary><form class="inline ontology-form ontology-object-form" method="post" action="/ontology/objects/{{ object.id }}/edit" data-properties-form>
+            <label>Object type</label><select name="object_type_id">{% for ot in object_types %}<option value="{{ ot.id }}" {% if ot.id.to_string() == object.object_type_id.to_string() %}selected{% endif %}>{{ ot.name }}</option>{% endfor %}</select>
+            {% if !object.editor_fields.is_empty() %}<div class="property-editor"><div class="detail-label">Structured properties <span class="muted">schema-aware</span></div>{% for field in object.editor_fields %}<label class="property-editor-field"><span>{{ field.key }}{% if field.required %} <span class="required-mark">required</span>{% endif %}</span>{% if field.input_type == "boolean" %}<input type="checkbox" data-property-key="{{ field.key }}" data-property-type="boolean" {% if field.checked %}checked{% endif %}>{% else if field.input_type == "json" %}<textarea rows="2" data-property-key="{{ field.key }}" data-property-type="json">{{ field.value }}</textarea>{% else %}<input type="{% if field.input_type == "number" %}number{% else %}text{% endif %}" data-property-key="{{ field.key }}" data-property-type="{{ field.input_type }}" value="{{ field.value }}"{% if field.required %} required{% endif %}>{% endif %}</label>{% endfor %}</div>{% endif %}
+            <details class="advanced-json-editor"><summary>Advanced properties / unknown fields</summary><textarea name="properties" rows="7" data-properties-json>{{ object.properties }}</textarea><p class="muted">The structured editor updates declared fields and preserves additional source fields in this payload.</p></details>
+            <label>Source lineage <span class="muted">JSON array</span></label><textarea name="source_lineage" rows="3">{{ object.lineage }}</textarea><button class="btn" type="submit">Save object</button></form></details>{% endif %}
+          {% if is_admin %}<form method="post" action="/ontology/objects/{{ object.id }}/delete" onsubmit="return confirm('Delete this ontology object?');"><button class="btn-link btn-danger-link" type="submit">Delete object</button></form>{% endif %}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if has_prev || has_next %}<div class="pagination ontology-pagination"><a class="btn btn-secondary{% if !has_prev %} disabled{% endif %}" href="/ontology?page={% if has_prev %}{{ page - 1 }}{% else %}{{ page }}{% endif %}{% if let Some(type_id) = selected_type %}&type_id={{ type_id }}{% endif %}&risk={{ risk|urlencode }}&q={{ q|urlencode }}&property={{ property|urlencode }}&value={{ value|urlencode }}"{% if !has_prev %} aria-disabled="true" tabindex="-1"{% endif %}>&larr; Previous</a><span class="muted">Page {{ page + 1 }} · {{ matching_count }} matching</span><a class="btn btn-secondary{% if !has_next %} disabled{% endif %}" href="/ontology?page={{ page + 1 }}{% if let Some(type_id) = selected_type %}&type_id={{ type_id }}{% endif %}&risk={{ risk|urlencode }}&q={{ q|urlencode }}&property={{ property|urlencode }}&value={{ value|urlencode }}"{% if !has_next %} aria-disabled="true" tabindex="-1"{% endif %}>Next &rarr;</a></div>{% endif %}
+    {% if can_manage %}<details class="authoring-drawer" id="new-object"><summary>Create an ontology object</summary><form class="inline ontology-form ontology-object-form" method="post" action="/ontology/objects" data-create-properties-form>
+      <label for="object-type">Object type</label><select id="object-type" name="object_type_id" required>{% for ot in object_types %}<option value="{{ ot.id }}" data-property-schema="{{ ot.schema }}">{{ ot.name }}</option>{% endfor %}</select>
+      <div class="property-editor" data-create-property-editor><div class="detail-label">Structured properties <span class="muted">schema-aware</span></div><p class="muted">Choose an object type to load its property contract.</p></div>
+      <details class="advanced-json-editor"><summary>Advanced properties / unknown fields</summary><textarea id="object-properties" name="properties" rows="7" data-create-properties-json>{"id":"new-object","name":"New object"}</textarea><p class="muted">The structured editor updates declared fields and preserves additional source fields in this payload.</p></details>
+      <label for="object-lineage">Source lineage <span class="muted">JSON array, optional</span></label><textarea id="object-lineage" name="source_lineage" rows="3">[]</textarea><button class="btn" type="submit">Create object</button></form></details>{% endif %}
+  </section>
+</div>
+
+<section class="panel ontology-graph-panel">
+  <div class="panel-heading"><div><h2>Entity graph</h2><p class="muted">A navigable view of the live object relationships. Select a node to inspect its neighborhood; double-click or use the action to open the full record.</p></div><span class="graph-legend"><span class="object-dot"></span> object <span class="graph-edge-key"></span> relationship <span class="pill pill-muted">{{ graph_nodes.len() }} of {{ graph_total_count }}</span></span></div>
+  {% if graph_nodes.is_empty() %}
+  <div class="empty-state compact"><p>No graph nodes are available yet.</p></div>
+  {% else %}
+  <div class="graph-toolbar" role="toolbar" aria-label="Graph controls"><span class="muted">Drag nodes · pan canvas · inspect model</span>{% if let Some(selected) = selected_object %}<span class="pill pill-muted">{{ graph_depth }}-hop neighborhood</span>{% if graph_depth < 3 %}<a class="btn-link" href="/ontology?object_id={{ selected }}&amp;depth={{ graph_depth + 1 }}&amp;risk={{ risk }}#ontology-graph">Expand to {{ graph_depth + 1 }} hops &rarr;</a>{% endif %}{% endif %}<input id="graph-focus-query" class="graph-focus-query" type="search" placeholder="Filter entities…" aria-label="Filter graph entities"><select id="graph-relation-filter" class="graph-relation-filter" aria-label="Filter relationship type"><option value="">All relationships</option></select><button type="button" class="btn-link" data-graph-action="zoom-out" aria-label="Zoom out">−</button><span id="graph-zoom-level" class="graph-zoom-level" aria-live="polite">100%</span><button type="button" class="btn-link" data-graph-action="zoom-in" aria-label="Zoom in">+</button><span class="graph-toolbar-divider"></span><button type="button" class="btn-link" data-graph-action="pan-left" aria-label="Pan left">←</button><button type="button" class="btn-link" data-graph-action="pan-up" aria-label="Pan up">↑</button><button type="button" class="btn-link" data-graph-action="pan-down" aria-label="Pan down">↓</button><button type="button" class="btn-link" data-graph-action="pan-right" aria-label="Pan right">→</button><button type="button" class="btn-link" data-graph-action="reset">Reset</button><button type="button" class="btn-link" data-graph-action="export">Export SVG</button><button type="button" class="btn-link" data-graph-action="neighbors" aria-pressed="false">Show neighbors</button><a id="graph-open-selected" class="btn-link graph-open-selected" href="#" aria-disabled="true">Open selected object &rarr;</a><span class="sr-only" data-graph-export-status aria-live="polite"></span></div>
+  <form class="ontology-path-form" method="get" action="/ontology#ontology-graph" aria-label="Find a relationship path"><input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="risk" value="{{ risk }}"><label>Path from<select name="path_from" required><option value="">Choose origin entity</option>{% for object in relationship_objects %}<option value="{{ object.id }}"{% if let Some(selected) = path_from %}{% if selected.to_string() == object.id.to_string() %} selected{% endif %}{% endif %}>{{ object.type_name }} · {{ object.summary }}</option>{% endfor %}</select></label><span class="ontology-path-arrow">→</span><label>Path to<select name="path_to" required><option value="">Choose destination entity</option>{% for object in relationship_objects %}<option value="{{ object.id }}"{% if let Some(selected) = path_to %}{% if selected.to_string() == object.id.to_string() %} selected{% endif %}{% endif %}>{{ object.type_name }} · {{ object.summary }}</option>{% endfor %}</select></label><button class="btn btn-secondary" type="submit">Find shortest path</button>{% if path_from.is_some() || path_to.is_some() %}<a class="btn-link" href="/ontology#ontology-graph">Clear path</a>{% endif %}</form>
+  {% if path_from.is_some() && path_to.is_some() %}<div class="ontology-path-result" aria-live="polite">{% if graph_path.is_empty() %}<span class="ontology-path-empty">No relationship path was found between these entities in the live model.</span>{% else %}<strong class="detail-label">{{ graph_path.len() - 1 }} relationship hop{% if graph_path.len() - 1 != 1 %}s{% endif %}</strong>{% for node in graph_path %}<a class="ontology-path-step" href="/ontology?object_id={{ node.id }}#object-{{ node.id }}"><span>{{ node.summary }}</span><small>{{ node.type_name }}</small></a>{% if !loop.last %}<span class="ontology-path-arrow">→</span>{% endif %}{% endfor %}{% endif %}</div>{% endif %}
+  <div id="graph-inspector" class="graph-inspector" aria-live="polite"><div class="detail-label">Graph inspector</div><strong data-graph-inspector-title>Select an entity</strong><p class="muted" data-graph-inspector-help>Click a node to inspect its immediate relationship context. Double-click or open the record to continue the investigation.</p><div class="graph-inspector-links" data-graph-inspector-links hidden></div></div>
+  <div class="ontology-graph-wrap">
+    <div id="graph-type-legend" class="graph-type-legend" aria-label="Entity type legend"></div>
+    <svg id="ontology-graph" class="ontology-graph" data-graph-selected="{% if let Some(selected) = selected_object %}{{ selected }}{% endif %}" viewBox="0 0 900 700" role="img" aria-label="Ontology object relationship graph">
+      <defs><marker id="graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="var(--accent-dim)"></path></marker></defs>
+      {% for edge in graph_edges %}<line class="graph-edge" data-graph-edge-source="{{ edge.source_id }}" data-graph-edge-target="{{ edge.target_id }}" data-graph-edge-label="{{ edge.label }}" x1="{{ edge.x1 }}" y1="{{ edge.y1 }}" x2="{{ edge.x2 }}" y2="{{ edge.y2 }}" marker-end="url(#graph-arrow)"></line><text class="graph-edge-label" data-graph-edge-source="{{ edge.source_id }}" data-graph-edge-target="{{ edge.target_id }}" data-graph-edge-label="{{ edge.label }}" x="{{ (edge.x1 + edge.x2) / 2 }}" y="{{ (edge.y1 + edge.y2) / 2 - 8 }}">{{ edge.label }}</text>{% endfor %}
+      {% for node in graph_nodes %}<a href="/ontology?object_id={{ node.id }}&amp;depth={{ graph_depth }}&amp;risk={{ risk }}#object-{{ node.id }}" data-graph-link="{{ node.id }}"><g class="graph-node" data-graph-node="{{ node.id }}" data-graph-type="{{ node.type_name }}" data-graph-label="{{ node.summary }}" tabindex="0" transform="translate({{ node.x }},{{ node.y }})"><rect x="-92" y="-31" width="184" height="62" rx="9"></rect><circle cx="-76" cy="-11" r="5"></circle><text class="graph-node-type" x="-63" y="-9">{{ node.type_name }}</text><text class="graph-node-label" x="-76" y="14">{{ node.summary }}</text></g></a>{% endfor %}
+    </svg>
+  </div>
+    {% endif %}
+  </section>
+
+<script>
+  (function () {
+    var graph = document.getElementById('ontology-graph');
+    if (!graph) return;
+    var base = { x: 0, y: 0, width: 900, height: 700 };
+    var view = { x: 0, y: 0, width: 900, height: 700 };
+    var zoomLabel = document.getElementById('graph-zoom-level');
+    var focusQuery = document.getElementById('graph-focus-query');
+    var openSelected = document.getElementById('graph-open-selected');
+    var inspectorTitle = document.querySelector('[data-graph-inspector-title]');
+    var inspectorHelp = document.querySelector('[data-graph-inspector-help]');
+    var inspectorLinks = document.querySelector('[data-graph-inspector-links]');
+    var neighborButton = document.querySelector('[data-graph-action="neighbors"]');
+    var nodeLinks = Array.prototype.slice.call(graph.querySelectorAll('[data-graph-link]'));
+    var nodes = Array.prototype.slice.call(graph.querySelectorAll('[data-graph-node]'));
+    var edges = Array.prototype.slice.call(graph.querySelectorAll('[data-graph-edge-source]'));
+    var graphEdges = edges.filter(function (edge) { return edge.classList.contains('graph-edge'); });
+    var relationFilter = document.getElementById('graph-relation-filter');
+    var typeLegend = document.getElementById('graph-type-legend');
+    var selectedId = graph.dataset.graphSelected || null;
+    var neighborMode = false;
+    var typePalette = ['#5bb5ff', '#7bd6a5', '#d9ad62', '#b98be8', '#e47d8b', '#68c7c0', '#aeb9d9', '#df8f58'];
+    function applyTypeColors() {
+      var colors = {};
+      var types = [];
+      nodes.forEach(function (node) {
+        var type = node.dataset.graphType || 'Object';
+        if (!colors[type]) { colors[type] = typePalette[types.length % typePalette.length]; types.push(type); }
+        var color = colors[type];
+        var rect = node.querySelector('rect'); var dot = node.querySelector('circle'); var label = node.querySelector('.graph-node-type');
+        if (rect) rect.style.stroke = color; if (dot) { dot.style.fill = color; dot.style.filter = 'drop-shadow(0 0 5px ' + color + '66)'; } if (label) label.style.fill = color;
+      });
+      if (!typeLegend) return;
+      typeLegend.innerHTML = '';
+      types.forEach(function (type) { var item = document.createElement('span'); item.className = 'graph-type-legend-item'; var swatch = document.createElement('span'); swatch.className = 'graph-type-legend-swatch'; swatch.style.color = colors[type]; swatch.style.background = colors[type]; var text = document.createElement('span'); text.textContent = type; item.appendChild(swatch); item.appendChild(text); typeLegend.appendChild(item); });
+    }
+    applyTypeColors();
+    if (relationFilter) {
+      var relationTypes = {};
+      graphEdges.forEach(function (edge) { relationTypes[edge.dataset.graphEdgeLabel || 'Related'] = true; });
+      Object.keys(relationTypes).sort().forEach(function (label) { var option = document.createElement('option'); option.value = label; option.textContent = label; relationFilter.appendChild(option); });
+    }
+    var positions = {};
+    nodes.forEach(function (node) {
+      var match = /translate\(\s*([-\d.]+)[, ]+([-\d.]+)\s*\)/.exec(node.getAttribute('transform') || '');
+      positions[node.dataset.graphNode] = { x: match ? Number(match[1]) : 450, y: match ? Number(match[2]) : 350 };
+    });
+    var initialPositions = JSON.parse(JSON.stringify(positions));
+    var layoutKey = 'kizashi.ontology.graph-layout.v1.' + nodes.map(function (node) { return node.dataset.graphNode; }).sort().join('.');
+    var graphPrefsKey = layoutKey + '.prefs';
+    try {
+      var graphPrefs = JSON.parse(window.localStorage.getItem(graphPrefsKey) || '{}');
+      if (focusQuery && typeof graphPrefs.query === 'string') focusQuery.value = graphPrefs.query;
+      if (relationFilter && typeof graphPrefs.relation === 'string' && relationFilter.querySelector('option[value="' + graphPrefs.relation.replace(/"/g, '\\"') + '"]')) relationFilter.value = graphPrefs.relation;
+    } catch (_) {}
+    try {
+      var savedLayout = JSON.parse(window.localStorage.getItem(layoutKey) || '{}');
+      Object.keys(positions).forEach(function (id) {
+        if (savedLayout[id] && Number.isFinite(Number(savedLayout[id].x)) && Number.isFinite(Number(savedLayout[id].y))) {
+          positions[id] = { x: Number(savedLayout[id].x), y: Number(savedLayout[id].y) };
+          var savedNode = document.querySelector('[data-graph-node="' + id + '"]');
+          if (savedNode) savedNode.setAttribute('transform', 'translate(' + positions[id].x + ',' + positions[id].y + ')');
+        }
+      });
+    } catch (_) {}
+    function persistLayout() {
+      try { window.localStorage.setItem(layoutKey, JSON.stringify(positions)); } catch (_) {}
+    }
+    function persistGraphPrefs() {
+      try { window.localStorage.setItem(graphPrefsKey, JSON.stringify({ query: focusQuery ? focusQuery.value : '', relation: relationFilter ? relationFilter.value : '' })); } catch (_) {}
+    }
+    function resetLayout() {
+      positions = JSON.parse(JSON.stringify(initialPositions));
+      nodes.forEach(function (node) {
+        var position = positions[node.dataset.graphNode];
+        if (position) node.setAttribute('transform', 'translate(' + position.x + ',' + position.y + ')');
+      });
+      try { window.localStorage.removeItem(layoutKey); } catch (_) {}
+      try { window.localStorage.removeItem(graphPrefsKey); } catch (_) {}
+      if (focusQuery) focusQuery.value = '';
+      if (relationFilter) relationFilter.value = '';
+      updateGraphEdges();
+    }
+    function exportGraph() {
+      var clone = graph.cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+      var source = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+      var blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement('a');
+      link.href = url; link.download = 'kizashi-ontology-graph.svg';
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      var status = document.querySelector('[data-graph-export-status]');
+      if (status) status.textContent = 'Current graph exported as SVG';
+    }
+    function updateGraphEdges() {
+      edges.forEach(function (edge) {
+        var source = positions[edge.dataset.graphEdgeSource];
+        var target = positions[edge.dataset.graphEdgeTarget];
+        if (!source || !target) return;
+        edge.setAttribute('x1', source.x); edge.setAttribute('y1', source.y);
+        edge.setAttribute('x2', target.x); edge.setAttribute('y2', target.y);
+        var label = document.querySelector('.graph-edge-label[data-graph-edge-source="' + edge.dataset.graphEdgeSource + '"][data-graph-edge-target="' + edge.dataset.graphEdgeTarget + '"]');
+        if (label) { label.setAttribute('x', (source.x + target.x) / 2); label.setAttribute('y', (source.y + target.y) / 2 - 8); }
+      });
+    }
+    updateGraphEdges();
+    function render() {
+      graph.setAttribute('viewBox', [view.x, view.y, view.width, view.height].join(' '));
+      if (zoomLabel) zoomLabel.textContent = Math.round((base.width / view.width) * 100) + '%';
+    }
+    var graphWrap = graph.parentElement;
+    var pointerState = null;
+    var nodeDrag = null;
+    var suppressNodeClick = false;
+    function svgPoint(event) {
+      var rect = graph.getBoundingClientRect();
+      return {
+        x: view.x + ((event.clientX - rect.left) / rect.width) * view.width,
+        y: view.y + ((event.clientY - rect.top) / rect.height) * view.height
+      };
+    }
+    graph.addEventListener('pointerdown', function (event) {
+      if (event.button !== 0 || (event.target.closest && event.target.closest('[data-graph-node]'))) return;
+      pointerState = { x: event.clientX, y: event.clientY, view: { x: view.x, y: view.y, width: view.width, height: view.height } };
+      graph.setPointerCapture(event.pointerId);
+      graphWrap.classList.add('is-panning');
+    });
+    graph.addEventListener('pointermove', function (event) {
+      if (nodeDrag) {
+        var point = svgPoint(event);
+        var position = positions[nodeDrag.id];
+        if (!position) return;
+        var dx = point.x - nodeDrag.start.x;
+        var dy = point.y - nodeDrag.start.y;
+        if (Math.abs(dx) + Math.abs(dy) > 2) nodeDrag.moved = true;
+      position.x = nodeDrag.origin.x + dx;
+      position.y = nodeDrag.origin.y + dy;
+      nodeDrag.node.setAttribute('transform', 'translate(' + position.x + ',' + position.y + ')');
+        updateGraphEdges();
+        return;
+      }
+      if (!pointerState) return;
+      var rect = graph.getBoundingClientRect();
+      view.x = pointerState.view.x - ((event.clientX - pointerState.x) / rect.width) * pointerState.view.width;
+      view.y = pointerState.view.y - ((event.clientY - pointerState.y) / rect.height) * pointerState.view.height;
+      render();
+    });
+    function endPan(event) {
+      if (!pointerState) return;
+      pointerState = null;
+      graphWrap.classList.remove('is-panning');
+      if (event && graph.hasPointerCapture && graph.hasPointerCapture(event.pointerId)) graph.releasePointerCapture(event.pointerId);
+    }
+    function endNodeDrag(event) {
+      if (!nodeDrag) return;
+      suppressNodeClick = nodeDrag.moved;
+      graphWrap.classList.remove('is-dragging');
+      if (event && graph.hasPointerCapture && graph.hasPointerCapture(event.pointerId)) graph.releasePointerCapture(event.pointerId);
+      if (nodeDrag.moved) persistLayout();
+      nodeDrag = null;
+      if (suppressNodeClick) window.setTimeout(function () { suppressNodeClick = false; }, 0);
+    }
+    graph.addEventListener('pointerup', endPan);
+    graph.addEventListener('pointercancel', endPan);
+    graph.addEventListener('pointerup', endNodeDrag);
+    graph.addEventListener('pointercancel', endNodeDrag);
+    graph.addEventListener('wheel', function (event) {
+      event.preventDefault();
+      var before = svgPoint(event);
+      var factor = event.deltaY < 0 ? .85 : 1.18;
+      view.width = Math.max(360, Math.min(1800, view.width * factor));
+      view.height = Math.max(280, Math.min(1400, view.height * factor));
+      var after = svgPoint(event);
+      view.x += before.x - after.x;
+      view.y += before.y - after.y;
+      render();
+    }, { passive: false });
+    function applyGraphFocus() {
+      var query = (focusQuery ? focusQuery.value : '').trim().toLowerCase();
+      var relation = relationFilter ? relationFilter.value : '';
+      var visible = {};
+      nodes.forEach(function (node) {
+        var matches = !query || ((node.dataset.graphLabel || '') + ' ' + (node.dataset.graphType || '')).toLowerCase().indexOf(query) !== -1;
+        var isNeighbor = !neighborMode || !selectedId || node.dataset.graphNode === selectedId || edges.some(function (edge) {
+          return (edge.dataset.graphEdgeSource === selectedId && edge.dataset.graphEdgeTarget === node.dataset.graphNode) || (edge.dataset.graphEdgeTarget === selectedId && edge.dataset.graphEdgeSource === node.dataset.graphNode);
+        });
+        var matchesRelation = !relation || graphEdges.some(function (edge) {
+          return edge.dataset.graphEdgeLabel === relation && (edge.dataset.graphEdgeSource === node.dataset.graphNode || edge.dataset.graphEdgeTarget === node.dataset.graphNode);
+        });
+        visible[node.dataset.graphNode] = matches && isNeighbor && matchesRelation;
+        var link = node.closest('[data-graph-link]');
+        if (link) link.hidden = !visible[node.dataset.graphNode];
+        node.classList.toggle('graph-selected', selectedId === node.dataset.graphNode);
+        node.classList.toggle('graph-muted', !!selectedId && selectedId !== node.dataset.graphNode && visible[node.dataset.graphNode]);
+      });
+      edges.forEach(function (edge) {
+        var source = edge.dataset.graphEdgeSource;
+        var target = edge.dataset.graphEdgeTarget;
+        var matches = visible[source] && visible[target] && (!relation || edge.dataset.graphEdgeLabel === relation);
+        var connected = selectedId && (source === selectedId || target === selectedId);
+        edge.hidden = !matches;
+        edge.classList.toggle('graph-focus', !!connected);
+        edge.classList.toggle('graph-muted', !!selectedId && !connected);
+      });
+      if (openSelected) {
+        var selectedLink = selectedId && document.querySelector('[data-graph-link="' + selectedId + '"]');
+        openSelected.href = selectedLink ? selectedLink.getAttribute('href') : '#';
+        openSelected.setAttribute('aria-disabled', selectedLink ? 'false' : 'true');
+        openSelected.classList.toggle('is-disabled', !selectedLink);
+      }
+      if (neighborButton) {
+        neighborButton.textContent = neighborMode ? 'Show all entities' : 'Show neighbors';
+        neighborButton.setAttribute('aria-pressed', neighborMode ? 'true' : 'false');
+        neighborButton.disabled = !selectedId;
+      }
+      if (inspectorTitle && inspectorHelp && inspectorLinks) {
+        var selectedNode = selectedId && document.querySelector('[data-graph-node="' + selectedId + '"]');
+        inspectorLinks.innerHTML = '';
+        if (!selectedNode) {
+          inspectorTitle.textContent = 'Select an entity';
+          inspectorHelp.textContent = 'Click a node to inspect its immediate relationship context. Double-click or open the record to continue the investigation.';
+          inspectorLinks.hidden = true;
+        } else {
+          inspectorTitle.textContent = selectedNode.dataset.graphLabel || 'Untitled entity';
+          inspectorHelp.textContent = (selectedNode.dataset.graphType || 'Object') + ' · ' + selectedId;
+          var connections = edges.filter(function (edge) { return edge.classList.contains('graph-edge') && (edge.dataset.graphEdgeSource === selectedId || edge.dataset.graphEdgeTarget === selectedId); });
+          connections.forEach(function (edge) {
+            var otherId = edge.dataset.graphEdgeSource === selectedId ? edge.dataset.graphEdgeTarget : edge.dataset.graphEdgeSource;
+            var other = document.querySelector('[data-graph-node="' + otherId + '"]');
+            var otherLink = other && other.closest('[data-graph-link]');
+            if (!other || !otherLink) return;
+            var link = document.createElement('a');
+            link.href = otherLink.getAttribute('href');
+            var name = document.createElement('strong'); name.textContent = other.dataset.graphLabel || 'Untitled entity';
+            var labelSelector = '.graph-edge-label[data-graph-edge-source="' + edge.dataset.graphEdgeSource + '"][data-graph-edge-target="' + edge.dataset.graphEdgeTarget + '"]';
+            var edgeLabel = document.querySelector(labelSelector);
+            var relation = document.createElement('small'); relation.textContent = (edgeLabel ? edgeLabel.textContent : 'Related entity') + ' · ' + (other.dataset.graphType || 'Object');
+            link.appendChild(name); link.appendChild(relation); inspectorLinks.appendChild(link);
+          });
+          inspectorLinks.hidden = connections.length === 0;
+          if (!connections.length) inspectorHelp.textContent += ' · No relationship instances are currently visible.';
+        }
+      }
+    }
+    function selectNode(node) {
+      selectedId = selectedId === node.dataset.graphNode ? null : node.dataset.graphNode;
+      applyGraphFocus();
+    }
+    nodes.forEach(function (node) {
+      node.addEventListener('pointerdown', function (event) {
+        if (event.button !== 0) return;
+        var id = node.dataset.graphNode;
+        var position = positions[id];
+        if (!position) return;
+        event.preventDefault(); event.stopPropagation();
+        nodeDrag = { node: node, id: id, start: svgPoint(event), origin: { x: position.x, y: position.y }, moved: false };
+        graph.setPointerCapture(event.pointerId);
+        graphWrap.classList.add('is-dragging');
+      });
+      node.addEventListener('click', function (event) {
+        if (suppressNodeClick) { event.preventDefault(); event.stopPropagation(); return; }
+        event.preventDefault();
+        event.stopPropagation();
+        selectNode(node);
+      });
+      node.addEventListener('dblclick', function (event) {
+        event.preventDefault();
+        var link = node.closest('[data-graph-link]');
+        if (link) window.location.href = link.getAttribute('href');
+      });
+      node.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          selectNode(node);
+        }
+      });
+    });
+    if (focusQuery) focusQuery.addEventListener('input', function () { persistGraphPrefs(); applyGraphFocus(); });
+    if (relationFilter) relationFilter.addEventListener('change', function () { persistGraphPrefs(); applyGraphFocus(); });
+    if (openSelected) openSelected.addEventListener('click', function (event) {
+      if (openSelected.getAttribute('aria-disabled') === 'true') event.preventDefault();
+    });
+    applyGraphFocus();
+      document.querySelectorAll('[data-graph-action]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var action = button.dataset.graphAction;
+        if (action === 'export') { exportGraph(); return; }
+        if (action === 'neighbors') { if (selectedId) neighborMode = !neighborMode; persistGraphPrefs(); applyGraphFocus(); return; }
+        if (action === 'reset') { view = { x: base.x, y: base.y, width: base.width, height: base.height }; neighborMode = false; resetLayout(); }
+        else if (action === 'zoom-in' || action === 'zoom-out') {
+          var factor = action === 'zoom-in' ? .8 : 1.25;
+          var nextWidth = Math.max(360, Math.min(1800, view.width * factor));
+          var nextHeight = Math.max(280, Math.min(1400, view.height * factor));
+          view.x += (view.width - nextWidth) / 2;
+          view.y += (view.height - nextHeight) / 2;
+          view.width = nextWidth;
+          view.height = nextHeight;
+        } else {
+          var stepX = view.width * .15;
+          var stepY = view.height * .15;
+          if (action === 'pan-left') view.x -= stepX;
+          if (action === 'pan-right') view.x += stepX;
+          if (action === 'pan-up') view.y -= stepY;
+          if (action === 'pan-down') view.y += stepY;
+        }
+        render();
+      });
+    });
+    function openObjectFromHash() {
+      if (!window.location.hash || !window.location.hash.startsWith('#object-')) return;
+      var object = document.getElementById(window.location.hash.slice(1));
+      if (object && object.tagName.toLowerCase() === 'details') {
+        object.open = true;
+        window.setTimeout(function () { object.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 0);
+      }
+    }
+    window.addEventListener('hashchange', openObjectFromHash);
+    openObjectFromHash();
+  }());
+</script>
+
+<script>
+  (function () {
+    document.querySelectorAll('.mapping-builder-form').forEach(function (form) {
+      var editor = form.querySelector('[data-mapping-editor]');
+      var raw = form.querySelector('[data-mapping-json]');
+      var addRule = form.querySelector('[data-add-mapping-rule]');
+      if (!editor || !raw) return;
+      var sourceTypes = ['ticket', 'message', 'log', 'sql_row', 'fabric_record', 'generic'];
+      function readRules() {
+        try {
+          var value = JSON.parse(raw.value || '[]');
+          return Array.isArray(value) ? value : [];
+        } catch (_) { return []; }
+      }
+      function input(label, value, placeholder) {
+        var wrapper = document.createElement('label');
+        wrapper.textContent = label;
+        var field = document.createElement('input');
+        field.type = 'text'; field.value = value || ''; field.placeholder = placeholder || '';
+        wrapper.appendChild(field);
+        return { wrapper: wrapper, field: field };
+      }
+      function addPair(fields, target, path) {
+        var pair = document.createElement('div');
+        pair.className = 'mapping-pair-row';
+        var targetInput = input('Object property', target, 'customer_name');
+        var pathInput = input('Normalized source path', path, 'requester_name');
+        var remove = document.createElement('button');
+        remove.type = 'button'; remove.className = 'btn-link btn-danger-link'; remove.textContent = 'Remove';
+        remove.addEventListener('click', function () { pair.remove(); });
+        pair.appendChild(targetInput.wrapper); pair.appendChild(pathInput.wrapper); pair.appendChild(remove);
+        fields.appendChild(pair);
+      }
+      function addRow(rule) {
+        rule = rule || { source_type: 'ticket', identity_field: '', fields: {} };
+        var row = document.createElement('div');
+        row.className = 'mapping-rule-row';
+        var header = document.createElement('div'); header.className = 'mapping-rule-header';
+        var source = document.createElement('label'); source.textContent = 'Source type';
+        var sourceSelect = document.createElement('select');
+        sourceTypes.forEach(function (value) { var option = document.createElement('option'); option.value = value; option.textContent = value; option.selected = rule.source_type === value; sourceSelect.appendChild(option); });
+        source.appendChild(sourceSelect);
+        var identity = input('Identity property', rule.identity_field, 'id or customer_name');
+        var remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn-link btn-danger-link'; remove.textContent = 'Remove rule';
+        remove.addEventListener('click', function () { row.remove(); });
+        header.appendChild(source); header.appendChild(identity.wrapper); header.appendChild(remove); row.appendChild(header);
+        var fields = document.createElement('div'); fields.className = 'mapping-fields';
+        var label = document.createElement('div'); label.className = 'detail-label'; label.textContent = 'Field mappings'; fields.appendChild(label);
+        var mapping = rule.fields && typeof rule.fields === 'object' && !Array.isArray(rule.fields) ? rule.fields : {};
+        Object.keys(mapping).forEach(function (key) { addPair(fields, key, mapping[key]); });
+        var addField = document.createElement('button'); addField.type = 'button'; addField.className = 'btn-link'; addField.textContent = '+ Add field mapping';
+        addField.addEventListener('click', function () { addPair(fields, '', ''); });
+        fields.appendChild(addField); row.appendChild(fields); editor.appendChild(row);
+      }
+      function render() {
+        editor.querySelectorAll('.mapping-rule-row, .mapping-empty').forEach(function (item) { item.remove(); });
+        var rules = readRules();
+        rules.forEach(addRow);
+        if (!rules.length) { var empty = document.createElement('p'); empty.className = 'muted mapping-empty'; empty.textContent = 'No source mappings defined. Add one to derive objects from normalized records.'; editor.appendChild(empty); }
+      }
+      function sync() {
+        var rules = [];
+        editor.querySelectorAll('.mapping-rule-row').forEach(function (row) {
+          var source = row.querySelector('select').value;
+          var identity = row.querySelector('.mapping-rule-header input').value.trim();
+          var fields = {};
+          row.querySelectorAll('.mapping-pair-row').forEach(function (pair) {
+            var values = pair.querySelectorAll('input');
+            var target = values[0].value.trim(); var path = values[1].value.trim();
+            if (target && path) fields[target] = path;
+          });
+          if (!Object.keys(fields).length) throw new Error('Every source mapping needs at least one field');
+          rules.push({ source_type: source, identity_field: identity, fields: fields });
+        });
+        raw.value = JSON.stringify(rules, null, 2);
+      }
+      if (addRule) addRule.addEventListener('click', function () { addRow({ source_type: 'ticket', identity_field: '', fields: {} }); });
+      raw.addEventListener('change', render);
+      form.addEventListener('submit', function (event) {
+        try { sync(); } catch (_) { event.preventDefault(); window.alert('Add at least one complete field mapping to each source rule.'); }
+      });
+      render();
+    });
+  }());
+</script>
+
+<script>
+  (function () {
+    var form = document.querySelector('[data-create-properties-form]');
+    if (!form) return;
+    var select = form.querySelector('#object-type');
+    var editor = form.querySelector('[data-create-property-editor]');
+    var raw = form.querySelector('[data-create-properties-json]');
+    function currentProperties() {
+      try {
+        var value = JSON.parse(raw.value || '{}');
+        return value && !Array.isArray(value) && typeof value === 'object' ? value : {};
+      } catch (_) { return {}; }
+    }
+    function addField(key, definition, properties) {
+      var type = definition && definition.type ? definition.type : 'string';
+      var inputType = type === 'boolean' ? 'boolean' : (type === 'array' || type === 'object' ? 'json' : (type === 'number' || type === 'integer' ? 'number' : 'text'));
+      var label = document.createElement('label');
+      label.className = 'property-editor-field';
+      var title = document.createElement('span');
+      title.textContent = key;
+      if (definition && definition.required) {
+        var required = document.createElement('span');
+        required.className = 'required-mark';
+        required.textContent = ' required';
+        title.appendChild(required);
+      }
+      label.appendChild(title);
+      var field = document.createElement(inputType === 'json' ? 'textarea' : 'input');
+      if (inputType === 'boolean') field.type = 'checkbox';
+      else if (inputType === 'number') field.type = 'number';
+      else if (inputType !== 'json') field.type = 'text';
+      field.dataset.propertyKey = key;
+      field.dataset.propertyType = inputType;
+      var value = properties[key];
+      if (inputType === 'boolean') field.checked = value === true;
+      else if (inputType === 'json') field.value = value === undefined ? (type === 'array' ? '[]' : '{}') : JSON.stringify(value);
+      else if (value !== undefined && value !== null) field.value = String(value);
+      if (definition && definition.required) field.required = true;
+      label.appendChild(field);
+      editor.appendChild(label);
+    }
+    function render() {
+      var option = select.options[select.selectedIndex];
+      var schema;
+      try { schema = JSON.parse(option.dataset.propertySchema || '{}'); } catch (_) { schema = {}; }
+      var properties = currentProperties();
+      editor.innerHTML = '';
+      var heading = document.createElement('div');
+      heading.className = 'detail-label';
+      heading.innerHTML = 'Structured properties <span class="muted">schema-aware</span>';
+      editor.appendChild(heading);
+      Object.keys(schema).sort().forEach(function (key) { addField(key, schema[key] || {}, properties); });
+      if (!Object.keys(schema).length) {
+        var empty = document.createElement('p');
+        empty.className = 'muted';
+        empty.textContent = 'This type has no declared fields. Use the advanced payload editor.';
+        editor.appendChild(empty);
+      }
+    }
+    function sync() {
+      var properties = currentProperties();
+      editor.querySelectorAll('[data-property-key]').forEach(function (field) {
+        var key = field.dataset.propertyKey;
+        var type = field.dataset.propertyType;
+        if (type === 'boolean') properties[key] = field.checked;
+        else if (type === 'number') {
+          if (field.value.trim() === '') delete properties[key];
+          else {
+            var number = Number(field.value);
+            if (!Number.isFinite(number)) throw new Error('Invalid number');
+            properties[key] = number;
+          }
+        } else if (type === 'json') {
+          if (field.value.trim() === '') delete properties[key];
+          else properties[key] = JSON.parse(field.value);
+        } else properties[key] = field.value;
+      });
+      raw.value = JSON.stringify(properties, null, 2);
+    }
+    select.addEventListener('change', render);
+    form.addEventListener('submit', function (event) {
+      try { sync(); } catch (_) {
+        event.preventDefault();
+        window.alert('Check the structured property values and JSON fields before creating the object.');
+      }
+    });
+    render();
+  }());
+</script>
+
+<script>
+  (function () {
+    document.querySelectorAll('[data-schema-builder]').forEach(function (form) {
+      var editor = form.querySelector('[data-schema-editor]');
+      var raw = form.querySelector('[data-schema-json]');
+      var add = form.querySelector('[data-add-schema-property]');
+      if (!editor || !raw) return;
+      var types = ['string', 'number', 'integer', 'boolean', 'array', 'object'];
+      var requiredByDefault = form.dataset.schemaRequiredDefault === 'true';
+      function readSchema() {
+        try {
+          var value = JSON.parse(raw.value || '{}');
+          return value && !Array.isArray(value) && typeof value === 'object' ? value : {};
+        } catch (_) { return {}; }
+      }
+      function row(key, definition) {
+        var wrap = document.createElement('div');
+        wrap.className = 'schema-property-row';
+        var name = document.createElement('input');
+        name.type = 'text'; name.placeholder = 'property name'; name.value = key || ''; name.dataset.schemaName = 'true';
+        var type = document.createElement('select');
+        type.dataset.schemaType = 'true';
+        types.forEach(function (value) { var option = document.createElement('option'); option.value = value; option.textContent = value; if ((definition && definition.type) === value) option.selected = true; type.appendChild(option); });
+        var requiredLabel = document.createElement('label');
+        requiredLabel.className = 'schema-required';
+        var isRequired = definition && definition.required !== undefined ? !!definition.required : requiredByDefault;
+        var required = document.createElement('input'); required.type = 'checkbox'; required.checked = isRequired; required.dataset.schemaRequired = 'true';
+        requiredLabel.appendChild(required); if (isRequired) requiredLabel.appendChild(document.createTextNode(' required'));
+        var remove = document.createElement('button');
+        remove.type = 'button'; remove.className = 'btn-link btn-danger-link'; remove.textContent = 'Remove';
+        remove.addEventListener('click', function () { wrap.remove(); });
+        wrap.appendChild(name); wrap.appendChild(type); wrap.appendChild(requiredLabel); wrap.appendChild(remove);
+        editor.appendChild(wrap);
+      }
+      function render() {
+        var schema = readSchema();
+        editor.querySelectorAll('.schema-property-row').forEach(function (item) { item.remove(); });
+        Object.keys(schema).sort().forEach(function (key) { row(key, schema[key] || {}); });
+      }
+      function sync() {
+        var schema = {};
+        var invalid = false;
+        editor.querySelectorAll('.schema-property-row').forEach(function (item) {
+          var name = item.querySelector('[data-schema-name]').value.trim();
+          if (!name || schema[name]) { invalid = true; return; }
+          var definition = { type: item.querySelector('[data-schema-type]').value };
+          if (item.querySelector('[data-schema-required]').checked || requiredByDefault) definition.required = item.querySelector('[data-schema-required]').checked;
+          schema[name] = definition;
+        });
+        if (invalid) throw new Error('Property names must be present and unique');
+        raw.value = JSON.stringify(schema, null, 2);
+      }
+      if (add) add.addEventListener('click', function () { row('', { type: 'string' }); });
+      raw.addEventListener('change', render);
+      form.addEventListener('submit', function (event) {
+        try { sync(); } catch (_) { event.preventDefault(); window.alert('Give each property a unique name before saving the type.'); }
+      });
+      render();
+    });
+  }());
+</script>
+
+<script>
+  (function () {
+    document.querySelectorAll('[data-relationship-form]').forEach(function (form) {
+      var linkType = form.querySelector('[data-link-type]');
+      var source = form.querySelector('[data-source-object]');
+      var target = form.querySelector('[data-target-object]');
+      if (!linkType || !source || !target) return;
+      function filter(select, allowedType) {
+        var first = null;
+        select.querySelectorAll('option').forEach(function (option) {
+          var allowed = option.dataset.objectType === allowedType;
+          option.hidden = !allowed;
+          option.disabled = !allowed;
+          if (allowed && !first) first = option;
+        });
+        if (!select.selectedOptions.length || select.selectedOptions[0].disabled) {
+          if (first) first.selected = true;
+        }
+      }
+      function apply() {
+        var option = linkType.selectedOptions[0];
+        if (!option) return;
+        filter(source, option.dataset.sourceType);
+        filter(target, option.dataset.targetType);
+      }
+      linkType.addEventListener('change', apply);
+      apply();
+    });
+  }());
+</script>
+
+<div class="ontology-secondary-grid">
+  <section class="panel"><div class="panel-heading"><div><h2>Schema definitions</h2><p class="muted">The contract behind each derived object.</p></div></div>
+    <div class="schema-list">{% for ot in object_types %}<details class="schema-card"><summary><strong>{{ ot.name }}</strong><span class="muted">{{ ot.property_count }} fields</span></summary><pre>{{ ot.schema }}</pre></details>{% endfor %}</div>
+  </section>
+  <section class="panel"><div class="panel-heading"><div><h2>Relationships</h2><p class="muted">How object types connect.</p></div>{% if can_manage %}<a class="btn btn-secondary panel-action" href="#new-link">New link</a>{% endif %}</div>
+    {% if link_types.is_empty() %}<div class="empty-state compact"><p>No relationship types defined.</p></div>
+    {% else %}<form class="inline ontology-relationship-filter" method="get" action="/ontology"><input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="property" value="{{ property }}"><input type="hidden" name="value" value="{{ value }}"><label for="ontology-link-filter">Relationship instances</label><select id="ontology-link-filter" name="link_type_id"><option value="">All relationship types</option>{% for link in link_types %}<option value="{{ link.id }}"{% if link.selected %} selected{% endif %}>{{ link.name }} · {{ link.source_name }} → {{ link.target_name }}</option>{% endfor %}</select><button class="btn btn-secondary" type="submit">Filter</button>{% if link_type_filter.is_some() %}<a class="btn-link" href="/ontology{% if !q.is_empty() %}?q={{ q|urlencode }}{% endif %}">Clear</a>{% endif %}<span class="muted">{{ matching_link_count }} live instance{% if matching_link_count != 1 %}s{% endif %}</span></form><div class="relationship-list">{% for link in link_types %}<div class="relationship-row"><span><span class="relationship-name">{{ link.name }}</span><small class="relationship-path">{{ link.source_name }} → {{ link.target_name }}</small></span><span class="relationship-end"><span class="muted">{{ link.cardinality }}</span>{% if can_manage %}<a class="btn-link" href="#edit-link-{{ link.id }}">Edit</a>{% endif %}{% if is_admin %}<form method="post" action="/ontology/links/{{ link.id }}/delete"><button class="btn-link btn-danger-link" type="submit">Delete</button></form>{% endif %}</span></div>{% if can_manage %}<details class="inline-edit" id="edit-link-{{ link.id }}"><summary>Edit {{ link.name }}</summary><form class="inline ontology-form" method="post" action="/ontology/links/{{ link.id }}/edit"><label>Name</label><input name="name" value="{{ link.name }}" required><label>Source type</label><select name="source_object_type_id">{% for ot in object_types %}<option value="{{ ot.id }}" {% if ot.id == link.source_id %}selected{% endif %}>{{ ot.name }}</option>{% endfor %}</select><label>Target type</label><select name="target_object_type_id">{% for ot in object_types %}<option value="{{ ot.id }}" {% if ot.id == link.target_id %}selected{% endif %}>{{ ot.name }}</option>{% endfor %}</select><label>Cardinality</label><select name="cardinality"><option {% if link.cardinality == "many-to-one" %}selected{% endif %}>many-to-one</option><option {% if link.cardinality == "one-to-many" %}selected{% endif %}>one-to-many</option><option {% if link.cardinality == "one-to-one" %}selected{% endif %}>one-to-one</option></select><button class="btn" type="submit">Save relationship</button></form></details>{% endif %}{% endfor %}</div>{% endif %}
+    {% if !links.is_empty() %}<div class="detail-label relationship-instance-label">Live relationship instances</div><div class="relationship-list">{% for instance in links %}<div class="relationship-row relationship-instance"><span><span class="relationship-name">{{ instance.link_type_name }}</span><small class="relationship-path"><a href="/ontology?object_id={{ instance.source_id }}#object-{{ instance.source_id }}">{{ instance.source_summary }}</a> → <a href="/ontology?object_id={{ instance.target_id }}#object-{{ instance.target_id }}">{{ instance.target_summary }}</a></small></span><span class="relationship-end">{% if can_manage %}<a class="btn-link" href="#edit-link-instance-{{ instance.id }}">Edit</a>{% endif %}{% if is_admin %}<form method="post" action="/ontology/links/instances/{{ instance.id }}/delete"><button class="btn-link" type="submit">Delete</button></form>{% endif %}</span></div>{% if can_manage %}<details class="inline-edit" id="edit-link-instance-{{ instance.id }}"><summary>Edit relationship instance</summary><form class="inline ontology-form relationship-instance-form" method="post" action="/ontology/links/instances/{{ instance.id }}/edit" data-relationship-form><label>Relationship type</label><select name="link_type_id" data-link-type>{% for link_type in link_types %}<option value="{{ link_type.id }}" data-source-type="{{ link_type.source_id }}" data-target-type="{{ link_type.target_id }}" {% if link_type.id.to_string() == instance.link_type_id.to_string() %}selected{% endif %}>{{ link_type.name }}</option>{% endfor %}</select><label>Source object</label><select name="source_object_id" data-source-object>{% for object in objects %}<option value="{{ object.id }}" data-object-type="{{ object.object_type_id }}" {% if object.id.to_string() == instance.source_id.to_string() %}selected{% endif %}>{{ object.type_name }} · {{ object.summary }}</option>{% endfor %}</select><label>Target object</label><select name="target_object_id" data-target-object>{% for object in objects %}<option value="{{ object.id }}" data-object-type="{{ object.object_type_id }}" {% if object.id.to_string() == instance.target_id.to_string() %}selected{% endif %}>{{ object.type_name }} · {{ object.summary }}</option>{% endfor %}</select><label>Properties <span class="muted">JSON</span></label><textarea name="properties" rows="3">{{ instance.properties }}</textarea><button class="btn" type="submit">Save relationship</button></form></details>{% endif %}{% endfor %}</div>{% endif %}
+    {% if can_manage %}<details class="authoring-drawer" id="new-link-instance"><summary>Create a relationship instance</summary><form class="inline ontology-form relationship-instance-form" method="post" action="/ontology/links/instances" data-relationship-form><label>Relationship type</label><select name="link_type_id" data-link-type required>{% for link_type in link_types %}<option value="{{ link_type.id }}" data-source-type="{{ link_type.source_id }}" data-target-type="{{ link_type.target_id }}">{{ link_type.name }} · {{ link_type.source_name }} → {{ link_type.target_name }}</option>{% endfor %}</select><label>Source object</label><select name="source_object_id" data-source-object required>{% for object in objects %}<option value="{{ object.id }}" data-object-type="{{ object.object_type_id }}">{{ object.type_name }} · {{ object.summary }}</option>{% endfor %}</select><label>Target object</label><select name="target_object_id" data-target-object required>{% for object in objects %}<option value="{{ object.id }}" data-object-type="{{ object.object_type_id }}">{{ object.type_name }} · {{ object.summary }}</option>{% endfor %}</select><label>Properties <span class="muted">JSON, optional</span></label><textarea name="properties" rows="3">{}</textarea><button class="btn" type="submit">Create relationship instance</button></form></details>{% endif %}
+    {% if can_manage %}<details class="authoring-drawer" id="new-link"><summary>Define a relationship</summary><form class="inline ontology-form" method="post" action="/ontology/links"><label for="link-name">Name</label><input id="link-name" name="name" placeholder="Raised by" required><label for="link-source">Source type</label><select id="link-source" name="source_object_type_id" required>{% for ot in object_types %}<option value="{{ ot.id }}">{{ ot.name }}</option>{% endfor %}</select><label for="link-target">Target type</label><select id="link-target" name="target_object_type_id" required>{% for ot in object_types %}<option value="{{ ot.id }}">{{ ot.name }}</option>{% endfor %}</select><label for="link-cardinality">Cardinality</label><select id="link-cardinality" name="cardinality"><option>many-to-one</option><option>one-to-many</option><option>one-to-one</option></select><button class="btn" type="submit">Create relationship</button></form></details>{% endif %}
+  </section>
+  <section class="panel"><div class="panel-heading"><div><h2>Action activity</h2><p class="muted">The latest actions taken by the system.</p></div>{% if can_manage %}<a class="btn btn-secondary panel-action" href="#new-action">New action</a>{% endif %}</div>
+    {% if !action_types.is_empty() %}<div class="defined-actions">{% for action_type in action_types %}<div class="defined-action"><span><strong>{{ action_type.name }}</strong><small>Target type: {{ action_type.target_type_name }}</small></span><span class="relationship-end">{% if can_manage %}<a class="btn-link" href="#edit-action-{{ action_type.id }}">Edit</a>{% endif %}{% if is_admin %}<form method="post" action="/ontology/actions/{{ action_type.id }}/delete"><button class="btn-link" type="submit">Delete</button></form>{% endif %}</span></div>{% if can_manage %}<details class="inline-edit" id="invoke-action-{{ action_type.id }}"><summary>Run {{ action_type.name }}</summary><form class="inline ontology-form" method="post" action="/ontology/actions/invoke"><input type="hidden" name="action_type_id" value="{{ action_type.id }}"><label>Target object</label><select name="target_object_id" required>{% for object in objects %}<option value="{{ object.id }}">{{ object.type_name }} · {{ object.summary }}</option>{% endfor %}</select><label>Parameters <span class="muted">JSON</span></label><textarea name="parameters" rows="3">{}</textarea><p class="muted action-contract">Preconditions: {{ action_type.preconditions }} · Effect: {{ action_type.effect_definition }}</p><button class="btn" type="submit">Run action</button></form></details><details class="inline-edit" id="edit-action-{{ action_type.id }}"><summary>Edit {{ action_type.name }}</summary><form class="inline ontology-form schema-builder-form" method="post" action="/ontology/actions/{{ action_type.id }}/edit" data-schema-builder data-schema-label="Parameter contract" data-schema-required-default="true"><label>Name</label><input name="name" value="{{ action_type.name }}" required><label>Target object type</label><select name="target_object_type_id"><option value="">Any object type</option>{% for ot in object_types %}<option value="{{ ot.id }}"{% if action_type.target_object_type_id.unwrap_or_default().to_string() == ot.id.to_string() %} selected{% endif %}>{{ ot.name }}</option>{% endfor %}</select><div class="schema-builder" data-schema-editor><div class="detail-label">Parameter contract <span class="muted">structured</span></div></div><button type="button" class="btn-link schema-add-property" data-add-schema-property>+ Add parameter</button><details class="advanced-json-editor"><summary>Advanced parameter schema JSON</summary><textarea name="parameter_schema" rows="7" data-schema-json>{{ action_type.parameter_schema }}</textarea></details><label>Preconditions <span class="muted">JSON</span></label><textarea name="preconditions" rows="3">{{ action_type.preconditions }}</textarea><label>Effect definition <span class="muted">JSON</span></label><textarea name="effect_definition" rows="3">{{ action_type.effect_definition }}</textarea><button class="btn" type="submit">Save action</button></form></details>{% endif %}{% endfor %}</div>{% endif %}
+    {% if action_invocations.is_empty() %}<div class="empty-state compact"><p>No action invocations recorded.</p></div>
+    {% else %}<div class="relationship-list">{% for action in action_invocations %}<div class="relationship-row"><span><span class="relationship-name">{{ action.action_name }}</span><small class="relationship-path">{{ action.target_count }} target(s) · {{ action.outcome }}</small></span><span class="muted">{{ action.executed_at.format("%Y-%m-%d %H:%M") }}</span></div>{% endfor %}</div>{% endif %}
+    {% if can_manage %}<details class="authoring-drawer" id="new-action"><summary>Define an action type</summary><form class="inline ontology-form schema-builder-form" method="post" action="/ontology/actions" data-schema-builder data-schema-label="Parameter contract" data-schema-required-default="true"><label for="action-name">Name</label><input id="action-name" name="name" placeholder="Escalate ticket" required><label for="action-target-type">Target object type</label><select id="action-target-type" name="target_object_type_id" required><option value="">Choose the governed target type</option>{% for ot in object_types %}<option value="{{ ot.id }}">{{ ot.name }}</option>{% endfor %}</select><div class="schema-builder" data-schema-editor><div class="detail-label">Parameter contract <span class="muted">structured</span></div></div><button type="button" class="btn-link schema-add-property" data-add-schema-property>+ Add parameter</button><details class="advanced-json-editor"><summary>Advanced parameter schema JSON</summary><textarea id="action-params" name="parameter_schema" rows="7" data-schema-json>{}</textarea></details><label for="action-preconditions">Preconditions <span class="muted">JSON</span></label><textarea id="action-preconditions" name="preconditions" rows="3">{}</textarea><label for="action-effects">Effect definition <span class="muted">JSON</span></label><textarea id="action-effects" name="effect_definition" rows="3">{}</textarea><p class="muted action-contract-help">Bind an effect to a submitted parameter with <code>{"$parameter":"field_name"}</code>, for example <code>{"status":{"$parameter":"next_status"}}</code>. Literal JSON values are applied as-is.</p><button class="btn" type="submit">Create action type</button></form></details>{% endif %}
+  </section>
+</div>
+{% if can_manage && !action_types.is_empty() %}
+<section class="panel ontology-action-workbench">
+  <div class="panel-heading"><div><h2>Structured execution</h2><p class="muted">Run governed actions with typed parameters from the live ontology contract.</p></div><span class="pill pill-muted">operator control</span></div>
+  <div class="structured-action-grid">
+  {% for action_type in action_types %}
+  <form class="inline ontology-form ontology-action-form" method="post" action="/ontology/actions/invoke" data-ontology-action-form>
+    <input type="hidden" name="action_type_id" value="{{ action_type.id }}"><input type="hidden" name="target_object_ids" value="" data-ontology-selected-targets><strong>{{ action_type.name }}</strong>
+    <label>Target object <span class="muted">eligible targets first</span></label><select name="target_object_id" required>{% for target in action_type.target_options %}<option value="{{ target.id }}"{% if !target.eligible %} disabled{% endif %}>{{ target.type_name }} · {{ target.label }}{% if !target.eligible %} · preconditions not met{% endif %}</option>{% endfor %}</select>
+    {% if action_type.parameter_fields.is_empty() %}<p class="muted">No parameters required.</p>{% else %}<div class="action-parameter-fields"><div class="detail-label">Parameters</div>{% for field in action_type.parameter_fields %}<label>{{ field.name }}{% if field.required %} <span class="required-mark">required</span>{% endif %}{% if field.field_type == "boolean" %}<input type="checkbox" data-ontology-action-field="{{ field.name }}" data-action-type="boolean">{% else if field.field_type == "array" || field.field_type == "object" %}<textarea rows="2" data-ontology-action-field="{{ field.name }}" data-action-type="{{ field.field_type }}">{{ field.default_value }}</textarea>{% else %}<input type="{% if field.field_type == "number" || field.field_type == "integer" %}number{% else %}text{% endif %}" data-ontology-action-field="{{ field.name }}" data-action-type="{{ field.field_type }}" value="{{ field.default_value }}"{% if field.required %} required{% endif %}>{% endif %}</label>{% endfor %}</div>{% endif %}
+    <input type="hidden" name="parameters" value="{}"><p class="muted action-contract">Preconditions: {{ action_type.preconditions }} · Effect: {{ action_type.effect_definition }}</p><button type="button" class="btn-link ontology-use-selection" data-ontology-use-selection>Use selected entities</button><button class="btn" type="submit">Run governed action</button>
+  </form>
+  {% endfor %}
+  </div>
+</section>
+<script>
+  (function () {
+    var boxes = function () { return Array.prototype.slice.call(document.querySelectorAll('[data-ontology-object-id]')); };
+    var selectionKey = 'kizashi.ontology.selection';
+    var selectionTypeKey = 'kizashi.ontology.selection-types';
+    var persisted = [];
+    var persistedTypes = {};
+    try { persisted = JSON.parse(localStorage.getItem(selectionKey) || '[]').filter(function (value) { return typeof value === 'string'; }); } catch (_) { persisted = []; }
+    try { persistedTypes = JSON.parse(localStorage.getItem(selectionTypeKey) || '{}'); } catch (_) { persistedTypes = {}; }
+    boxes().forEach(function (box) { box.checked = persisted.indexOf(box.dataset.ontologyObjectId) !== -1; });
+    var selected = function () {
+      var visible = boxes(); var visibleIds = visible.map(function (box) { return box.dataset.ontologyObjectId; });
+      return Array.from(new Set(persisted.filter(function (id) { return visibleIds.indexOf(id) === -1; }).concat(visible.filter(function (box) { return box.checked; }).map(function (box) { return box.dataset.ontologyObjectId; }))));
+    };
+    var syncSelection = function () {
+      persisted = selected();
+      boxes().forEach(function (box) { if (box.checked) persistedTypes[box.dataset.ontologyObjectId] = box.dataset.ontologyObjectType; else delete persistedTypes[box.dataset.ontologyObjectId]; });
+      try { localStorage.setItem(selectionKey, JSON.stringify(persisted)); } catch (_) {}
+      try { localStorage.setItem(selectionTypeKey, JSON.stringify(persistedTypes)); } catch (_) {}
+      var count = document.getElementById('ontology-selection-count');
+      if (count) count.textContent = persisted.length ? persisted.length + ' entit' + (persisted.length === 1 ? 'y' : 'ies') + ' selected across this view.' : 'No persisted entities selected.';
+      var compare = document.getElementById('ontology-compare-selected');
+      if (compare) {
+        var canCompare = persisted.length >= 2;
+        compare.href = canCompare ? '/ontology/compare?ids=' + encodeURIComponent(persisted.join(',')) : '/ontology/compare';
+        compare.setAttribute('aria-disabled', canCompare ? 'false' : 'true');
+        compare.classList.toggle('is-disabled', !canCompare);
+      }
+    };
+    boxes().forEach(function (box) { box.addEventListener('change', syncSelection); });
+    syncSelection();
+    var selectVisible = document.getElementById('ontology-select-visible');
+    if (selectVisible) selectVisible.addEventListener('click', function () {
+      var allSelected = boxes().length > 0 && boxes().every(function (box) { return box.checked; });
+      boxes().forEach(function (box) { box.checked = !allSelected; });
+      syncSelection();
+      selectVisible.textContent = allSelected ? 'Select visible' : 'Clear selection';
+    });
+    var clearSelection = document.getElementById('ontology-clear-selection');
+    if (clearSelection) clearSelection.addEventListener('click', function () { persisted = []; persistedTypes = {}; boxes().forEach(function (box) { box.checked = false; }); try { localStorage.removeItem(selectionKey); localStorage.removeItem(selectionTypeKey); } catch (_) {} syncSelection(); });
+    document.querySelectorAll('[data-ontology-use-selection]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var form = button.closest('form');
+        var allowed = Array.prototype.slice.call(form.querySelectorAll('select[name="target_object_id"] option:not(:disabled)')).map(function (option) { return option.value; });
+        var ids = selected().filter(function (id) { return allowed.indexOf(id) !== -1; });
+        if (!ids.length) { window.alert('Select at least one visible entity first.'); return; }
+        form.querySelector('[data-ontology-selected-targets]').value = ids.join(',');
+        button.textContent = ids.length + ' entities selected';
+      });
+    });
+    document.querySelectorAll('[data-ontology-action-form]').forEach(function (form) {
+      form.addEventListener('submit', function (event) {
+        var parameters = {};
+        try {
+          form.querySelectorAll('[data-ontology-action-field]').forEach(function (field) {
+            var type = field.dataset.actionType;
+            if (type === 'boolean') parameters[field.dataset.ontologyActionField] = field.checked;
+            else if (type === 'number') parameters[field.dataset.ontologyActionField] = Number(field.value);
+            else if (type === 'integer') parameters[field.dataset.ontologyActionField] = parseInt(field.value, 10);
+            else if (type === 'array' || type === 'object') parameters[field.dataset.ontologyActionField] = field.value.trim() ? JSON.parse(field.value) : (type === 'array' ? [] : {});
+            else parameters[field.dataset.ontologyActionField] = field.value;
+          });
+          form.querySelector('input[name="parameters"]').value = JSON.stringify(parameters);
+        } catch (_) { event.preventDefault(); window.alert('Parameters must match the governed action schema.'); }
+      });
+    });
+  }());
+</script>
+{% endif %}
+<template id="ontology-all-object-options">{% for object in relationship_objects %}<option value="{{ object.id }}" data-object-type="{{ object.object_type_id }}">{{ object.type_name }} · {{ object.summary }}</option>{% endfor %}</template>
+<script>
+  (function () {
+    var template = document.getElementById('ontology-all-object-options');
+    if (!template) return;
+    var options = Array.prototype.slice.call(template.content.querySelectorAll('option'));
+    document.querySelectorAll('[data-relationship-form] [data-source-object], [data-relationship-form] [data-target-object]').forEach(function (select) {
+      var selected = select.value;
+      select.replaceChildren.apply(select, options.map(function (option) { return option.cloneNode(true); }));
+      if (selected) select.value = selected;
+    });
+    document.querySelectorAll('[data-relationship-form] [data-link-type]').forEach(function (select) { select.dispatchEvent(new Event('change')); });
+  }());
+</script>
+<script>
+  (function () {
+    function parseLiteral(value) { var trimmed = value.trim(); if (!trimmed) return ''; try { return JSON.parse(trimmed); } catch (_) { return value; } }
+    function formatLiteral(value) { return typeof value === 'string' ? value : JSON.stringify(value); }
+    function installContractEditor(raw, kind) {
+      var form = raw.closest('form'); var readyKey = kind === 'effect' ? 'contractEffectReady' : 'contractPreconditionsReady'; if (!form || form.dataset[readyKey] === 'true') return; form.dataset[readyKey] = 'true'; raw.style.display = 'none';
+      var previous = raw.previousElementSibling; if (previous && previous.tagName.toLowerCase() === 'label') previous.style.display = 'none';
+      var editor = document.createElement('div'); editor.className = 'contract-builder';
+      var heading = document.createElement('div'); heading.className = 'detail-label'; heading.textContent = kind === 'effect' ? 'Effect definition · structured' : 'Preconditions · structured property checks'; editor.appendChild(heading);
+      var add = document.createElement('button'); add.type = 'button'; add.className = 'btn-link'; add.textContent = kind === 'effect' ? '+ Add effect' : '+ Add precondition';
+      var rawToggle = document.createElement('button'); rawToggle.type = 'button'; rawToggle.className = 'btn-link contract-raw-toggle'; rawToggle.textContent = 'Show advanced JSON';
+      rawToggle.addEventListener('click', function () { var visible = raw.style.display !== 'none'; raw.style.display = visible ? 'none' : 'block'; if (previous) previous.style.display = visible ? 'none' : 'block'; rawToggle.textContent = visible ? 'Show advanced JSON' : 'Hide advanced JSON'; });
+      raw.parentNode.insertBefore(editor, raw); raw.parentNode.insertBefore(rawToggle, raw);
+      function read() { try { var value = JSON.parse(raw.value || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch (_) { return {}; } }
+      function addRow(key, value) {
+        var row = document.createElement('div'); row.className = 'contract-row';
+        var keyLabel = document.createElement('label'); keyLabel.textContent = 'Object property'; var keyInput = document.createElement('input'); keyInput.type = 'text'; keyInput.value = key || ''; keyInput.placeholder = 'status'; keyLabel.appendChild(keyInput);
+        var valueLabel = document.createElement('label'); var valueInput = document.createElement('input'); valueInput.type = 'text'; var parameterValue = kind === 'effect' && value && typeof value === 'object' && value.$parameter !== undefined; valueInput.value = parameterValue ? String(value.$parameter) : formatLiteral(value === undefined ? '' : value); valueInput.placeholder = kind === 'effect' ? 'Investigating or next_status' : 'Investigating';
+        if (kind === 'effect') { valueLabel.textContent = 'Effect value'; var mode = document.createElement('select'); var literal = document.createElement('option'); literal.value = 'literal'; literal.textContent = 'Literal value'; var parameter = document.createElement('option'); parameter.value = 'parameter'; parameter.textContent = 'Action parameter'; mode.appendChild(literal); mode.appendChild(parameter); mode.value = parameterValue ? 'parameter' : 'literal'; valueLabel.appendChild(mode); valueInput.dataset.modeSelect = 'true'; }
+        valueLabel.appendChild(valueInput); var remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn-link btn-danger-link'; remove.textContent = 'Remove'; remove.addEventListener('click', function () { row.remove(); });
+        row.appendChild(keyLabel); row.appendChild(valueLabel); row.appendChild(remove); editor.insertBefore(row, add);
+      }
+      function render() { editor.querySelectorAll('.contract-row, .contract-empty').forEach(function (item) { item.remove(); }); var values = read(); Object.keys(values).forEach(function (key) { addRow(key, values[key]); }); if (!Object.keys(values).length) { var empty = document.createElement('p'); empty.className = 'muted contract-empty'; empty.textContent = 'No contract rules defined yet.'; editor.insertBefore(empty, add); } }
+      function sync() { var values = {}; editor.querySelectorAll('.contract-row').forEach(function (row) { var inputs = row.querySelectorAll('input'); var key = inputs[0].value.trim(); if (!key || values[key] !== undefined) throw new Error('Contract properties must be present and unique'); var value = parseLiteral(inputs[1].value); if (kind === 'effect' && inputs[1].dataset.modeSelect && inputs[1].previousElementSibling.value === 'parameter') value = { $parameter: inputs[1].value.trim() }; values[key] = value; }); raw.value = JSON.stringify(values, null, 2); }
+      add.addEventListener('click', function () { addRow('', ''); }); form.addEventListener('submit', function (event) { try { sync(); } catch (_) { event.preventDefault(); window.alert('Complete each contract rule with a unique property name.'); } }); raw.addEventListener('change', render); editor.appendChild(add); render();
+    }
+    document.querySelectorAll('textarea[name="preconditions"]').forEach(function (raw) { installContractEditor(raw, 'preconditions'); }); document.querySelectorAll('textarea[name="effect_definition"]').forEach(function (raw) { installContractEditor(raw, 'effect'); });
+  }());
+</script>
+<style>
+  /* The model workspace stays readable and coherent when the global theme changes. */
+  .ontology-telemetry-track, .ontology-shape-track { background:var(--surface-raised); }
+  .ontology-telemetry-fill, .ontology-shape-fill { background:linear-gradient(90deg,var(--accent-dim),var(--accent)); }
+  .ontology-shape-fill.mapping { background:var(--accent-secondary,#8d79dc); }
+  .ontology-shape-fill.relationship { background:var(--success); }
+  .ontology-relationship-card, .ontology-shape-card { background:var(--surface-raised); border-color:var(--border); }
+  .ontology-relationship-card:hover, .ontology-shape-card:hover { background:var(--surface-hover); border-color:var(--accent); }
+  .ontology-telemetry-count, .ontology-shape-value { color:var(--text); }
+  .ontology-relationship-volume { color:var(--accent); }
+  .ontology-matrix-cell { background:color-mix(in srgb,var(--accent) 8%,var(--surface-raised)); }
+  .ontology-matrix-cell.active { background:color-mix(in srgb,var(--accent) 72%,var(--surface-raised)); }
+</style>
 {% endblock %}

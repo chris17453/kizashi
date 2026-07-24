@@ -1,18 +1,45 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Incidents</h1>
-<p class="muted">Groups related Events into one trackable problem — select Events on the
-<a href="/events">Events</a> page and use "Create Incident from Selected" to start one, or
-create a blank one below.</p>
+<style>
+  .incident-telemetry{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;margin:18px 0}.incident-telemetry-panel{min-height:205px}.incident-metric-list{display:grid;gap:12px;margin-top:17px}.incident-metric-row{display:grid;grid-template-columns:76px 1fr 38px;gap:12px;align-items:center;text-decoration:none}.incident-metric-row strong{font-size:12px}.incident-metric-track{height:9px;border-radius:99px;background:#17263a;overflow:hidden}.incident-metric-fill{height:100%;min-width:3px;border-radius:99px}.incident-metric-fill.risk{background:linear-gradient(90deg,#b76870,#e49a75)}.incident-metric-fill.warning{background:linear-gradient(90deg,#b88945,#e2c06b)}.incident-metric-fill.good{background:linear-gradient(90deg,#3e9b79,#78d5a4)}.incident-metric-fill.neutral{background:linear-gradient(90deg,#4d82b6,#86b4dd)}.incident-metric-count{text-align:right;color:#e4effc;font-variant-numeric:tabular-nums}.incident-metric-row:hover{opacity:.86}@media(max-width:820px){.incident-telemetry{grid-template-columns:1fr}}
+  .incident-sla-matrix{margin:0 0 1.25rem}.incident-sla-matrix table{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--border);border-radius:9px}.incident-sla-matrix th,.incident-sla-matrix td{padding:.65rem .75rem;border-bottom:1px solid var(--border);text-align:right}.incident-sla-matrix th{font-size:.68rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em}.incident-sla-matrix th:first-child,.incident-sla-matrix td:first-child{text-align:left}.incident-sla-matrix tr:last-child td{border-bottom:0}.incident-sla-matrix td a{display:block;color:var(--text);text-decoration:none;font:700 1rem ui-monospace,SFMono-Regular,Menlo,monospace}.incident-sla-matrix td a:hover{color:var(--accent)}.incident-sla-matrix .matrix-risk{color:#e47a7c}.incident-sla-matrix .matrix-warning{color:#e1be6a}.incident-sla-matrix .matrix-good{color:#76d4a0}.incident-sla-matrix .matrix-neutral{color:#8bb7df}
+  .incident-correlation-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.65rem}.incident-correlation-card{display:grid;gap:.35rem;padding:.8rem;border:1px solid var(--border-subtle);border-radius:8px;background:var(--surface);color:var(--text);text-decoration:none}.incident-correlation-card:hover{border-color:var(--accent);background:var(--surface-hover);text-decoration:none}.incident-correlation-card strong{font-size:.9rem}.incident-correlation-card small{color:var(--text-dim)}.incident-correlation-meta{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap}.incident-bulk-preflight{flex-basis:100%;padding-top:.35rem;color:var(--text-dim);font-size:.72rem}.incident-bulk-preflight strong{color:var(--text)}
+</style>
+<div class="page-header"><div><div class="page-kicker">Operations / case management</div><h1>Incident Queue</h1><p class="page-description">Turn correlated signals into owned cases, make governed lifecycle changes, and keep the evidence chain visible.</p></div><div class="quick-actions"><span class="console-live" data-incident-live-status>Live refresh paused</span><button type="button" class="btn btn-secondary" data-incident-refresh>Refresh now</button><button type="button" class="btn btn-secondary" data-incident-toggle-live>Enable live mode</button><a class="btn btn-secondary" href="/events">Inspect events &rarr;</a><a class="btn btn-secondary" href="/reports">Open posture report</a><a class="btn btn-secondary" href="/incidents/export.csv?q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}">Export filtered queue &darr;</a></div></div>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 {% if let Some(e) = form_error %}<p class="error">{{ e }}</p>{% endif %}
+{% if notice == "bulk_updated" %}<p class="success-banner">Selected incidents were updated and audited.</p>{% endif %}
+{% if notice == "bulk_partial" %}<p class="warning-banner">Some selected incidents were updated; review the queue for any remaining cases.</p>{% endif %}
+{% if notice == "bulk_failed" %}<p class="error">No selected incidents could be updated.</p>{% endif %}
+{% if notice == "bulk_empty" %}<p class="warning-banner">Select at least one incident before applying a lifecycle action.</p>{% endif %}
+{% if notice == "bulk_invalid" %}<p class="error">Choose a valid lifecycle action and try again.</p>{% endif %}
+{% if notice == "transitioned" %}<p class="success-banner">The incident lifecycle transition was applied and audited.</p>{% endif %}
+
+<div class="kpi-grid incident-kpis">
+  <a class="kpi-card kpi-card-link {% if open_count > 0 %}kpi-danger{% else %}kpi-success{% endif %}" href="/incidents?status=active&q={{ q|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&view={{ view|urlencode }}"><div class="kpi-label">Active cases</div><div class="kpi-value">{{ open_count }}</div><div class="kpi-sub">{{ total_count }} total in workspace · active scope &rarr;</div></a>
+  <a class="kpi-card kpi-card-link {% if critical_count > 0 %}kpi-danger{% else %}kpi-success{% endif %}" href="/incidents?severity=critical&q={{ q|urlencode }}&status={{ status|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&view={{ view|urlencode }}"><div class="kpi-label">Critical exposure</div><div class="kpi-value">{{ critical_count }}</div><div class="kpi-sub">unresolved critical cases · inspect &rarr;</div></a>
+  <a class="kpi-card kpi-card-link kpi-accent" href="/incidents?status=acknowledged&q={{ q|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&view={{ view|urlencode }}"><div class="kpi-label">Acknowledged</div><div class="kpi-value">{{ acknowledged_count }}</div><div class="kpi-sub">in active response · open lane &rarr;</div></a>
+  <a class="kpi-card kpi-card-link {% if sla_breached_count > 0 %}kpi-danger{% else %}kpi-success{% endif %}" href="/incidents?sla=breached&q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&owner={{ owner|urlencode }}&view={{ view|urlencode }}"><div class="kpi-label">SLA breaches</div><div class="kpi-value">{{ sla_breached_count }}</div><div class="kpi-sub">cases past response target · review &rarr;</div></a>
+</div>
+
+<section class="incident-telemetry" aria-label="Incident triage telemetry">
+  <div class="panel incident-telemetry-panel"><div class="panel-heading"><div><h2>Severity mix</h2><p class="muted">Cases in the current triage scope.</p></div><span class="pill pill-muted">{{ matching_count }} shown</span></div><div class="incident-metric-list">{% for metric in severity_metrics %}<a class="incident-metric-row" href="{{ metric.href }}"><strong>{{ metric.label }}</strong><span class="incident-metric-track"><span class="incident-metric-fill {{ metric.tone }}" style="width:{% if metric.percent > 0 %}{{ metric.percent }}{% else %}2{% endif %}%"></span></span><span class="incident-metric-count">{{ metric.count }}</span></a>{% endfor %}</div></div>
+  <div class="panel incident-telemetry-panel"><div class="panel-heading"><div><h2>SLA heatmap</h2><p class="muted">Response target posture across this queue.</p></div><span class="pill pill-muted">triage clock</span></div><div class="incident-metric-list">{% for metric in sla_metrics %}<a class="incident-metric-row" href="{{ metric.href }}"><strong>{{ metric.label }}</strong><span class="incident-metric-track"><span class="incident-metric-fill {{ metric.tone }}" style="width:{% if metric.percent > 0 %}{{ metric.percent }}{% else %}2{% endif %}%"></span></span><span class="incident-metric-count">{{ metric.count }}</span></a>{% endfor %}</div></div>
+</section>
+
+<section class="panel incident-sla-matrix" aria-label="Incident severity by SLA matrix"><div class="panel-heading"><div><h2>Severity × SLA control board</h2><p class="muted">Find where response debt is concentrated. Each cell opens the exact severity and SLA queue.</p></div><span class="pill pill-muted">{{ matching_count }} cases</span></div><table><thead><tr><th>Severity</th>{% if let Some(first) = sla_matrix.first() %}{% for cell in first.cells %}<th>{{ cell.label }}</th>{% endfor %}{% endif %}</tr></thead><tbody>{% for row in sla_matrix %}<tr><td><strong>{{ row.severity }}</strong></td>{% for cell in row.cells %}<td><a class="matrix-{{ cell.tone }}" href="{{ cell.href }}" title="{{ cell.label }} · {{ row.severity }}">{{ cell.count }}</a></td>{% endfor %}</tr>{% endfor %}</tbody></table></section>
+
+<section class="panel" aria-label="Cross-case correlation"><div class="panel-heading"><div><h2>Cross-case correlation</h2><p class="muted">Shared signal group keys reveal where separate investigations may represent one operating problem. Open a cluster to inspect the matching evidence scope.</p></div><span class="pill pill-muted">{{ correlation_clusters.len() }} cluster{% if correlation_clusters.len() != 1 %}s{% endif %}</span></div>{% if correlation_clusters.is_empty() %}<p class="muted">No multi-case signal overlap is present in this triage scope.</p>{% else %}<div class="incident-correlation-grid">{% for cluster in correlation_clusters %}<a class="incident-correlation-card" href="{{ cluster.href }}"><span class="detail-label">Shared group key</span><strong>{{ cluster.group_key }}</strong><div class="incident-correlation-meta"><span class="pill {% if cluster.severity == "critical" || cluster.severity == "high" %}pill-down{% else %}pill-muted{% endif %}">{{ cluster.severity }}</span><small>{{ cluster.case_count }} cases · {{ cluster.signal_count }} signals</small></div><small>Open correlated queue &rarr;</small></a>{% endfor %}</div>{% endif %}</section>
 
 {% if can_write %}
-<div class="panel" style="max-width: 480px; margin-bottom: 1.5rem;">
-  <h2>Create an incident</h2>
+<section class="panel incident-create-panel">
+  <div class="panel-heading"><div><h2>Create a case</h2><p class="muted">Start an investigation when a signal has no existing track.</p></div></div>
   <form class="inline" method="post" action="/incidents">
     <label for="title">Title</label>
     <input type="text" id="title" name="title" placeholder="elevated error rate" required>
+
+    <label for="summary">Investigation brief</label>
+    <textarea id="summary" name="summary" rows="3" placeholder="What is the impact, scope, or decision context?" maxlength="2000"></textarea>
 
     <label for="severity">Severity</label>
     <select id="severity" name="severity">
@@ -24,41 +51,92 @@ create a blank one below.</p>
 
     <button type="submit">Create incident</button>
   </form>
-</div>
+</section>
 {% endif %}
 
-<form class="inline" method="get" action="/incidents" style="margin-bottom:1rem;">
+<section class="panel incident-queue-panel"><div class="panel-heading"><div><h2>Case queue</h2><p class="muted">Search and triage the workspace’s active investigations.</p></div><div class="queue-view-toggle"><a class="btn-link {% if view == "board" %}view-selected{% endif %}" href="/incidents?view=board&q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}">Board</a><a class="btn-link {% if view != "board" %}view-selected{% endif %}" href="/incidents?view=table&q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}">Table</a><span class="pill pill-muted">{{ incidents.len() }} shown{% if incidents.len() != matching_count %} of {{ matching_count }}{% endif %}</span></div></div>
+<form class="inline incident-filter-bar" method="get" action="/incidents" style="margin-bottom:1rem;">
+  <label for="q">Search</label>
+  <input type="search" id="q" name="q" value="{{ q }}" placeholder="Title or investigation topic...">
   <label for="status">Status</label>
   <select id="status" name="status">
     <option value="" {% if status.is_empty() %}selected{% endif %}>All</option>
+    <option value="active" {% if status == "active" %}selected{% endif %}>Active (open + acknowledged)</option>
     <option value="open" {% if status == "open" %}selected{% endif %}>Open</option>
     <option value="acknowledged" {% if status == "acknowledged" %}selected{% endif %}>Acknowledged</option>
     <option value="resolved" {% if status == "resolved" %}selected{% endif %}>Resolved</option>
   </select>
+  <label for="severity">Severity</label>
+  <select id="severity" name="severity">
+    <option value="" {% if severity.is_empty() %}selected{% endif %}>All severities</option>
+    <option value="critical" {% if severity == "critical" %}selected{% endif %}>Critical</option>
+    <option value="high" {% if severity == "high" %}selected{% endif %}>High</option>
+    <option value="medium" {% if severity == "medium" %}selected{% endif %}>Medium</option>
+    <option value="low" {% if severity == "low" %}selected{% endif %}>Low</option>
+  </select>
+  <label for="sla">SLA posture</label>
+  <select id="sla" name="sla">
+    <option value="" {% if sla.is_empty() %}selected{% endif %}>All SLA states</option>
+    <option value="breached" {% if sla == "breached" %}selected{% endif %}>Breached</option>
+    <option value="at-risk" {% if sla == "at-risk" %}selected{% endif %}>At risk</option>
+    <option value="on-track" {% if sla == "on-track" %}selected{% endif %}>On track</option>
+    <option value="resolved" {% if sla == "resolved" %}selected{% endif %}>Resolved within/after target</option>
+  </select>
+  <label for="owner">Owner</label>
+  <select id="owner" name="owner">
+    <option value="" {% if owner.is_empty() %}selected{% endif %}>All owners</option>
+    {% for option in assignee_options %}<option value="{{ option.username }}" {% if owner == option.username %}selected{% endif %}>{{ option.username }} · {{ option.role }}</option>{% endfor %}
+  </select>
   <button type="submit">Filter</button>
-  {% if !status.is_empty() %}<a href="/incidents" class="btn-link">Clear</a>{% endif %}
+  {% if !status.is_empty() || !severity.is_empty() || !sla.is_empty() || !owner.is_empty() || !q.is_empty() %}<a href="/incidents" class="btn-link">Clear</a>{% endif %}
 </form>
+<form class="inline incidents-export-form" method="get" action="/incidents/export.csv"><input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="status" value="{{ status }}"><input type="hidden" name="severity" value="{{ severity }}"><input type="hidden" name="sla" value="{{ sla }}"><input type="hidden" name="owner" value="{{ owner }}"><input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}"><button type="submit" class="btn-link">Export this exact queue scope &darr;</button><span class="muted">Complete filtered case set, including SLA posture.</span></form>
+<form class="inline incidents-save-view-form" method="post" action="/incidents/saved-views">
+  <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="status" value="{{ status }}"><input type="hidden" name="severity" value="{{ severity }}"><input type="hidden" name="sla" value="{{ sla }}"><input type="hidden" name="owner" value="{{ owner }}"><input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}"><input type="hidden" name="view" value="{{ view }}">
+  <label for="save-incident-view-name">Save this view as</label><input id="save-incident-view-name" name="name" placeholder="Critical unassigned cases" required><button type="submit" class="btn">Save view</button>
+</form>
+{% if !saved_views.is_empty() %}<div class="saved-view-strip"><span class="detail-label">Saved case views</span>{% for view_item in saved_views %}<span class="saved-view-chip"><a href="{{ view_item.load_url }}">{{ view_item.name }}</a><form method="post" action="/incidents/saved-views/{{ view_item.id }}/delete"><button class="btn-link btn-danger-link" type="submit" aria-label="Remove {{ view_item.name }}">×</button></form></span>{% endfor %}</div>{% endif %}
 
 {% if incidents.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#9888;</div>
   <p>No incidents{% if !status.is_empty() %} match this filter{% else %} yet for this tenant{% endif %}.</p>
 </div>
+{% else if view == "board" %}
+<div class="incident-board" aria-label="Incident lifecycle board">
+  <section class="incident-board-column incident-board-open"><div class="incident-board-heading"><div><span class="posture-dot posture-risk"></span><h3>Open</h3></div><span class="pill pill-muted">{{ board_open_count }} · active</span></div>
+    {% for incident in incidents %}{% if incident.status.to_string() == "open" %}<a class="incident-board-card" href="/incidents/{{ incident.id }}"><div class="incident-board-card-top"><span class="pill {% if incident.severity.to_string() == "critical" || incident.severity.to_string() == "high" %}pill-down{% else %}pill-muted{% endif %}">{{ incident.severity }}</span><span class="muted">{{ incident.event_count }} signal{% if incident.event_count != 1 %}s{% endif %}</span></div><strong>{{ incident.title }}</strong><div class="incident-board-card-meta">{% if let Some(owner) = incident.assigned_to %}<span class="owner-chip">{{ owner }}</span>{% else %}<span class="muted">Unassigned</span>{% endif %}<span class="muted">{{ incident.created_at.format("%b %d, %H:%M") }}</span></div><span class="incident-board-open-link">Open investigation &rarr;</span></a><div class="incident-board-card-actions"><form method="post" action="/incidents/{{ incident.id }}/status"><input type="hidden" name="target_status" value="acknowledged"><button type="submit" class="btn-link">Acknowledge</button></form><form method="post" action="/incidents/{{ incident.id }}/status"><input type="hidden" name="target_status" value="resolved"><button type="submit" class="btn-link">Resolve</button></form></div>{% endif %}{% endfor %}
+  </section>
+  <section class="incident-board-column incident-board-ack"><div class="incident-board-heading"><div><span class="posture-dot posture-warn"></span><h3>Acknowledged</h3></div><span class="pill pill-muted">{{ board_acknowledged_count }} · in response</span></div>
+    {% for incident in incidents %}{% if incident.status.to_string() == "acknowledged" %}<a class="incident-board-card" href="/incidents/{{ incident.id }}"><div class="incident-board-card-top"><span class="pill {% if incident.severity.to_string() == "critical" || incident.severity.to_string() == "high" %}pill-down{% else %}pill-muted{% endif %}">{{ incident.severity }}</span><span class="muted">{{ incident.event_count }} signal{% if incident.event_count != 1 %}s{% endif %}</span></div><strong>{{ incident.title }}</strong><div class="incident-board-card-meta">{% if let Some(owner) = incident.assigned_to %}<span class="owner-chip">{{ owner }}</span>{% else %}<span class="muted">Unassigned</span>{% endif %}<span class="muted">{{ incident.created_at.format("%b %d, %H:%M") }}</span></div><span class="incident-board-open-link">Resume investigation &rarr;</span></a><div class="incident-board-card-actions"><form method="post" action="/incidents/{{ incident.id }}/status"><input type="hidden" name="target_status" value="resolved"><button type="submit" class="btn-link">Resolve</button></form><form method="post" action="/incidents/{{ incident.id }}/status"><input type="hidden" name="target_status" value="open"><button type="submit" class="btn-link">Reopen</button></form></div>{% endif %}{% endfor %}
+  </section>
+  <section class="incident-board-column incident-board-resolved"><div class="incident-board-heading"><div><span class="posture-dot posture-good"></span><h3>Resolved</h3></div><span class="pill pill-muted">{{ board_resolved_count }} · closed</span></div>
+    {% for incident in incidents %}{% if incident.status.to_string() == "resolved" %}<a class="incident-board-card" href="/incidents/{{ incident.id }}"><div class="incident-board-card-top"><span class="pill pill-up">{{ incident.severity }}</span><span class="muted">{{ incident.event_count }} signal{% if incident.event_count != 1 %}s{% endif %}</span></div><strong>{{ incident.title }}</strong><div class="incident-board-card-meta">{% if let Some(owner) = incident.assigned_to %}<span class="owner-chip">{{ owner }}</span>{% else %}<span class="muted">Unassigned</span>{% endif %}<span class="muted">{{ incident.created_at.format("%b %d, %H:%M") }}</span></div><span class="incident-board-open-link">Review case record &rarr;</span></a><div class="incident-board-card-actions"><form method="post" action="/incidents/{{ incident.id }}/status"><input type="hidden" name="target_status" value="open"><button type="submit" class="btn-link">Reopen</button></form></div>{% endif %}{% endfor %}
+  </section>
+</div>
 {% else %}
-<table>
+{% if can_write %}<form method="post" action="/incidents/bulk-update" id="bulk-incident-form" onsubmit="return confirm('Apply this lifecycle transition to the selected incidents?');">
+<input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="status" value="{{ status }}"><input type="hidden" name="severity" value="{{ severity }}"><input type="hidden" name="sla" value="{{ sla }}"><input type="hidden" name="owner" value="{{ owner }}"><input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}"><input type="hidden" name="view" value="{{ view }}">
+<div class="bulk-action-bar"><label class="bulk-select-all"><input type="checkbox" id="select-visible-incidents"> Select visible</label><span class="bulk-divider"></span><label for="target-status">Apply status</label><select id="target-status" name="target_status"><option value="__keep__">Keep current status</option><option value="acknowledged">Acknowledge</option><option value="resolved">Resolve</option><option value="open">Reopen</option></select><label for="target-owner">Assign owner</label><select id="target-owner" name="target_owner"><option value="__keep__">Keep current owner</option><option value="">Unassign</option>{% for option in assignee_options %}<option value="{{ option.username }}">{{ option.username }} · {{ option.role }}</option>{% endfor %}</select><button class="btn" type="submit">Apply to selected &rarr;</button></div>
+{% endif %}
+<div class="incident-selection-status"><span id="incident-selection-count" class="muted">No persisted cases selected.</span><button type="button" class="btn-link" id="incident-clear-selection">Clear selection</button></div>
+<div class="table-wrap"><table>
   <thead>
     <tr>
-      <th scope="col">Title</th>
-      <th scope="col">Severity</th>
-      <th scope="col">Status</th>
-      <th scope="col">Events</th>
-      <th scope="col">Created</th>
+      {% if can_write %}<th scope="col" class="select-column"><span class="sr-only">Select</span></th>{% endif %}
+      <th scope="col"><a href="/incidents?q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&sort=title&dir={% if sort == "title" && dir == "asc" %}desc{% else %}asc{% endif %}&view={{ view|urlencode }}">Title{% if sort == "title" %} {% if dir == "asc" %}↑{% else %}↓{% endif %}{% endif %}</a></th>
+      <th scope="col"><a href="/incidents?q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&sort=severity&dir={% if sort == "severity" && dir == "asc" %}desc{% else %}asc{% endif %}&view={{ view|urlencode }}">Severity{% if sort == "severity" %} {% if dir == "asc" %}↑{% else %}↓{% endif %}{% endif %}</a></th>
+      <th scope="col"><a href="/incidents?q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&sort=status&dir={% if sort == "status" && dir == "asc" %}desc{% else %}asc{% endif %}&view={{ view|urlencode }}">Status{% if sort == "status" %} {% if dir == "asc" %}↑{% else %}↓{% endif %}{% endif %}</a></th>
+      <th scope="col">Owner</th>
+      <th scope="col"><a href="/incidents?q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&sort=events&dir={% if sort == "events" && dir == "asc" %}desc{% else %}asc{% endif %}&view={{ view|urlencode }}">Events{% if sort == "events" %} {% if dir == "asc" %}↑{% else %}↓{% endif %}{% endif %}</a></th>
+      <th scope="col"><a href="/incidents?q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&sort=created_at&dir={% if sort == "created_at" && dir == "asc" %}desc{% else %}asc{% endif %}&view={{ view|urlencode }}">Created{% if sort == "created_at" %} {% if dir == "asc" %}↑{% else %}↓{% endif %}{% endif %}</a></th><th scope="col">SLA</th>
     </tr>
   </thead>
   <tbody>
     {% for incident in incidents %}
     <tr>
-      <td><a href="/incidents/{{ incident.id }}">{{ incident.title }}</a></td>
+      {% if can_write %}<td class="select-column"><input type="checkbox" name="ids" value="{{ incident.id }}" class="incident-select" aria-label="Select {{ incident.title }}"></td>{% endif %}
+      <td><a href="/incidents/{{ incident.id }}">{{ incident.title }}</a>{% if !incident.summary.is_empty() %}<small class="muted incident-summary-snippet">{{ incident.summary }}</small>{% endif %}</td>
       <td>
         <span class="pill {% if incident.severity.to_string() == "critical" || incident.severity.to_string() == "high" %}pill-down{% else %}pill-up{% endif %}">
           {{ incident.severity }}
@@ -69,11 +147,124 @@ create a blank one below.</p>
           {{ incident.status }}
         </span>
       </td>
+      <td>{% if let Some(owner) = incident.assigned_to %}<span class="owner-chip">{{ owner }}</span>{% else %}<span class="muted">Unassigned</span>{% endif %}</td>
       <td>{{ incident.event_count }}</td>
-      <td>{{ incident.created_at }}</td>
+      <td>{{ incident.created_at }}</td><td><span class="pill sla-{{ incident.sla_state }}" title="{{ incident.sla_detail }}">{{ incident.sla_label }}</span></td>
     </tr>
     {% endfor %}
   </tbody>
-</table>
+</table></div>
+{% if can_write %}</form>{% endif %}
 {% endif %}
+{% if has_prev || has_next %}<div class="pagination incident-pagination"><a class="btn {% if !has_prev %}btn-secondary{% endif %}" href="/incidents?page={% if has_prev %}{{ page - 1 }}{% else %}{{ page }}{% endif %}&q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&view={{ view|urlencode }}"{% if !has_prev %} aria-disabled="true" onclick="return false;"{% endif %}>&larr; Previous</a><span class="muted">Page {{ page + 1 }} · {{ matching_count }} matching</span><a class="btn {% if !has_next %}btn-secondary{% endif %}" href="/incidents?page={% if has_next %}{{ page + 1 }}{% else %}{{ page }}{% endif %}&q={{ q|urlencode }}&status={{ status|urlencode }}&severity={{ severity|urlencode }}&sla={{ sla|urlencode }}&owner={{ owner|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&view={{ view|urlencode }}"{% if !has_next %} aria-disabled="true" onclick="return false;"{% endif %}>Next &rarr;</a></div>{% endif %}
+ </section>
+{% if can_write %}<script>
+  (function () {
+    var master = document.getElementById('select-visible-incidents');
+    if (!master) return;
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('.incident-select'));
+    var selectionKey = 'kizashi.incidents.selection'; var persisted = [];
+    try { persisted = JSON.parse(localStorage.getItem(selectionKey) || '[]').filter(function (value) { return typeof value === 'string'; }); } catch (_) { persisted = []; }
+    boxes.forEach(function (box) { box.checked = persisted.indexOf(box.value) !== -1; });
+    function selectedIds() { var visibleIds = boxes.map(function (box) { return box.value; }); return Array.from(new Set(persisted.filter(function (id) { return visibleIds.indexOf(id) === -1; }).concat(boxes.filter(function (box) { return box.checked; }).map(function (box) { return box.value; })))); }
+    function sync() { persisted = selectedIds(); try { localStorage.setItem(selectionKey, JSON.stringify(persisted)); } catch (_) {} var count = document.getElementById('incident-selection-count'); if (count) count.textContent = persisted.length ? persisted.length + ' case' + (persisted.length === 1 ? '' : 's') + ' selected across this view.' : 'No persisted cases selected.'; master.checked = boxes.length > 0 && boxes.every(function (box) { return box.checked; }); }
+    boxes.forEach(function (box) { box.addEventListener('change', sync); });
+    master.addEventListener('change', function () { boxes.forEach(function (box) { box.checked = master.checked; }); sync(); });
+    var clear = document.getElementById('incident-clear-selection'); if (clear) clear.addEventListener('click', function () { persisted = []; boxes.forEach(function (box) { box.checked = false; }); try { localStorage.removeItem(selectionKey); } catch (_) {} sync(); });
+    var bulkForm = document.getElementById('bulk-incident-form');
+    var bulkBar = bulkForm && bulkForm.querySelector('.bulk-action-bar');
+    var bulkPreflight = document.createElement('span');
+    bulkPreflight.className = 'incident-bulk-preflight';
+    bulkPreflight.innerHTML = '<strong>Transition preflight:</strong> select cases to preview the lifecycle change.';
+    if (bulkBar) bulkBar.appendChild(bulkPreflight);
+    function syncPreflight() {
+      var selected = selectedIds().length;
+      var status = document.getElementById('target-status');
+      var owner = document.getElementById('target-owner');
+      var statusLabel = status && status.options[status.selectedIndex] ? status.options[status.selectedIndex].text : 'Keep current status';
+      var ownerLabel = owner && owner.options[owner.selectedIndex] ? owner.options[owner.selectedIndex].text : 'Keep current owner';
+      bulkPreflight.innerHTML = '<strong>Transition preflight:</strong> ' + (selected ? selected + ' case' + (selected === 1 ? '' : 's') + ' will be updated' : 'select cases to preview the lifecycle change') + ' · status: ' + statusLabel + ' · owner: ' + ownerLabel + '. Changes are audited per case.';
+    }
+    boxes.forEach(function (box) { box.addEventListener('change', syncPreflight); });
+    ['target-status', 'target-owner'].forEach(function (id) { var input = document.getElementById(id); if (input) input.addEventListener('change', syncPreflight); });
+    if (bulkForm) bulkForm.addEventListener('submit', function (event) { var selected = selectedIds(); if (!selected.length) { event.preventDefault(); window.alert('Select at least one case first.'); return; } bulkForm.querySelectorAll('input[data-persisted-incident]').forEach(function (input) { input.remove(); }); boxes.forEach(function (box) { box.disabled = true; }); selected.forEach(function (id) { var input = document.createElement('input'); input.type = 'hidden'; input.name = 'ids'; input.value = id; input.dataset.persistedIncident = 'true'; bulkForm.appendChild(input); }); });
+    sync();
+    syncPreflight();
+  }());
+</script>{% endif %}
+{% if can_write && view == "board" %}
+<script>
+  (function () {
+    function preserveBoardContext(form) {
+      var params = new URLSearchParams(window.location.search);
+      ['q', 'status', 'severity', 'sla', 'owner', 'sort', 'dir', 'view'].forEach(function (key) {
+        if (!params.has(key)) return;
+        var input = form.querySelector('input[data-board-context="' + key + '"]');
+        if (!input) { input = document.createElement('input'); input.type = 'hidden'; input.name = key; input.dataset.boardContext = key; form.appendChild(input); }
+        input.value = params.get(key) || '';
+      });
+    }
+    var dragged = null;
+    var columns = document.querySelectorAll('.incident-board-column');
+    var statusForms = document.querySelectorAll('.incident-board-card-actions form');
+    statusForms.forEach(function (form) { form.addEventListener('submit', function () { preserveBoardContext(form); }); });
+    document.querySelectorAll('.incident-board-card').forEach(function (card) {
+      card.draggable = true;
+      card.addEventListener('dragstart', function (event) {
+        dragged = card;
+        card.classList.add('is-dragging');
+        if (event.dataTransfer) event.dataTransfer.setData('text/plain', card.getAttribute('href') || '');
+      });
+      card.addEventListener('dragend', function () {
+        card.classList.remove('is-dragging');
+        columns.forEach(function (column) { column.classList.remove('board-drop-target'); });
+        dragged = null;
+      });
+    });
+    columns.forEach(function (column) {
+      column.addEventListener('dragover', function (event) {
+        if (!dragged) return;
+        event.preventDefault();
+        column.classList.add('board-drop-target');
+      });
+      column.addEventListener('dragleave', function (event) {
+        if (event.target === column) column.classList.remove('board-drop-target');
+      });
+      column.addEventListener('drop', function (event) {
+        event.preventDefault();
+        if (!dragged) return;
+        var status = column.classList.contains('incident-board-ack') ? 'acknowledged' : (column.classList.contains('incident-board-resolved') ? 'resolved' : 'open');
+        var actions = dragged.nextElementSibling;
+        var form = actions && actions.querySelector('form[action$="/status"] input[value="' + status + '"]');
+        if (form) { preserveBoardContext(form.closest('form')); form.closest('form').submit(); }
+        else { column.classList.remove('board-drop-target'); window.alert('This case is already in that lifecycle state.'); }
+      });
+    });
+  }());
+</script>
+{% endif %}
+<script>
+  (function () {
+    var storageKey = 'kizashi.incidents.live-refresh';
+    var status = document.querySelector('[data-incident-live-status]'); var toggle = document.querySelector('[data-incident-toggle-live]'); var refresh = document.querySelector('[data-incident-refresh]');
+    var enabled = false; try { enabled = window.localStorage.getItem(storageKey) === 'on'; } catch (_) {}
+    function render() { if (status) status.textContent = enabled ? 'Live · 30s refresh' : 'Live refresh paused'; if (toggle) { toggle.textContent = enabled ? 'Pause live mode' : 'Enable live mode'; toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false'); } }
+    if (refresh) refresh.addEventListener('click', function () { window.location.reload(); });
+    if (toggle) toggle.addEventListener('click', function () { enabled = !enabled; try { window.localStorage.setItem(storageKey, enabled ? 'on' : 'off'); } catch (_) {} render(); if (enabled) window.setTimeout(function () { window.location.reload(); }, 30000); });
+    render(); if (enabled) window.setTimeout(function () { window.location.reload(); }, 30000);
+  }());
+</script>
+<style>
+  /* Triage telemetry and board cards inherit the same semantic shell palette. */
+  .incident-metric-track { background:var(--surface-raised); }
+  .incident-metric-fill.risk { background:linear-gradient(90deg,color-mix(in srgb,var(--danger) 72%,var(--surface)),var(--danger)); }
+  .incident-metric-fill.warning { background:linear-gradient(90deg,color-mix(in srgb,var(--warning) 72%,var(--surface)),var(--warning)); }
+  .incident-metric-fill.good { background:linear-gradient(90deg,color-mix(in srgb,var(--success) 72%,var(--surface)),var(--success)); }
+  .incident-metric-fill.neutral { background:linear-gradient(90deg,var(--accent-dim),var(--accent)); }
+  .incident-metric-count { color:var(--text); }
+  .incident-sla-matrix .matrix-risk { color:var(--danger); }
+  .incident-sla-matrix .matrix-warning { color:var(--warning); }
+  .incident-sla-matrix .matrix-good { color:var(--success); }
+  .incident-sla-matrix .matrix-neutral { color:var(--accent); }
+</style>
 {% endblock %}

@@ -1,4 +1,5 @@
 use super::*;
+use crate::audit_log::audit_log_test::InMemoryAuditLogReader;
 use crate::incident_repository::incident_repository_test::{
     FailingIncidentRepository, InMemoryIncidentRepository,
 };
@@ -10,15 +11,21 @@ use tower::ServiceExt;
 
 fn router(state: IncidentState) -> Router {
     Router::new()
+        .route("/v1/audit-log", axum::routing::get(list_audit_log))
+        .route("/v1/audit-log/:entity_id", axum::routing::get(list_entity_audit_log))
         .route("/v1/incidents", post(create_incident).get(list_incidents))
         .route("/v1/incidents/:id", get(get_incident).put(update_incident))
+        .route("/v1/incidents/:id/notes", axum::routing::post(add_incident_note))
         .route("/v1/incidents/:id/events", post(link_event))
         .route("/v1/incidents/:id/events/:event_id", axum::routing::delete(unlink_event))
         .with_state(state)
 }
 
 fn default_state() -> IncidentState {
-    IncidentState { incident_repository: Arc::new(InMemoryIncidentRepository::default()) }
+    IncidentState {
+        incident_repository: Arc::new(InMemoryIncidentRepository::default()),
+        audit_log_reader: Arc::new(InMemoryAuditLogReader::default()),
+    }
 }
 
 fn sample_incident(tenant_id: Uuid) -> Incident {
@@ -29,6 +36,7 @@ fn sample_incident(tenant_id: Uuid) -> Incident {
         summary: String::new(),
         severity: common::IncidentSeverity::High,
         status: IncidentStatus::Open,
+        assigned_to: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
         resolved_at: None,
@@ -138,7 +146,10 @@ async fn get_incident_returns_404_for_unknown_id() {
 
 #[tokio::test]
 async fn list_incidents_returns_backend_error_as_500() {
-    let state = IncidentState { incident_repository: Arc::new(FailingIncidentRepository) };
+    let state = IncidentState {
+        incident_repository: Arc::new(FailingIncidentRepository),
+        audit_log_reader: Arc::new(InMemoryAuditLogReader::default()),
+    };
     let response =
         send(router(state), "GET", "/v1/incidents".to_string(), Some(Uuid::new_v4()), None).await;
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);

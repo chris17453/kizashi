@@ -18,8 +18,8 @@ pub use connector_stats_handler::{
 pub use delete_record_handler::delete_record;
 pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
 pub use ingest_handler::{
-    ingest_record, reprocess_records, IngestError, IngestState, NewRawRecordRequest,
-    ReprocessResponse,
+    ingest_record, reprocess_record, reprocess_records, IngestError, IngestState,
+    NewRawRecordRequest, ReprocessResponse,
 };
 pub use list_records_handler::{list_records, ListRecordsQuery};
 pub use raw_record_repository::{
@@ -41,6 +41,7 @@ pub fn build_router(state: IngestState) -> Router {
         .route("/v1/records/by-connector", get(list_records_by_connector))
         .route("/v1/records/search", get(search_records))
         .route("/v1/records/:id/normalized", patch(update_normalized_payload))
+        .route("/v1/records/:id/reprocess", post(reprocess_record))
         .route("/v1/records/:id", get(get_record).delete(delete_record))
         .with_state(state)
 }

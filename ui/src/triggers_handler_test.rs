@@ -14,6 +14,33 @@ use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+#[test]
+fn builds_a_governed_teams_action_from_provider_configuration() {
+    let form = PostTriggerForm {
+        name: "notify".into(),
+        event_type_match: "risk".into(),
+        window_seconds: 60,
+        condition_shape: "count_over_window".into(),
+        count: "1".into(),
+        field: String::new(),
+        threshold: String::new(),
+        direction: None,
+        action_url: None,
+        action_type: Some("teams_alert".into()),
+        action_config: r#"{"url":"https://teams.example/hook"}"#.into(),
+        ..Default::default()
+    };
+    let actions = build_action_refs(&form).unwrap();
+    assert_eq!(actions[0].action_type, common::ActionType::TeamsAlert);
+    assert_eq!(actions[0].config["url"], "https://teams.example/hook");
+}
+
+#[test]
+fn rejects_an_unknown_action_provider() {
+    let form = PostTriggerForm { action_type: Some("pagerduty".into()), ..Default::default() };
+    assert!(build_action_refs(&form).is_err());
+}
+
 fn router(state: AppState) -> Router {
     Router::new().route("/triggers", get(get_triggers).post(post_trigger)).with_state(state)
 }
@@ -122,6 +149,14 @@ async fn renders_the_triggers_table_when_signed_in() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("high-volume-negative"));
+    assert!(body.contains("Detection coverage"));
+    assert!(body.contains("sentiment"));
+    assert!(body.contains("data-triggers-live-status"));
+    assert!(body.contains("kizashi.triggers.live-refresh"));
+    assert!(body.contains("Microsoft Teams alert"));
+    assert!(body.contains("action_config"));
+    assert!(body.contains("smtp_host"));
+    assert!(body.contains("graph_client_secret"));
     assert!(
         body.contains(r#"scope="col""#),
         "table headers should carry scope=\"col\" for screen readers"
@@ -343,4 +378,13 @@ async fn shows_an_error_when_the_backend_fails() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("unreachable"));
+}
+
+#[test]
+fn bulk_trigger_toggle_exposes_selection_preflight() {
+    let template = include_str!("../templates/triggers.html");
+    assert!(template.contains("id=\"trigger-selection-preflight\""));
+    assert!(template.contains("No evaluation changes occur until submit"));
+    assert!(template.contains("target-enabled"));
+    assert!(template.contains("master.indeterminate"));
 }

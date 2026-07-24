@@ -58,6 +58,8 @@ fn default_state() -> AdminState {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
         mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+        event_type_repository: None,
+        report_run_repository: None,
     }
 }
 
@@ -281,6 +283,8 @@ async fn list_triggers_returns_backend_error_as_500() {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
         mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+        event_type_repository: None,
+        report_run_repository: None,
     };
     let response = send(
         router(state),
@@ -305,6 +309,8 @@ async fn delete_trigger_succeeds_then_get_returns_404() {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
         mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+        event_type_repository: None,
+        report_run_repository: None,
     };
     let app = router(state);
 
@@ -350,6 +356,8 @@ async fn delete_trigger_rejects_a_viewer_role() {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
         mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+        event_type_repository: None,
+        report_run_repository: None,
     };
     let response = router(state)
         .oneshot(
@@ -485,6 +493,8 @@ async fn list_mappings_returns_backend_error_as_500() {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
         mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+        event_type_repository: None,
+        report_run_repository: None,
     };
     let response = send(
         router(state),
@@ -548,6 +558,8 @@ async fn delete_mapping_succeeds_then_get_returns_404() {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
         mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+        event_type_repository: None,
+        report_run_repository: None,
     };
     let app = router(state);
 
@@ -598,6 +610,8 @@ async fn delete_mapping_rejects_a_viewer_role() {
         audit_reader: Arc::new(InMemoryAuditLogReader::default()),
         trigger_publisher: Arc::new(InMemoryTriggerPublisher::default()),
         mapping_publisher: Arc::new(InMemoryMappingPublisher::default()),
+        event_type_repository: None,
+        report_run_repository: None,
     };
     let response = router(state)
         .oneshot(

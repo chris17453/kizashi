@@ -13,12 +13,40 @@ fn router(state: DashboardState) -> Router {
     Router::new()
         .route("/v1/events", get(list_events))
         .route("/v1/events/daily-counts", get(daily_event_counts))
-        .route("/v1/events/:id", get(get_event))
+        .route("/v1/events/:id", axum::routing::get(get_event).patch(update_event_status))
         .with_state(state)
 }
 
 fn sample_event(tenant_id: Uuid) -> Event {
     Event::new(tenant_id, "sentiment", "cust-1", "cust-1", serde_json::json!({}), Utc::now())
+}
+
+#[tokio::test]
+async fn update_event_status_is_tenant_scoped_and_returns_new_state() {
+    let tenant_id = Uuid::new_v4();
+    let event = sample_event(tenant_id);
+    let event_id = event.id;
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::with_events(vec![event])),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/v1/events/{event_id}"))
+                .header("x-tenant-id", tenant_id.to_string())
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"status":"dismissed"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["status"], "dismissed");
 }
 
 #[tokio::test]
@@ -88,6 +116,39 @@ async fn list_events_reports_has_more_when_results_exceed_the_page_size() {
     let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(body["events"].as_array().unwrap().len(), 2);
     assert_eq!(body["has_more"], serde_json::json!(true));
+}
+
+#[tokio::test]
+async fn list_events_applies_case_insensitive_search_before_pagination() {
+    let tenant_id = Uuid::new_v4();
+    let mut matching = sample_event(tenant_id);
+    matching.event_type = "urgent_ticket".to_string();
+    let mut other = sample_event(tenant_id);
+    other.event_type = "routine_ticket".to_string();
+    let state = DashboardState {
+        event_query_repository: Arc::new(InMemoryEventQueryRepository::with_events(vec![
+            other,
+            matching.clone(),
+        ])),
+    };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/events?search=URGENT&limit=1")
+                .header("x-tenant-id", tenant_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let events: Vec<Event> = serde_json::from_value(body["events"].clone()).unwrap();
+    assert_eq!(events, vec![matching]);
+    assert_eq!(body["has_more"], serde_json::json!(false));
 }
 
 #[tokio::test]

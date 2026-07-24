@@ -1,7 +1,7 @@
 use super::*;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Json};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use std::sync::Mutex;
 
@@ -53,7 +53,18 @@ async fn spawn_stub_server() -> String {
         }]))
         .into_response()
     }
-    let app = Router::new().route("/v1/backup/status", get(handler));
+    async fn trigger_handler() -> axum::response::Response {
+        Json(serde_json::json!({
+            "id": "00000000-0000-0000-0000-000000000001",
+            "status": "success",
+            "size_bytes": 4096,
+            "error": null
+        }))
+        .into_response()
+    }
+    let app = Router::new()
+        .route("/v1/backup/status", get(handler))
+        .route("/v1/backup/run", post(trigger_handler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -80,6 +91,17 @@ async fn http_client_returns_unreachable_when_server_is_down() {
         HttpBackupStatusClient::new(reqwest::Client::new(), "http://127.0.0.1:1".to_string());
     let err = client.list_recent(common::Role::Admin, None).await.unwrap_err();
     assert!(matches!(err, BackupStatusClientError::Unreachable(_)));
+}
+
+#[tokio::test]
+async fn http_client_triggers_a_backup_and_decodes_the_outcome() {
+    let url = spawn_stub_server().await;
+    let client = HttpBackupStatusClient::new(reqwest::Client::new(), url);
+
+    let result = client.trigger_backup().await.unwrap();
+
+    assert_eq!(result.status, "success");
+    assert_eq!(result.size_bytes, Some(4096));
 }
 
 #[tokio::test]

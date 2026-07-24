@@ -70,6 +70,7 @@ pub(crate) fn default_state() -> AppState {
         record_client: Arc::new(InMemoryRawRecordClient::default()),
         archive_store: Arc::new(InMemoryArchiveStore::default()),
         internal_secret: TEST_INTERNAL_SECRET.to_string(),
+        hold_repository: None,
     }
 }
 
@@ -442,6 +443,7 @@ async fn delete_policy_succeeds_then_get_returns_404() {
         record_client: Arc::new(InMemoryRawRecordClient::default()),
         archive_store: Arc::new(InMemoryArchiveStore::default()),
         internal_secret: TEST_INTERNAL_SECRET.to_string(),
+        hold_repository: None,
     };
     let app = router(state);
 

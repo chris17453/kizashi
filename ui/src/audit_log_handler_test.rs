@@ -144,6 +144,8 @@ async fn shows_entries_from_the_config_client_for_the_config_service() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("created"));
     assert!(body.contains("high-volume"));
+    assert!(body.contains("Recorded changes"));
+    assert!(body.contains("Mutation distribution"));
 }
 
 #[tokio::test]

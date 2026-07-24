@@ -1,6 +1,7 @@
 use super::*;
 use crate::analysis_client::analysis_client_test::{
-    spawn_stub_chat_completions, FailingAnalysisClient, InMemoryAnalysisClient,
+    spawn_stub_chat_completions, spawn_stub_chat_completions_status, FailingAnalysisClient,
+    InMemoryAnalysisClient,
 };
 use crate::analysis_config_repository::analysis_config_repository_test::InMemoryAnalysisConfigRepository;
 use crate::event_publisher::event_publisher_test::{FailingEventPublisher, InMemoryEventPublisher};
@@ -35,6 +36,7 @@ async fn process_batch_calls_analysis_once_and_publishes_one_message_per_record(
     let publisher = Arc::new(InMemoryEventPublisher::default());
     let deps = AnalysisDeps {
         analysis_client: analysis_client.clone(),
+        fallback_analysis_client: None,
         publisher: publisher.clone(),
         analysis_config_repository: Arc::new(InMemoryAnalysisConfigRepository::default()),
         http_client: reqwest::Client::new(),
@@ -62,6 +64,7 @@ async fn process_batch_passes_the_tenants_configured_prompt_to_the_analysis_clie
         .unwrap();
     let deps = AnalysisDeps {
         analysis_client: analysis_client.clone(),
+        fallback_analysis_client: None,
         publisher: Arc::new(InMemoryEventPublisher::default()),
         analysis_config_repository: config_repository,
         http_client: reqwest::Client::new(),
@@ -82,6 +85,7 @@ async fn process_batch_on_empty_records_is_a_no_op() {
     let publisher = Arc::new(InMemoryEventPublisher::default());
     let deps = AnalysisDeps {
         analysis_client: analysis_client.clone(),
+        fallback_analysis_client: None,
         publisher,
         analysis_config_repository: Arc::new(InMemoryAnalysisConfigRepository::default()),
         http_client: reqwest::Client::new(),
@@ -98,6 +102,7 @@ async fn process_batch_on_empty_records_is_a_no_op() {
 async fn process_batch_propagates_analysis_failure() {
     let deps = AnalysisDeps {
         analysis_client: Arc::new(FailingAnalysisClient),
+        fallback_analysis_client: None,
         publisher: Arc::new(InMemoryEventPublisher::default()),
         analysis_config_repository: Arc::new(InMemoryAnalysisConfigRepository::default()),
         http_client: reqwest::Client::new(),
@@ -110,10 +115,63 @@ async fn process_batch_propagates_analysis_failure() {
 }
 
 #[tokio::test]
+async fn process_batch_uses_the_fallback_for_a_transient_primary_failure() {
+    let fallback = Arc::new(InMemoryAnalysisClient::default());
+    let publisher = Arc::new(InMemoryEventPublisher::default());
+    let deps = AnalysisDeps {
+        analysis_client: Arc::new(FailingAnalysisClient),
+        fallback_analysis_client: Some(fallback.clone()),
+        publisher: publisher.clone(),
+        analysis_config_repository: Arc::new(InMemoryAnalysisConfigRepository::default()),
+        http_client: reqwest::Client::new(),
+        openai_compatible_concurrency: 4,
+    };
+    let tenant_id = Uuid::new_v4();
+
+    let published = process_batch(&deps, tenant_id, vec![record_for(tenant_id)]).await.unwrap();
+
+    assert_eq!(published, 1);
+    assert_eq!(fallback.calls.lock().unwrap().len(), 1);
+    assert_eq!(publisher.published.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn compatible_tenant_model_falls_back_to_the_platform_default() {
+    let (endpoint, _captured) = spawn_stub_chat_completions_status(
+        r#"{}"#.to_string(),
+        axum::http::StatusCode::TOO_MANY_REQUESTS,
+    )
+    .await;
+    let default_client = Arc::new(InMemoryAnalysisClient::default());
+    let publisher = Arc::new(InMemoryEventPublisher::default());
+    let config_repository = Arc::new(InMemoryAnalysisConfigRepository::default());
+    let tenant_id = Uuid::new_v4();
+    let mut config = AnalysisConfig::new(tenant_id, "flag urgent issues");
+    config.provider = AnalysisProvider::OpenAiCompatible;
+    config.endpoint = Some(endpoint);
+    config.model = Some("primary-model".to_string());
+    config_repository.upsert(config).await.unwrap();
+    let deps = AnalysisDeps {
+        analysis_client: default_client.clone(),
+        fallback_analysis_client: None,
+        publisher: publisher.clone(),
+        analysis_config_repository: config_repository,
+        http_client: reqwest::Client::new(),
+        openai_compatible_concurrency: 4,
+    };
+
+    let published = process_batch(&deps, tenant_id, vec![record_for(tenant_id)]).await.unwrap();
+
+    assert_eq!(published, 1);
+    assert_eq!(default_client.calls.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn process_batch_continues_past_individual_publish_failures() {
     let analysis_client = Arc::new(InMemoryAnalysisClient::default());
     let deps = AnalysisDeps {
         analysis_client,
+        fallback_analysis_client: None,
         publisher: Arc::new(FailingEventPublisher),
         analysis_config_repository: Arc::new(InMemoryAnalysisConfigRepository::default()),
         http_client: reqwest::Client::new(),
@@ -147,6 +205,7 @@ async fn process_batch_routes_to_the_openai_compatible_client_when_a_tenant_is_c
     config_repository.upsert(config).await.unwrap();
     let deps = AnalysisDeps {
         analysis_client: default_client.clone(),
+        fallback_analysis_client: None,
         publisher: publisher.clone(),
         analysis_config_repository: config_repository,
         http_client: reqwest::Client::new(),

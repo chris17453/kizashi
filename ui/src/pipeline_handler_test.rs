@@ -110,6 +110,11 @@ async fn renders_all_five_pipeline_stages_with_their_health_status() {
     assert!(body.contains("Action Executor"));
     assert!(body.contains("node-up"));
     assert!(body.contains("node-down"));
+    assert!(body.contains("href=\"/data?normalized=false\""));
+    assert!(body.contains("href=\"/events?status=new\""));
+    assert!(body.contains("href=\"/actions?outcome=review\""));
+    assert!(body.contains("Pressure distribution"));
+    assert!(body.contains("Queued total"));
 }
 
 #[tokio::test]
@@ -122,6 +127,13 @@ async fn redirects_to_login_when_not_signed_in() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[test]
+fn pressure_scope_accepts_only_queue_severity_states() {
+    assert_eq!(normalize_pressure_scope("CRITICAL"), "critical");
+    assert_eq!(normalize_pressure_scope("warn"), "warn");
+    assert_eq!(normalize_pressure_scope("anything"), "");
 }
 
 #[tokio::test]
@@ -195,4 +207,5 @@ async fn marks_a_heavily_backlogged_queue_as_critical() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("edge-critical"));
     assert!(body.contains("500 queued"));
+    assert!(body.contains("Peak boundary"));
 }

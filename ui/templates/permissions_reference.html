@@ -1,10 +1,38 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Permissions Reference</h1>
+<style>
+  .permission-posture { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; margin:0 0 1.25rem; }
+  .permission-posture-card { padding:1rem; }
+  .permission-posture-card h2 { margin:.2rem 0 .3rem; font-size:1rem; }
+  .permission-posture-value { font:700 1.65rem ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); }
+  .permission-posture-card small { color:var(--text-dim); }
+  .permission-cell { border-left:3px solid transparent; }
+  .permission-cell.read { border-left-color:#4d82b6; }
+  .permission-cell.write { border-left-color:#16a34a; }
+  .permission-cell.deny { border-left-color:#dc2626; color:var(--text-dim); }
+  .permission-legend { display:flex; gap:1rem; flex-wrap:wrap; margin:.7rem 0 1rem; font-size:.78rem; color:var(--text-dim); }
+  .permission-legend span::before { content:""; display:inline-block; width:.55rem; height:.55rem; border-radius:50%; margin-right:.35rem; background:#4d82b6; }
+  .permission-legend .write::before { background:#16a34a; } .permission-legend .deny::before { background:#dc2626; }
+  .permission-posture-card { text-decoration:none; color:var(--text); transition:border-color .15s ease,background .15s ease; }
+  .permission-posture-card:hover,.permission-posture-card.active { border-color:var(--accent); background:var(--surface-hover); text-decoration:none; }
+  .permission-posture-card.active .permission-posture-value { color:var(--accent); }
+  .permission-column-active { background:rgba(94,234,212,.06); box-shadow:inset 2px 0 var(--accent), inset -2px 0 var(--accent); }
+  .permission-area-link { color:var(--text); text-decoration:none; font-weight:650; }
+  .permission-area-link:hover { color:var(--accent); text-decoration:underline; }
+  @media(max-width:760px){.permission-posture{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / authorization</div><h1>Permissions Reference</h1><p class="page-description">The role contract enforced by the running services, area by area.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/users">Manage users</a><a class="btn btn-secondary" href="/security">Security overview &rarr;</a></div></div>
 <p class="muted">What each role can actually do, area by area — transcribed directly from what
 every backend service enforces in code (ADR-0048), not a design aspiration. If this table and
 the running system ever disagree, the running system is right; file that as a bug against this
 page.</p>
+
+<section class="permission-posture" aria-label="Role capability overview">
+  <a class="panel permission-posture-card{% if active_role == "viewer" %} active{% endif %}" href="/security/permissions?role=viewer"><div class="page-kicker">Viewer</div><h2>Read surface</h2><div class="permission-posture-value">{{ viewer_allowed_count }}/{{ rows.len() }}</div><small>Focus Viewer permissions</small></a>
+  <a class="panel permission-posture-card{% if active_role == "operator" %} active{% endif %}" href="/security/permissions?role=operator"><div class="page-kicker">Operator</div><h2>Execution surface</h2><div class="permission-posture-value">{{ operator_allowed_count }}/{{ rows.len() }}</div><small>Focus Operator permissions</small></a>
+  <a class="panel permission-posture-card{% if active_role == "admin" %} active{% endif %}" href="/security/permissions?role=admin"><div class="page-kicker">Admin</div><h2>Governance surface</h2><div class="permission-posture-value">{{ admin_allowed_count }}/{{ rows.len() }}</div><small>Focus Admin permissions</small></a>
+</section>
+<div class="permission-legend"><span>Read-only</span><span class="write">Write or govern</span><span class="deny">No access</span></div>
 
 <table>
   <thead>
@@ -14,12 +42,12 @@ page.</p>
     {% for r in rows %}
     <tr>
       <td>
-        {{ r.area }}
+        <a class="permission-area-link" href="{{ r.href }}">{{ r.area }}</a>
         {% if let Some(note) = r.note %}<br><span class="muted" style="font-size:0.8em;">{{ note }}</span>{% endif %}
       </td>
-      <td>{{ r.viewer }}</td>
-      <td>{{ r.operator }}</td>
-      <td>{{ r.admin }}</td>
+      <td class="permission-cell {{ r.viewer_state }}{% if active_role == "viewer" %} permission-column-active{% endif %}">{{ r.viewer }}</td>
+      <td class="permission-cell {{ r.operator_state }}{% if active_role == "operator" %} permission-column-active{% endif %}">{{ r.operator }}</td>
+      <td class="permission-cell {{ r.admin_state }}{% if active_role == "admin" %} permission-column-active{% endif %}">{{ r.admin }}</td>
     </tr>
     {% endfor %}
   </tbody>

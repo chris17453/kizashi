@@ -21,6 +21,7 @@ fn router(state: AppState) -> Router {
         .route("/data", get(get_data))
         .route("/data/export.csv", get(get_data_export_csv))
         .route("/data/reprocess", axum::routing::post(post_reprocess))
+        .route("/data/reprocess-selected", axum::routing::post(post_reprocess_selected))
         .route("/data/saved-searches", axum::routing::post(post_save_search))
         .route("/data/saved-searches/:id/delete", axum::routing::post(post_delete_saved_search))
         .with_state(state)
@@ -194,6 +195,34 @@ async fn reprocess_redirects_with_the_count_and_calls_the_client() {
 }
 
 #[tokio::test]
+async fn reprocess_can_be_scoped_to_the_connector_in_the_current_investigation() {
+    let (mut state, session_id) = state_with_session().await;
+    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
+    *stats_client.reprocessed.lock().unwrap() = 3;
+    state.stats_client = stats_client.clone();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/data/reprocess")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("connector_id=zendesk"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        response.headers().get("location").unwrap(),
+        "/data?connector_id=zendesk&reprocessed=3&reprocessed_connector=zendesk"
+    );
+    assert_eq!(stats_client.reprocessed_connector.lock().unwrap().as_deref(), Some("zendesk"));
+}
+
+#[tokio::test]
 async fn reprocess_rejects_a_viewer_role() {
     let (state, session_id) = state_with_session_role(common::Role::Viewer).await;
 
@@ -210,6 +239,32 @@ async fn reprocess_rejects_a_viewer_role() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn selected_reprocess_replays_each_requested_record_and_redirects_with_count() {
+    let (mut state, session_id) = state_with_session().await;
+    let stats_client = Arc::new(InMemoryIngestionStatsClient::default());
+    state.stats_client = stats_client.clone();
+    let first = Uuid::new_v4();
+    let second = Uuid::new_v4();
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/data/reprocess-selected")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={first},{second}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers().get("location").unwrap(), "/data?reprocessed=2");
+    assert_eq!(*stats_client.reprocessed_records.lock().unwrap(), vec![first, second]);
 }
 
 #[tokio::test]

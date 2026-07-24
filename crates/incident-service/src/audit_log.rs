@@ -74,6 +74,13 @@ pub trait AuditLogReader: Send + Sync {
         tenant_id: Uuid,
         entity_id: Uuid,
     ) -> Result<Vec<AuditLogEntry>, AuditLogError>;
+
+    async fn list_recent(
+        &self,
+        tenant_id: Uuid,
+        limit: u32,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogError>;
 }
 
 pub struct PostgresAuditLogReader {
@@ -133,6 +140,47 @@ impl AuditLogReader for PostgresAuditLogReader {
         .bind(entity_id)
         .fetch_all(&self.pool)
         .await
+        .map_err(|e| AuditLogError::Backend(e.to_string()))?;
+
+        Ok(rows.into_iter().map(row_to_entry).collect())
+    }
+
+    async fn list_recent(
+        &self,
+        tenant_id: Uuid,
+        limit: u32,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogError> {
+        let rows: Vec<AuditRow> = if let Some(before) = before {
+            sqlx::query_as(
+                r#"
+                SELECT id, tenant_id, entity_type, entity_id, change_type, actor, before, after, changed_at
+                FROM incident_audit_log
+                WHERE tenant_id = $1 AND changed_at < $2
+                ORDER BY changed_at DESC
+                LIMIT $3
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(before)
+            .bind(i64::from(limit.min(200)))
+            .fetch_all(&self.pool)
+            .await
+        } else {
+            sqlx::query_as(
+                r#"
+                SELECT id, tenant_id, entity_type, entity_id, change_type, actor, before, after, changed_at
+                FROM incident_audit_log
+                WHERE tenant_id = $1
+                ORDER BY changed_at DESC
+                LIMIT $2
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(i64::from(limit.min(200)))
+            .fetch_all(&self.pool)
+            .await
+        }
         .map_err(|e| AuditLogError::Backend(e.to_string()))?;
 
         Ok(rows.into_iter().map(row_to_entry).collect())

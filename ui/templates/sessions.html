@@ -1,6 +1,23 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Active Sessions</h1>
+<style>
+  .session-posture { display:grid; grid-template-columns:1.25fr 1fr; gap:1rem; margin:0 0 1.25rem; }
+  .session-posture-panel { padding:1rem; }
+  .session-posture-panel h2 { margin:0 0 .25rem; font-size:1rem; }
+  .session-posture-list { display:grid; gap:.65rem; margin-top:1rem; }
+  .session-posture-row { display:grid; grid-template-columns:6.5rem 1fr auto; gap:.65rem; align-items:center; }
+  .session-posture-track { height:.55rem; overflow:hidden; border-radius:99px; background:var(--surface-3,#e8edf3); }
+  .session-posture-fill { height:100%; border-radius:inherit; background:#4d82b6; }
+  .session-posture-fill.risk { background:#dc2626; }
+  .session-posture-fill.good { background:#16a34a; }
+  .session-posture-count { font:700 .8rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .session-posture-kpis { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; margin-top:1rem; }
+  .session-posture-kpi { display:grid; gap:.2rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .session-posture-kpi strong { font:700 1.25rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .session-posture-kpi small { color:var(--text-dim); }
+  @media(max-width:760px){.session-posture{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / access</div><h1>Active Sessions</h1><p class="page-description">Review every browser session currently signed in and revoke compromised access immediately.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/users">Workspace users</a><a class="btn btn-secondary" href="/security/login-attempts">Login attempts &rarr;</a></div></div>
 <p class="muted">Every browser currently signed in to this workspace. Revoking a session forces
 that login out immediately, without changing the user's password — use this if someone left the
 team or you suspect a session was compromised. This list only reflects logins started on this
@@ -9,17 +26,28 @@ Console UI instance (ADR-0046).</p>
 <form class="inline" method="get" action="/security/sessions" style="margin-bottom:1rem;">
   <label for="q">Search</label>
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by username&hellip;">
+  <label for="role">Role</label>
+  <select id="role" name="role"><option value="" {% if role.is_empty() %}selected{% endif %}>All roles</option><option value="admin" {% if role == "admin" %}selected{% endif %}>Admin</option><option value="operator" {% if role == "operator" %}selected{% endif %}>Operator</option><option value="viewer" {% if role == "viewer" %}selected{% endif %}>Viewer</option></select>
+  <label for="age">Session age</label>
+  <select id="age" name="age"><option value="" {% if age.is_empty() %}selected{% endif %}>Any age</option><option value="recent" {% if age == "recent" %}selected{% endif %}>Last 24 hours</option><option value="stale" {% if age == "stale" %}selected{% endif %}>30+ days</option></select>
   <button type="submit">Search</button>
-  {% if !q.is_empty() %}<a href="/security/sessions" class="btn-link">Clear</a>{% endif %}
+  {% if !q.is_empty() || !role.is_empty() || !age.is_empty() %}<a href="/security/sessions" class="btn-link">Clear</a>{% endif %}
 </form>
+
+{% if !sessions.is_empty() %}
+<section class="session-posture" aria-label="Session security posture">
+  <div class="panel session-posture-panel"><div class="page-kicker">Access concentration</div><h2>Sessions by role</h2><p class="muted">Select a role to scope the active-session evidence below.</p><div class="session-posture-list"><a class="session-posture-row" href="/security/sessions?q={{ q|urlencode }}&role=admin&age={{ age|urlencode }}"><span>Admins</span><span class="session-posture-track"><span class="session-posture-fill risk" style="width:{% if sessions.len() > 0 %}{{ admin_count * 100 / sessions.len() }}{% else %}0{% endif %}%"></span></span><strong class="session-posture-count">{{ admin_count }}</strong></a><a class="session-posture-row" href="/security/sessions?q={{ q|urlencode }}&role=operator&age={{ age|urlencode }}"><span>Operators</span><span class="session-posture-track"><span class="session-posture-fill good" style="width:{% if sessions.len() > 0 %}{{ operator_count * 100 / sessions.len() }}{% else %}0{% endif %}%"></span></span><strong class="session-posture-count">{{ operator_count }}</strong></a><a class="session-posture-row" href="/security/sessions?q={{ q|urlencode }}&role=viewer&age={{ age|urlencode }}"><span>Viewers</span><span class="session-posture-track"><span class="session-posture-fill" style="width:{% if sessions.len() > 0 %}{{ viewer_count * 100 / sessions.len() }}{% else %}0{% endif %}%"></span></span><strong class="session-posture-count">{{ viewer_count }}</strong></a></div></div>
+  <div class="panel session-posture-panel"><div class="page-kicker">Session age</div><h2>Freshness signal</h2><div class="session-posture-kpis"><a class="session-posture-kpi" href="/security/sessions?q={{ q|urlencode }}&role={{ role|urlencode }}&age=recent"><strong>{{ recent_count }}</strong><small>signed in last 24h →</small></a><a class="session-posture-kpi" href="/security/sessions?q={{ q|urlencode }}&role={{ role|urlencode }}&age=stale"><strong>{{ stale_count }}</strong><small>older than 30 days →</small></a><div class="session-posture-kpi"><strong>{{ sessions.len() }}</strong><small>active sessions in scope</small></div><div class="session-posture-kpi"><strong>{% for s in sessions %}{% if s.is_current %}1{% endif %}{% endfor %}</strong><small>current session identified</small></div></div><p class="muted">Older sessions should be reviewed during access recertification or incident response.</p></div>
+</section>
+{% endif %}
 
 {% if sessions.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#128274;</div>
-  {% if q.is_empty() %}
+  {% if q.is_empty() && role.is_empty() && age.is_empty() %}
   <p>No active sessions.</p>
   {% else %}
-  <p>No sessions match &ldquo;{{ q }}&rdquo;.</p>
+  <p>No sessions match the current access scope.</p>
   {% endif %}
 </div>
 {% else %}
@@ -32,17 +60,17 @@ Console UI instance (ADR-0046).</p>
     <tr>
       <th scope="col"></th>
       <th scope="col">
-        <a href="/security/sessions?q={{ q|urlencode }}&sort=username&dir={% if sort == "username" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/security/sessions?q={{ q|urlencode }}&role={{ role|urlencode }}&age={{ age|urlencode }}&sort=username&dir={% if sort == "username" && dir != "desc" %}desc{% else %}asc{% endif %}">
           User{% if sort == "username" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/security/sessions?q={{ q|urlencode }}&sort=role&dir={% if sort == "role" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/security/sessions?q={{ q|urlencode }}&role={{ role|urlencode }}&age={{ age|urlencode }}&sort=role&dir={% if sort == "role" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Role{% if sort == "role" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/security/sessions?q={{ q|urlencode }}&sort=created_at&dir={% if sort == "created_at" || sort.is_empty() %}{% if dir == "asc" %}desc{% else %}asc{% endif %}{% else %}desc{% endif %}">
+        <a href="/security/sessions?q={{ q|urlencode }}&role={{ role|urlencode }}&age={{ age|urlencode }}&sort=created_at&dir={% if sort == "created_at" || sort.is_empty() %}{% if dir == "asc" %}desc{% else %}asc{% endif %}{% else %}desc{% endif %}">
           Signed in{% if sort == "created_at" || sort.is_empty() %}{% if dir == "asc" %} &#9650;{% else %} &#9660;{% endif %}{% endif %}
         </a>
       </th>

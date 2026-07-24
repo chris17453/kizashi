@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+{% block content %}
+<style>
+  .ontology-compare-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .7rem; }
+  .ontology-compare-card { display: grid; gap: .25rem; padding: .85rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); text-decoration: none; }
+  .ontology-compare-card:hover { border-color: var(--accent); background: var(--surface-hover); }
+  .ontology-compare-card small { color: var(--text-dim); overflow-wrap: anywhere; }
+  .ontology-compare-table { min-width: 720px; }
+  .ontology-compare-table th:first-child { position: sticky; left: 0; background: var(--surface); text-align: left; }
+  .ontology-compare-table tbody th { font-weight: 600; }
+  .ontology-compare-table td { min-width: 150px; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>
+<div class="page-header">
+  <div>
+    <div class="page-kicker">Ontology / investigation</div>
+    <h1>Compare entities</h1>
+    <p class="page-description">Review selected objects side by side while preserving their typed properties and model context.</p>
+  </div>
+  <div class="quick-actions"><a class="btn btn-secondary" href="/ontology">Back to ontology</a><a class="btn btn-secondary" href="/actions">Open action ledger</a></div>
+</div>
+{% if objects.is_empty() %}
+<section class="panel empty-state"><div class="empty-icon">◇</div><h2>Select entities to compare</h2><p>Return to the ontology, select two or more compatible entities, and choose Compare selected.</p><a class="btn" href="/ontology">Choose entities &rarr;</a></section>
+{% else %}
+<div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));"><div class="kpi-card kpi-accent"><div class="kpi-label">Comparison set</div><div class="kpi-value">{{ objects.len() }}</div><div class="kpi-sub">entities selected</div></div><div class="kpi-card kpi-success"><div class="kpi-label">Shared properties</div><div class="kpi-value">{{ shared_property_count }}</div><div class="kpi-sub">same across the set</div></div><div class="kpi-card {% if differing_property_count > 0 %}kpi-danger{% else %}kpi-success{% endif %}"><div class="kpi-label">Divergent properties</div><div class="kpi-value">{{ differing_property_count }}</div><div class="kpi-sub">require investigation</div></div></div>
+<section class="panel ontology-compare-summary"><div class="panel-heading"><div><h2>{{ objects.len() }} entities in this comparison</h2><p class="muted">Differences remain visible across types; missing properties are shown as an em dash.</p></div><span class="pill pill-muted">investigation set</span></div><div class="ontology-compare-cards">{% for object in objects %}<a class="ontology-compare-card" href="/ontology?object_id={{ object.id }}#object-{{ object.id }}"><span class="page-kicker">{{ object.type_name }}</span><strong>{{ object.summary }}</strong><small>{{ object.id }}</small><span class="muted">Updated {{ object.updated_at.format("%Y-%m-%d %H:%M") }}</span></a>{% endfor %}</div></section>
+<section class="panel ontology-compare-table-panel"><div class="panel-heading"><div><h2>Property comparison</h2><p class="muted">A normalized view of every property present in the selected set.</p></div><span class="pill pill-muted">{{ property_rows.len() }} properties</span></div><div class="table-wrap"><table class="data-table ontology-compare-table"><thead><tr><th>Property</th>{% for object in objects %}<th>{{ object.summary }}</th>{% endfor %}</tr></thead><tbody>{% for row in property_rows %}<tr><th><code>{{ row.key }}</code></th>{% for value in row.values %}<td{% if value == "—" %} class="muted"{% endif %}>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div></section>
+{% endif %}
+{% endblock %}

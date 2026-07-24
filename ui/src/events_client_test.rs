@@ -205,6 +205,39 @@ async fn http_client_sends_since_and_until_as_query_params() {
 }
 
 #[tokio::test]
+async fn http_client_sends_server_side_search_as_query_param() {
+    async fn handler(
+        axum::extract::Query(params): axum::extract::Query<
+            std::collections::HashMap<String, String>,
+        >,
+    ) -> axum::response::Response {
+        assert_eq!(params.get("search").map(String::as_str), Some("urgent"));
+        Json(serde_json::json!({"events": [], "has_more": false})).into_response()
+    }
+    let app = Router::new().route("/v1/events", get(handler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let client = HttpEventsClient::new(reqwest::Client::new(), format!("http://{addr}"));
+
+    let page = client
+        .list_events_filtered(
+            "token",
+            100,
+            0,
+            None,
+            None,
+            Some("urgent".to_string()),
+            Some("triggered".to_string()),
+        )
+        .await
+        .unwrap();
+    assert!(page.events.is_empty());
+}
+
+#[tokio::test]
 async fn http_client_is_rejected_with_the_wrong_token() {
     let url = spawn_stub_server("correct-token").await;
     let client = HttpEventsClient::new(reqwest::Client::new(), url);

@@ -7,11 +7,13 @@ mod analysis_config_publisher;
 mod analysis_config_repository;
 mod audit_log;
 mod encryption;
+mod event_type_definition_repository;
 mod handlers;
 mod health;
 mod internal_secret;
 mod mapping_publisher;
 mod normalization_mapping_repository;
+mod report_run_repository;
 mod saved_search_query_handlers;
 mod saved_search_query_repository;
 mod sensor_handlers;
@@ -32,10 +34,15 @@ pub use audit_log::{
     PostgresAuditLogReader,
 };
 pub use encryption::{ApiKeyEncryptor, EncryptionError};
+pub use event_type_definition_repository::{
+    EventTypeDefinitionRepository, EventTypeDefinitionRepositoryError,
+    PostgresEventTypeDefinitionRepository,
+};
 pub use handlers::{
-    create_mapping, create_trigger, delete_mapping, delete_trigger, get_audit_log, get_mapping,
-    get_recent_audit_log, get_trigger, list_mappings, list_triggers, update_mapping,
-    update_trigger, AdminState,
+    create_event_type, create_event_type_version, create_mapping, create_report_run,
+    create_trigger, delete_mapping, delete_trigger, get_audit_log, get_event_type, get_mapping,
+    get_recent_audit_log, get_trigger, list_event_types, list_mappings, list_report_runs,
+    list_triggers, update_mapping, update_report_run, update_trigger, AdminState,
 };
 pub use health::healthz;
 pub use internal_secret::require_internal_secret;
@@ -43,6 +50,9 @@ pub use mapping_publisher::{MappingPublishError, MappingPublisher, RabbitMqMappi
 pub use normalization_mapping_repository::{
     NormalizationMappingRepository, NormalizationMappingRepositoryError,
     PostgresNormalizationMappingRepository,
+};
+pub use report_run_repository::{
+    PostgresReportRunRepository, ReportRunRepository, ReportRunRepositoryError,
 };
 pub use saved_search_query_handlers::{
     create_saved_search_query, delete_saved_search_query, list_saved_search_queries,
@@ -86,6 +96,11 @@ pub fn build_router(
         )
         .route("/v1/audit-log", get(get_recent_audit_log))
         .route("/v1/audit-log/:entity_id", get(get_audit_log))
+        .route("/v1/event-type-definitions", post(create_event_type).get(list_event_types))
+        .route("/v1/event-type-definitions/:id", get(get_event_type))
+        .route("/v1/event-type-definitions/:id/versions", post(create_event_type_version))
+        .route("/v1/report-runs", post(create_report_run).get(list_report_runs))
+        .route("/v1/report-runs/:id", axum::routing::put(update_report_run))
         .with_state(state);
 
     let sensor_routes = Router::new()

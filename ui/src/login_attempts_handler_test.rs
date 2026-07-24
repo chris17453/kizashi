@@ -213,6 +213,26 @@ async fn filters_by_the_q_query_param_case_insensitively() {
 }
 
 #[tokio::test]
+async fn filters_by_outcome_and_preserves_investigation_scope() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let client = InMemoryLoginAttemptsClient {
+        attempts: Mutex::new(vec![attempt("bob", false), attempt("carol", true)]),
+    };
+    let state = state_with(store, Arc::new(client)).await;
+
+    let response = get_page_at(state, &session_id, "/security/login-attempts?status=failed").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("bob"));
+    assert!(!body.contains("carol"));
+    assert!(body.contains("name=\"status\""));
+    assert!(body.contains("value=\"failed\" selected"));
+}
+
+#[tokio::test]
 async fn shows_a_load_older_link_when_a_full_page_is_returned() {
     let store = InMemorySessionStore::default();
     let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
@@ -312,4 +332,29 @@ async fn export_csv_requires_admin_role() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn login_attempt_reason_filter_and_posture_handoff_are_available() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Uuid::new_v4(), Role::Admin, "alice")).await;
+    let client = InMemoryLoginAttemptsClient {
+        attempts: Mutex::new(vec![attempt("bob", false), attempt("carol", true)]),
+    };
+    let state = state_with(store, Arc::new(client)).await;
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/security/login-attempts?reason=wrong_password")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Failure reason"));
+    assert!(body.contains("name=\"reason\""));
 }

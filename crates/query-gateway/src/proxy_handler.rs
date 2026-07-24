@@ -3,7 +3,8 @@
 mod proxy_handler_test;
 
 use crate::token_store::TokenStore;
-use axum::extract::{OriginalUri, State};
+use axum::body::{to_bytes, Body};
+use axum::extract::{OriginalUri, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use std::sync::Arc;
@@ -41,13 +42,37 @@ pub async fn proxy_get(
     headers: HeaderMap,
     OriginalUri(uri): OriginalUri,
 ) -> Response {
+    proxy_request(state, headers, uri, Body::empty(), reqwest::Method::GET).await
+}
+
+pub async fn proxy_any(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    OriginalUri(uri): OriginalUri,
+    request: Request,
+) -> Response {
+    let method = request.method().clone();
+    let body = match to_bytes(request.into_body(), 2 * 1024 * 1024).await {
+        Ok(bytes) => Body::from(bytes),
+        Err(_) => return error_response(StatusCode::BAD_REQUEST, "request body too large"),
+    };
+    proxy_request(state, headers, uri, body, method).await
+}
+
+async fn proxy_request(
+    state: GatewayState,
+    headers: HeaderMap,
+    uri: axum::http::Uri,
+    body: Body,
+    method: reqwest::Method,
+) -> Response {
     let token = match bearer_token(&headers) {
         Some(t) if !t.is_empty() => t,
         _ => return error_response(StatusCode::UNAUTHORIZED, "missing Bearer token"),
     };
 
-    let tenant_id = match state.token_store.session_for_token(token).await {
-        Ok(Some((tenant_id, _role))) => tenant_id,
+    let (tenant_id, session_role) = match state.token_store.session_for_token(token).await {
+        Ok(Some((tenant_id, role))) => (tenant_id, role),
         Ok(None) => return error_response(StatusCode::UNAUTHORIZED, "invalid token"),
         Err(e) => {
             tracing::error!(error = %e, "token lookup failed");
@@ -62,12 +87,25 @@ pub async fn proxy_get(
     };
 
     let upstream_url = format!("{}{}", upstream_base, uri);
-    let upstream = state
+    let bytes = match to_bytes(body, 2 * 1024 * 1024).await {
+        Ok(bytes) => bytes,
+        Err(_) => return error_response(StatusCode::BAD_REQUEST, "request body too large"),
+    };
+    let mut request = state
         .http_client
-        .get(&upstream_url)
+        .request(method, &upstream_url)
         .header("x-tenant-id", tenant_id.to_string())
-        .send()
-        .await;
+        .header("x-role", session_role.to_string());
+    if let Some(content_type) = headers.get(axum::http::header::CONTENT_TYPE) {
+        request = request.header(axum::http::header::CONTENT_TYPE, content_type);
+    }
+    if let Some(actor) = headers.get("x-actor") {
+        request = request.header("x-actor", actor);
+    }
+    if !bytes.is_empty() {
+        request = request.body(bytes);
+    }
+    let upstream = request.send().await;
 
     match upstream {
         Ok(response) => {

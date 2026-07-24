@@ -2,11 +2,12 @@
 #[cfg(test)]
 mod handlers_test;
 
+use crate::audit_log::{AuditLogError, AuditLogReader};
 use crate::incident_repository::{IncidentRepository, IncidentRepositoryError};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use common::{Incident, IncidentStatus, Role};
+use common::{Incident, IncidentNote, IncidentStatus, Role};
 use std::str::FromStr;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -14,6 +15,52 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct IncidentState {
     pub incident_repository: Arc<dyn IncidentRepository>,
+    pub audit_log_reader: Arc<dyn AuditLogReader>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct ListAuditLogQuery {
+    #[serde(default = "default_audit_limit")]
+    limit: u32,
+    before: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+fn default_audit_limit() -> u32 {
+    50
+}
+
+pub async fn list_audit_log(
+    State(state): State<IncidentState>,
+    headers: HeaderMap,
+    Query(query): Query<ListAuditLogQuery>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.audit_log_reader.list_recent(tenant_id, query.limit.min(200), query.before).await {
+        Ok(entries) => Json(entries).into_response(),
+        Err(AuditLogError::Backend(message)) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, message)
+        }
+    }
+}
+
+pub async fn list_entity_audit_log(
+    State(state): State<IncidentState>,
+    headers: HeaderMap,
+    Path(entity_id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.audit_log_reader.list_for_entity(tenant_id, entity_id).await {
+        Ok(entries) => Json(entries).into_response(),
+        Err(AuditLogError::Backend(message)) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, message)
+        }
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -80,6 +127,7 @@ struct IncidentDetailResponse {
     #[serde(flatten)]
     incident: Incident,
     event_ids: Vec<Uuid>,
+    notes: Vec<IncidentNote>,
 }
 
 async fn detail_response(
@@ -87,7 +135,43 @@ async fn detail_response(
     incident: Incident,
 ) -> Result<IncidentDetailResponse, IncidentRepositoryError> {
     let event_ids = state.incident_repository.list_linked_event_ids(incident.id).await?;
-    Ok(IncidentDetailResponse { incident, event_ids })
+    let notes = state.incident_repository.list_notes(incident.tenant_id, incident.id).await?;
+    Ok(IncidentDetailResponse { incident, event_ids, notes })
+}
+
+#[derive(serde::Deserialize)]
+pub struct AddIncidentNoteRequest {
+    body: String,
+}
+
+pub async fn add_incident_note(
+    State(state): State<IncidentState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<AddIncidentNoteRequest>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
+    let body = request.body.trim();
+    if body.is_empty() || body.len() > 10_000 {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "note body must contain 1-10000 characters",
+        );
+    }
+    let actor = match username_from_headers(&headers) {
+        Ok(actor) => actor,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    match state.incident_repository.add_note(tenant_id, id, &actor, body).await {
+        Ok(note) => (StatusCode::CREATED, Json(note)).into_response(),
+        Err(e) => incident_error_response(e),
+    }
 }
 
 #[derive(serde::Deserialize)]

@@ -1,12 +1,37 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>AI Analysis</h1>
+<style>
+  .analysis-posture { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; margin:0 0 1.25rem; }
+  .analysis-posture-card { padding:1rem; }
+  .analysis-posture-card h2 { margin:.2rem 0 .35rem; font-size:1rem; }
+  .analysis-posture-value { font:700 1.1rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .analysis-posture-card small { color:var(--text-dim); }
+  .analysis-posture-state { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .5rem; border-radius:99px; background:var(--state-good-bg); color:var(--state-good-text); font-size:.75rem; font-weight:700; }
+  .analysis-posture-state.warn { background:var(--state-warn-bg); color:var(--state-warn-text); }
+  @media(max-width:820px){.analysis-posture{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Control plane / intelligence</div><h1>AI Analysis</h1><p class="page-description">Define the signals the analysis service extracts from normalized records before detection rules evaluate them.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/normalization-mappings">Review field mappings</a><a class="btn btn-secondary" href="/triggers">Open detection rules &rarr;</a></div></div>
 <p class="muted">What the AI/ML backend looks for when it analyzes this tenant's records —
 every record ingested is run through this prompt before Trigger Engine evaluates it against
 your Triggers. Leave blank to keep the platform's default analysis behavior.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 {% if saved %}<p class="status-up">Saved — new records will use this prompt.</p>{% endif %}
 <p><a href="/audit-log/config/{{ tenant_id }}">View change history</a></p>
+
+<section class="analysis-posture" aria-label="Analysis configuration posture">
+  <div class="panel analysis-posture-card"><div class="page-kicker">Policy mode</div><h2>{% if prompt_configured %}Tenant policy{% else %}Platform default{% endif %}</h2><div class="analysis-posture-value">{% if prompt_configured %}Custom prompt{% else %}No override{% endif %}</div><small>{% if prompt_configured %}A tenant-specific analysis instruction is active.{% else %}Records use the platform’s default analysis behavior.{% endif %}</small></div>
+  <div class="panel analysis-posture-card"><div class="page-kicker">Provider</div><h2>{{ provider_label }}</h2>{% if connection_ready %}<span class="analysis-posture-state">&#10003; Configuration ready</span>{% else %}<span class="analysis-posture-state warn">! Needs connection details</span>{% endif %}<small style="display:block;margin-top:.45rem;">Readiness is based on the fields configured here, not upstream model availability.</small></div>
+  <div class="panel analysis-posture-card"><div class="page-kicker">Secret posture</div><h2>{% if secret_configured %}Credential configured{% else %}No API key stored{% endif %}</h2><div class="analysis-posture-value">{% if secret_configured %}Protected{% else %}Local/default{% endif %}</div><small>{% if secret_configured %}The key is write-only in this console and never echoed.{% else %}Compatible with local Ollama or platform-managed credentials.{% endif %}</small></div>
+  <div class="panel analysis-posture-card"><div class="page-kicker">Fallback route</div><h2>{{ fallback_status }}</h2><div class="analysis-posture-value">{% if fallback_status == "configured" %}Alternate model{% else %}Resilience path{% endif %}</div><small>{% if fallback_status == "configured" %}A separate model can absorb transient provider failures.{% else if fallback_status == "not configured" %}Transient failures fall through to retry/dead-letter policy.{% else %}Analysis service posture is not reachable.{% endif %}</small></div>
+  <div class="panel analysis-posture-card"><div class="page-kicker">Consumer</div><h2>{{ consumer_status }}</h2><div class="analysis-posture-value">{% if consumer_status == "online" %}Processing{% else %}Attention{% endif %}</div><small>Heartbeat and recovery state from Analysis Service.</small></div>
+</section>
+
+<section class="panel" style="max-width:none;margin-bottom:1.25rem;border-color:{% if let Some(count) = analysis_queue_count %}{% if count.to_string() != "0" %}var(--danger){% else %}var(--border-subtle){% endif %}{% else %}var(--warning){% endif %};">
+  <div class="panel-heading"><div><div class="page-kicker">Pipeline recovery</div><h2>Analysis dead-letter posture</h2><p class="muted">Transient model failures are retried and may fall back automatically. Messages that exhaust those attempts remain isolated for operator recovery.</p></div><a class="section-link" href="/actions#pipeline-recovery">Open recovery controls &rarr;</a></div>
+  {% if let Some(count) = analysis_queue_count %}
+    {% if count.to_string() != "0" %}<p class="warning-banner"><strong>{{ count }}</strong> analyzed record{% if count.to_string() != "1" %}s{% endif %} waiting in the analysis dead-letter queue. Inspect the recovery queue before treating the model as healthy.</p>{% else %}<p class="status-up">Analysis dead-letter queue is clear.</p>{% endif %}
+  {% else %}<p class="muted">Analysis queue telemetry is unavailable. Open Platform Health or the Action Center to inspect dependency state.</p>{% endif %}
+</section>
 
 <div class="form-row">
   <div class="panel">
@@ -66,6 +91,15 @@ your Triggers. Leave blank to keep the platform's default analysis behavior.</p>
         redacted before it reaches that log, but is otherwise stored as entered
         (config-as-data convention; see ADR-0031).</li>
     </ul>
+    <div class="panel" style="margin-top:1rem; max-width:none; border-color:var(--accent-dim);">
+      <div class="detail-label">Resilience posture</div>
+      <p><strong>Transient model failures do not stop the pipeline.</strong></p>
+      <p class="muted">If an OpenAI-compatible model is overloaded, rate-limited, times out, or
+        returns a temporary upstream failure, the batch is attempted once against the platform
+        default Foundry model. Foundry-primary deployments can also configure a separate
+        fallback model at service deployment time. Only after both attempts fail does the normal
+        retry and dead-letter policy take over.</p>
+    </div>
   </div>
 </div>
 {% endblock %}

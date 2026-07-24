@@ -1,17 +1,66 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Incident Detail</h1>
+<style>
+  .case-response-outcomes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.75rem; margin:1rem 0 1.25rem; }
+  .case-response-outcome { display:grid; gap:.45rem; padding:.75rem; border:1px solid var(--border-subtle); border-radius:7px; color:var(--text); text-decoration:none; }
+  .case-response-outcome:hover { border-color:var(--accent); background:var(--surface-hover); text-decoration:none; }
+  .case-response-outcome-top { display:flex; justify-content:space-between; gap:.5rem; }
+  .case-response-outcome strong { font:700 1.35rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .case-response-outcome small { color:var(--text-dim); }
+  .case-response-outcome-track { height:.45rem; overflow:hidden; border-radius:99px; background:var(--surface-3,#e8edf3); }
+  .case-response-outcome-fill { height:100%; border-radius:inherit; background:#4d82b6; }
+  .case-response-outcome-fill.good { background:#16a34a; } .case-response-outcome-fill.risk { background:#dc2626; }
+  .case-graph-wrap { overflow:auto; border:1px solid var(--border); border-radius:10px; background:radial-gradient(circle at 50% 20%,#142842 0,#0b1524 70%); }
+  .case-graph { display:block; min-width:760px; width:100%; height:auto; min-height:300px; }
+  .case-graph-edge { stroke:#557ba6; stroke-width:2; opacity:.8; marker-end:url(#case-graph-arrow); }
+  .case-graph-edge-label { fill:#9eb9d7; font-size:11px; text-anchor:middle; }
+  .case-graph-node { fill:#142942; stroke:#4f86bd; stroke-width:2; cursor:pointer; }
+  .case-graph-node:hover { fill:#1b3b60; stroke:#8dc9ff; }
+  .case-graph-node-type { fill:#8db4d9; font-size:10px; font-weight:700; }
+  .case-graph-node-label { fill:#f0f6ff; font-size:13px; font-weight:650; }
+  .case-graph-wrap { background:radial-gradient(circle at 50% 20%,var(--surface-raised) 0,var(--bg) 70%); }
+  .case-graph-edge { stroke:var(--accent-dim); }
+  .case-graph-edge-label { fill:var(--text-dim); }
+  .case-graph-node { fill:var(--surface-raised); stroke:var(--accent-dim); }
+  .case-graph-node:hover { fill:var(--surface-hover); stroke:var(--accent); }
+  .case-graph-node-type { fill:var(--accent); }
+  .case-graph-node-label { fill:var(--text); }
+  @media (max-width:620px) { .case-response-outcomes { grid-template-columns:1fr; } }
+  .case-clock{display:grid;gap:.7rem;margin:0 0 1rem}.case-clock-row{display:grid;grid-template-columns:8rem minmax(8rem,1fr) 5.5rem;gap:.65rem;align-items:center;padding:.55rem .65rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface);text-decoration:none;color:var(--text)}.case-clock-row:hover{border-color:var(--accent);background:var(--surface-hover)}.case-clock-label{display:grid;gap:.15rem;min-width:0}.case-clock-label strong,.case-clock-label small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.case-clock-label small{color:var(--text-dim);font-size:.68rem}.case-clock-track{height:.65rem;border-radius:99px;overflow:hidden;background:var(--surface-raised)}.case-clock-fill{display:block;height:100%;min-width:4px;border-radius:inherit;background:var(--accent)}.case-clock-fill.good{background:var(--success)}.case-clock-fill.warning{background:var(--warning)}.case-clock-fill.risk{background:var(--danger)}.case-clock-time{text-align:right;color:var(--text-dim);font:600 .72rem ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}@media(max-width:620px){.case-clock-row{grid-template-columns:1fr;gap:.35rem}.case-clock-time{text-align:left}}
+  .case-action-preflight{margin:.65rem 0;padding:.6rem .7rem;border:1px solid var(--border);border-radius:7px;background:var(--surface-raised);color:var(--text-dim);font-size:.7rem}.case-action-preflight strong{display:block;color:var(--text);font-size:.74rem}.case-action-preflight.ready{border-color:color-mix(in srgb,var(--success) 55%,var(--border))}.case-action-preflight.ready strong{color:var(--success)}
+</style>
 {% if let Some(e) = error %}
 <p class="error">{{ e }}</p>
 {% endif %}
+{% if notice == "executed" %}
+<div class="notice success" role="status"><strong>Governed action executed.</strong> The response was accepted and recorded in the case timeline.</div>
+{% endif %}
+{% if notice == "rejected" %}
+<div class="notice error" role="alert"><strong>Governed action rejected.</strong> The action did not satisfy the current contract or could not be applied.</div>
+{% endif %}
+{% if notice == "invalid-parameters" %}
+<div class="notice warning" role="alert"><strong>Invalid action parameters.</strong> Review the typed fields and submit again.</div>
+{% endif %}
+{% if notice == "correlated" %}
+<div class="notice success" role="status"><strong>Signal correlated into this investigation.</strong> The existing case was kept intact and the new signal was appended with an audit entry.</div>
+{% endif %}
 {% if let Some(inc) = incident %}
-<p class="muted">
-  <a href="/incidents">&larr; Back to Incidents</a>
-</p>
+<div class="page-header"><div><div class="page-kicker">Operations / investigation</div><h1>{{ inc.title }}</h1><p class="page-description">Case record with lifecycle state, linked evidence, and governed operator controls.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/incidents">&larr; Back to queue</a><a class="btn btn-secondary" href="/events?linked_incident={{ inc.id }}">Attach signals</a><a class="btn btn-secondary" href="/events">Browse events</a><a class="btn btn-secondary" href="/actions">Action ledger &rarr;</a><a class="btn btn-secondary" href="/incidents/{{ inc.id }}/export.csv">Export case evidence &darr;</a></div></div>
+
+<div class="linked-context">
+  <div class="linked-context-label">Investigation brief</div>
+  <div class="linked-context-card incident-brief">
+    <span class="pill {% if inc.severity.to_string() == "critical" || inc.severity.to_string() == "high" %}pill-down{% else %}pill-muted{% endif %}">{{ inc.severity }}</span>
+    <div>
+      <strong>{{ inc.title }}</strong>
+      {% if !inc.summary.is_empty() %}<p>{{ inc.summary }}</p>{% else %}<p class="muted">No incident brief has been recorded yet. Use the linked evidence below to establish scope and next action.</p>{% endif %}
+    </div>
+  </div>
+</div>
 
 <div class="form-row">
-  <div class="panel">
-    <h2>{{ inc.title }}</h2>
+  <div class="panel incident-facts-panel">
+    <div class="panel-heading"><div><h2>Case posture</h2><p class="muted">Current state and lifecycle timestamps.</p></div></div>
     <table>
       <tbody>
         <tr><th scope="row">Status</th><td>
@@ -20,6 +69,8 @@
         <tr><th scope="row">Severity</th><td>
           <span class="pill {% if inc.severity.to_string() == "critical" || inc.severity.to_string() == "high" %}pill-down{% else %}pill-up{% endif %}">{{ inc.severity }}</span>
         </td></tr>
+        <tr><th scope="row">Owner</th><td>{% if let Some(owner) = inc.assigned_to %}<span class="owner-chip">{{ owner }}</span>{% else %}<span class="muted">Unassigned</span>{% endif %}</td></tr>
+        {% if let Some(sla) = sla %}<tr><th scope="row">SLA posture</th><td><span class="pill sla-{{ sla.state }}">{{ sla.label }}</span><span class="sla-detail">{{ sla.detail }}</span></td></tr>{% endif %}
         <tr><th scope="row">Created</th><td>{{ inc.created_at }}</td></tr>
         <tr><th scope="row">Updated</th><td>{{ inc.updated_at }}</td></tr>
         {% if let Some(resolved_at) = inc.resolved_at %}
@@ -29,11 +80,14 @@
     </table>
   </div>
   {% if can_write %}
-  <div class="info-panel">
-    <h2>Update incident</h2>
+  <div class="info-panel incident-update-panel">
+    <div class="panel-heading"><div><h2>Update case</h2><p class="muted">Changes are recorded with the acting operator.</p></div></div>
     <form class="inline" method="post" action="/incidents/{{ inc.id }}">
       <label for="title">Title</label>
       <input type="text" id="title" name="title" value="{{ inc.title }}" required>
+
+      <label for="summary">Investigation brief</label>
+      <textarea id="summary" name="summary" rows="4" maxlength="2000" placeholder="Impact, scope, and decision context">{{ inc.summary }}</textarea>
 
       <label for="severity">Severity</label>
       <select id="severity" name="severity">
@@ -50,16 +104,23 @@
         <option value="resolved" {% if inc.status.to_string() == "resolved" %}selected{% endif %}>Resolved</option>
       </select>
 
+      <label for="assigned_to">Owner <span class="muted">tenant-scoped operators</span></label>
+      <select id="assigned_to" name="assigned_to">
+        <option value="">Unassigned</option>
+        {% for option in assignee_options %}<option value="{{ option.username }}"{% if let Some(owner) = inc.assigned_to %}{% if owner.to_string() == option.username %} selected{% endif %}{% endif %}>{{ option.username }} · {{ option.role }}</option>{% endfor %}
+      </select>
+
       <button type="submit">Save</button>
     </form>
   </div>
   {% endif %}
 </div>
 
-<h2 class="section-title">Linked events</h2>
+<section class="panel incident-evidence-panel"><div class="panel-heading"><div><h2>Evidence chain</h2><p class="muted">Signals linked to this investigation.</p></div><span class="pill pill-muted">{{ linked_events.len() }} linked signal{% if linked_events.len() != 1 %}s{% endif %}</span></div>
 {% if linked_events.is_empty() %}
 <div class="empty-state">
   <p>No events are linked to this incident.</p>
+  <p>Open <a href="/events">Events</a> to select signals and attach them to this case.</p>
 </div>
 {% else %}
 <table>
@@ -75,7 +136,7 @@
   <tbody>
     {% for row in linked_events %}
     <tr>
-      <td>{{ row.event.event_type }}</td>
+      <td><strong>{{ row.event.event_type }}</strong><br><span class="muted">{{ row.event.group_key }}</span></td>
       <td>{{ row.event.status }}</td>
       <td>{{ row.event.occurred_at }}</td>
       <td><a href="/events/{{ row.event.id }}">View event</a></td>
@@ -91,6 +152,123 @@
   </tbody>
 </table>
 {% endif %}
+</section>
+
+<section class="panel incident-source-evidence-panel"><div class="panel-heading"><div><h2>Source evidence</h2><p class="muted">Raw records that contributed to the linked signals, with direct lineage into the evidence journey.</p></div><span class="pill pill-muted">{{ evidence_records.len() }} record{% if evidence_records.len() != 1 %}s{% endif %}</span></div>
+{% if evidence_records.is_empty() %}<div class="empty-state compact"><p>No source-record lineage is attached to the linked signals.</p><p class="muted">Open the event detail page to inspect its payload and contributing evidence.</p></div>{% else %}<div class="incident-source-record-grid">{% for record in evidence_records %}<a class="incident-source-record" href="/data/{{ record.id }}/journey"><span class="object-dot"></span><span><strong>{{ record.id }}</strong><small>{{ record.event_count }} contributing signal{% if record.event_count != 1 %}s{% endif %} · {{ record.event_types }}</small></span><span class="work-item-arrow">&rarr;</span></a>{% endfor %}</div>{% endif %}
+</section>
+
+<section class="panel incident-timeline-panel">
+  <div class="panel-heading"><div><h2>Investigation timeline</h2><p class="muted">One chronological view of signals, decisions, lifecycle changes, and operator findings.</p></div><span class="pill pill-muted">{{ timeline.len() }} entries</span></div>
+  {% if !timeline_metrics.is_empty() %}<div class="detail-label">Response clock <span class="muted">elapsed from case creation</span></div><div class="case-clock" aria-label="Incident response clock">{% for metric in timeline_metrics %}{% if let Some(href) = metric.href %}<a class="case-clock-row" href="{{ href }}"><span class="case-clock-label"><strong>{{ metric.label }}</strong><small>{{ metric.detail }}</small></span><span class="case-clock-track"><span class="case-clock-fill {{ metric.tone }}" style="width:{{ metric.width_pct }}%"></span></span><span class="case-clock-time">+{{ metric.elapsed }}</span></a>{% else %}<div class="case-clock-row"><span class="case-clock-label"><strong>{{ metric.label }}</strong><small>{{ metric.detail }}</small></span><span class="case-clock-track"><span class="case-clock-fill {{ metric.tone }}" style="width:{{ metric.width_pct }}%"></span></span><span class="case-clock-time">+{{ metric.elapsed }}</span></div>{% endif %}{% endfor %}</div>{% endif %}
+  {% if timeline.is_empty() %}<div class="empty-state compact"><p>No case timeline entries are available.</p></div>{% else %}
+  <ol class="case-timeline" aria-label="Chronological incident timeline">
+    {% for entry in timeline %}<li class="case-timeline-entry"><span class="case-timeline-marker {% if entry.is_failure %}timeline-marker-failure{% endif %}" aria-hidden="true"></span><div class="case-timeline-content"><div class="case-timeline-meta"><span class="pill {% if entry.is_failure %}pill-down{% else %}pill-muted{% endif %}">{{ entry.kind }}</span><strong>{{ entry.actor }}</strong><time>{{ entry.at }}</time></div><p class="case-timeline-summary">{% if let Some(href) = entry.href %}<a href="{{ href }}">{{ entry.summary }}</a>{% else %}{{ entry.summary }}{% endif %}</p><small class="muted">{{ entry.detail }}</small></div></li>{% endfor %}
+  </ol>
+  {% endif %}
+</section>
+
+<section class="panel incident-operational-picture">
+  <div class="panel-heading"><div><h2>Operational picture</h2><p class="muted">Modeled impact and governed response synthesized from this case's signal chain.</p></div><span class="pill {% if response_review_count > 0 %}pill-down{% else %}pill-up{% endif %}">{% if response_review_count > 0 %}{{ response_review_count }} response{% if response_review_count != 1 %}s{% endif %} need review{% else %}response posture clean{% endif %}</span></div>
+  <div class="case-synthesis-kpis"><div><strong>{{ impact_objects.len() }}</strong><span>modeled entities</span></div><div><strong>{{ modeled_event_count }}/{{ linked_events.len() }}</strong><span>signals modeled</span></div><div><strong>{{ response_completed_count }}</strong><span>completed responses</span></div><div><strong>{{ response_review_count }}</strong><span>responses to review</span></div></div>
+  <div class="case-response-outcomes" aria-label="Response outcome distribution">{% for metric in response_outcome_metrics %}<a class="case-response-outcome" href="{{ metric.href }}"><div class="case-response-outcome-top"><span>{{ metric.label }}</span><strong>{{ metric.count }}</strong></div><div class="case-response-outcome-track"><div class="case-response-outcome-fill {{ metric.tone }}" style="width:{{ metric.percent }}%"></div></div><small>{{ metric.percent }}% of responses · open ledger &rarr;</small></a>{% endfor %}</div>
+  <div class="case-synthesis-grid">
+    <div><div class="detail-label">Modeled impact</div>{% if impact_objects.is_empty() %}<p class="muted">No linked signal has resolved to an ontology object yet.</p>{% else %}<div class="case-impact-list">{% for object in impact_objects %}<a class="case-impact-row" href="/ontology?object_id={{ object.id }}#object-{{ object.id }}"><span class="object-dot"></span><span class="case-impact-main"><strong>{{ object.label }}</strong><small>{{ object.type_name }} · {{ object.status }} · {{ object.event_count }} signal{% if object.event_count != 1 %}s{% endif %} · {{ object.action_count }} governed action{% if object.action_count != 1 %}s{% endif %}</small></span>{% if let Some(last_action) = object.last_action %}<span class="case-impact-last"><strong>{{ last_action }}</strong>{% if let Some(last_outcome) = object.last_outcome %}{% if let Some(last_at) = object.last_action_at %}<small>{{ last_outcome }} · {{ last_at }}</small>{% endif %}{% endif %}</span>{% else %}<span class="muted">No response yet</span>{% endif %}</a>{% endfor %}</div>{% endif %}</div>
+    <div><div class="detail-label">Governed response chain</div>{% if governed_responses.is_empty() %}<p class="muted">No governed actions have targeted the modeled impact yet.</p>{% else %}<div class="case-response-list">{% for response in governed_responses %}<div class="case-response-row"><span class="posture-dot {% if response.outcome == "Completed" %}posture-good{% else %}posture-risk{% endif %}"></span><span class="case-response-main"><strong>{{ response.action_name }}</strong><small>{{ response.target_label }} · {{ response.outcome }} · {{ response.executed_at }}</small></span>{% if let Some(event_id) = response.event_id %}<a class="btn-link" href="/events/{{ event_id }}">Signal &rarr;</a>{% else if let Some(incident_id) = response.incident_id %}<span class="muted">this case</span>{% else %}<span class="muted">console</span>{% endif %}</div>{% endfor %}</div>{% endif %}</div>
+  </div>
+</section>
+
+<section class="panel incident-review-posture-panel"><div class="panel-heading"><div><h2>Response review posture</h2><p class="muted">Human review state for governed responses linked to this investigation.</p></div><a class="btn-link" href="/actions?outcome=review">Open review queue &rarr;</a></div>{% if governed_responses.is_empty() %}<p class="muted">No governed responses have been recorded for this case.</p>{% else %}<div class="case-response-list">{% for response in governed_responses %}<div class="case-response-row"><span class="posture-dot {% if response.review_stale %}posture-risk{% else if response.review_status == "approved" %}posture-good{% else %}posture-neutral{% endif %}"></span><span class="case-response-main"><strong>{{ response.action_name }}</strong><small>{{ response.target_label }} · review {{ response.review_status }}{% if response.review_stale %} · overdue{% endif %}{% if let Some(owner) = response.review_assignee %} · owner {{ owner }}{% endif %}</small></span><a class="btn-link" href="/actions/{{ response.id }}">Decision record &rarr;</a></div>{% endfor %}</div>{% endif %}</section>
+
+{% if !governed_responses.is_empty() %}<div class="panel linked-decision-records"><div class="detail-label">Immutable decision records</div><div class="case-response-list">{% for response in governed_responses %}<a class="case-response-row" href="/actions/{{ response.id }}"><span class="object-dot"></span><span class="case-response-main"><strong>{{ response.action_name }}</strong><small>{{ response.outcome }} · {{ response.target_label }} · review {{ response.review_status }}</small></span><span class="context-arrow">&rarr;</span></a>{% endfor %}</div></div>{% endif %}
+
+{% if !impact_relationships.is_empty() %}
+<section class="panel incident-relationship-map-panel">
+  <div class="panel-heading"><div><h2>Case neighborhood map</h2><p class="muted">Visual context around the modeled entities touched by this investigation. Select a node to continue in Ontology.</p></div><span class="pill pill-muted">{{ case_graph_nodes.len() }} entities · {{ case_graph_edges.len() }} relationships</span></div>
+<div class="case-graph-wrap"><svg class="case-graph" viewBox="0 0 1070 520" role="img" aria-label="Case ontology neighborhood graph"><defs><marker id="case-graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="var(--accent-dim)"></path></marker></defs>{% for edge in case_graph_edges %}<line class="case-graph-edge" x1="{{ edge.x1 }}" y1="{{ edge.y1 }}" x2="{{ edge.x2 }}" y2="{{ edge.y2 }}"></line><text class="case-graph-edge-label" x="{{ (edge.x1 + edge.x2) / 2 }}" y="{{ (edge.y1 + edge.y2) / 2 - 8 }}">{{ edge.relationship }}</text>{% endfor %}{% for node in case_graph_nodes %}<a href="/ontology?object_id={{ node.id }}&amp;depth=2#object-{{ node.id }}"><g transform="translate({{ node.x }},{{ node.y }})"><rect class="case-graph-node" x="-112" y="-38" width="224" height="76" rx="10"></rect><text class="case-graph-node-type" x="-94" y="-12">{{ node.type_name }}</text><text class="case-graph-node-label" x="-94" y="15">{{ node.label }}</text></g></a>{% endfor %}</svg></div>
+</section>
+<section class="panel incident-relationship-panel">
+  <div class="panel-heading"><div><h2>Relationship context</h2><p class="muted">The modeled neighborhood around this case, expanded two hops from directly impacted entities.</p></div><span class="pill pill-muted">{{ impact_relationships.len() }} relationship{% if impact_relationships.len() != 1 %}s{% endif %}</span></div>
+  <div class="case-relationship-list">
+    {% for relation in impact_relationships %}<div class="case-relationship-row"><a href="/ontology?object_id={{ relation.source_id }}&depth=2#object-{{ relation.source_id }}"><span class="detail-label">{{ relation.source_type_name }}</span><strong>{{ relation.source_label }}</strong></a><span class="case-relationship-arrow">&rarr;</span><span class="case-relationship-name">{{ relation.relationship }}</span><span class="case-relationship-arrow">&rarr;</span><a href="/ontology?object_id={{ relation.target_id }}&depth=2#object-{{ relation.target_id }}"><span class="detail-label">{{ relation.target_type_name }}</span><strong>{{ relation.target_label }}</strong></a></div>{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if can_write && !impact_objects.is_empty() %}
+<section class="panel incident-action-workbench">
+  <div class="panel-heading"><div><h2>Governed response from case</h2><p class="muted">Execute an approved action against an impacted modeled object without leaving this investigation.</p></div><a class="btn-link" href="/actions">Open Action Center &rarr;</a></div>
+  <div class="case-action-grid">{% for object in impact_objects %}<div class="case-action-card"><div class="detail-label">{{ object.type_name }}</div><strong>{{ object.label }}</strong><small class="muted">{{ object.status }}</small>{% for action in object.actions %}<form class="inline case-action-form" method="post" action="/ontology/actions/invoke" data-case-action-form><input type="hidden" name="action_type_id" value="{{ action.id }}"><input type="hidden" name="target_object_id" value="{{ object.id }}"><input type="hidden" name="incident_id" value="{{ inc.id }}"><input type="hidden" name="return_to" value="/incidents/{{ inc.id }}"><strong>{{ action.name }}</strong>{% if action.parameter_fields.is_empty() %}<p class="muted">No parameters required.</p>{% else %}<div class="action-parameter-fields"><div class="detail-label">Parameters</div>{% for field in action.parameter_fields %}<label>{{ field.name }}{% if field.required %} <span class="required-mark">required</span>{% endif %}{% if field.field_type == "boolean" %}<input type="checkbox" data-case-action-field="{{ field.name }}" data-action-type="boolean"{% if !action.eligible %} disabled{% endif %}>{% else if field.field_type == "array" || field.field_type == "object" %}<textarea rows="2" data-case-action-field="{{ field.name }}" data-action-type="{{ field.field_type }}"{% if !action.eligible %} disabled{% endif %}>{{ field.default_value }}</textarea>{% else %}<input type="{% if field.field_type == "number" || field.field_type == "integer" %}number{% else %}text{% endif %}" data-case-action-field="{{ field.name }}" data-action-type="{{ field.field_type }}" value="{{ field.default_value }}"{% if field.required %} required{% endif %}{% if !action.eligible %} disabled{% endif %}>{% endif %}</label>{% endfor %}</div>{% endif %}<input type="hidden" name="parameters" value="{}"><p class="muted action-contract">Preconditions: {{ action.preconditions }} · Effect: {{ action.effect_definition }}</p><button class="btn" type="submit"{% if !action.eligible %} disabled{% endif %}>{% if action.eligible %}Run action{% else %}Blocked by contract{% endif %}</button></form>{% endfor %}</div>{% endfor %}</div>
+</section>
+{% endif %}
+
+<script>
+  (function () {
+    document.querySelectorAll('[data-case-action-form]').forEach(function (form) {
+      var preflight = document.createElement('div');
+      preflight.className = 'case-action-preflight';
+      var submit = form.querySelector('button[type="submit"]');
+      if (submit) form.insertBefore(preflight, submit);
+      var actionName = form.querySelector('strong:last-of-type');
+      var ready = submit && !submit.disabled;
+      preflight.classList.toggle('ready', ready);
+      preflight.innerHTML = '<strong>Case action preflight</strong><span>' + (ready ? 'Target is eligible for ' + (actionName ? actionName.textContent : 'this governed action') + '. No state changes occur until you submit.' : 'This target is blocked by the current governed preconditions.') + '</span>';
+      form.addEventListener('submit', function (event) {
+        var parameters = {};
+        try {
+          form.querySelectorAll('[data-case-action-field]').forEach(function (field) {
+            var type = field.dataset.actionType;
+            if (type === 'boolean') parameters[field.dataset.caseActionField] = field.checked;
+            else if (type === 'number' || type === 'integer') {
+              if (field.value.trim() !== '') parameters[field.dataset.caseActionField] = Number(field.value);
+            } else if (type === 'array' || type === 'object') {
+              if (field.value.trim() !== '') parameters[field.dataset.caseActionField] = JSON.parse(field.value);
+            } else parameters[field.dataset.caseActionField] = field.value;
+          });
+          form.querySelector('input[name="parameters"]').value = JSON.stringify(parameters);
+        } catch (_) {
+          event.preventDefault();
+          window.alert('Check the typed action parameters and JSON fields before submitting.');
+        }
+      });
+    });
+  }());
+</script>
+
+<section class="panel incident-activity-panel">
+  <div class="panel-heading"><div><h2>Case activity</h2><p class="muted">Immutable changes to this investigation, shown in decision order.</p></div><span class="pill pill-muted">{{ activity.len() }} change{% if activity.len() != 1 %}s{% endif %}</span></div>
+  {% if activity.is_empty() %}
+  <div class="empty-state compact"><p>No audit activity is available for this case yet.</p><p class="muted">Lifecycle changes, ownership changes, and edits will appear here as they occur.</p></div>
+  {% else %}
+  <ol class="incident-activity-list">
+    {% for entry in activity %}
+    <li class="incident-activity-item">
+      <span class="incident-activity-marker" aria-hidden="true"></span>
+      <div class="incident-activity-content">
+        <div class="incident-note-meta"><strong>{{ entry.actor }}</strong><time>{{ entry.changed_at }}</time></div>
+        <p><span class="pill pill-muted">{{ entry.change_type }}</span> <span class="incident-activity-summary">{{ entry.summary }}</span></p>
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+</section>
+
+<section class="panel incident-notes-panel">
+  <div class="panel-heading"><div><h2>Investigation notes</h2><p class="muted">Durable findings, handoff context, and operator decisions.</p></div><span class="pill pill-muted">{{ notes.len() }} note{% if notes.len() != 1 %}s{% endif %}</span></div>
+  {% if can_write %}
+  <form class="inline incident-note-form" method="post" action="/incidents/{{ inc.id }}/notes">
+    <label for="incident-note-body">Add finding</label>
+    <textarea id="incident-note-body" name="body" rows="4" maxlength="10000" placeholder="What did you verify, decide, or hand off?" required></textarea>
+    <button type="submit">Add note</button>
+  </form>
+  {% endif %}
+  {% if notes.is_empty() %}<div class="empty-state compact"><p>No investigation notes yet.</p><p class="muted">Record the reasoning behind the next lifecycle decision.</p></div>{% else %}
+  <div class="incident-note-list">
+    {% for note in notes %}<article class="incident-note"><div class="incident-note-meta"><strong>{{ note.author }}</strong><time>{{ note.created_at }}</time></div><p>{{ note.body }}</p></article>{% endfor %}
+  </div>
+  {% endif %}
+</section>
 
 {% else %}
 <p class="muted">Incident not found.</p>

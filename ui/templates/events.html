@@ -1,40 +1,92 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Events</h1>
+<style>
+  .event-telemetry{display:grid;grid-template-columns:1fr 1.2fr;gap:16px;margin:18px 0}.event-telemetry-panel{min-height:205px}.event-metric-list{display:grid;gap:12px;margin-top:17px}.event-metric-row{display:grid;grid-template-columns:90px 1fr 38px;gap:12px;align-items:center;text-decoration:none}.event-metric-row strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.event-metric-track{height:9px;border-radius:99px;background:#17263a;overflow:hidden}.event-metric-fill{height:100%;min-width:3px;border-radius:99px}.event-metric-fill.risk{background:linear-gradient(90deg,#b76870,#e49a75)}.event-metric-fill.warning{background:linear-gradient(90deg,#b88945,#e2c06b)}.event-metric-fill.good{background:linear-gradient(90deg,#3e9b79,#78d5a4)}.event-metric-fill.neutral{background:linear-gradient(90deg,#4d82b6,#86b4dd)}.event-metric-count{text-align:right;color:#e4effc;font-variant-numeric:tabular-nums}.event-metric-row:hover{opacity:.86}@media(max-width:820px){.event-telemetry{grid-template-columns:1fr}}
+  .event-heatmap-wrap{overflow:auto;border:1px solid var(--border);border-radius:9px}.event-heatmap{min-width:720px;width:100%;border-collapse:separate;border-spacing:3px;background:transparent}.event-heatmap th{background:transparent;border:0;padding:.35rem;color:var(--text-dim);font-size:.65rem;white-space:nowrap}.event-heatmap td{border:0;padding:0;text-align:center}.event-heatmap .heatmap-label{text-align:left;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:.73rem}.event-heatmap-cell{display:block;min-width:30px;height:24px;border-radius:4px;background:rgba(75,130,182,.08);color:var(--text-dim);font-size:.7rem;line-height:24px;text-decoration:none}.event-heatmap-cell:hover{outline:1px solid var(--accent);color:#fff}.event-heatmap-total{color:var(--text);font-weight:700}.events-chart-panel svg a{cursor:pointer}.events-chart-panel svg a:hover rect{opacity:.72}.events-chart-panel svg a:focus-visible rect{outline:1px solid var(--accent)}
+  .event-metric-track{background:var(--surface-raised)}.event-metric-count{color:var(--text)}.event-heatmap-cell{background:color-mix(in srgb,var(--accent) 8%,var(--surface));}.event-heatmap-cell:hover{color:var(--text)}.event-selection-preflight{flex-basis:100%;padding-top:.35rem;color:var(--text-dim);font-size:.72rem}.event-selection-preflight strong{color:var(--text)}
+</style>
+<div class="page-header"><div><div class="page-kicker">Signals / event stream</div><h1>Events</h1><p class="page-description">Inspect the signals produced by your data, connect them to cases, and move selected evidence into governed response.</p></div><div class="quick-actions"><span class="console-live" data-live-status>Live refresh paused</span><button type="button" class="btn btn-secondary" data-refresh-now>Refresh now</button><button type="button" class="btn btn-secondary" data-toggle-live>Enable live mode</button><a class="btn btn-secondary" href="/incidents">Open case queue &rarr;</a><a class="btn btn-secondary" href="/pipeline">View pipeline</a></div></div>
+{% if let Some(incident_id) = linked_incident %}<p class="success-banner">Select signals below to attach them to <a href="/incidents/{{ incident_id }}">this investigation</a>.</p>{% endif %}
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
-<form method="get" action="/events/export.csv" style="margin-bottom:0.5rem;">
+{% if notice == "already_linked" %}<p class="warning-banner">Every selected signal is already linked to an investigation. No duplicate case was created.</p>{% endif %}
+{% if notice == "link_lookup_failed" %}<p class="error">The existing case links could not be verified, so no case was created. Try again.</p>{% endif %}
+{% if notice == "skipped_linked" %}<p class="warning-banner">A case was created for the unlinked signals. {{ skipped_count }} already-linked signal{% if skipped_count != 1 %}s{% endif %} were skipped. {% if let Some(incident_id) = created_incident %}<a href="/incidents/{{ incident_id }}">Open the new case &rarr;</a>{% endif %}</p>{% endif %}
+{% if notice == "bulk-status-updated" %}<p class="success-banner">Lifecycle updated for {{ updated_count }} selected signal{% if updated_count != 1 %}s{% endif %}.{% if failed_count > 0 %} {{ failed_count }} signal{% if failed_count != 1 %}s{% endif %} could not be updated and remain unchanged.{% endif %}</p>{% endif %}
+{% if notice == "bulk-status-empty" %}<p class="warning-banner">Select at least one signal before applying a lifecycle change.</p>{% endif %}
+{% if notice == "link-empty" %}<p class="warning-banner">Select at least one signal before linking it to a case.</p>{% endif %}
+{% if notice == "link-invalid" %}<p class="error">Choose an existing case before linking signals.</p>{% endif %}
+{% if notice == "events-linked" %}<p class="success-banner">Linked {{ linked_count_result }} selected signal{% if linked_count_result != 1 %}s{% endif %} to {% if let Some(incident_id) = linked_incident %}<a href="/incidents/{{ incident_id }}">the case</a>{% else %}the case{% endif %}.{% if link_failed_count > 0 %} {{ link_failed_count }} could not be linked and remain unchanged.{% endif %}</p>{% endif %}
+{% if notice == "view_saved" %}<p class="success-banner" role="status">Event investigation view saved for this exact signal scope.</p>{% endif %}{% if notice == "view_failed" %}<p class="warning-banner" role="alert">The event investigation view could not be saved. Your active signal scope is still intact.</p>{% endif %}
+{% if notice == "invalid-status" %}<p class="error">That lifecycle state is not valid.</p>{% endif %}
+<div class="kpi-grid event-kpis">
+  <div class="kpi-card kpi-accent"><div class="kpi-label">Visible signals</div><div class="kpi-value">{{ visible_count }}</div><div class="kpi-sub">in this result window</div></div>
+  <div class="kpi-card {% if unlinked_count > 0 %}kpi-danger{% else %}kpi-success{% endif %}"><div class="kpi-label">Needs a case</div><div class="kpi-value">{{ unlinked_count }}</div><div class="kpi-sub">signals without an incident</div></div>
+  <div class="kpi-card"><div class="kpi-label">Case-linked</div><div class="kpi-value">{{ linked_count }}</div><div class="kpi-sub">already in triage</div></div>
+  <div class="kpi-card kpi-success"><div class="kpi-label">Actioned</div><div class="kpi-value">{{ actioned_count }}</div><div class="kpi-sub">signals with completed response</div></div>
+</div>
+<section class="event-telemetry" aria-label="Signal posture telemetry">
+  <div class="panel event-telemetry-panel"><div class="panel-heading"><div><h2>Lifecycle posture</h2><p class="muted">Signal disposition in the current result window.</p></div><span class="pill pill-muted">{{ visible_count }} signals</span></div><div class="event-metric-list">{% for metric in status_metrics %}<a class="event-metric-row" href="{{ metric.href }}"><strong>{{ metric.label }}</strong><span class="event-metric-track"><span class="event-metric-fill {{ metric.tone }}" style="width:{% if metric.percent > 0 %}{{ metric.percent }}{% else %}2{% endif %}%"></span></span><span class="event-metric-count">{{ metric.count }}</span></a>{% endfor %}</div></div>
+  <div class="panel event-telemetry-panel"><div class="panel-heading"><div><h2>Signal composition</h2><p class="muted">Most represented event contracts in this window.</p></div><span class="pill pill-muted">top classes</span></div><div class="event-metric-list">{% for metric in type_metrics %}<a class="event-metric-row" href="{{ metric.href }}"><strong title="{{ metric.label }}">{{ metric.label }}</strong><span class="event-metric-track"><span class="event-metric-fill neutral" style="width:{% if metric.percent > 0 %}{{ metric.percent }}{% else %}2{% endif %}%"></span></span><span class="event-metric-count">{{ metric.count }}</span></a>{% endfor %}{% if type_metrics.is_empty() %}<p class="muted">No event classes in this scope.</p>{% endif %}</div></div>
+</section>
+<form method="get" action="/events/export.csv" class="events-export-form">
+  <input type="hidden" name="q" value="{{ q }}">
+  <input type="hidden" name="status" value="{{ status }}">
+  <input type="hidden" name="case_scope" value="{{ case_scope }}">
   <input type="hidden" name="from" value="{{ from }}">
   <input type="hidden" name="to" value="{{ to }}">
-  <button type="submit" class="btn-link">Download CSV &#8595;</button>
+  <button type="submit" class="btn-link">Download filtered CSV &#8595;</button>
 </form>
 
-{% if !chart_bars.is_empty() %}
-<div class="panel" style="margin-bottom: 1.5rem;">
-  <h2>Events over the last 30 days</h2>
-  <svg viewBox="0 0 {{ chart_bars.len() * 24 }} 110" style="width: 100%; max-height: 140px;" role="img" aria-label="Daily event counts over the last 30 days">
-    {% for bar in chart_bars %}
-    <g>
-      <title>{{ bar.date }}: {{ bar.count }} event{% if bar.count != 1 %}s{% endif %}</title>
-      <rect x="{{ loop.index0 * 24 + 4 }}" y="{{ 100 - bar.height_pct }}" width="16" height="{{ bar.height_pct.max(2) }}" fill="var(--accent, #3b82f6)"></rect>
-      <text x="{{ loop.index0 * 24 + 12 }}" y="108" font-size="7" text-anchor="middle" fill="currentColor">{{ bar.count }}</text>
-    </g>
-    {% endfor %}
-  </svg>
-</div>
+{% if event_trend_has_data %}
+<section class="panel events-chart-panel">
+  <div class="panel-heading"><div><h2>Signal trend in scope</h2><p class="muted">Daily signal volume for the active date, text, and lifecycle filters. Select a point to inspect that day.</p></div><span class="pill pill-muted">filtered scope</span></div>
+  <div class="chart events-line-chart" data-chart-source="event-trend-chart-data" data-chart-kind="line"></div>
+  <script type="application/json" id="event-trend-chart-data">{{ event_trend_chart_json|safe }}</script>
+  <noscript><svg viewBox="0 0 {{ chart_bars.len() * 24 }} 110" style="width:100%;max-height:140px" role="img" aria-label="Daily event counts">{% for bar in chart_bars %}<a href="{{ bar.href }}" aria-label="Inspect {{ bar.date }} events"><rect x="{{ loop.index0 * 24 + 4 }}" y="{{ 100 - bar.height_pct }}" width="16" height="{{ bar.height_pct.max(2) }}" fill="var(--accent)"></rect><text x="{{ loop.index0 * 24 + 12 }}" y="108" font-size="7" text-anchor="middle" fill="currentColor">{{ bar.count }}</text></a>{% endfor %}</svg></noscript>
+</section>
 {% endif %}
 
-<form class="inline" method="get" action="/events" style="margin-bottom:1rem;">
+{% if !heatmap_rows.is_empty() %}<section class="panel event-heatmap-panel"><div class="panel-heading"><div><h2>Signal concentration map</h2><p class="muted">Event classes by day in the active filter window. Darker cells indicate higher concentration; select a cell to inspect the exact signals.</p></div><span class="pill pill-muted">{{ heatmap_rows.len() }} classes</span></div><div class="event-heatmap-wrap"><table class="event-heatmap"><thead><tr><th class="heatmap-label">Event class</th>{% for date in heatmap_dates %}<th title="{{ date }}">{{ date }}</th>{% endfor %}<th>Total</th></tr></thead><tbody>{% for row in heatmap_rows %}<tr><td class="heatmap-label" title="{{ row.event_type }}"><strong>{{ row.event_type }}</strong></td>{% for cell in row.cells %}<td><a class="event-heatmap-cell" href="{{ cell.href }}" title="{{ row.event_type }} · {{ cell.date }} · {{ cell.count }} signals" style="background:rgba(75,130,182,{{ cell.opacity }})">{% if cell.count > 0 %}{{ cell.count }}{% else %}·{% endif %}</a></td>{% endfor %}<td class="event-heatmap-total">{{ row.total }}</td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
+
+<section class="panel events-filter-panel">
+<div class="panel-heading"><div><h2>Signal explorer</h2><p class="muted">Narrow the stream before selecting evidence for a case.</p></div></div>
+<form class="inline events-filter-bar" method="get" action="/events">
   <label for="q">Search</label>
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by type, group, or status&hellip;">
   <label for="from">Occurred from</label>
   <input type="date" id="from" name="from" value="{{ from }}">
   <label for="to">Occurred to</label>
   <input type="date" id="to" name="to" value="{{ to }}">
+  <label for="event-status">Lifecycle</label>
+  <select id="event-status" name="status">
+    <option value="" {% if status.is_empty() %}selected{% endif %}>All statuses</option>
+    <option value="new" {% if status == "new" %}selected{% endif %}>New</option>
+    <option value="triggered" {% if status == "triggered" %}selected{% endif %}>Triggered</option>
+    <option value="actioned" {% if status == "actioned" %}selected{% endif %}>Actioned</option>
+    <option value="dismissed" {% if status == "dismissed" %}selected{% endif %}>Dismissed</option>
+  </select>
+  <label for="event-case-scope">Case linkage</label>
+  <select id="event-case-scope" name="case_scope">
+    <option value="" {% if case_scope.is_empty() %}selected{% endif %}>Any case state</option>
+    <option value="unlinked" {% if case_scope == "unlinked" %}selected{% endif %}>Needs a case</option>
+    <option value="linked" {% if case_scope == "linked" %}selected{% endif %}>Case-linked</option>
+  </select>
   <input type="hidden" name="sort" value="{{ sort }}">
   <input type="hidden" name="dir" value="{{ dir }}">
   <button type="submit">Search</button>
-  {% if !q.is_empty() || !from.is_empty() || !to.is_empty() %}<a href="/events" class="btn-link">Clear</a>{% endif %}
+  {% if !q.is_empty() || !from.is_empty() || !to.is_empty() || !status.is_empty() || !case_scope.is_empty() %}<a href="/events" class="btn-link">Clear</a>{% endif %}
 </form>
+<form class="inline events-save-view-form" method="post" action="/events/saved-views">
+  <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="status" value="{{ status }}"><input type="hidden" name="case_scope" value="{{ case_scope }}">
+  <input type="hidden" name="from" value="{{ from }}"><input type="hidden" name="to" value="{{ to }}">
+  <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">
+  <label for="save-event-view-name">Save this view as</label><input id="save-event-view-name" name="name" placeholder="Untriaged Northwind signals" required>
+  <button type="submit" class="btn">Save view</button>
+</form>
+{% if !saved_views.is_empty() %}<div class="saved-view-strip"><span class="detail-label">Saved investigation views</span>{% for view in saved_views %}<span class="saved-view-chip"><a href="{{ view.load_url }}">{{ view.name }}</a><form method="post" action="/events/saved-views/{{ view.id }}/delete"><button class="btn-link btn-danger-link" type="submit" aria-label="Remove {{ view.name }}">×</button></form></span>{% endfor %}</div>{% endif %}
+</section>
+
+{% if !potential_clusters.is_empty() %}<section class="panel potential-clusters-panel"><div class="panel-heading"><div><h2>Potential signal clusters</h2><p class="muted">Signals sharing a group key are shown together as a review suggestion. Nothing is auto-linked; opening a case remains an explicit governed action.</p></div><span class="pill pill-muted">{{ potential_clusters.len() }} suggestion{% if potential_clusters.len() != 1 %}s{% endif %}</span></div><div class="potential-cluster-grid">{% for cluster in potential_clusters %}<article class="potential-cluster-card"><div class="potential-cluster-heading"><div><span class="page-kicker">Shared group key</span><h3>{{ cluster.group_key }}</h3></div><span class="pill pill-down">{{ cluster.unlinked_count }} unlinked</span></div><p class="muted">{{ cluster.total_count }} related signal{% if cluster.total_count != 1 %}s{% endif %} across {{ cluster.event_types.len() }} event type{% if cluster.event_types.len() != 1 %}s{% endif %}.</p><div class="potential-cluster-types">{% for event_type in cluster.event_types %}<code>{{ event_type }}</code>{% endfor %}</div>{% if can_write %}<form method="post" action="/events/create-incident"><input type="hidden" name="ids" value="{{ cluster.unlinked_event_ids[0] }}">{% for event_id in cluster.unlinked_event_ids %}{% if !loop.first %}<input type="hidden" name="ids" value="{{ event_id }}">{% endif %}{% endfor %}<button class="btn btn-secondary" type="submit">Open case from unlinked signals &rarr;</button></form>{% else %}<span class="muted">Operator access required to open a case.</span>{% endif %}</article>{% endfor %}</div></section>{% endif %}
 
 {% if events.is_empty() && page == 0 && !has_more %}
 <div class="empty-state">
@@ -53,53 +105,68 @@
      below (same standalone-form pattern as Sensors'/API Keys' bulk actions) so the checkboxes
      can live inside the events table without nesting a <form> inside each row's own controls. -->
 <form id="create-incident-form" method="post" action="/events/create-incident"></form>
+<form id="link-incident-form" method="post" action="/events/link-incident"></form>
+<form id="bulk-status-form" method="post" action="/events/bulk-status">
+  <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="status" value="{{ status }}"><input type="hidden" name="case_scope" value="{{ case_scope }}"><input type="hidden" name="from" value="{{ from }}"><input type="hidden" name="to" value="{{ to }}"><input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">
+</form>
 {% endif %}
+<section class="panel events-table-panel">
+{% if can_write %}<div class="bulk-action-bar event-bulk-action-bar"><label class="bulk-select-all"><input type="checkbox" id="select-visible-events"> Select visible signals</label><span class="bulk-divider"></span><span class="muted">Move selected into</span><select name="target_status" form="bulk-status-form" aria-label="Target lifecycle"><option value="triggered">Triggered</option><option value="actioned">Actioned</option><option value="dismissed">Dismissed</option><option value="new">New</option></select><button type="submit" form="bulk-status-form" class="btn">Apply lifecycle</button><span class="bulk-divider"></span><span class="muted">or open a case</span><button type="submit" form="create-incident-form" class="btn btn-secondary">Create Incident from Selected &rarr;</button></div>{% endif %}
+{% if can_write && !incident_options.is_empty() %}<div class="bulk-action-bar event-link-action-bar"><span class="muted">Attach selected signals to existing case</span><select name="incident_id" form="link-incident-form" aria-label="Existing case"><option value="">Choose a case&hellip;</option>{% for incident in incident_options %}<option value="{{ incident.id }}"{% if incident.selected %} selected{% endif %}>{{ incident.title }} · {{ incident.severity }} · {{ incident.status }}</option>{% endfor %}</select><button type="submit" form="link-incident-form" class="btn btn-secondary">Link selected &rarr;</button></div>{% endif %}
+{% if can_write %}<div class="event-selection-status"><span id="event-selection-count" class="muted">No persisted signals selected.</span><button type="button" class="btn-link" id="event-clear-selection">Clear selection</button></div>{% endif %}
 <table>
   <thead>
     <tr>
       {% if can_write %}<th scope="col"></th>{% endif %}
       <th scope="col">
-        <a href="/events?q={{ q|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=event_type&dir={% if sort == "event_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/events?q={{ q|urlencode }}&status={{ status|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=event_type&dir={% if sort == "event_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Event Type{% if sort == "event_type" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/events?q={{ q|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=group_key&dir={% if sort == "group_key" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/events?q={{ q|urlencode }}&status={{ status|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=group_key&dir={% if sort == "group_key" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Group Key{% if sort == "group_key" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/events?q={{ q|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=status&dir={% if sort == "status" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/events?q={{ q|urlencode }}&status={{ status|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=status&dir={% if sort == "status" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Status{% if sort == "status" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/events?q={{ q|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=occurred_at&dir={% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %}desc{% else %}asc{% endif %}{% else %}desc{% endif %}">
+        <a href="/events?q={{ q|urlencode }}&status={{ status|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}&sort=occurred_at&dir={% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %}desc{% else %}asc{% endif %}{% else %}desc{% endif %}">
           Occurred At{% if sort == "occurred_at" || sort.is_empty() %}{% if dir == "asc" %} &#9650;{% else %} &#9660;{% endif %}{% endif %}
         </a>
       </th>
-      <th scope="col"></th>
+      <th scope="col">Source evidence</th>
+      <th scope="col">Response</th>
     </tr>
   </thead>
   <tbody>
     {% for event in events %}
     <tr>
       {% if can_write %}
-      <td><input type="checkbox" name="ids" value="{{ event.id }}" form="create-incident-form" aria-label="Select {{ event.event_type }} for incident creation"></td>
+      <td><input type="checkbox" name="ids" value="{{ event.event.id }}" data-event-linked="{% if event.incident.is_some() %}true{% else %}false{% endif %}" form="create-incident-form" aria-label="Select {{ event.event.event_type }} for incident creation"></td>
       {% endif %}
-      <td><a href="/events/{{ event.id }}">{{ event.event_type }}</a></td>
-      <td>{{ event.group_key }}</td>
-      <td class="status-{{ event.status }}">{{ event.status }}</td>
-      <td>{{ event.occurred_at }}</td>
+      <td><a href="/events/{{ event.event.id }}">{{ event.event.event_type }}</a></td>
+      <td>{{ event.event.group_key }}</td>
+      <td class="status-{{ event.event.status }}">{{ event.event.status }}</td>
+      <td>{{ event.event.occurred_at }}</td>
       <td>
-        {% if event.record_ids.is_empty() %}
-        <span class="muted">&mdash;</span>
-        {% else if event.record_ids.len() == 1 %}
-        <a href="/data/{{ event.record_ids[0] }}/journey">View journey</a>
+        {% if event.event.record_ids.is_empty() %}
+        <span class="muted">No source records</span>
+        {% else if event.event.record_ids.len() == 1 %}
+        <a href="/data/{{ event.event.record_ids[0] }}/journey">View journey</a>
         {% else %}
-        {% for record_id in event.record_ids %}
-        <a href="/data/{{ record_id }}/journey">Journey {{ loop.index }}</a>{% if !loop.last %}, {% endif %}
-        {% endfor %}
+        <span class="muted">{{ event.event.record_ids.len() }} record journeys</span><br>
+        {% for record_id in event.event.record_ids %}<a href="/data/{{ record_id }}/journey">Record {{ loop.index }}</a>{% if !loop.last %}, {% endif %}{% endfor %}
+        {% endif %}
+      </td>
+      <td>
+        {% if let Some(incident) = event.incident %}
+        <a class="event-case-link" href="/incidents/{{ incident.id }}"><span class="pill {% if incident.severity == "critical" || incident.severity == "high" %}pill-down{% else %}pill-muted{% endif %}">{{ incident.severity }}</span> {{ incident.status }}</a><br><span class="muted">{{ incident.title }}</span>
+        {% else %}
+        <span class="muted">No case linked</span>
         {% endif %}
       </td>
     </tr>
@@ -107,14 +174,12 @@
   </tbody>
 </table>
 
-{% if can_write %}
-<p><button type="submit" form="create-incident-form" class="btn">Create Incident from Selected</button></p>
-{% endif %}
-
 <div class="pagination">
   {% if page > 0 %}
   <form method="get" action="/events" class="pagination-form">
     <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="status" value="{{ status }}">
+    <input type="hidden" name="case_scope" value="{{ case_scope }}">
     <input type="hidden" name="from" value="{{ from }}">
     <input type="hidden" name="to" value="{{ to }}">
     <input type="hidden" name="sort" value="{{ sort }}">
@@ -127,6 +192,8 @@
   {% if has_more %}
   <form method="get" action="/events" class="pagination-form">
     <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="status" value="{{ status }}">
+    <input type="hidden" name="case_scope" value="{{ case_scope }}">
     <input type="hidden" name="from" value="{{ from }}">
     <input type="hidden" name="to" value="{{ to }}">
     <input type="hidden" name="sort" value="{{ sort }}">
@@ -136,5 +203,73 @@
   </form>
   {% endif %}
 </div>
+</section>
 {% endif %}
+{% if can_write %}<script>
+  (function () {
+    var master = document.getElementById('select-visible-events');
+    if (!master) return;
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('#create-incident-form input[name="ids"]'));
+    var actionBar = document.querySelector('.event-bulk-action-bar');
+    var preflight = document.createElement('span');
+    preflight.className = 'event-selection-preflight';
+    preflight.innerHTML = '<strong>Selection preflight:</strong> select signals to preview the downstream case or lifecycle impact.';
+    if (actionBar) actionBar.appendChild(preflight);
+    var selectionKey = 'kizashi.events.selection'; var persisted = [];
+    try { persisted = JSON.parse(localStorage.getItem(selectionKey) || '[]').filter(function (value) { return typeof value === 'string'; }); } catch (_) { persisted = []; }
+    boxes.forEach(function (box) { box.checked = persisted.indexOf(box.value) !== -1; });
+    function selectedIds() { var visibleIds = boxes.map(function (box) { return box.value; }); return Array.from(new Set(persisted.filter(function (id) { return visibleIds.indexOf(id) === -1; }).concat(boxes.filter(function (box) { return box.checked; }).map(function (box) { return box.value; })))); }
+    function sync() { persisted = selectedIds(); try { localStorage.setItem(selectionKey, JSON.stringify(persisted)); } catch (_) {} var count = document.getElementById('event-selection-count'); if (count) count.textContent = persisted.length ? persisted.length + ' signal' + (persisted.length === 1 ? '' : 's') + ' selected across this view.' : 'No persisted signals selected.'; var visibleSelected = boxes.filter(function (box) { return box.checked; }); var linked = visibleSelected.filter(function (box) { return box.dataset.eventLinked === 'true'; }).length; var unlinked = visibleSelected.length - linked; var status = document.querySelector('.event-bulk-action-bar select[name="target_status"]'); var statusLabel = status && status.options[status.selectedIndex] ? status.options[status.selectedIndex].text : 'lifecycle update'; preflight.innerHTML = '<strong>Selection preflight:</strong> ' + (persisted.length ? persisted.length + ' selected' : 'select signals') + ' · ' + linked + ' case-linked · ' + unlinked + ' unlinked · operation: ' + statusLabel + '. Linked signals remain associated; case creation only uses eligible unlinked evidence.'; master.checked = boxes.length > 0 && boxes.every(function (box) { return box.checked; }); }
+    boxes.forEach(function (box) { box.addEventListener('change', sync); });
+    var statusSelect = document.querySelector('.event-bulk-action-bar select[name="target_status"]'); if (statusSelect) statusSelect.addEventListener('change', sync);
+    master.addEventListener('change', function () { boxes.forEach(function (box) { box.checked = master.checked; }); sync(); });
+    var clear = document.getElementById('event-clear-selection'); if (clear) clear.addEventListener('click', function () { persisted = []; boxes.forEach(function (box) { box.checked = false; }); try { localStorage.removeItem(selectionKey); } catch (_) {} sync(); });
+    var bulkForm = document.getElementById('bulk-status-form');
+    var linkForm = document.getElementById('link-incident-form');
+    var createForm = document.getElementById('create-incident-form');
+    function appendSelection(form) { form.querySelectorAll('input[data-selected-event]').forEach(function (input) { input.remove(); }); boxes.forEach(function (box) { box.disabled = true; }); selectedIds().forEach(function (id) { var input = document.createElement('input'); input.type = 'hidden'; input.name = 'ids'; input.value = id; input.dataset.selectedEvent = 'true'; form.appendChild(input); }); }
+    if (createForm) createForm.addEventListener('submit', function (event) { if (!selectedIds().length) { event.preventDefault(); window.alert('Select at least one signal first.'); return; } appendSelection(createForm); });
+    if (linkForm) linkForm.addEventListener('submit', function (event) {
+      if (!selectedIds().length) { event.preventDefault(); window.alert('Select at least one signal first.'); return; }
+      appendSelection(linkForm);
+    });
+    if (bulkForm) bulkForm.addEventListener('submit', function () {
+      appendSelection(bulkForm);
+    });
+    sync();
+  }());
+</script>{% endif %}
+<script>
+  (function () {
+    var storageKey = 'kizashi.events.live-refresh';
+    var status = document.querySelector('[data-live-status]');
+    var toggle = document.querySelector('[data-toggle-live]');
+    var refresh = document.querySelector('[data-refresh-now]');
+    var enabled = false;
+    try { enabled = window.localStorage.getItem(storageKey) === 'on'; } catch (_) {}
+    function render() {
+      if (status) status.textContent = enabled ? 'Live · 30s refresh' : 'Live refresh paused';
+      if (toggle) toggle.textContent = enabled ? 'Pause live mode' : 'Enable live mode';
+      if (toggle) toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    }
+    if (refresh) refresh.addEventListener('click', function () { window.location.reload(); });
+    if (toggle) toggle.addEventListener('click', function () {
+      enabled = !enabled;
+      try { window.localStorage.setItem(storageKey, enabled ? 'on' : 'off'); } catch (_) {}
+      render();
+    });
+    render();
+    if (enabled) window.setTimeout(function () { window.location.reload(); }, 30000);
+  }());
+</script>
+<style>
+  .event-metric-track { background:var(--surface-raised); }
+  .event-metric-fill.risk { background:linear-gradient(90deg,color-mix(in srgb,var(--danger) 72%,var(--surface)),var(--danger)); }
+  .event-metric-fill.warning { background:linear-gradient(90deg,color-mix(in srgb,var(--warning) 72%,var(--surface)),var(--warning)); }
+  .event-metric-fill.good { background:linear-gradient(90deg,var(--accent-dim),var(--success)); }
+  .event-metric-fill.neutral { background:linear-gradient(90deg,var(--accent-dim),var(--accent)); }
+  .event-metric-count { color:var(--text); }
+  .event-heatmap-cell { background:color-mix(in srgb,var(--accent) 8%,var(--surface-raised)); }
+  .event-heatmap-cell:hover { color:var(--text); }
+</style>
 {% endblock %}

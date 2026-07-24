@@ -1,13 +1,114 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Event Detail</h1>
+<style>
+  .event-waterfall{display:grid;gap:.55rem;margin:0 0 1.25rem}.event-waterfall-row{display:grid;grid-template-columns:minmax(9rem,1fr) minmax(10rem,2fr) minmax(7rem,.8fr);gap:.7rem;align-items:center;padding:.55rem .65rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface)}.event-waterfall-label{display:grid;gap:.15rem;min-width:0}.event-waterfall-label strong,.event-waterfall-label small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.event-waterfall-label small{color:var(--text-dim)}.event-waterfall-track{height:.7rem;overflow:hidden;border-radius:99px;background:var(--surface-raised)}.event-waterfall-fill{display:block;height:100%;min-width:5px;border-radius:inherit;background:linear-gradient(90deg,#4d82b6,#65c4aa)}.event-waterfall-fill.failure{background:linear-gradient(90deg,#b95d68,#e39a78)}.event-waterfall-time{color:var(--text-dim);font-size:.72rem;text-align:right;white-space:nowrap}.event-waterfall-legend{display:flex;gap:1rem;margin-top:.55rem;color:var(--text-dim);font-size:.72rem}.event-waterfall-legend span::before{content:'';display:inline-block;width:.55rem;height:.55rem;border-radius:2px;margin-right:.3rem;background:#65c4aa}.event-waterfall-legend .failure::before{background:#d47772}@media(max-width:700px){.event-waterfall-row{grid-template-columns:1fr;gap:.35rem}.event-waterfall-time{text-align:left}}
+  .event-lineage-panel{margin:0 0 1.25rem}.event-lineage{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0}.event-lineage-stage{position:relative;display:grid;gap:.2rem;min-height:5.3rem;padding:.75rem .65rem;border:1px solid var(--border);background:var(--surface);color:var(--text);text-decoration:none}.event-lineage-stage:first-child{border-radius:8px 0 0 8px}.event-lineage-stage:last-child{border-radius:0 8px 8px 0}.event-lineage-stage:not(:last-child)::after{content:'›';position:absolute;z-index:2;right:-.65rem;top:1.7rem;width:1.25rem;height:1.25rem;border:1px solid var(--border);border-radius:50%;background:var(--surface-raised);color:var(--accent);font-size:1.15rem;line-height:1.05;text-align:center}.event-lineage-stage:hover{z-index:3;border-color:var(--accent);background:var(--surface-hover);text-decoration:none}.event-lineage-stage strong{font:700 1.3rem var(--mono,ui-monospace);color:var(--text)}.event-lineage-stage small{color:var(--text-dim);font-size:.68rem}.event-lineage-stage .event-lineage-label{font-weight:700;color:var(--text)}@media(max-width:800px){.event-lineage{grid-template-columns:1fr;gap:.4rem}.event-lineage-stage,.event-lineage-stage:first-child,.event-lineage-stage:last-child{border-radius:7px}.event-lineage-stage:not(:last-child)::after{content:'↓';right:calc(50% - .65rem);top:auto;bottom:-.85rem}}
+  .event-response-preflight{display:block;margin-top:.5rem;padding:.55rem .65rem;border:1px solid var(--border-subtle);border-radius:6px;background:var(--surface-raised);color:var(--text-dim);font-size:.7rem;line-height:1.35}.event-response-preflight strong{color:var(--text)}
+</style>
 {% if let Some(e) = error %}
 <p class="error">{{ e }}</p>
 {% endif %}
 {% if let Some(ev) = event %}
-<p class="muted">
-  <a href="/events">&larr; Back to Events</a>
-</p>
+<div class="page-header"><div><div class="page-kicker">Signals / investigation</div><h1>{{ ev.event_type }}</h1><p class="page-description">{{ ev.group_key }} &middot; {{ ev.status }} &middot; occurred {{ ev.occurred_at }}</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/events">&larr; Back to events</a><a class="btn btn-secondary" href="/actions?q={{ ev.id }}">Action ledger for signal</a>{% if !linked_incidents.is_empty() %}<a class="btn" href="/incidents/{{ linked_incidents[0].id }}">Open case &rarr;</a>{% endif %}</div></div>
+{% if notice == "linked" %}<p class="success-banner">Signal linked to the selected incident and recorded in the case evidence chain.</p>{% endif %}
+{% if notice == "executed" %}<p class="success-banner">Governed action executed against the modeled entity. The invocation is recorded in the action ledger.</p>{% endif %}
+{% if notice == "rejected" %}<p class="error">The governed action was rejected. Review its preconditions and parameter contract.</p>{% endif %}
+{% if notice == "invalid-parameters" %}<p class="error">Action parameters did not match the governed contract.</p>{% endif %}
+{% if notice == "failed" %}<p class="error">The signal could not be attached. The case may no longer be writable.</p>{% endif %}
+{% if notice == "invalid" %}<p class="error">Check the case title, severity, and investigation brief, then try again.</p>{% endif %}
+{% if notice == "already_linked" %}<p class="warning-banner">This signal is already linked to an investigation. Open the existing case below instead of creating a duplicate.</p>{% endif %}
+{% if notice == "status-updated" %}<p class="success-banner">Signal lifecycle updated. The new state is now visible in queues, filters, and downstream reporting.</p>{% endif %}
+{% if notice == "status-update-failed" %}<p class="error">The signal lifecycle could not be updated. Check platform health and try again.</p>{% endif %}
+{% if notice == "invalid-status" %}<p class="error">That lifecycle state is not valid.</p>{% endif %}
+
+<section class="metric-grid event-evidence-posture" aria-label="Signal evidence posture">
+  <div class="metric-card"><span class="metric-label">Source records</span><strong>{{ source_record_count }}</strong><span class="metric-note">raw evidence attached</span></div>
+  <div class="metric-card"><span class="metric-label">Response executions</span><strong>{{ execution_count }}</strong><span class="metric-note">downstream delivery attempts</span></div>
+  <div class="metric-card"><span class="metric-label">Linked cases</span><strong>{{ linked_case_count }}</strong><span class="metric-note">investigation context</span></div>
+  <div class="metric-card"><span class="metric-label">Modeled handoff</span><strong>{{ modeled_object_count }}</strong><span class="metric-note">ontology object{% if modeled_object_count != 1 %}s{% endif %} matched</span></div>
+</section>
+
+<section class="panel event-lineage-panel" aria-label="Signal lineage handoff"><div class="panel-heading"><div><h2>Evidence-to-action lineage</h2><p class="muted">Follow this signal through the operating model without losing its source or response context.</p></div><span class="pill pill-muted">live handoff</span></div><div class="event-lineage"><a class="event-lineage-stage" href="/data"><span class="detail-label">Evidence</span><strong>{{ source_record_count }}</strong><span class="event-lineage-label">Source records</span><small>raw contributing context</small></a><a class="event-lineage-stage" href="/events/{{ ev.id }}"><span class="detail-label">Signal</span><strong>1</strong><span class="event-lineage-label">Event detail</span><small>{{ ev.status }} disposition</small></a>{% if let Some(incident) = linked_incidents.first() %}<a class="event-lineage-stage" href="/incidents/{{ incident.id }}"><span class="detail-label">Response</span><strong>{{ linked_case_count }}</strong><span class="event-lineage-label">Linked cases</span><small>open investigation context</small></a>{% else %}<a class="event-lineage-stage" href="#event-response"><span class="detail-label">Response</span><strong>{{ linked_case_count }}</strong><span class="event-lineage-label">Linked cases</span><small>create or attach a case</small></a>{% endif %}{% if let Some(context) = modeled_context %}<a class="event-lineage-stage" href="/ontology?object_id={{ context.id }}#object-{{ context.id }}"><span class="detail-label">Model</span><strong>{{ modeled_object_count }}</strong><span class="event-lineage-label">Modeled entities</span><small>{{ context.type_name }} context</small></a>{% else %}<a class="event-lineage-stage" href="#modeled-context"><span class="detail-label">Model</span><strong>{{ modeled_object_count }}</strong><span class="event-lineage-label">Modeled entities</span><small>awaiting ontology match</small></a>{% endif %}<a class="event-lineage-stage" href="/actions?q={{ ev.id }}"><span class="detail-label">Decision</span><strong>{{ execution_count }}</strong><span class="event-lineage-label">Governed response</span><small>audit ledger handoff</small></a></div></section>
+
+{% if !linked_incidents.is_empty() %}
+<div class="linked-context">
+  <div class="linked-context-label">Operational context</div>
+  {% for incident in linked_incidents %}
+  <a href="/incidents/{{ incident.id }}" class="linked-context-card">
+    <span class="pill {% if incident.severity == "critical" || incident.severity == "high" %}pill-down{% else %}pill-muted{% endif %}">{{ incident.severity }}</span>
+    <strong>{{ incident.title }}</strong>
+    <span class="muted">{{ incident.status }} · Open incident &rarr;</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if can_write %}
+<section class="panel event-response-panel" id="event-response">
+  <div class="panel-heading"><div><h2>Move this signal into response</h2><p class="muted">Create a focused case or attach the signal to an existing investigation without leaving its evidence context.</p></div></div>
+  <div class="event-response-grid">
+    {% if linked_incidents.is_empty() %}
+    <form class="inline" method="post" action="/events/{{ ev.id }}/create-incident">
+      <div class="detail-label">Create a new case</div>
+      <label for="event-incident-title">Title</label><input id="event-incident-title" name="title" value="{{ ev.event_type }} investigation" required>
+      <label for="event-incident-summary">Investigation brief</label><textarea id="event-incident-summary" name="summary" rows="3" maxlength="2000">Focused investigation for {{ ev.event_type }} signal in group {{ ev.group_key }}.</textarea>
+      <label for="event-incident-severity">Severity</label><select id="event-incident-severity" name="severity"><option value="medium" selected>Medium</option><option value="low">Low</option><option value="high">High</option><option value="critical">Critical</option></select>
+      <button class="btn" type="submit">Create case from signal &rarr;</button><span class="event-response-preflight" data-event-case-create-preflight><strong>Case preflight:</strong> This will create a new case with this signal preserved as evidence.</span>
+    </form>
+    {% else %}
+    <div class="event-response-existing"><div class="detail-label">Existing investigation</div><p class="muted">This signal already has case context. Review that case before taking another lifecycle action.</p>{% for incident in linked_incidents %}<a class="btn" href="/incidents/{{ incident.id }}">Open {{ incident.title }} &rarr;</a>{% endfor %}</div>
+    {% endif %}
+    <form class="inline" method="post" action="/events/{{ ev.id }}/link-incident">
+      <div class="detail-label">Attach to an existing case</div>
+      {% if incident_options.is_empty() %}<p class="muted">No other cases are available for this signal.</p>{% else %}<label for="event-incident-link">Target case</label><select id="event-incident-link" name="incident_id" required>{% for incident in incident_options %}<option value="{{ incident.id }}">{{ incident.severity }} · {{ incident.title }} · {{ incident.status }}</option>{% endfor %}</select><button class="btn btn-secondary" type="submit">Link to case</button><span class="event-response-preflight" data-event-case-link-preflight><strong>Case preflight:</strong> Select a target case to preview the evidence handoff.</span>{% endif %}
+    </form>
+  </div>
+</section>
+{% endif %}
+
+<div class="investigation-context-grid">
+  <section class="panel" id="modeled-context"><div class="panel-heading"><div><h2>Modeled context</h2><p class="muted">The operational object associated with this signal.</p></div></div>
+  {% if let Some(context) = modeled_context %}<a class="modeled-context-card" href="/ontology?object_id={{ context.id }}#object-{{ context.id }}"><span class="object-dot"></span><span><strong>{{ context.label }}</strong><small>{{ context.type_name }} · {{ context.status }} · Open ontology &rarr;</small></span></a>{% else %}<p class="muted">No ontology object matches entity <code>{{ ev.entity_ref }}</code>.</p>{% endif %}</section>
+  {% if related_modeled_contexts.len() > 1 %}<section class="panel"><div class="panel-heading"><div><h2>Additional modeled entities</h2><p class="muted">Other ontology objects supported by this signal’s source lineage.</p></div><span class="pill pill-muted">{{ related_modeled_contexts.len() }} total</span></div><div class="record-context-list">{% for context in related_modeled_contexts %}<a href="/ontology?object_id={{ context.id }}#object-{{ context.id }}"><strong>{{ context.label }}</strong><small>{{ context.type_name }} · {{ context.status }} · Open ontology &rarr;</small></a>{% endfor %}</div></section>{% endif %}
+  <section class="panel"><div class="panel-heading"><div><h2>Governed response</h2><p class="muted">Actions evaluated against the modeled object.</p></div><a class="btn-link" href="/actions">Open Action Center</a></div>
+  {% if governed_actions.is_empty() %}<p class="muted">No governed action context is available for this signal.</p>{% else %}<div class="governed-action-list">{% for action in governed_actions %}<div class="governed-action-row"><span class="posture-dot {% if let Some(outcome) = action.invocation_outcome %}{% if outcome == "Completed" %}posture-good{% else %}posture-risk{% endif %}{% else if action.eligible %}posture-good{% else %}posture-risk{% endif %}"></span><strong>{{ action.name }}</strong><small class="muted">Target: {{ action.target_type_name }} · {% if let Some(outcome) = action.invocation_outcome %}{{ outcome }}{% else if action.eligible %}Eligible to run{% else %}Contract blocked{% endif %}</small>{% if let Some(invocation_id) = action.invocation_id %}<a class="btn-link" href="/actions/{{ invocation_id }}">Decision record &rarr;</a><span class="pill {% if action.review_status == "approved" %}pill-up{% else if action.review_stale %}pill-down{% else %}pill-muted{% endif %}">Review: {{ action.review_status }}{% if action.review_stale %} · overdue{% endif %}</span>{% if let Some(owner) = action.review_assignee %}<small class="muted">Owner: {{ owner }}</small>{% endif %}{% else %}<span class="muted">No invocation for this signal</span>{% endif %}</div>{% endfor %}</div>{% endif %}</section>
+</div>
+
+{% if can_write %}
+<section class="panel event-lifecycle-panel">
+  <div class="panel-heading"><div><h2>Signal lifecycle</h2><p class="muted">Record the operator disposition without changing the original signal payload or evidence.</p></div><span class="pill {% if ev.status == "actioned" %}pill-up{% else if ev.status == "dismissed" %}pill-down{% else %}pill-muted{% endif %}">{{ ev.status }}</span></div>
+  <div class="event-lifecycle-actions" role="group" aria-label="Signal lifecycle actions">
+    <form method="post" action="/events/{{ ev.id }}/status"><input type="hidden" name="status" value="new"><button class="btn {% if ev.status == "new" %}btn-secondary{% endif %}" type="submit"{% if ev.status == "new" %} disabled aria-current="true"{% endif %}>New{% if ev.status == "new" %} · current{% endif %}</button></form>
+    <form method="post" action="/events/{{ ev.id }}/status"><input type="hidden" name="status" value="triggered"><button class="btn {% if ev.status == "triggered" %}btn-secondary{% endif %}" type="submit"{% if ev.status == "triggered" %} disabled aria-current="true"{% endif %}>Triggered{% if ev.status == "triggered" %} · current{% endif %}</button></form>
+    <form method="post" action="/events/{{ ev.id }}/status"><input type="hidden" name="status" value="actioned"><button class="btn {% if ev.status == "actioned" %}btn-secondary{% endif %}" type="submit"{% if ev.status == "actioned" %} disabled aria-current="true"{% endif %}>Actioned{% if ev.status == "actioned" %} · current{% endif %}</button></form>
+    <form method="post" action="/events/{{ ev.id }}/status"><input type="hidden" name="status" value="dismissed"><button class="btn {% if ev.status == "dismissed" %}btn-secondary{% endif %}" type="submit"{% if ev.status == "dismissed" %} disabled aria-current="true"{% endif %}>Dismissed{% if ev.status == "dismissed" %} · current{% endif %}</button></form>
+  </div>
+</section>
+{% endif %}
+
+<section class="panel event-status-history-panel">
+  <div class="panel-heading"><div><h2>Disposition history</h2><p class="muted">Immutable lifecycle changes for this signal, separate from the original evidence payload.</p></div><span class="pill pill-muted">{{ status_history.len() }} change{% if status_history.len() != 1 %}s{% endif %}</span></div>
+  {% if status_history.is_empty() %}<p class="muted">No operator disposition changes have been recorded yet.</p>{% else %}
+  <ol class="event-status-history-list">
+    {% for entry in status_history %}<li><span class="event-status-history-marker"></span><div><div class="event-status-history-meta"><strong>{{ entry.actor }}</strong><time>{{ entry.changed_at }}</time></div><p><span class="pill pill-muted">{{ entry.from_status }}</span> <span class="muted">→</span> <span class="pill {% if entry.to_status == "dismissed" %}pill-down{% else if entry.to_status == "actioned" %}pill-up{% else %}pill-muted{% endif %}">{{ entry.to_status }}</span></p></div></li>{% endfor %}
+  </ol>
+  {% endif %}
+</section>
+
+{% if can_write && !modeled_context.is_none() && !governed_actions.is_empty() %}
+<section class="panel event-action-workbench">
+  <div class="panel-heading"><div><h2>Execute from this signal</h2><p class="muted">The action runs against the modeled entity above and returns here with its audited outcome.</p></div><span class="pill pill-muted">governed response</span></div>
+  <div class="structured-action-grid">
+  {% for action in governed_actions %}
+  <form class="inline event-action-form {% if !action.eligible %}action-form-ineligible{% endif %}" method="post" action="/ontology/actions/invoke" data-event-action-form>
+    <input type="hidden" name="action_type_id" value="{{ action.id }}"><input type="hidden" name="target_object_id" value="{{ modeled_context.as_ref().unwrap().id }}"><input type="hidden" name="return_to" value="/events/{{ ev.id }}"><input type="hidden" name="event_id" value="{{ ev.id }}"><strong>{{ action.name }}</strong>
+    {% if action.parameter_fields.is_empty() %}<p class="muted">No parameters required.</p>{% else %}<div class="action-parameter-fields"><div class="detail-label">Parameters</div>{% for field in action.parameter_fields %}<label>{{ field.name }}{% if field.required %} <span class="required-mark">required</span>{% endif %}{% if field.field_type == "boolean" %}<input type="checkbox" data-event-action-field="{{ field.name }}" data-action-type="boolean"{% if !action.eligible %} disabled{% endif %}>{% else if field.field_type == "array" || field.field_type == "object" %}<textarea rows="2" data-event-action-field="{{ field.name }}" data-action-type="{{ field.field_type }}"{% if !action.eligible %} disabled{% endif %}>{{ field.default_value }}</textarea>{% else %}<input type="{% if field.field_type == "number" || field.field_type == "integer" %}number{% else %}text{% endif %}" data-event-action-field="{{ field.name }}" data-action-type="{{ field.field_type }}" value="{{ field.default_value }}"{% if field.required %} required{% endif %}{% if !action.eligible %} disabled{% endif %}>{% endif %}</label>{% endfor %}</div>{% endif %}
+    <input type="hidden" name="parameters" value="{}"><p class="muted action-contract">Target type: {{ action.target_type_name }} · Preconditions: {{ action.preconditions }} · Effect: {{ action.effect_definition }}</p><button class="btn" type="submit"{% if !action.eligible %} disabled{% endif %}>{% if action.eligible %}Run action{% else %}Blocked by contract{% endif %}</button>
+  </form>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <div class="form-row">
   <div class="panel">
@@ -41,6 +142,7 @@
   <p>Nothing recorded yet.</p>
 </div>
 {% else %}
+<section class="panel" aria-label="Signal response waterfall"><div class="panel-heading"><div><h2>Response waterfall</h2><p class="muted">Relative time from signal occurrence to each downstream execution. Failed or non-completed steps are highlighted.</p></div><span class="pill pill-muted">{{ timeline.len() }} steps</span></div><div class="event-waterfall">{% for entry in timeline %}<div class="event-waterfall-row"><div class="event-waterfall-label"><strong>{{ entry.label }}</strong><small>{{ entry.detail }}</small></div><span class="event-waterfall-track"><span class="event-waterfall-fill{% if entry.is_failure %} failure{% endif %}" style="width:{{ entry.latency_pct }}%"></span></span><span class="event-waterfall-time">{% if let Some(latency) = entry.latency_from_event %}+{{ latency }}{% else %}signal origin{% endif %}</span></div>{% endfor %}</div><div class="event-waterfall-legend"><span>completed / recorded</span><span class="failure">failed / needs review</span></div></section>
 <table>
   <thead>
     <tr>
@@ -108,4 +210,35 @@
 {% else %}
 <p class="muted">Event not found.</p>
 {% endif %}
+{% if can_write %}<script>
+  document.querySelectorAll('[data-event-action-form]').forEach(function (form) {
+    form.addEventListener('submit', function (event) {
+      var parameters = {};
+      try {
+        form.querySelectorAll('[data-event-action-field]').forEach(function (field) {
+          var type = field.dataset.actionType;
+          if (type === 'boolean') parameters[field.dataset.eventActionField] = field.checked;
+          else if (type === 'number') parameters[field.dataset.eventActionField] = Number(field.value);
+          else if (type === 'integer') parameters[field.dataset.eventActionField] = parseInt(field.value, 10);
+          else if (type === 'array' || type === 'object') parameters[field.dataset.eventActionField] = field.value.trim() ? JSON.parse(field.value) : (type === 'array' ? [] : {});
+          else parameters[field.dataset.eventActionField] = field.value;
+        });
+        form.querySelector('input[name="parameters"]').value = JSON.stringify(parameters);
+      } catch (_) { event.preventDefault(); window.alert('Parameters must match the governed action schema.'); }
+    });
+  });
+</script>{% endif %}
+{% if can_write %}<script>
+  (function () {
+    var createForm = document.querySelector('form[action$="/create-incident"]');
+    var severity = document.getElementById('event-incident-severity');
+    var createPreflight = document.querySelector('[data-event-case-create-preflight]');
+    function syncCreate() { if (createPreflight) createPreflight.innerHTML = '<strong>Case preflight:</strong> Create a new ' + (severity ? severity.value : 'medium') + '-severity case from this signal; the original evidence remains attached and auditable.'; }
+    if (createForm && severity) { severity.addEventListener('change', syncCreate); syncCreate(); }
+    var link = document.getElementById('event-incident-link');
+    var linkPreflight = document.querySelector('[data-event-case-link-preflight]');
+    function syncLink() { var option = link && link.selectedOptions[0]; if (linkPreflight) linkPreflight.innerHTML = '<strong>Case preflight:</strong> ' + (option ? 'Attach this signal to ' + option.textContent + '; no source payload changes occur.' : 'Select a target case to preview the evidence handoff.'); }
+    if (link) { link.addEventListener('change', syncLink); syncLink(); }
+  }());
+</script>{% endif %}
 {% endblock %}

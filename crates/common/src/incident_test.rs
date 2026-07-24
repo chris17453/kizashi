@@ -48,6 +48,7 @@ fn sample_incident() -> Incident {
         summary: String::new(),
         severity: IncidentSeverity::High,
         status: IncidentStatus::Open,
+        assigned_to: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
         resolved_at: None,

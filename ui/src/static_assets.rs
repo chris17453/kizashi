@@ -7,6 +7,7 @@ use axum::response::{IntoResponse, Response};
 
 const CHARTS_JS: &str = include_str!("../static/charts.js");
 const CONFIRM_DANGER_JS: &str = include_str!("../static/confirm-danger.js");
+const COMMAND_PALETTE_JS: &str = include_str!("../static/command-palette.js");
 
 /// GET /static/charts.js — the vendored, dependency-free chart renderer (ADR-0015). Baked into
 /// the binary via `include_str!` rather than served off disk: one less runtime dependency (no
@@ -19,4 +20,8 @@ pub async fn get_charts_js() -> Response {
 /// (ADR-0061), same embed-in-binary approach as `get_charts_js`.
 pub async fn get_confirm_danger_js() -> Response {
     ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], CONFIRM_DANGER_JS).into_response()
+}
+
+pub async fn get_command_palette_js() -> Response {
+    ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], COMMAND_PALETTE_JS).into_response()
 }

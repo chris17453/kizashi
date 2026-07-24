@@ -1,6 +1,22 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Egress Allowlist</h1>
+<style>
+  .egress-posture { display:grid; grid-template-columns:1.25fr 1fr; gap:1rem; margin:0 0 1.25rem; }
+  .egress-posture-panel { padding:1rem; }
+  .egress-posture-panel h2 { margin:0 0 .25rem; font-size:1rem; }
+  .egress-status { display:flex; align-items:center; gap:.75rem; margin-top:.9rem; }
+  .egress-status-mark { width:2.2rem; height:2.2rem; border-radius:50%; display:grid; place-items:center; font-weight:800; background:var(--state-good-bg); color:var(--state-good-text); }
+  .egress-status-mark.open { background:var(--state-danger-bg); color:var(--state-danger-text); }
+  .egress-status strong { display:block; }
+  .egress-status small { color:var(--text-dim); }
+  .egress-posture-kpis { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; margin-top:1rem; }
+  .egress-posture-kpi { display:grid; gap:.2rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .egress-posture-kpi strong { font:700 1.3rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .egress-posture-kpi small { color:var(--text-dim); }
+  .egress-domain-inventory{margin:0 0 1.25rem}.egress-domain-tools{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;margin-top:.9rem}.egress-domain-search{flex:1;min-width:240px}.egress-domain-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.55rem;margin-top:1rem}.egress-domain-card{display:flex;align-items:center;gap:.5rem;padding:.65rem .75rem;border:1px solid var(--border);border-radius:7px;background:var(--surface-raised);color:var(--text);min-width:0}.egress-domain-card code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.egress-domain-card::before{content:'●';color:var(--success);font-size:.6rem}.egress-domain-empty{padding:1rem;border:1px dashed var(--border);border-radius:8px;color:var(--text-dim);text-align:center;margin-top:1rem}@media(max-width:900px){.egress-domain-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.egress-domain-grid{grid-template-columns:1fr}}
+  @media(max-width:760px){.egress-posture{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / network boundary</div><h1>Egress Allowlist</h1><p class="page-description">Control the external destinations that connectors and governed actions may reach through the outbound gateway.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/configuration">Control center</a><a class="btn btn-secondary" href="/audit-log">Audit log &rarr;</a></div></div>
 <p class="muted">Which external domains this tenant's connectors and actions are allowed to
 reach through Egress Gateway — every outbound call made on this tenant's behalf is tunneled
 through the gateway and checked against this list, then audit-logged regardless of outcome. An
@@ -8,6 +24,12 @@ empty list means no restriction is configured (every destination is allowed and 
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 {% if saved %}<p class="status-up">Saved — takes effect on the next outbound call.</p>{% endif %}
 <p><a href="/audit-log/egress/{{ tenant_id }}">View change history</a></p>
+
+<section class="egress-posture" aria-label="Egress enforcement posture">
+  <div class="panel egress-posture-panel"><div class="page-kicker">Outbound enforcement</div><h2>Destination boundary</h2>{% if restricted %}<div class="egress-status"><span class="egress-status-mark">&#10003;</span><div><strong>Restricted</strong><small>Only the configured domains can be reached through Egress Gateway.</small></div></div>{% else %}<div class="egress-status"><span class="egress-status-mark open">!</span><div><strong>Unrestricted</strong><small>No allowlist is configured; proxied destinations are currently open.</small></div></div>{% endif %}</div>
+  <div class="panel egress-posture-panel"><div class="page-kicker">Allowlist inventory</div><h2>Configured coverage</h2><div class="egress-posture-kpis"><div class="egress-posture-kpi"><strong>{{ domain_count }}</strong><small>domain entries</small></div><div class="egress-posture-kpi"><strong>{{ duplicate_count }}</strong><small>duplicate entries</small></div></div><p class="muted">Each configured domain also covers its subdomains under the gateway’s host-match policy.</p></div>
+</section>
+{% if !domains.is_empty() %}<section class="panel egress-domain-inventory" aria-label="Allowed destination inventory"><div class="panel-heading"><div><h2>Allowed destination inventory</h2><p class="muted">Search the effective host boundary without editing the policy. Subdomains inherit the configured parent-domain rule.</p></div><span class="pill pill-muted" data-egress-domain-count>{{ domains.len() }} entries</span></div><div class="egress-domain-tools"><label class="sr-only" for="egress-domain-search">Search allowed destinations</label><input class="egress-domain-search" id="egress-domain-search" type="search" placeholder="Search allowed domains…" autocomplete="off"><span class="muted" data-egress-domain-results>{{ domains.len() }} shown</span></div><div class="egress-domain-grid">{% for domain in domains %}<div class="egress-domain-card" data-egress-domain="{{ domain }}"><code>{{ domain }}</code></div>{% endfor %}</div><div class="egress-domain-empty" data-egress-domain-empty hidden>No allowed destination matches this search.</div></section>{% endif %}
 
 <div class="form-row">
   <div class="panel">
@@ -49,4 +71,19 @@ empty list means no restriction is configured (every destination is allowed and 
     </ul>
   </div>
 </div>
+{% if !domains.is_empty() %}<script>
+  (function () {
+    var search = document.getElementById('egress-domain-search');
+    var cards = Array.prototype.slice.call(document.querySelectorAll('[data-egress-domain]'));
+    var empty = document.querySelector('[data-egress-domain-empty]');
+    var results = document.querySelector('[data-egress-domain-results]');
+    if (!search) return;
+    search.addEventListener('input', function () {
+      var needle = search.value.toLowerCase().trim(); var shown = 0;
+      cards.forEach(function (card) { var visible = !needle || (card.getAttribute('data-egress-domain') || '').toLowerCase().indexOf(needle) !== -1; card.hidden = !visible; if (visible) shown += 1; });
+      if (empty) empty.hidden = shown !== 0;
+      if (results) results.textContent = shown + ' shown';
+    });
+  }());
+</script>{% endif %}
 {% endblock %}

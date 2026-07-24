@@ -3,7 +3,7 @@
 mod sso_login_handler_test;
 
 use crate::pending_oidc_flow::PendingOidcFlow;
-use crate::{AppState, Session, SESSION_COOKIE_NAME};
+use crate::{AppState, Session, SESSION_COOKIE_NAME, WORKSPACE_COOKIE_NAME};
 use askama::Template;
 use axum::extract::{Query, State};
 use axum::http::header::{COOKIE, SET_COOKIE};
@@ -24,6 +24,7 @@ struct LoginTemplate {
     is_admin: bool,
     error: Option<String>,
     tenant_name: String,
+    username: String,
     product_name: String,
     logo_url: String,
     accent_color: String,
@@ -36,6 +37,7 @@ fn sso_error(message: impl Into<String>) -> Response {
             is_admin: false,
             error: Some(message.into()),
             tenant_name: String::new(),
+            username: String::new(),
             product_name: String::new(),
             logo_url: String::new(),
             accent_color: String::new(),
@@ -79,6 +81,7 @@ pub async fn get_sso_login(
         code_verifier: authorization.code_verifier,
         tenant_name: query.tenant_name,
     };
+    let workspace_name = flow.tenant_name.clone();
     let flow_id = state.pending_oidc_flow_store.create(flow).await;
 
     // SameSite=Lax (not Strict, unlike the main session cookie): the browser leaves this site
@@ -91,6 +94,12 @@ pub async fn get_sso_login(
     );
     let mut response = Redirect::to(&authorization.authorization_url).into_response();
     response.headers_mut().insert(SET_COOKIE, cookie.parse().unwrap());
+    response.headers_mut().append(
+        SET_COOKIE,
+        format!("{WORKSPACE_COOKIE_NAME}={workspace_name}; Path=/; SameSite=Strict{secure}")
+            .parse()
+            .unwrap(),
+    );
     response
 }
 
@@ -165,5 +174,11 @@ pub async fn get_sso_callback(
         format!("{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Strict{secure}");
     let mut response = Redirect::to("/overview").into_response();
     response.headers_mut().insert(SET_COOKIE, cookie.parse().unwrap());
+    response.headers_mut().append(
+        SET_COOKIE,
+        format!("{WORKSPACE_COOKIE_NAME}={}; Path=/; SameSite=Strict{secure}", flow.tenant_name)
+            .parse()
+            .unwrap(),
+    );
     response
 }

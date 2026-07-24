@@ -158,3 +158,31 @@ pub async fn reprocess_records(
 
     Ok(Json(ReprocessResponse { republished }))
 }
+
+/// POST /v1/records/:id/reprocess — republishes one unnormalized record for targeted recovery.
+/// The tenant header is part of the lookup, so a record id alone can never cross a tenant
+/// boundary. Normalized records are left untouched and return `republished: 0`.
+pub async fn reprocess_record(
+    State(state): State<IngestState>,
+    headers: HeaderMap,
+    axum::extract::Path(record_id): axum::extract::Path<Uuid>,
+) -> Result<Json<ReprocessResponse>, IngestError> {
+    let tenant_id = tenant_id_from_headers(&headers)?;
+    let Some(record) = state
+        .repository
+        .get_by_id(tenant_id, record_id)
+        .await
+        .map_err(|e| IngestError::Storage(e.to_string()))?
+    else {
+        return Err(IngestError::NotFound("record not found".to_string()));
+    };
+    if record.normalized_payload.is_some() {
+        return Ok(Json(ReprocessResponse { republished: 0 }));
+    }
+    state
+        .publisher
+        .publish_record_ingested(&record)
+        .await
+        .map_err(|e| IngestError::Storage(e.to_string()))?;
+    Ok(Json(ReprocessResponse { republished: 1 }))
+}

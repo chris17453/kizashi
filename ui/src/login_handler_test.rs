@@ -159,7 +159,9 @@ async fn post_login_with_invalid_credentials_rerenders_the_form_with_an_error() 
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("Invalid workspace, username, or password"));
+    assert!(body.contains("Sign-in service is unavailable. Check platform health and try again."));
+    assert!(body.contains("value=\"acme\""));
+    assert!(body.contains("value=\"alice\""));
 }
 
 #[tokio::test]
@@ -185,4 +187,17 @@ async fn post_login_with_an_unknown_workspace_rerenders_the_form_with_an_error()
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("Invalid workspace, username, or password"));
+}
+
+#[tokio::test]
+async fn get_login_does_not_reload_or_discard_form_state_when_workspace_loses_focus() {
+    let response = router(default_state())
+        .oneshot(Request::builder().uri("/login").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Workspace branding loads after authentication."));
+    assert!(!body.contains("onblur="));
 }

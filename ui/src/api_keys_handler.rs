@@ -21,14 +21,30 @@ pub struct ApiKeysQuery {
     sort: String,
     #[serde(default)]
     dir: String,
+    #[serde(default)]
+    age: String,
 }
 
 /// Case-insensitive substring match on label -- same in-handler-filter shape as the Users page
 /// search (ADR-0062): `ApiKeysClient::list_api_keys` has no search parameter, and a tenant's key
 /// list is realistically small enough that filtering the already-fetched list is the right size
 /// of fix, not a new backend query param.
-fn matches_query(key: &ApiKeySummary, q: &str) -> bool {
-    q.is_empty() || key.label.to_lowercase().contains(&q.to_lowercase())
+fn key_age_band(key: &ApiKeySummary, now: chrono::DateTime<chrono::Utc>) -> &'static str {
+    let age = now - key.created_at;
+    if age < chrono::Duration::days(7) {
+        "0_7"
+    } else if age < chrono::Duration::days(31) {
+        "8_30"
+    } else if age < chrono::Duration::days(91) {
+        "31_90"
+    } else {
+        "90_plus"
+    }
+}
+
+fn matches_query(key: &ApiKeySummary, q: &str, age: &str) -> bool {
+    (q.is_empty() || key.label.to_lowercase().contains(&q.to_lowercase()))
+        && (age.is_empty() || key_age_band(key, chrono::Utc::now()) == age)
 }
 
 /// Same shape as Sensors' sortable columns (ADR-0070): applied after the search filter, on the
@@ -63,6 +79,43 @@ struct ApiKeysTemplate {
     q: String,
     sort: String,
     dir: String,
+    age: String,
+    active_count: usize,
+    revoked_count: usize,
+    recent_count: usize,
+    age_metrics: Vec<ApiKeyAgeMetric>,
+}
+
+struct ApiKeyAgeMetric {
+    key: String,
+    label: String,
+    count: usize,
+    percent: usize,
+}
+
+fn key_posture(keys: &[ApiKeySummary]) -> (usize, usize, usize) {
+    let active_count = keys.iter().filter(|key| key.revoked_at.is_none()).count();
+    let revoked_count = keys.len().saturating_sub(active_count);
+    let recent_cutoff = chrono::Utc::now() - chrono::Duration::days(30);
+    let recent_count = keys.iter().filter(|key| key.created_at >= recent_cutoff).count();
+    (active_count, revoked_count, recent_count)
+}
+
+fn key_age_metrics(keys: &[ApiKeySummary]) -> Vec<ApiKeyAgeMetric> {
+    let now = chrono::Utc::now();
+    let total = keys.len();
+    [("0_7", "0–7 days"), ("8_30", "8–30 days"), ("31_90", "31–90 days"), ("90_plus", "90+ days")]
+        .into_iter()
+        .map(|(key, label)| {
+            let count = keys.iter().filter(|item| key_age_band(item, now) == key).count();
+            ApiKeyAgeMetric {
+                key: key.to_string(),
+                label: label.to_string(),
+                count,
+                percent: if total == 0 { 0 } else { count * 100 / total },
+            }
+        })
+        .collect()
 }
 
 pub async fn get_api_keys(
@@ -80,8 +133,10 @@ pub async fn get_api_keys(
     match state.api_keys_client.list_api_keys(session.tenant_id).await {
         Ok(keys) => {
             let mut keys: Vec<ApiKeySummary> =
-                keys.into_iter().filter(|k| matches_query(k, &query.q)).collect();
+                keys.into_iter().filter(|k| matches_query(k, &query.q, &query.age)).collect();
             sort_rows(&mut keys, &query.sort, &query.dir);
+            let (active_count, revoked_count, recent_count) = key_posture(&keys);
+            let age_metrics = key_age_metrics(&keys);
             Html(
                 ApiKeysTemplate {
                     show_nav: true,
@@ -93,6 +148,11 @@ pub async fn get_api_keys(
                     q: query.q,
                     sort: query.sort,
                     dir: query.dir,
+                    age: query.age,
+                    active_count,
+                    revoked_count,
+                    recent_count,
+                    age_metrics,
                 }
                 .render()
                 .unwrap(),
@@ -110,6 +170,11 @@ pub async fn get_api_keys(
                 q: query.q,
                 sort: query.sort,
                 dir: query.dir,
+                age: query.age,
+                active_count: 0,
+                revoked_count: 0,
+                recent_count: 0,
+                age_metrics: vec![],
             }
             .render()
             .unwrap(),
@@ -147,6 +212,8 @@ pub async fn post_api_keys(
         Err(e) => {
             let keys =
                 state.api_keys_client.list_api_keys(session.tenant_id).await.unwrap_or_default();
+            let (active_count, revoked_count, recent_count) = key_posture(&keys);
+            let age_metrics = key_age_metrics(&keys);
             return Html(
                 ApiKeysTemplate {
                     show_nav: true,
@@ -158,6 +225,11 @@ pub async fn post_api_keys(
                     q: String::new(),
                     sort: String::new(),
                     dir: String::new(),
+                    age: String::new(),
+                    active_count,
+                    revoked_count,
+                    recent_count,
+                    age_metrics,
                 }
                 .render()
                 .unwrap(),
@@ -167,6 +239,8 @@ pub async fn post_api_keys(
     };
 
     let keys = state.api_keys_client.list_api_keys(session.tenant_id).await.unwrap_or_default();
+    let (active_count, revoked_count, recent_count) = key_posture(&keys);
+    let age_metrics = key_age_metrics(&keys);
     Html(
         ApiKeysTemplate {
             show_nav: true,
@@ -178,6 +252,11 @@ pub async fn post_api_keys(
             q: String::new(),
             sort: String::new(),
             dir: String::new(),
+            age: String::new(),
+            active_count,
+            revoked_count,
+            recent_count,
+            age_metrics,
         }
         .render()
         .unwrap(),

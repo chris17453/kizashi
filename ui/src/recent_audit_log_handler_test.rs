@@ -30,6 +30,20 @@ fn router(state: AppState) -> Router {
         .with_state(state)
 }
 
+#[test]
+fn entity_audit_href_maps_every_merged_audit_source() {
+    let entity_id = Uuid::nil();
+    assert_eq!(
+        entity_audit_href("ontology-service", entity_id),
+        "/audit-log/ontology/00000000-0000-0000-0000-000000000000"
+    );
+    assert_eq!(
+        entity_audit_href("incident-service", entity_id),
+        "/audit-log/incident/00000000-0000-0000-0000-000000000000"
+    );
+    assert_eq!(entity_audit_href("unknown", entity_id), "");
+}
+
 async fn state_with_session() -> (AppState, String, Uuid) {
     let session_store = InMemorySessionStore::default();
     let tenant_id = Uuid::new_v4();
@@ -179,6 +193,46 @@ async fn filters_by_the_q_query_param_case_insensitively() {
 }
 
 #[tokio::test]
+async fn filters_timeline_drilldown_by_exact_day() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let config_client = Arc::new(InMemoryAuditLogClient::default());
+    *config_client.recent.lock().unwrap() =
+        vec![entry("same-day", "2026-07-18T12:00:00Z"), entry("other-day", "2026-07-19T12:00:00Z")];
+    state.config_audit_log_client = config_client;
+
+    let response = get_page_at(state, &session_id, "/audit-log?date=2026-07-18").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("same-day"));
+    assert!(!body.contains(">other-day<"));
+    assert!(body.contains("Day: 2026-07-18"));
+}
+
+#[tokio::test]
+async fn filtered_search_walks_past_the_first_audit_page() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let config_client = Arc::new(InMemoryAuditLogClient::default());
+    let base = chrono::DateTime::parse_from_rfc3339("2026-07-23T00:00:00Z").unwrap();
+    let mut entries = Vec::new();
+    for offset in 0..51 {
+        let actor = if offset == 50 { "deep-match" } else { "other" };
+        let changed_at = (base - chrono::Duration::minutes(offset)).to_rfc3339();
+        entries.push(entry(actor, &changed_at));
+    }
+    *config_client.recent.lock().unwrap() = entries;
+    state.config_audit_log_client = config_client;
+
+    let response = get_page_at(state, &session_id, "/audit-log?q=deep-match").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("deep-match"));
+}
+
+#[tokio::test]
 async fn shows_a_no_match_empty_state_for_an_unmatched_query() {
     let (mut state, session_id, _tenant_id) = state_with_session().await;
     let config_client = Arc::new(InMemoryAuditLogClient::default());
@@ -204,7 +258,7 @@ async fn shows_a_load_older_link_when_a_full_page_is_returned() {
 
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("/audit-log?q=&before="));
+    assert!(body.contains("/audit-log?q=&service=&change_type=&before="));
 }
 
 #[tokio::test]
@@ -299,6 +353,22 @@ async fn csv_export_escapes_a_comma_in_a_field() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("\"actor, with a comma\""));
+}
+
+#[tokio::test]
+async fn csv_export_honors_active_audit_filters() {
+    let (mut state, session_id, _tenant_id) = state_with_session().await;
+    let config_client = Arc::new(InMemoryAuditLogClient::default());
+    *config_client.recent.lock().unwrap() =
+        vec![entry("alice", "2026-07-19T00:00:00Z"), entry("bob", "2026-07-18T00:00:00Z")];
+    state.config_audit_log_client = config_client;
+
+    let response = get_csv_at(state, &session_id, "/audit-log/export.csv?q=alice").await;
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("alice"));
+    assert!(!body.contains("bob"));
 }
 
 #[tokio::test]

@@ -10,6 +10,7 @@ use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Response};
 use chrono::{DateTime, Utc};
 use common::Role;
+use std::collections::{BTreeMap, HashSet};
 
 /// Matches `PostgresLoginAttemptRepository::list_recent`'s `DEFAULT_LIMIT` (auth-service,
 /// ADR-0053) -- a full page from the backend is exactly this many rows, so this is also the
@@ -23,6 +24,43 @@ struct LoginAttemptRow {
     attempted_at: DateTime<Utc>,
 }
 
+struct LoginReasonRow {
+    label: String,
+    count: usize,
+    percentage: usize,
+    href: String,
+}
+
+struct LoginActivityBar {
+    label: String,
+    success_count: usize,
+    failed_count: usize,
+    height_pct: u32,
+}
+
+fn login_activity(attempts: &[LoginAttemptRow]) -> Vec<LoginActivityBar> {
+    let mut buckets = BTreeMap::<String, (usize, usize)>::new();
+    for attempt in attempts {
+        let bucket = attempt.attempted_at.format("%m-%d %H:00 UTC").to_string();
+        let counts = buckets.entry(bucket).or_default();
+        if attempt.success {
+            counts.0 += 1;
+        } else {
+            counts.1 += 1;
+        }
+    }
+    let max = buckets.values().map(|(success, failed)| success + failed).max().unwrap_or(1);
+    buckets
+        .into_iter()
+        .map(|(label, (success_count, failed_count))| LoginActivityBar {
+            label,
+            success_count,
+            failed_count,
+            height_pct: (((success_count + failed_count) * 100) / max).max(8) as u32,
+        })
+        .collect()
+}
+
 #[derive(Template)]
 #[template(path = "login_attempts.html")]
 struct LoginAttemptsTemplate {
@@ -32,7 +70,50 @@ struct LoginAttemptsTemplate {
     failed_count: usize,
     next_before: Option<DateTime<Utc>>,
     q: String,
+    status: String,
+    reason: String,
     error: Option<String>,
+    success_count: usize,
+    distinct_user_count: usize,
+    reason_posture: Vec<LoginReasonRow>,
+    activity: Vec<LoginActivityBar>,
+}
+
+fn reason_posture(
+    attempts: &[LoginAttemptRow],
+    failed_count: usize,
+    q: &str,
+    status: &str,
+) -> Vec<LoginReasonRow> {
+    let mut counts = BTreeMap::<String, usize>::new();
+    for attempt in attempts.iter().filter(|attempt| !attempt.success) {
+        *counts.entry(attempt.reason.clone()).or_default() += 1;
+    }
+    let mut rows: Vec<_> = counts
+        .into_iter()
+        .map(|(label, count)| LoginReasonRow {
+            href: format!(
+                "/security/login-attempts?{}",
+                serde_urlencoded::to_string([
+                    ("q", q.to_string()),
+                    (
+                        "status",
+                        if status.is_empty() { "failed".to_string() } else { status.to_string() }
+                    ),
+                    ("reason", label.clone()),
+                ])
+                .unwrap_or_default()
+            ),
+            label,
+            count,
+            percentage: if failed_count == 0 { 0 } else { count * 100 / failed_count },
+        })
+        .collect();
+    rows.sort_by(|left, right| {
+        right.count.cmp(&left.count).then_with(|| left.label.cmp(&right.label))
+    });
+    rows.truncate(5);
+    rows
 }
 
 async fn require_admin_session(
@@ -50,14 +131,24 @@ async fn require_admin_session(
 pub struct LoginAttemptsQuery {
     #[serde(default)]
     q: String,
+    #[serde(default)]
+    status: String,
+    #[serde(default)]
+    reason: String,
     before: Option<DateTime<Utc>>,
 }
 
 /// Case-insensitive substring match on username -- same in-handler-filter shape as the other
 /// list-page searches (ADR-0062). Applied to one already-fetched page at a time (see
 /// `get_login_attempts`'s doc comment for the resulting caveat on a naturally paginated feed).
-fn matches_query(row: &LoginAttemptRow, q: &str) -> bool {
-    q.is_empty() || row.username.to_lowercase().contains(&q.to_lowercase())
+fn matches_query(row: &LoginAttemptRow, q: &str, status: &str, reason: &str) -> bool {
+    (q.is_empty() || row.username.to_lowercase().contains(&q.to_lowercase()))
+        && match status {
+            "success" => row.success,
+            "failed" => !row.success,
+            _ => true,
+        }
+        && (reason.is_empty() || row.reason == reason)
 }
 
 /// GET /security/login-attempts — every recent local-login and MFA-challenge attempt for the
@@ -94,7 +185,6 @@ pub async fn get_login_attempts(
             } else {
                 None
             };
-            let failed_count = attempts.iter().filter(|a| !a.success).count();
             let rows: Vec<LoginAttemptRow> = attempts
                 .into_iter()
                 .map(|a| LoginAttemptRow {
@@ -103,8 +193,14 @@ pub async fn get_login_attempts(
                     reason: a.reason,
                     attempted_at: a.attempted_at,
                 })
-                .filter(|row| matches_query(row, &query.q))
+                .filter(|row| matches_query(row, &query.q, &query.status, &query.reason))
                 .collect();
+            let failed_count = rows.iter().filter(|row| !row.success).count();
+            let success_count = rows.len().saturating_sub(failed_count);
+            let distinct_user_count =
+                rows.iter().map(|row| row.username.as_str()).collect::<HashSet<_>>().len();
+            let reason_posture = reason_posture(&rows, failed_count, &query.q, &query.status);
+            let activity = login_activity(&rows);
             Html(
                 LoginAttemptsTemplate {
                     show_nav: true,
@@ -113,7 +209,13 @@ pub async fn get_login_attempts(
                     failed_count,
                     next_before,
                     q: query.q,
+                    status: query.status,
+                    reason: query.reason,
                     error: None,
+                    success_count,
+                    distinct_user_count,
+                    reason_posture,
+                    activity,
                 }
                 .render()
                 .unwrap(),
@@ -128,7 +230,13 @@ pub async fn get_login_attempts(
                 failed_count: 0,
                 next_before: None,
                 q: query.q,
+                status: query.status,
+                reason: query.reason,
                 error: Some(e.to_string()),
+                success_count: 0,
+                distinct_user_count: 0,
+                reason_posture: vec![],
+                activity: vec![],
             }
             .render()
             .unwrap(),

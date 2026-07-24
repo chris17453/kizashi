@@ -6,6 +6,7 @@ mod data_handler_mutations_test;
 mod data_handler_test;
 
 use crate::ingestion_stats_client::DEFAULT_PAGE_SIZE;
+use crate::ontology_client::CreateObjectRequest;
 use crate::session_guard::require_session;
 use crate::{AppState, RecordSearchFilter, RecordSummary};
 use askama::Template;
@@ -75,6 +76,104 @@ pub struct DataSearchQuery {
     #[serde(default)]
     #[serde(skip_serializing)]
     pub reprocessed: Option<usize>,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    pub reprocessed_connector: Option<String>,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    pub modeled: Option<usize>,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    pub model_failed: Option<usize>,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    pub notice: String,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize, Default, Clone)]
+struct DataContext {
+    #[serde(default)]
+    connector_id: String,
+    #[serde(default)]
+    source_type: String,
+    #[serde(default)]
+    q: String,
+    #[serde(default)]
+    subject: String,
+    #[serde(default)]
+    email_from: String,
+    #[serde(default)]
+    attachment_filename: String,
+    #[serde(default)]
+    from: String,
+    #[serde(default)]
+    to: String,
+    #[serde(default)]
+    normalized: String,
+}
+
+impl DataContext {
+    fn query(&self, extras: &[(&str, String)]) -> String {
+        let mut pairs = Vec::new();
+        for (key, value) in [
+            ("connector_id", &self.connector_id),
+            ("source_type", &self.source_type),
+            ("q", &self.q),
+            ("subject", &self.subject),
+            ("email_from", &self.email_from),
+            ("attachment_filename", &self.attachment_filename),
+            ("from", &self.from),
+            ("to", &self.to),
+            ("normalized", &self.normalized),
+        ] {
+            if !value.is_empty() && !extras.iter().any(|(extra_key, _)| *extra_key == key) {
+                pairs.push((key, value.clone()));
+            }
+        }
+        pairs.extend(extras.iter().map(|(key, value)| (*key, value.clone())));
+        serde_urlencoded::to_string(pairs).unwrap_or_default()
+    }
+
+    fn from_query(query: &DataSearchQuery) -> Self {
+        Self {
+            connector_id: query.connector_id.clone(),
+            source_type: query.source_type.clone(),
+            q: query.q.clone(),
+            subject: query.subject.clone(),
+            email_from: query.email_from.clone(),
+            attachment_filename: query.attachment_filename.clone(),
+            from: query.from.clone(),
+            to: query.to.clone(),
+            normalized: query.normalized.clone(),
+        }
+    }
+}
+
+struct ModelTypeOption {
+    id: Uuid,
+    name: String,
+}
+
+struct DataSourceBucket {
+    source_type: String,
+    count: usize,
+    percent: i32,
+    href: String,
+}
+
+struct DataTimelinePoint {
+    label: String,
+    count: usize,
+    height_pct: i32,
+    href: String,
+}
+
+struct DataConnectorHeatmapRow {
+    connector_id: String,
+    normalized_count: usize,
+    unnormalized_count: usize,
+    normalized_percent: i32,
+    href: String,
 }
 
 /// A saved query's filter, plus a pre-built `/data?...` query string so the template can link
@@ -106,6 +205,14 @@ struct DataTemplate {
     reprocessed: Option<usize>,
     error: Option<String>,
     sensor_names: Vec<String>,
+    visible_count: usize,
+    normalized_count: usize,
+    unnormalized_count: usize,
+    connector_count: usize,
+    model_types: Vec<ModelTypeOption>,
+    source_buckets: Vec<DataSourceBucket>,
+    ingestion_timeline: Vec<DataTimelinePoint>,
+    connector_heatmap: Vec<DataConnectorHeatmapRow>,
 }
 
 /// Upper bound on how many registered sensor names populate the Connector ID datalist — a
@@ -171,6 +278,7 @@ pub async fn get_data(
 
     let can_write = session.role.at_least(common::Role::Operator);
     let reprocessed = query.reprocessed;
+    let context = DataContext::from_query(&query);
 
     let sensor_names = state
         .sensors_client
@@ -178,26 +286,133 @@ pub async fn get_data(
         .await
         .map(|page| page.sensors.into_iter().map(|s| s.name).collect())
         .unwrap_or_default();
+    let model_types = if can_write {
+        if let Some(client) = crate::ontology_client::global() {
+            client
+                .list_object_types(&session.bearer_token)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|object_type| ModelTypeOption { id: object_type.id, name: object_type.name })
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        }
+    } else {
+        vec![]
+    };
 
     match state.stats_client.search_records(session.tenant_id, &filter).await {
-        Ok(result) => Html(
-            DataTemplate {
-                show_nav: true,
-                is_admin,
-                records: result.records,
-                query,
-                page,
-                has_more: result.has_more,
-                saved_searches,
-                can_write,
-                reprocessed,
-                error: None,
-                sensor_names,
+        Ok(result) => {
+            let visible_count = result.records.len();
+            let normalized_count =
+                result.records.iter().filter(|record| record.is_normalized()).count();
+            let unnormalized_count = visible_count.saturating_sub(normalized_count);
+            let connector_count = result
+                .records
+                .iter()
+                .map(|record| record.connector_id.as_str())
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+            let mut source_counts = std::collections::HashMap::<String, usize>::new();
+            for record in &result.records {
+                *source_counts.entry(record.source_type.clone()).or_default() += 1;
             }
-            .render()
-            .unwrap(),
-        )
-        .into_response(),
+            let mut source_buckets = source_counts
+                .into_iter()
+                .map(|(source_type, count)| DataSourceBucket {
+                    href: format!(
+                        "/data?{}",
+                        context.query(&[("source_type", source_type.clone())])
+                    ),
+                    source_type,
+                    count,
+                    percent: if visible_count == 0 {
+                        0
+                    } else {
+                        (count * 100 / visible_count) as i32
+                    },
+                })
+                .collect::<Vec<_>>();
+            source_buckets.sort_by(|left, right| {
+                right.count.cmp(&left.count).then_with(|| left.source_type.cmp(&right.source_type))
+            });
+            let mut day_counts = std::collections::BTreeMap::<chrono::NaiveDate, usize>::new();
+            let mut connector_counts = std::collections::HashMap::<String, (usize, usize)>::new();
+            for record in &result.records {
+                *day_counts.entry(record.ingested_at.date_naive()).or_default() += 1;
+                let counts = connector_counts.entry(record.connector_id.clone()).or_default();
+                if record.is_normalized() {
+                    counts.0 += 1;
+                } else {
+                    counts.1 += 1;
+                }
+            }
+            let max_day_count = day_counts.values().copied().max().unwrap_or(1);
+            let ingestion_timeline = day_counts
+                .into_iter()
+                .map(|(date, count)| DataTimelinePoint {
+                    label: date.format("%b %d").to_string(),
+                    count,
+                    height_pct: (count * 100 / max_day_count).max(8) as i32,
+                    href: format!(
+                        "/data?{}",
+                        context.query(&[("from", date.to_string()), ("to", date.to_string())])
+                    ),
+                })
+                .collect::<Vec<_>>();
+            let mut connector_heatmap = connector_counts
+                .into_iter()
+                .map(|(connector_id, (normalized_count, unnormalized_count))| {
+                    let total = normalized_count + unnormalized_count;
+                    DataConnectorHeatmapRow {
+                        href: format!(
+                            "/data?{}",
+                            context.query(&[("connector_id", connector_id.clone())])
+                        ),
+                        connector_id,
+                        normalized_count,
+                        unnormalized_count,
+                        normalized_percent: if total == 0 {
+                            0
+                        } else {
+                            (normalized_count * 100 / total) as i32
+                        },
+                    }
+                })
+                .collect::<Vec<_>>();
+            connector_heatmap.sort_by(|left, right| {
+                (right.normalized_count + right.unnormalized_count)
+                    .cmp(&(left.normalized_count + left.unnormalized_count))
+                    .then_with(|| left.connector_id.cmp(&right.connector_id))
+            });
+            Html(
+                DataTemplate {
+                    show_nav: true,
+                    is_admin,
+                    records: result.records,
+                    query,
+                    page,
+                    has_more: result.has_more,
+                    saved_searches,
+                    can_write,
+                    reprocessed,
+                    error: None,
+                    sensor_names,
+                    visible_count,
+                    normalized_count,
+                    unnormalized_count,
+                    connector_count,
+                    model_types,
+                    source_buckets,
+                    ingestion_timeline,
+                    connector_heatmap,
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response()
+        }
         Err(e) => Html(
             DataTemplate {
                 show_nav: true,
@@ -211,6 +426,14 @@ pub async fn get_data(
                 reprocessed,
                 error: Some(e.to_string()),
                 sensor_names,
+                visible_count: 0,
+                normalized_count: 0,
+                unnormalized_count: 0,
+                connector_count: 0,
+                model_types,
+                source_buckets: vec![],
+                ingestion_timeline: vec![],
+                connector_heatmap: vec![],
             }
             .render()
             .unwrap(),
@@ -295,7 +518,11 @@ pub async fn get_data_export_csv(
 /// tenant's unnormalized records (the recovery path for records ingested before a
 /// `NormalizationMapping` existed for their source type). A UI wrapper around the API-only
 /// `POST /v1/records/reprocess` capability shipped without one initially.
-pub async fn post_reprocess(State(state): State<AppState>, headers: HeaderMap) -> Response {
+pub async fn post_reprocess(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(session) => session,
         Err(response) => return response,
@@ -304,8 +531,110 @@ pub async fn post_reprocess(State(state): State<AppState>, headers: HeaderMap) -
         return axum::http::StatusCode::FORBIDDEN.into_response();
     }
 
-    let republished = state.stats_client.reprocess(session.tenant_id).await.unwrap_or(0);
-    Redirect::to(&format!("/data?reprocessed={republished}")).into_response()
+    let context = serde_urlencoded::from_bytes::<DataContext>(&body).unwrap_or_default();
+    let connector_id =
+        (!context.connector_id.trim().is_empty()).then_some(context.connector_id.clone());
+    let republished = state
+        .stats_client
+        .reprocess_for_connector(session.tenant_id, connector_id.as_deref())
+        .await
+        .unwrap_or(0);
+    let mut extras = vec![("reprocessed", republished.to_string())];
+    if let Some(connector_id) = connector_id {
+        extras.push(("reprocessed_connector", connector_id));
+    }
+    let query = context.query(&extras);
+    Redirect::to(&format!("/data?{query}")).into_response()
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct SelectedRecordsForm {
+    #[serde(default)]
+    pub ids: String,
+    #[serde(flatten)]
+    context: DataContext,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ModelSelectedRecordsForm {
+    #[serde(default)]
+    pub ids: String,
+    pub object_type_id: Uuid,
+    #[serde(flatten)]
+    context: DataContext,
+}
+
+/// POST /data/reprocess-selected — operator-gated recovery for the explicitly selected result
+/// rows. Each record remains tenant-scoped by the ingestion service and normalized records are
+/// harmless no-ops, so a mixed selection can be submitted from an investigation window.
+pub async fn post_reprocess_selected(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Form(form): axum::extract::Form<SelectedRecordsForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Operator) {
+        return axum::http::StatusCode::FORBIDDEN.into_response();
+    }
+
+    let mut republished = 0;
+    for id in form.ids.split(',').filter_map(|value| Uuid::parse_str(value.trim()).ok()).take(25) {
+        if let Ok(count) = state.stats_client.reprocess_record(session.tenant_id, id).await {
+            republished += count;
+        }
+    }
+    let query = form.context.query(&[("reprocessed", republished.to_string())]);
+    Redirect::to(&format!("/data?{query}")).into_response()
+}
+
+/// POST /data/model-selected — promotes up to 25 selected source records into governed
+/// ontology objects. The normalized payload is preferred when available and every object keeps
+/// its source record id as lineage so investigators can move back to evidence.
+pub async fn post_model_selected(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Form(form): axum::extract::Form<ModelSelectedRecordsForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Operator) {
+        return axum::http::StatusCode::FORBIDDEN.into_response();
+    }
+    let Some(client) = crate::ontology_client::global() else {
+        let query = form.context.query(&[("notice", "model-selected-failed".to_string())]);
+        return Redirect::to(&format!("/data?{query}")).into_response();
+    };
+    let mut modeled = 0usize;
+    let mut model_failed = 0usize;
+    for id in form.ids.split(',').filter_map(|value| Uuid::parse_str(value.trim()).ok()).take(25) {
+        let Ok(Some(record)) = state.stats_client.get_record(session.tenant_id, id).await else {
+            model_failed += 1;
+            continue;
+        };
+        let payload = record.normalized_payload.unwrap_or(record.raw_payload);
+        let properties =
+            if payload.is_object() { payload } else { serde_json::json!({ "value": payload }) };
+        let input = CreateObjectRequest {
+            object_type_id: form.object_type_id,
+            properties,
+            source_lineage: serde_json::json!([id]),
+        };
+        match client.create_object(&session.bearer_token, &input).await {
+            Ok(()) => modeled += 1,
+            Err(_) => model_failed += 1,
+        }
+    }
+    let query = form.context.query(&[
+        ("notice", "model-selected".to_string()),
+        ("modeled", modeled.to_string()),
+        ("model_failed", model_failed.to_string()),
+    ]);
+    Redirect::to(&format!("/data?{query}")).into_response()
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -331,6 +660,23 @@ pub struct SaveSearchForm {
     normalized: String,
 }
 
+fn data_search_redirect(form: &SaveSearchForm, notice: &str) -> Redirect {
+    let query = serde_urlencoded::to_string([
+        ("connector_id", form.connector_id.clone()),
+        ("source_type", form.source_type.clone()),
+        ("q", form.q.clone()),
+        ("subject", form.subject.clone()),
+        ("email_from", form.email_from.clone()),
+        ("attachment_filename", form.attachment_filename.clone()),
+        ("from", form.from.clone()),
+        ("to", form.to.clone()),
+        ("normalized", form.normalized.clone()),
+        ("notice", notice.to_string()),
+    ])
+    .unwrap_or_else(|_| format!("notice={notice}"));
+    Redirect::to(&format!("/data?{query}"))
+}
+
 /// POST /data/saved-searches — no `require_operator` gate (ADR-0029): any authenticated tenant
 /// member can bookmark a search.
 pub async fn post_save_search(
@@ -344,24 +690,30 @@ pub async fn post_save_search(
     };
 
     let filter = DataSearchQuery {
-        connector_id: form.connector_id,
-        source_type: form.source_type,
-        q: form.q,
-        subject: form.subject,
-        email_from: form.email_from,
-        attachment_filename: form.attachment_filename,
-        from: form.from,
-        to: form.to,
-        normalized: form.normalized,
+        connector_id: form.connector_id.clone(),
+        source_type: form.source_type.clone(),
+        q: form.q.clone(),
+        subject: form.subject.clone(),
+        email_from: form.email_from.clone(),
+        attachment_filename: form.attachment_filename.clone(),
+        from: form.from.clone(),
+        to: form.to.clone(),
+        normalized: form.normalized.clone(),
         page: 0,
         reprocessed: None,
+        reprocessed_connector: None,
+        modeled: None,
+        model_failed: None,
+        notice: String::new(),
     };
-    let _ = state
+    let result = state
         .saved_search_queries_client
         .create(session.tenant_id, &form.name, serde_json::to_value(&filter).unwrap_or_default())
         .await;
-
-    Redirect::to("/data").into_response()
+    match result {
+        Ok(_) => data_search_redirect(&form, "saved").into_response(),
+        Err(_) => data_search_redirect(&form, "save_failed").into_response(),
+    }
 }
 
 pub async fn post_delete_saved_search(

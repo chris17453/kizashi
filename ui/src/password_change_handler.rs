@@ -16,6 +16,7 @@ struct PasswordSettingsTemplate {
     is_admin: bool,
     error: Option<String>,
     success: bool,
+    username: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -39,9 +40,15 @@ pub async fn get_password_settings(
     };
     let is_admin = session.role.at_least(common::Role::Admin);
     Html(
-        PasswordSettingsTemplate { show_nav: true, is_admin, error: None, success: query.changed }
-            .render()
-            .unwrap(),
+        PasswordSettingsTemplate {
+            show_nav: true,
+            is_admin,
+            error: None,
+            success: query.changed,
+            username: session.username,
+        }
+        .render()
+        .unwrap(),
     )
     .into_response()
 }
@@ -75,6 +82,7 @@ pub async fn post_password_settings(
                 is_admin,
                 error: Some("New password and confirmation do not match.".to_string()),
                 success: false,
+                username: session.username.clone(),
             }
             .render()
             .unwrap(),
@@ -98,6 +106,7 @@ pub async fn post_password_settings(
                 is_admin,
                 error: Some(e.to_string()),
                 success: false,
+                username: session.username,
             }
             .render()
             .unwrap(),

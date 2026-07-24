@@ -1,7 +1,36 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>API Keys</h1>
+<style>
+  .key-posture { display:grid; grid-template-columns:1.25fr 1fr; gap:1rem; margin:0 0 1.25rem; }
+  .key-posture-panel { padding:1rem; }
+  .key-posture-panel h2 { margin:0 0 .25rem; font-size:1rem; }
+  .key-posture-list { display:grid; gap:.65rem; margin-top:1rem; }
+  .key-posture-row { display:grid; grid-template-columns:6rem 1fr auto; gap:.65rem; align-items:center; }
+  .key-posture-track { height:.55rem; overflow:hidden; border-radius:99px; background:var(--surface-3,#e8edf3); }
+  .key-posture-fill { height:100%; border-radius:inherit; background:#16a34a; }
+  .key-posture-fill.risk { background:#dc2626; }
+  .key-posture-fill.neutral { background:#4d82b6; }
+  .key-posture-count { font:700 .8rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .key-posture-kpis { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; margin-top:1rem; }
+  .key-posture-kpi { display:grid; gap:.2rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .key-posture-kpi strong { font:700 1.25rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .key-posture-kpi small { color:var(--text-dim); }
+  .key-age-list { display:grid; gap:.55rem; margin-top:1rem; }
+  .key-age-row { display:grid; grid-template-columns:5.5rem 1fr auto; gap:.6rem; align-items:center; color:var(--text); text-decoration:none; font-size:.78rem; }
+  .key-age-row:hover { color:var(--accent); text-decoration:none; }
+  .key-age-track { height:.42rem; overflow:hidden; border-radius:99px; background:var(--surface-3,#e8edf3); }
+  .key-age-fill { height:100%; min-width:2px; border-radius:inherit; background:var(--accent); }
+  @media(max-width:760px){.key-posture{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Control plane / access</div><h1>API Keys</h1><p class="page-description">Issue and revoke connector credentials while keeping a durable, reviewable access trail.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/sensors">Connector inventory</a><a class="btn btn-secondary" href="/audit-log">Audit log &rarr;</a></div></div>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+{% if !keys.is_empty() %}
+<section class="key-posture" aria-label="API key lifecycle posture">
+  <div class="panel key-posture-panel"><div class="page-kicker">Credential posture</div><h2>Lifecycle distribution</h2><p class="muted">The current visible key set, including filtered results.</p><div class="key-posture-list"><div class="key-posture-row"><span>Active</span><span class="key-posture-track"><span class="key-posture-fill" style="width:{% if keys.len() > 0 %}{{ active_count * 100 / keys.len() }}{% else %}0{% endif %}%"></span></span><strong class="key-posture-count">{{ active_count }}</strong></div><div class="key-posture-row"><span>Revoked</span><span class="key-posture-track"><span class="key-posture-fill risk" style="width:{% if keys.len() > 0 %}{{ revoked_count * 100 / keys.len() }}{% else %}0{% endif %}%"></span></span><strong class="key-posture-count">{{ revoked_count }}</strong></div></div></div>
+  <div class="panel key-posture-panel"><div class="page-kicker">Credential inventory</div><h2>Issuance signal</h2><div class="key-posture-kpis"><div class="key-posture-kpi"><strong>{{ keys.len() }}</strong><small>keys in view</small></div><div class="key-posture-kpi"><strong>{{ recent_count }}</strong><small>issued in 30 days</small></div></div><div class="key-age-list" aria-label="API key age distribution">{% for metric in age_metrics %}<a class="key-age-row" href="/api-keys?q={{ q|urlencode }}&age={{ metric.key }}"><span>{{ metric.label }}</span><span class="key-age-track"><span class="key-age-fill" style="width:{% if metric.percent > 0 %}{{ metric.percent }}{% else %}2{% endif %}%"></span></span><strong class="key-posture-count">{{ metric.count }}</strong></a>{% endfor %}</div><p class="muted">Select an age band to scope the credential inventory. New keys should map to a named connector and be revoked when the agent is retired.</p></div>
+</section>
+{% endif %}
 
 {% if let Some(key) = created_key %}
 <div class="panel">
@@ -45,6 +74,7 @@
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by label&hellip;">
   <input type="hidden" name="sort" value="{{ sort }}">
   <input type="hidden" name="dir" value="{{ dir }}">
+  <input type="hidden" name="age" value="{{ age }}">
   <button type="submit">Search</button>
   {% if !q.is_empty() %}<a href="/api-keys" class="btn-link">Clear</a>{% endif %}
 </form>
@@ -71,12 +101,12 @@
     <tr>
       {% if can_write %}<th scope="col"></th>{% endif %}
       <th scope="col">
-        <a href="/api-keys?q={{ q|urlencode }}&sort=label&dir={% if sort == "label" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/api-keys?q={{ q|urlencode }}&age={{ age|urlencode }}&sort=label&dir={% if sort == "label" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Label{% if sort == "label" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/api-keys?q={{ q|urlencode }}&sort=created_at&dir={% if sort == "created_at" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/api-keys?q={{ q|urlencode }}&age={{ age|urlencode }}&sort=created_at&dir={% if sort == "created_at" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Created{% if sort == "created_at" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
@@ -117,4 +147,10 @@
 <p><button type="submit" form="bulk-revoke-form" class="btn-danger">Revoke selected</button></p>
 {% endif %}
 {% endif %}
+<style>
+  .key-posture-track, .key-age-track { background:var(--surface-raised); }
+  .key-posture-fill { background:var(--success); } .key-posture-fill.risk { background:var(--danger); } .key-posture-fill.neutral { background:var(--accent); }
+  .key-posture-kpi { background:var(--surface-raised); border-color:var(--border); }
+  .key-age-fill { background:var(--accent); }
+</style>
 {% endblock %}

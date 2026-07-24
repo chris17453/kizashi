@@ -43,6 +43,8 @@ pub struct ListEventsQuery {
     pub since: Option<DateTime<Utc>>,
     pub until: Option<DateTime<Utc>>,
     pub record_id: Option<Uuid>,
+    /// Case-insensitive search across event type, group key, and lifecycle status.
+    pub search: Option<String>,
     #[serde(default = "default_limit")]
     pub limit: u32,
     #[serde(default)]
@@ -69,6 +71,15 @@ fn parse_status(raw: &str) -> Result<common::EventStatus, String> {
     }
 }
 
+fn status_str(status: common::EventStatus) -> &'static str {
+    match status {
+        common::EventStatus::New => "new",
+        common::EventStatus::Triggered => "triggered",
+        common::EventStatus::Actioned => "actioned",
+        common::EventStatus::Dismissed => "dismissed",
+    }
+}
+
 pub async fn list_events(
     State(state): State<DashboardState>,
     headers: HeaderMap,
@@ -91,6 +102,7 @@ pub async fn list_events(
         since: query.since,
         until: query.until,
         record_id: query.record_id,
+        search: query.search,
         limit: query.limit + 1,
         offset: query.offset,
     };
@@ -130,6 +142,76 @@ pub async fn get_event(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "an internal error occurred; check server logs for details",
             )
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateEventStatusRequest {
+    pub status: String,
+}
+
+/// PATCH /v1/events/:id — advances the operator lifecycle projection without changing the
+/// original signal payload or timestamps. Tenant scope comes exclusively from the gateway.
+pub async fn update_event_status(
+    State(state): State<DashboardState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<UpdateEventStatusRequest>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, message)) => return error_response(status, message),
+    };
+    let status = match parse_status(&request.status.to_ascii_lowercase()) {
+        Ok(status) => status,
+        Err(message) => return error_response(StatusCode::BAD_REQUEST, message),
+    };
+    let current_status = match state.event_query_repository.get_event(tenant_id, id).await {
+        Ok(None) => return error_response(StatusCode::NOT_FOUND, format!("no event with id {id}")),
+        Err(e) => {
+            tracing::error!(error = %e, "event lookup failed before lifecycle update");
+            return error_response(StatusCode::INTERNAL_SERVER_ERROR, "event lookup failed");
+        }
+        Ok(Some(event)) => event.status,
+    };
+    if current_status == status {
+        return Json(serde_json::json!({"id": id, "status": status_str(status), "changed": false}))
+            .into_response();
+    }
+    let actor = headers
+        .get("x-actor")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("operator");
+    match state
+        .event_query_repository
+        .update_event_status(tenant_id, id, current_status, status, actor)
+        .await
+    {
+        Ok(()) => Json(serde_json::json!({"id": id, "status": status_str(status)})).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "event lifecycle update failed");
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, "event lifecycle update failed")
+        }
+    }
+}
+
+/// GET /v1/events/:id/status-history — immutable operator disposition history for one signal.
+pub async fn list_event_status_history(
+    State(state): State<DashboardState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, message)) => return error_response(status, message),
+    };
+    match state.event_query_repository.list_status_history(tenant_id, id).await {
+        Ok(history) => Json(history).into_response(),
+        Err(error) => {
+            tracing::error!(%error, "event status history query failed");
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, "event status history unavailable")
         }
     }
 }

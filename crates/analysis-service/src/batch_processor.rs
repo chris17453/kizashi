@@ -24,6 +24,10 @@ pub struct AnalysisDeps {
     /// The platform-wide default client (Foundry), used for tenants with no config or
     /// `AnalysisProvider::AzureFoundry` (ADR-0031).
     pub analysis_client: Arc<dyn AnalysisClient>,
+    /// Optional alternate model/provider used once for transient primary-provider failures.
+    /// Keeping this separate from the tenant's primary client makes the fallback explicit and
+    /// prevents a failed model from causing the same request to loop forever.
+    pub fallback_analysis_client: Option<Arc<dyn AnalysisClient>>,
     pub publisher: Arc<dyn EventPublisher>,
     pub analysis_config_repository: Arc<dyn AnalysisConfigRepository>,
     /// Reused to build per-tenant `OpenAiCompatibleAnalysisClient`s so each call doesn't pay
@@ -53,6 +57,21 @@ fn resolve_analysis_client(
             .with_concurrency(deps.openai_compatible_concurrency),
         ),
         _ => deps.analysis_client.clone(),
+    }
+}
+
+fn resolve_fallback_client(
+    deps: &AnalysisDeps,
+    config: Option<&AnalysisConfig>,
+) -> Option<Arc<dyn AnalysisClient>> {
+    match config {
+        // A tenant-selected compatible model can always fall back to the platform-default
+        // Foundry client. This keeps the alternate path useful in local/dev deployments too;
+        // operators only need ANALYSIS_FALLBACK_* when the platform default is the primary.
+        Some(config) if config.provider == AnalysisProvider::OpenAiCompatible => {
+            Some(deps.analysis_client.clone())
+        }
+        _ => deps.fallback_analysis_client.clone(),
     }
 }
 
@@ -87,11 +106,32 @@ pub async fn process_batch(
         .map_err(|e| BatchError::ConfigLookup(e.to_string()))?;
     let prompt = config.as_ref().map(|c| c.prompt.clone());
     let analysis_client = resolve_analysis_client(deps, config.as_ref());
+    let fallback_analysis_client = resolve_fallback_client(deps, config.as_ref());
 
-    let results = analysis_client
-        .analyze_batch(tenant_id, &records, prompt.as_deref())
-        .await
-        .map_err(|e| BatchError::Analysis(e.to_string()))?;
+    let results = match analysis_client.analyze_batch(tenant_id, &records, prompt.as_deref()).await
+    {
+        Ok(results) => results,
+        Err(primary_error)
+            if primary_error.is_retryable() && fallback_analysis_client.is_some() =>
+        {
+            tracing::warn!(
+                %tenant_id,
+                error = %primary_error,
+                "primary analysis provider failed transiently; trying fallback model"
+            );
+            fallback_analysis_client
+                .as_ref()
+                .expect("fallback checked above")
+                .analyze_batch(tenant_id, &records, prompt.as_deref())
+                .await
+                .map_err(|fallback_error| {
+                    BatchError::Analysis(format!(
+                        "primary provider failed: {primary_error}; fallback provider failed: {fallback_error}"
+                    ))
+                })?
+        }
+        Err(error) => return Err(BatchError::Analysis(error.to_string())),
+    };
 
     let mut published = 0;
     for (record, analysis) in records.into_iter().zip(results) {

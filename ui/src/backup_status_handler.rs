@@ -25,9 +25,19 @@ struct BackupRunRow {
     error: Option<String>,
 }
 
+struct BackupTimelinePoint {
+    label: String,
+    status: String,
+    size_label: String,
+}
+
 #[derive(serde::Deserialize, Default)]
 pub struct BackupsQuery {
+    #[serde(default)]
+    notice: String,
     before: Option<DateTime<Utc>>,
+    #[serde(default)]
+    status: String,
 }
 
 #[derive(Template)]
@@ -38,6 +48,67 @@ struct BackupsTemplate {
     runs: Vec<BackupRunRow>,
     next_before: Option<DateTime<Utc>>,
     error: Option<String>,
+    notice: String,
+    successful_count: usize,
+    failed_count: usize,
+    running_count: usize,
+    total_size_bytes: i64,
+    timeline: Vec<BackupTimelinePoint>,
+    last_success_at: Option<String>,
+    freshness_label: String,
+    status: String,
+}
+
+fn normalize_backup_status(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "success" => "success".to_string(),
+        "failed" => "failed".to_string(),
+        "running" | "in_progress" => "running".to_string(),
+        _ => String::new(),
+    }
+}
+
+fn recovery_freshness(rows: &[BackupRunRow]) -> (Option<String>, String) {
+    let last_success = rows
+        .iter()
+        .filter(|run| run.status == "success")
+        .filter_map(|run| {
+            run.completed_at
+                .as_deref()
+                .or(Some(run.started_at.as_str()))
+                .and_then(|value| value.parse::<DateTime<Utc>>().ok())
+        })
+        .max();
+    let Some(last_success) = last_success else {
+        return (None, "No successful run".to_string());
+    };
+    let age = (Utc::now() - last_success).num_hours().max(0);
+    let label = if age < 24 {
+        "Fresh · under 24h"
+    } else if age < 24 * 7 {
+        "Aging · under 7d"
+    } else {
+        "Stale · over 7d"
+    };
+    (Some(last_success.to_rfc3339()), label.to_string())
+}
+
+fn timeline_points(rows: &[BackupRunRow]) -> Vec<BackupTimelinePoint> {
+    rows.iter()
+        .rev()
+        .map(|run| BackupTimelinePoint {
+            label: run
+                .started_at
+                .parse::<DateTime<Utc>>()
+                .map(|value| value.format("%m-%d %H:%M UTC").to_string())
+                .unwrap_or_else(|_| run.started_at.clone()),
+            status: run.status.clone(),
+            size_label: run
+                .size_bytes
+                .map(|size| format!("{size} bytes"))
+                .unwrap_or_else(|| "no artifact".to_string()),
+        })
+        .collect()
 }
 
 async fn require_admin_session(
@@ -73,23 +144,42 @@ pub async fn get_backups(
             } else {
                 None
             };
+            let rows: Vec<BackupRunRow> = runs
+                .into_iter()
+                .map(|r| BackupRunRow {
+                    started_at: r.started_at.to_rfc3339(),
+                    completed_at: r.completed_at.map(|c| c.to_rfc3339()),
+                    status: r.status,
+                    target: r.target,
+                    size_bytes: r.size_bytes,
+                    error: r.error,
+                })
+                .filter(|run| {
+                    query.status.is_empty() || normalize_backup_status(&run.status) == query.status
+                })
+                .collect();
+            let successful_count = rows.iter().filter(|run| run.status == "success").count();
+            let failed_count = rows.iter().filter(|run| run.status == "failed").count();
+            let running_count = rows.len().saturating_sub(successful_count + failed_count);
+            let total_size_bytes = rows.iter().filter_map(|run| run.size_bytes).sum();
+            let timeline = timeline_points(&rows);
+            let (last_success_at, freshness_label) = recovery_freshness(&rows);
             Html(
                 BackupsTemplate {
                     show_nav: true,
                     is_admin,
-                    runs: runs
-                        .into_iter()
-                        .map(|r| BackupRunRow {
-                            started_at: r.started_at.to_rfc3339(),
-                            completed_at: r.completed_at.map(|c| c.to_rfc3339()),
-                            status: r.status,
-                            target: r.target,
-                            size_bytes: r.size_bytes,
-                            error: r.error,
-                        })
-                        .collect(),
+                    runs: rows,
                     next_before,
                     error: None,
+                    notice: query.notice.clone(),
+                    successful_count,
+                    failed_count,
+                    running_count,
+                    total_size_bytes,
+                    timeline,
+                    last_success_at,
+                    freshness_label,
+                    status: query.status,
                 }
                 .render()
                 .unwrap(),
@@ -103,10 +193,34 @@ pub async fn get_backups(
                 runs: vec![],
                 next_before: None,
                 error: Some(e.to_string()),
+                notice: query.notice,
+                successful_count: 0,
+                failed_count: 0,
+                running_count: 0,
+                total_size_bytes: 0,
+                timeline: vec![],
+                last_success_at: None,
+                freshness_label: "Unavailable".to_string(),
+                status: query.status,
             }
             .render()
             .unwrap(),
         )
         .into_response(),
+    }
+}
+
+pub async fn post_trigger_backup(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let _session = match require_admin_session(&state, &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    match state.backup_status_client.trigger_backup().await {
+        Ok(result) if result.status == "success" => {
+            axum::response::Redirect::to("/security/backups?notice=triggered").into_response()
+        }
+        Ok(_) | Err(_) => {
+            axum::response::Redirect::to("/security/backups?notice=trigger-failed").into_response()
+        }
     }
 }

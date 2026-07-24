@@ -102,6 +102,9 @@ async fn renders_the_record_when_found() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("printer on fire"));
+    assert!(body.contains("Record lifecycle"));
+    assert!(body.contains("01 / INGEST"));
+    assert!(body.contains("05 / RESPOND"));
 }
 
 #[tokio::test]

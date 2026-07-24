@@ -43,6 +43,7 @@ pub async fn trigger_sweep(State(state): State<AppState>, headers: HeaderMap) ->
         policy_repository: state.policy_repository.clone(),
         record_client: state.record_client.clone(),
         archive_store: state.archive_store.clone(),
+        hold_repository: state.hold_repository.clone(),
     };
     match sweep(&sweep_state, chrono::Utc::now(), DEFAULT_SWEEP_BATCH_LIMIT).await {
         Ok(summary) => Json(summary).into_response(),

@@ -27,14 +27,22 @@ pub struct SessionsQuery {
     sort: String,
     #[serde(default)]
     dir: String,
+    #[serde(default)]
+    role: String,
+    #[serde(default)]
+    age: String,
 }
 
 /// Case-insensitive substring match on username -- same in-handler-filter shape as the Users
 /// and API Keys pages (ADR-0062): the session store's `list_for_tenant` has no search parameter
 /// of its own, and a tenant's active-session count is realistically small enough to filter
 /// after the fetch.
-fn matches_query(row: &SessionRow, q: &str) -> bool {
-    q.is_empty() || row.username.to_lowercase().contains(&q.to_lowercase())
+fn matches_query(row: &SessionRow, q: &str, role: &str, age: &str, now: DateTime<Utc>) -> bool {
+    (q.is_empty() || row.username.to_lowercase().contains(&q.to_lowercase()))
+        && (role.is_empty() || row.role_str == role)
+        && (age.is_empty()
+            || (age == "recent" && row.created_at >= now - chrono::Duration::hours(24))
+            || (age == "stale" && row.created_at < now - chrono::Duration::days(30)))
 }
 
 /// Same shape as the Users page's sortable columns (ADR-0064), applied after the search filter
@@ -65,8 +73,15 @@ struct SessionsTemplate {
     is_admin: bool,
     sessions: Vec<SessionRow>,
     q: String,
+    role: String,
     sort: String,
     dir: String,
+    age: String,
+    admin_count: usize,
+    operator_count: usize,
+    viewer_count: usize,
+    recent_count: usize,
+    stale_count: usize,
 }
 
 async fn require_admin_session(
@@ -97,6 +112,7 @@ pub async fn get_sessions(
     let is_admin = session.role.at_least(Role::Admin);
     let current_id = session_cookie_value(&headers);
 
+    let now = Utc::now();
     let mut sessions: Vec<SessionRow> = state
         .session_store
         .list_for_tenant(session.tenant_id)
@@ -109,9 +125,16 @@ pub async fn get_sessions(
             role_str: s.role.to_string(),
             created_at: s.created_at,
         })
-        .filter(|row| matches_query(row, &query.q))
+        .filter(|row| matches_query(row, &query.q, &query.role, &query.age, now))
         .collect();
     sort_rows(&mut sessions, &query.sort, &query.dir);
+    let admin_count = sessions.iter().filter(|row| row.role_str == "admin").count();
+    let operator_count = sessions.iter().filter(|row| row.role_str == "operator").count();
+    let viewer_count = sessions.iter().filter(|row| row.role_str == "viewer").count();
+    let recent_count =
+        sessions.iter().filter(|row| row.created_at >= now - chrono::Duration::hours(24)).count();
+    let stale_count =
+        sessions.iter().filter(|row| row.created_at < now - chrono::Duration::days(30)).count();
 
     Html(
         SessionsTemplate {
@@ -119,8 +142,15 @@ pub async fn get_sessions(
             is_admin,
             sessions,
             q: query.q,
+            role: query.role,
             sort: query.sort,
             dir: query.dir,
+            age: query.age,
+            admin_count,
+            operator_count,
+            viewer_count,
+            recent_count,
+            stale_count,
         }
         .render()
         .unwrap(),

@@ -249,3 +249,11 @@ async fn redirects_to_login_when_not_signed_in() {
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
 }
+
+#[test]
+fn egress_console_exposes_searchable_destination_inventory() {
+    let template = include_str!("../templates/egress_allowlist.html");
+    assert!(template.contains("Allowed destination inventory"));
+    assert!(template.contains("egress-domain-search"));
+    assert!(template.contains("data-egress-domain"));
+}

@@ -55,7 +55,8 @@ async fn main() {
         .await
         .expect("failed to bind queue");
 
-    let engine = Arc::new(ontology_service::mapping_engine::OntologyMappingEngine::new(repo.clone()));
+    let engine =
+        Arc::new(ontology_service::mapping_engine::OntologyMappingEngine::new(repo.clone()));
 
     let mut consumer = consume_channel
         .basic_consume(

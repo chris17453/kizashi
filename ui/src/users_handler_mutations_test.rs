@@ -27,6 +27,7 @@ fn router(state: AppState) -> Router {
         .route("/users/:id/role", post(post_update_user_role))
         .route("/users/:id/delete", post(post_delete_user))
         .route("/users/bulk-delete", post(post_bulk_delete_users))
+        .route("/users/bulk-role", post(post_bulk_update_user_role))
         .route("/users/:id/export", get(get_export_user))
         .with_state(state)
 }
@@ -250,6 +251,64 @@ async fn post_bulk_delete_users_with_no_selection_is_a_no_op() {
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     let remaining = state.users_client.list_users(tenant_id, Role::Admin).await.unwrap();
     assert_eq!(remaining.len(), 1);
+}
+
+#[tokio::test]
+async fn post_bulk_update_user_role_changes_every_selected_user() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Admin).await;
+    let first = state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "first", "pw", Role::Viewer, "test-actor")
+        .await
+        .unwrap();
+    let second = state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "second", "pw", Role::Viewer, "test-actor")
+        .await
+        .unwrap();
+
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/users/bulk-role")
+                .header("cookie", cookie(&session_id))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={}&ids={}&role=operator", first.id, second.id)))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let users = state.users_client.list_users(tenant_id, Role::Admin).await.unwrap();
+    assert!(users
+        .iter()
+        .filter(|user| user.username != "alice")
+        .all(|user| user.role == Role::Operator));
+}
+
+#[tokio::test]
+async fn post_bulk_update_user_role_is_forbidden_for_an_operator() {
+    let (state, session_id, tenant_id) = state_with_session(Role::Operator).await;
+    let created = state
+        .users_client
+        .create_user(tenant_id, Role::Admin, "first", "pw", Role::Viewer, "test-actor")
+        .await
+        .unwrap();
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/users/bulk-role")
+                .header("cookie", cookie(&session_id))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!("ids={}&role=admin", created.id)))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]

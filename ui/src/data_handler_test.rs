@@ -17,6 +17,14 @@ use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+#[test]
+fn data_batch_selection_exposes_a_preflight_scope() {
+    let template = include_str!("../templates/data.html");
+    assert!(template.contains("data-record-normalized"));
+    assert!(template.contains("Selection preflight"));
+    assert!(template.contains("Batch actions affect the selected record IDs only."));
+}
+
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/data", get(get_data))
@@ -113,6 +121,8 @@ async fn renders_search_results_when_signed_in() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("zendesk"));
+    assert!(body.contains("data-data-live-status"));
+    assert!(body.contains("kizashi.data.live-refresh"));
 }
 
 #[tokio::test]
@@ -365,4 +375,39 @@ async fn a_backend_failure_listing_saved_searches_does_not_break_the_page() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[test]
+fn data_mutation_forms_preserve_the_current_search_context() {
+    let template = include_str!("../templates/data.html");
+    assert!(template.contains("data-data-context-form"));
+    assert!(template.contains("data-data-context=\"' + key + '\""));
+    assert!(template.contains("reprocessed_connector"));
+}
+
+#[test]
+fn data_explorer_rows_link_directly_into_lineage() {
+    let template = include_str!("../templates/data.html");
+    assert!(template.contains("<th scope=\"col\">Lineage</th>"));
+    assert!(template.contains("/data/{{ record.id }}/journey"));
+}
+
+#[test]
+fn data_search_save_feedback_preserves_the_active_scope() {
+    let source = include_str!("data_handler.rs");
+    assert!(source.contains("fn data_search_redirect"));
+    let template = include_str!("../templates/data.html");
+    assert!(template.contains("Source-data search saved for this exact filter scope."));
+    assert!(template.contains("active filters are still intact."));
+}
+
+#[test]
+fn data_visual_handoffs_preserve_the_active_filter_scope() {
+    let source = include_str!("data_handler.rs");
+    assert!(source.contains("fn from_query(query: &DataSearchQuery)"));
+    assert!(source
+        .contains("context.query(&[(\"from\", date.to_string()), (\"to\", date.to_string())])"));
+    let template = include_str!("../templates/data.html");
+    assert!(template.contains("href=\"{{ bucket.href }}\""));
+    assert!(template.contains("href=\"{{ row.href }}\""));
 }

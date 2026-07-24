@@ -16,7 +16,40 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 fn router(state: AppState) -> Router {
-    Router::new().route("/sensors/:id", get(get_sensor_detail)).with_state(state)
+    Router::new()
+        .route("/sensors/:id", get(get_sensor_detail))
+        .route("/sensors/:id/edit", axum::routing::post(post_update_sensor))
+        .with_state(state)
+}
+
+#[test]
+fn activity_bars_group_records_by_ingestion_day() {
+    let records = vec![
+        RecordSummary {
+            id: Uuid::new_v4(),
+            connector_id: "feed".to_string(),
+            source_type: "ticket".to_string(),
+            ingested_at: chrono::DateTime::parse_from_rfc3339("2026-07-23T10:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+            raw_payload: serde_json::json!({}),
+            normalized_payload: None,
+        },
+        RecordSummary {
+            id: Uuid::new_v4(),
+            connector_id: "feed".to_string(),
+            source_type: "ticket".to_string(),
+            ingested_at: chrono::DateTime::parse_from_rfc3339("2026-07-23T11:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+            raw_payload: serde_json::json!({}),
+            normalized_payload: None,
+        },
+    ];
+    let bars = activity_bars(&records);
+    assert_eq!(bars.len(), 1);
+    assert_eq!(bars[0].count, 2);
+    assert_eq!(bars[0].height_pct, 100);
 }
 
 async fn state_with_session() -> (AppState, String, Uuid) {
@@ -115,6 +148,7 @@ async fn renders_the_sensor_and_its_records_when_found() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("support-poller"));
     assert!(body.contains("ticket"));
+    assert!(body.contains("Ingestion activity"));
 }
 
 #[tokio::test]
@@ -136,6 +170,39 @@ async fn renders_not_found_for_an_unknown_sensor_id() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("Sensor not found"));
+}
+
+#[tokio::test]
+async fn operator_can_update_sensor_config_and_enabled_state() {
+    let (state, session_id, tenant_id) = state_with_session().await;
+    let sensor = state
+        .sensors_client
+        .register_sensor(
+            Role::Operator,
+            "alice",
+            tenant_id,
+            "generic",
+            "ops-feed",
+            serde_json::json!({"region":"east"}),
+        )
+        .await
+        .unwrap();
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/sensors/{}/edit", sensor.id))
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("enabled=false&config=%7B%22region%22%3A%22west%22%7D"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let saved = state.sensors_client.get_sensor(tenant_id, sensor.id).await.unwrap().unwrap();
+    assert!(!saved.enabled);
+    assert_eq!(saved.config["region"], "west");
 }
 
 #[tokio::test]

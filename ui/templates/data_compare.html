@@ -1,0 +1,61 @@
+{% extends "layout.html" %}
+{% block content %}
+<style>
+  .compare-posture { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.6rem; margin:.8rem 0 1rem; }
+  .compare-posture-item { display:grid; gap:.2rem; padding:.65rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .compare-posture-item strong { font:700 1.1rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .compare-posture-item small { color:var(--text-dim); }
+  .compare-transformation { display:flex; align-items:center; gap:.45rem; margin:.7rem 0; color:var(--text-dim); font-size:.78rem; }
+  .compare-field-map { display:grid; gap:.45rem; margin:.8rem 0 1rem; }
+  .compare-field-row { display:grid; grid-template-columns:minmax(8rem,1.2fr) 1fr 1fr 7rem; gap:.55rem; align-items:center; padding:.4rem .5rem; border:1px solid var(--border-subtle); border-radius:5px; font-size:.72rem; }
+  .compare-field-row strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .compare-field-state { justify-self:end; color:var(--text-dim); font-size:.66rem; text-transform:uppercase; letter-spacing:.04em; }
+  .compare-field-state.preserved { color:var(--success,#4ade80); } .compare-field-state.raw-only { color:var(--warning,#fbbf24); } .compare-field-state.normalized-only { color:var(--accent); }
+  .compare-field-presence { color:var(--text-dim); text-align:center; } .compare-field-presence.present { color:var(--text); }
+  .compare-field-header { display:grid; grid-template-columns:minmax(8rem,1.2fr) 1fr 1fr 7rem; gap:.55rem; padding:0 .5rem; color:var(--text-dim); font-size:.65rem; text-transform:uppercase; letter-spacing:.05em; }
+  .compare-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.6rem; margin:1rem 0; }
+  .compare-summary-item { padding:.7rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .compare-summary-item strong { display:block; font:700 1.15rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .compare-summary-item small { color:var(--text-dim); }
+  .compare-matrix { overflow-x:auto; margin:1rem 0 1.3rem; }
+  .compare-matrix table { min-width:620px; }
+  .compare-matrix th, .compare-matrix td { padding:.45rem .55rem; font-size:.7rem; white-space:nowrap; }
+  .compare-matrix th:not(:first-child), .compare-matrix td:not(:first-child) { text-align:center; }
+  .compare-matrix th { color:var(--text-dim); font-size:.63rem; text-transform:uppercase; letter-spacing:.04em; }
+  .compare-matrix .matrix-present { color:var(--success,#4ade80); font-weight:700; }
+  .compare-matrix .matrix-missing { color:var(--text-dim); }
+  .compare-matrix .matrix-state { text-transform:uppercase; letter-spacing:.04em; font-size:.62rem; }.compare-matrix .matrix-variance{color:var(--warning,#fbbf24);font-weight:700}
+  .compare-matrix .shared { color:var(--success,#4ade80); } .compare-matrix .partial { color:var(--warning,#fbbf24); } .compare-matrix .unique { color:var(--accent); }
+  .compare-impact{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin:1rem 0}.compare-impact-panel{padding:.65rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface)}.compare-impact-list{display:grid;gap:.35rem;margin-top:.45rem}.compare-impact-list a{display:flex;justify-content:space-between;gap:.5rem;padding:.35rem .45rem;border-radius:5px;color:var(--text);text-decoration:none;font-size:.72rem}.compare-impact-list a:hover{background:var(--surface-hover);color:var(--accent)}.compare-impact-list small{color:var(--text-dim)}@media(max-width:760px){.compare-impact{grid-template-columns:1fr}}
+  @media(max-width:760px){.compare-posture{grid-template-columns:1fr}}
+  @media(max-width:760px){.compare-summary{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Evidence review</div><h1>Compare source records</h1><p class="page-description">A bounded side-by-side view for checking payload differences before modeling or replaying evidence.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/data">Back to explorer</a></div></div>
+{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if records.is_empty() %}
+<div class="empty-state"><div class="empty-icon">&#8644;</div><p>Select up to four records in Data Explorer to compare them here.</p><a class="btn" href="/data">Open Data Explorer</a></div>
+{% else %}
+<div class="section-heading"><div class="section-title">{{ records.len() }} record{% if records.len() != 1 %}s{% endif %} in comparison</div><span class="muted">{{ requested_count }} requested · tenant-scoped</span></div>
+{% if records.len() > 1 && !comparison_fields.is_empty() %}
+<section class="panel" aria-label="Cross-record comparison">
+  <div class="panel-heading"><div><h2>Cross-record field coverage</h2><p class="muted">See which fields are shared across the selected evidence and which only appear in one record.</p></div><span class="pill pill-muted">{{ comparison_field_count }} fields</span></div>
+  <div class="compare-summary"><div class="compare-summary-item"><strong>{{ shared_field_count }}</strong><small>shared by every record</small></div><div class="compare-summary-item"><strong>{{ comparison_field_count - shared_field_count }}</strong><small>partial or unique fields</small></div><div class="compare-summary-item"><strong>{{ variable_field_count }}</strong><small>fields with different values</small></div></div>
+  <div class="compare-matrix"><table><thead><tr><th>Field</th>{% for record in records %}<th><a href="/data/{{ record.id }}">{{ record.preview }}</a></th>{% endfor %}<th>Coverage</th><th>Values</th></tr></thead><tbody>{% for field in comparison_fields %}<tr><th scope="row"><code>{{ field.name }}</code></th>{% for cell in field.cells %}<td class="{% if cell %}matrix-present{% else %}matrix-missing{% endif %}">{% if cell %}Present{% else %}&mdash;{% endif %}</td>{% endfor %}<td class="matrix-state {{ field.disposition }}">{{ field.present_count }}/{{ records.len() }} · {{ field.disposition }}</td><td class="{% if field.distinct_value_count > 1 %}matrix-variance{% endif %}">{{ field.distinct_value_count }} variant{% if field.distinct_value_count != 1 %}s{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endif %}
+<div class="compare-grid">
+{% for record in records %}
+<article class="panel compare-card">
+  <div class="panel-heading"><div><h2>{{ record.preview }}</h2><p class="muted">{{ record.connector_id }} · {{ record.source_type }}</p></div><span class="pill {% if record.normalized %}pill-up{% else %}pill-down{% endif %}">{% if record.normalized %}normalized{% else %}raw only{% endif %}</span></div>
+  <div class="record-identity"><div><span class="detail-label">Record</span><a href="/data/{{ record.id }}"><code>{{ record.id }}</code></a></div><div><span class="detail-label">Ingested</span><strong>{{ record.ingested_at }}</strong></div></div>
+  <div class="compare-posture"><div class="compare-posture-item"><strong>{{ record.raw_field_count }}</strong><small>raw top-level fields</small></div><div class="compare-posture-item"><strong>{{ record.normalized_field_count }}</strong><small>normalized fields</small></div><div class="compare-posture-item"><strong>{% if record.normalized %}Ready{% else %}Pending{% endif %}</strong><small>normalization state</small></div></div>
+  <div class="compare-transformation"><span>Raw evidence</span><span>&rarr;</span><span>{% if record.normalized %}Normalized evidence available{% else %}Normalization not completed{% endif %}</span></div>
+  <div class="compare-impact"><div class="compare-impact-panel"><div class="detail-label">Signals derived <strong>{{ record.signals.len() }}</strong></div>{% if record.signals.is_empty() %}<small class="muted">No downstream signals.</small>{% else %}<div class="compare-impact-list">{% for signal in record.signals %}<a href="/events/{{ signal.id }}"><span>{{ signal.event_type }}</span><small>{{ signal.status }} &rarr;</small></a>{% endfor %}</div>{% endif %}</div><div class="compare-impact-panel"><div class="detail-label">Modeled entities <strong>{{ record.modeled_objects.len() }}</strong></div>{% if record.modeled_objects.is_empty() %}<small class="muted">No modeled entities.</small>{% else %}<div class="compare-impact-list">{% for object in record.modeled_objects %}<a href="/ontology?object_id={{ object.id }}#object-{{ object.id }}"><span>{{ object.label }}</span><small>{{ object.type_name }} &rarr;</small></a>{% endfor %}</div>{% endif %}</div></div>
+  {% if !record.field_presence.is_empty() %}<div class="section-title">Field coverage</div><p class="muted">Compare top-level field presence before reviewing the full payloads.</p><div class="compare-field-map"><div class="compare-field-header"><span>Field</span><span>Raw</span><span>Normalized</span><span>Disposition</span></div>{% for field in record.field_presence %}<div class="compare-field-row"><strong title="{{ field.name }}">{{ field.name }}</strong><span class="compare-field-presence{% if field.raw %} present{% endif %}">{% if field.raw %}Present{% else %}&mdash;{% endif %}</span><span class="compare-field-presence{% if field.normalized %} present{% endif %}">{% if field.normalized %}Present{% else %}&mdash;{% endif %}</span><span class="compare-field-state {{ field.state }}">{{ field.state }}</span></div>{% endfor %}</div>{% endif %}
+  <div class="section-title">Raw payload</div><pre class="panel compare-payload">{{ record.raw_payload }}</pre>
+  <div class="section-title">Normalized payload</div>{% if let Some(payload) = record.normalized_payload %}<pre class="panel compare-payload">{{ payload }}</pre>{% else %}<p class="muted">Not yet normalized.</p>{% endif %}
+</article>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

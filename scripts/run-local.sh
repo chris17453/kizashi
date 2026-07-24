@@ -34,6 +34,7 @@ INGESTION_SERVICE_PORT=8082
 QUERY_GATEWAY_PORT=8083
 DASHBOARD_API_PORT=8084
 NORMALIZATION_SERVICE_PORT=8085
+ONTOLOGY_SERVICE_PORT=8097
 ANALYSIS_SERVICE_PORT=8086
 TRIGGER_ENGINE_PORT=8087
 ACTION_EXECUTOR_PORT=8088
@@ -42,13 +43,29 @@ CONFIG_ADMIN_SERVICE_PORT=8090
 RETENTION_SERVICE_PORT=8091
 OBSERVABILITY_PORT=8092
 UI_PORT=8093
+EGRESS_GATEWAY_PORT=8094
+BACKUP_SERVICE_PORT=8095
 INCIDENT_SERVICE_PORT=8096
+REPORT_SCHEDULER_PORT=8098
+
+# A local Ollama install is a useful second model for the demo and for recovery drills. Detect it
+# without making Ollama a hard dependency: deployments with explicit fallback settings always win,
+# while a machine with Ollama gets a materially different model automatically.
+if [[ -z "${ANALYSIS_FALLBACK_ENDPOINT:-}" && -z "${ANALYSIS_FALLBACK_MODEL:-}" ]] \
+  && curl -fsS --max-time 1 http://localhost:11434/api/version >/dev/null 2>&1; then
+  ANALYSIS_FALLBACK_ENDPOINT="http://localhost:11434/v1"
+  ANALYSIS_FALLBACK_MODEL="qwen3:8b"
+  echo "==> detected local Ollama; enabling qwen3:8b as the analysis fallback model"
+fi
 
 start() {
   local name="$1" bin="$2"
   shift 2
   echo "==> starting $name on the port in its BIND_ADDR"
-  env "$@" "./target/debug/$bin" >"logs/$name.log" 2>&1 &
+  # Detach each service from the launcher shell. This keeps a full stack started from a
+  # non-interactive shell (CI, an IDE task, or an API-launched terminal) alive after this
+  # script exits, while the pid file still gives stop-local.sh an explicit process handle.
+  nohup env "$@" "./target/debug/$bin" >"logs/$name.log" 2>&1 < /dev/null &
   echo $! >"run/$name.pid"
 }
 
@@ -90,11 +107,20 @@ start normalization-service normalization-service \
   INTERNAL_API_SECRET="${INTERNAL_API_SECRET:-change-me-in-production}"
 wait_healthy normalization-service "http://localhost:$NORMALIZATION_SERVICE_PORT/healthz"
 
+start ontology-service ontology-service \
+  BIND_ADDR="0.0.0.0:$ONTOLOGY_SERVICE_PORT" DATABASE_URL="$DATABASE_URL" \
+  RABBITMQ_URL="$RABBITMQ_URL"
+wait_healthy ontology-service "http://localhost:$ONTOLOGY_SERVICE_PORT/healthz"
+
 start analysis-service analysis-service \
   BIND_ADDR="0.0.0.0:$ANALYSIS_SERVICE_PORT" DATABASE_URL="$DATABASE_URL" \
   RABBITMQ_URL="$RABBITMQ_URL" \
   AZURE_AI_FOUNDRY_ENDPOINT="${AZURE_AI_FOUNDRY_ENDPOINT:-}" \
   AZURE_AI_FOUNDRY_API_KEY="${AZURE_AI_FOUNDRY_API_KEY:-}" \
+  ANALYSIS_FALLBACK_ENDPOINT="${ANALYSIS_FALLBACK_ENDPOINT:-}" \
+  ANALYSIS_FALLBACK_MODEL="${ANALYSIS_FALLBACK_MODEL:-}" \
+  ANALYSIS_FALLBACK_API_KEY="${ANALYSIS_FALLBACK_API_KEY:-}" \
+  ANALYSIS_OPENAI_CONCURRENCY="${ANALYSIS_OPENAI_CONCURRENCY:-4}" \
   INTERNAL_API_SECRET="${INTERNAL_API_SECRET:-change-me-in-production}"
 wait_healthy analysis-service "http://localhost:$ANALYSIS_SERVICE_PORT/healthz"
 
@@ -131,8 +157,20 @@ wait_healthy ingestion-gateway "http://localhost:$INGESTION_GATEWAY_PORT/healthz
 start query-gateway query-gateway \
   BIND_ADDR="0.0.0.0:$QUERY_GATEWAY_PORT" DATABASE_URL="$DATABASE_URL" \
   DASHBOARD_API_URL="http://localhost:$DASHBOARD_API_PORT" \
+  ONTOLOGY_SERVICE_URL="http://localhost:$ONTOLOGY_SERVICE_PORT" \
   INTERNAL_API_SECRET="${INTERNAL_API_SECRET:-change-me-in-production}"
 wait_healthy query-gateway "http://localhost:$QUERY_GATEWAY_PORT/healthz"
+
+start report-scheduler report-scheduler \
+  BIND_ADDR="0.0.0.0:$REPORT_SCHEDULER_PORT" DATABASE_URL="$DATABASE_URL" \
+  QUERY_GATEWAY_URL="http://localhost:$QUERY_GATEWAY_PORT" \
+  INTERNAL_API_SECRET="${INTERNAL_API_SECRET:-change-me-in-production}" \
+  REPORT_ARTIFACT_BASE_URL="http://localhost:$UI_PORT" \
+  REPORT_SCHEDULER_INTERVAL_SECONDS="${REPORT_SCHEDULER_INTERVAL_SECONDS:-10}" \
+  REPORT_SMTP_HOST="${REPORT_SMTP_HOST:-}" REPORT_SMTP_PORT="${REPORT_SMTP_PORT:-587}" \
+  REPORT_SMTP_USERNAME="${REPORT_SMTP_USERNAME:-}" REPORT_SMTP_PASSWORD="${REPORT_SMTP_PASSWORD:-}" \
+  REPORT_FROM_EMAIL="${REPORT_FROM_EMAIL:-}"
+wait_healthy report-scheduler "http://localhost:$REPORT_SCHEDULER_PORT/healthz"
 
 start retention-service retention-service \
   BIND_ADDR="0.0.0.0:$RETENTION_SERVICE_PORT" DATABASE_URL="$DATABASE_URL" \
@@ -142,6 +180,19 @@ start retention-service retention-service \
   AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-kizashi}" \
   AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-kizashi-minio-dev}"
 wait_healthy retention-service "http://localhost:$RETENTION_SERVICE_PORT/healthz"
+
+start egress-gateway egress-gateway \
+  BIND_ADDR="0.0.0.0:$EGRESS_GATEWAY_PORT" DATABASE_URL="$DATABASE_URL"
+wait_healthy egress-gateway "http://localhost:$EGRESS_GATEWAY_PORT/healthz"
+
+start backup-service backup-service \
+  BIND_ADDR="0.0.0.0:$BACKUP_SERVICE_PORT" DATABASE_URL="$DATABASE_URL" \
+  AWS_REGION="${AWS_REGION:-us-east-1}" S3_ENDPOINT_URL="${S3_ENDPOINT_URL:-http://localhost:9100}" \
+  AWS_S3_BUCKET="${BACKUP_S3_BUCKET:-kizashi-backups}" \
+  AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-kizashi}" \
+  AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-kizashi-minio-dev}" \
+  INTERNAL_API_SECRET="${INTERNAL_API_SECRET:-change-me-in-production}"
+wait_healthy backup-service "http://localhost:$BACKUP_SERVICE_PORT/healthz"
 
 start auth-service auth-service \
   BIND_ADDR="0.0.0.0:$AUTH_SERVICE_PORT" DATABASE_URL="$DATABASE_URL" \
@@ -154,7 +205,7 @@ wait_healthy auth-service "http://localhost:$AUTH_SERVICE_PORT/healthz"
 start observability observability \
   BIND_ADDR="0.0.0.0:$OBSERVABILITY_PORT" \
   RABBITMQ_MANAGEMENT_URL="${RABBITMQ_MANAGEMENT_URL:-http://kizashi:kizashi@localhost:15672}" \
-  SERVICE_REGISTRY="ingestion-gateway=http://localhost:$INGESTION_GATEWAY_PORT,ingestion-service=http://localhost:$INGESTION_SERVICE_PORT,query-gateway=http://localhost:$QUERY_GATEWAY_PORT,dashboard-api=http://localhost:$DASHBOARD_API_PORT,normalization-service=http://localhost:$NORMALIZATION_SERVICE_PORT,analysis-service=http://localhost:$ANALYSIS_SERVICE_PORT,trigger-engine=http://localhost:$TRIGGER_ENGINE_PORT,action-executor=http://localhost:$ACTION_EXECUTOR_PORT,auth-service=http://localhost:$AUTH_SERVICE_PORT,config-admin-service=http://localhost:$CONFIG_ADMIN_SERVICE_PORT,retention-service=http://localhost:$RETENTION_SERVICE_PORT"
+  SERVICE_REGISTRY="ingestion-gateway=http://localhost:$INGESTION_GATEWAY_PORT,ingestion-service=http://localhost:$INGESTION_SERVICE_PORT,query-gateway=http://localhost:$QUERY_GATEWAY_PORT,dashboard-api=http://localhost:$DASHBOARD_API_PORT,normalization-service=http://localhost:$NORMALIZATION_SERVICE_PORT,analysis-service=http://localhost:$ANALYSIS_SERVICE_PORT,trigger-engine=http://localhost:$TRIGGER_ENGINE_PORT,action-executor=http://localhost:$ACTION_EXECUTOR_PORT,auth-service=http://localhost:$AUTH_SERVICE_PORT,config-admin-service=http://localhost:$CONFIG_ADMIN_SERVICE_PORT,report-scheduler=http://localhost:$REPORT_SCHEDULER_PORT,retention-service=http://localhost:$RETENTION_SERVICE_PORT"
 wait_healthy observability "http://localhost:$OBSERVABILITY_PORT/healthz"
 
 # --- Tier 3: Console UI, depends on auth/query-gateway/config-admin/observability ---
@@ -165,9 +216,14 @@ start kizashi-ui kizashi-ui \
   CONFIG_ADMIN_SERVICE_URL="http://localhost:$CONFIG_ADMIN_SERVICE_PORT" \
   OBSERVABILITY_URL="http://localhost:$OBSERVABILITY_PORT" \
   INGESTION_SERVICE_URL="http://localhost:$INGESTION_SERVICE_PORT" \
+  NORMALIZATION_SERVICE_URL="http://localhost:$NORMALIZATION_SERVICE_PORT" \
+  ANALYSIS_SERVICE_URL="http://localhost:$ANALYSIS_SERVICE_PORT" \
   INGESTION_GATEWAY_URL="http://localhost:$INGESTION_GATEWAY_PORT" \
   INGESTION_GATEWAY_PUBLIC_URL="http://localhost:$INGESTION_GATEWAY_PORT" \
   ACTION_EXECUTOR_URL="http://localhost:$ACTION_EXECUTOR_PORT" \
+  RETENTION_SERVICE_URL="http://localhost:$RETENTION_SERVICE_PORT" \
+  BACKUP_SERVICE_URL="http://localhost:$BACKUP_SERVICE_PORT" \
+  EGRESS_GATEWAY_URL="http://localhost:$EGRESS_GATEWAY_PORT" \
   TRIGGER_ENGINE_URL="http://localhost:$TRIGGER_ENGINE_PORT" \
   INCIDENT_SERVICE_URL="http://localhost:$INCIDENT_SERVICE_PORT"
 sleep 2

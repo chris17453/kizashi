@@ -47,6 +47,14 @@ pub struct EventDetail {
     pub record_ids: Vec<Uuid>,
 }
 
+#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+pub struct StatusHistoryEntry {
+    pub from_status: String,
+    pub to_status: String,
+    pub actor: String,
+    pub changed_at: chrono::DateTime<chrono::Utc>,
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Deserialize)]
 pub struct DailyCount {
     pub date: String,
@@ -77,6 +85,23 @@ pub trait EventsClient: Send + Sync {
         until: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<EventsPage, EventsClientError>;
 
+    /// Server-side search for the Events explorer. Implementations that predate the query
+    /// parameter can fall back to the paginated list; the UI still applies its local predicate
+    /// so test doubles and older deployments remain safe.
+    async fn list_events_filtered(
+        &self,
+        bearer_token: &str,
+        limit: u32,
+        offset: u32,
+        since: Option<chrono::DateTime<chrono::Utc>>,
+        until: Option<chrono::DateTime<chrono::Utc>>,
+        search: Option<String>,
+        status: Option<String>,
+    ) -> Result<EventsPage, EventsClientError> {
+        let _ = (search, status);
+        self.list_events(bearer_token, limit, offset, since, until).await
+    }
+
     /// Lists the Events whose `record_ids` contain `record_id` — the record→event lineage
     /// lookup (ADR-0017) a record-journey view uses to find what a record contributed to.
     async fn list_events_for_record(
@@ -101,6 +126,28 @@ pub trait EventsClient: Send + Sync {
         bearer_token: &str,
         id: Uuid,
     ) -> Result<Option<EventDetail>, EventsClientError>;
+
+    async fn list_status_history(
+        &self,
+        bearer_token: &str,
+        id: Uuid,
+    ) -> Result<Vec<StatusHistoryEntry>, EventsClientError> {
+        let _ = (bearer_token, id);
+        Ok(vec![])
+    }
+
+    /// Moves the operator lifecycle projection for one signal. The signal payload remains
+    /// immutable; this is the explicit response-state control used by the event detail page.
+    async fn update_event_status(
+        &self,
+        bearer_token: &str,
+        id: Uuid,
+        status: &str,
+        actor: &str,
+    ) -> Result<(), EventsClientError> {
+        let _ = (bearer_token, id, status, actor);
+        Err(EventsClientError::Rejected(501))
+    }
 }
 
 pub struct HttpEventsClient {
@@ -124,12 +171,31 @@ impl EventsClient for HttpEventsClient {
         since: Option<chrono::DateTime<chrono::Utc>>,
         until: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<EventsPage, EventsClientError> {
+        self.list_events_filtered(bearer_token, limit, offset, since, until, None, None).await
+    }
+
+    async fn list_events_filtered(
+        &self,
+        bearer_token: &str,
+        limit: u32,
+        offset: u32,
+        since: Option<chrono::DateTime<chrono::Utc>>,
+        until: Option<chrono::DateTime<chrono::Utc>>,
+        search: Option<String>,
+        status: Option<String>,
+    ) -> Result<EventsPage, EventsClientError> {
         let mut params = vec![("limit", limit.to_string()), ("offset", offset.to_string())];
         if let Some(since) = since {
             params.push(("since", since.to_rfc3339()));
         }
         if let Some(until) = until {
             params.push(("until", until.to_rfc3339()));
+        }
+        if let Some(search) = search.filter(|value| !value.trim().is_empty()) {
+            params.push(("search", search));
+        }
+        if let Some(status) = status.filter(|value| !value.trim().is_empty()) {
+            params.push(("status", status));
         }
         let response = self
             .client
@@ -231,5 +297,45 @@ impl EventsClient for HttpEventsClient {
         let event: EventDetail =
             response.json().await.map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
         Ok(Some(event))
+    }
+
+    async fn list_status_history(
+        &self,
+        bearer_token: &str,
+        id: Uuid,
+    ) -> Result<Vec<StatusHistoryEntry>, EventsClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/events/{id}/status-history", self.query_gateway_url))
+            .bearer_auth(bearer_token)
+            .send()
+            .await
+            .map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(EventsClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| EventsClientError::Unreachable(e.to_string()))
+    }
+
+    async fn update_event_status(
+        &self,
+        bearer_token: &str,
+        id: Uuid,
+        status: &str,
+        actor: &str,
+    ) -> Result<(), EventsClientError> {
+        let response = self
+            .client
+            .patch(format!("{}/v1/events/{id}", self.query_gateway_url))
+            .bearer_auth(bearer_token)
+            .header("x-actor", actor)
+            .json(&serde_json::json!({"status": status}))
+            .send()
+            .await
+            .map_err(|e| EventsClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(EventsClientError::Rejected(response.status().as_u16()));
+        }
+        Ok(())
     }
 }

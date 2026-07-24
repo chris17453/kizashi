@@ -1,10 +1,31 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Audit History</h1>
+<style>
+  .audit-entity-posture { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.6rem; margin:1.25rem 0 1rem; }
+  .audit-entity-card { display:grid; gap:.18rem; padding:.75rem .85rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .audit-entity-card strong { font:700 1.35rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .audit-entity-card small { color:var(--text-dim); font-size:.7rem; }
+  .audit-entity-distribution { max-width:none; }
+  .audit-entity-bars { display:grid; gap:.55rem; }
+  .audit-entity-bar-row { display:grid; grid-template-columns:8rem minmax(0,1fr) 2rem; gap:.65rem; align-items:center; font-size:.76rem; }
+  .audit-entity-track { height:.55rem; overflow:hidden; border-radius:99px; background:var(--surface-raised); }
+  .audit-entity-track span { display:block; height:100%; min-width:3px; border-radius:inherit; background:var(--accent); }
+  .audit-entity-bar-row strong { text-align:right; font:700 .75rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  @media(max-width:760px){.audit-entity-posture{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / evidence</div><h1>Audit History</h1><p class="page-description">An immutable, entity-scoped record of the change that occurred, who performed it, and the resulting state.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/audit-log">All audit events &rarr;</a></div></div>
 <p class="muted">The immutable record of every change to this <code>{{ service }}</code>-owned
 entity (<code>{{ entity_id }}</code>) — written in the same database transaction as the change
 itself, and never editable or deletable, even by an admin.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+<section class="audit-entity-posture" aria-label="Entity audit posture">
+  <div class="audit-entity-card"><span class="detail-label">Recorded changes</span><strong>{{ entry_count }}</strong><small>immutable entries for this entity</small></div>
+  <div class="audit-entity-card"><span class="detail-label">Distinct actors</span><strong>{{ actor_count }}</strong><small>identities that changed state</small></div>
+  <div class="audit-entity-card"><span class="detail-label">Mutation types</span><strong>{{ mutation_count }}</strong><small>change classes represented</small></div>
+  <div class="audit-entity-card"><span class="detail-label">Latest change</span><strong>{% if let Some(at) = latest_change_at %}{{ at.format("%Y-%m-%d") }}{% else %}&mdash;{% endif %}</strong><small>most recent immutable write</small></div>
+</section>
+{% if !change_posture.is_empty() %}<section class="panel audit-entity-distribution"><div class="panel-heading"><div><h2>Mutation distribution</h2><p class="muted">Change types in this entity’s audit chain, normalized to the most frequent mutation.</p></div></div><div class="audit-entity-bars">{% for row in change_posture %}<div class="audit-entity-bar-row"><span>{{ row.label }}</span><span class="audit-entity-track"><span style="width:{{ row.percentage }}%"></span></span><strong>{{ row.count }}</strong></div>{% endfor %}</div></section>{% endif %}
 
 {% if entries.is_empty() %}
 <div class="empty-state">

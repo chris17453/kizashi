@@ -26,6 +26,7 @@ members = [
     "crates/ontology-service",
   "crates/observability",
   "crates/query-gateway",
+  "crates/report-scheduler",
   "crates/retention-service",
   "crates/trigger-engine",
   "ui",

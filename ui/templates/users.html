@@ -1,9 +1,37 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Users</h1>
+<style>
+  .user-telemetry { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; margin:1.25rem 0; }
+  .user-telemetry-panel { padding:1rem 1.1rem; }
+  .user-telemetry-panel h2 { margin:0 0 .8rem; font-size:1rem; }
+  .user-posture-row { display:grid; grid-template-columns:8rem 1fr auto; gap:.75rem; align-items:center; margin:.65rem 0; }
+  .user-posture-row a { color:inherit; text-decoration:none; font-weight:600; }
+  .user-posture-track { height:.45rem; border-radius:99px; background:var(--surface-3,#e8edf3); overflow:hidden; }
+  .user-posture-fill { height:100%; border-radius:inherit; background:var(--accent,#3b82f6); }
+  .user-posture-fill.good { background:#16a34a; } .user-posture-fill.risk { background:#dc2626; }
+  .user-posture-count { font-variant-numeric:tabular-nums; font-weight:700; }
+  .user-mfa-handoff{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:0 0 1.25rem;padding:.85rem 1rem;border:1px solid var(--border);border-radius:8px;background:var(--surface)}.user-mfa-handoff-copy{display:grid;gap:.2rem}.user-mfa-handoff-copy strong{font-size:.9rem}.user-mfa-handoff-copy small{color:var(--text-dim)}
+  @media (max-width:760px) { .user-telemetry { grid-template-columns:1fr; } .user-posture-row { grid-template-columns:7rem 1fr auto; } }
+</style>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / identity</div><h1>Users</h1><p class="page-description">Manage workspace membership and role boundaries. Every role change and removal is recorded for review.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/security/sessions">Active sessions</a><a class="btn btn-secondary" href="/security/permissions">Permissions reference &rarr;</a></div></div>
 <p class="muted">Manage who can sign in to this workspace and what they're allowed to do.
 <code>Viewer</code> can read; <code>Operator</code> and above can create/update config entities;
 <code>Admin</code> can also manage users (ADR-0016).</p>
+<section class="user-telemetry" aria-label="Identity posture telemetry">
+  <div class="panel user-telemetry-panel">
+    <h2>MFA posture</h2>
+    {% for metric in posture_metrics %}{% if metric.label == "MFA enrolled" || metric.label == "MFA missing" %}
+    <div class="user-posture-row"><a href="{{ metric.href }}">{{ metric.label }}</a><div class="user-posture-track"><div class="user-posture-fill {{ metric.tone }}" style="width:{{ metric.percent }}%"></div></div><span class="user-posture-count">{{ metric.count }} <small>({{ metric.percent }}%)</small></span></div>
+    {% endif %}{% endfor %}
+  </div>
+  <div class="panel user-telemetry-panel">
+    <h2>Role distribution</h2>
+    {% for metric in posture_metrics %}{% if metric.label == "Admins" || metric.label == "Operators" %}
+    <div class="user-posture-row"><a href="{{ metric.href }}">{{ metric.label }}</a><div class="user-posture-track"><div class="user-posture-fill" style="width:{{ metric.percent }}%"></div></div><span class="user-posture-count">{{ metric.count }} <small>({{ metric.percent }}%)</small></span></div>
+    {% endif %}{% endfor %}
+  </div>
+</section>
+<section class="user-mfa-handoff" aria-label="Current session MFA setup"><div class="user-mfa-handoff-copy"><span class="detail-label">Current principal</span><strong>{% if current_mfa_enabled %}MFA protects this session{% else %}MFA enrollment is still required{% endif %}</strong><small>Manage your authenticator without leaving the identity console.</small></div><span class="pill {% if current_mfa_enabled %}pill-up{% else %}pill-down{% endif %}">{% if current_mfa_enabled %}enrolled{% else %}not enrolled{% endif %}</span><a class="btn {% if current_mfa_enabled %}btn-secondary{% endif %}" href="/security/mfa">{% if current_mfa_enabled %}Manage MFA{% else %}Enroll MFA &rarr;{% endif %}</a></section>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
 <div class="panel">
@@ -30,17 +58,21 @@
 <form class="inline" method="get" action="/users" style="margin-bottom:1rem;">
   <label for="q">Search</label>
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by username&hellip;">
+  <label for="role-filter">Role</label>
+  <select id="role-filter" name="role"><option value="" {% if role.is_empty() %}selected{% endif %}>All roles</option><option value="admin" {% if role == "admin" %}selected{% endif %}>Administrators</option><option value="operator" {% if role == "operator" %}selected{% endif %}>Operators</option><option value="viewer" {% if role == "viewer" %}selected{% endif %}>Viewers</option></select>
+  <label for="mfa">MFA posture</label>
+  <select id="mfa" name="mfa"><option value="" {% if mfa.is_empty() %}selected{% endif %}>All</option><option value="enrolled" {% if mfa == "enrolled" %}selected{% endif %}>Enrolled</option><option value="missing" {% if mfa == "missing" %}selected{% endif %}>Not enrolled</option></select>
   <button type="submit">Search</button>
-  {% if !q.is_empty() %}<a href="/users" class="btn-link">Clear</a>{% endif %}
+  {% if !q.is_empty() || !mfa.is_empty() || !role.is_empty() %}<a href="/users" class="btn-link">Clear</a>{% endif %}
 </form>
 
 {% if users.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#128100;</div>
-  {% if q.is_empty() %}
+  {% if q.is_empty() && mfa.is_empty() && role.is_empty() %}
   <p>No users configured yet for this tenant.</p>
   {% else %}
-  <p>No users match &ldquo;{{ q }}&rdquo;.</p>
+  <p>No users match the current identity filters.</p>
   {% endif %}
 </div>
 {% else %}
@@ -54,16 +86,16 @@
     <tr>
       <th scope="col"></th>
       <th scope="col">
-        <a href="/users?q={{ q|urlencode }}&sort=username&dir={% if sort == "username" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/users?q={{ q|urlencode }}&mfa={{ mfa|urlencode }}&role={{ role|urlencode }}&sort=username&dir={% if sort == "username" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Username{% if sort == "username" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">
-        <a href="/users?q={{ q|urlencode }}&sort=role&dir={% if sort == "role" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/users?q={{ q|urlencode }}&mfa={{ mfa|urlencode }}&role={{ role|urlencode }}&sort=role&dir={% if sort == "role" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Role{% if sort == "role" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
-      <th scope="col"></th><th scope="col"></th><th scope="col"></th>
+      <th scope="col">MFA</th><th scope="col"></th><th scope="col"></th><th scope="col"></th>
     </tr>
   </thead>
   <tbody>
@@ -74,7 +106,7 @@
         <input type="checkbox" name="ids" value="{{ user.id }}" form="bulk-delete-form" aria-label="Select {{ user.username }} for bulk removal">
         {% endif %}
       </td>
-      <td>{{ user.username }}</td>
+      <td><a href="/users/{{ user.id }}">{{ user.username }}</a>{% if user.is_current %} <span class="pill">current</span>{% endif %}</td>
       <td>
         <form class="inline" method="post" action="/users/{{ user.id }}/role" style="display:inline">
           <select name="role" onchange="this.form.submit()" aria-label="Role for {{ user.username }}">
@@ -84,6 +116,7 @@
           </select>
         </form>
       </td>
+      <td><span class="pill {% if user.mfa_enabled %}pill-up{% else %}pill-down{% endif %}">{% if user.mfa_enabled %}enrolled{% else %}not enrolled{% endif %}</span></td>
       <td>
         <form class="inline" method="post" action="/users/{{ user.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this user? This cannot be undone.');">
           <button type="submit" class="btn-danger" {% if user.is_current %}disabled title="you can't remove yourself" aria-label="Remove -- you can't remove yourself"{% endif %}>Remove</button>
@@ -95,6 +128,14 @@
     {% endfor %}
   </tbody>
 </table>
-<p><button type="submit" form="bulk-delete-form" class="btn-danger">Remove selected</button></p>
+<p class="inline">
+  <button type="submit" form="bulk-delete-form" class="btn-danger">Remove selected</button>
+  <select name="role" form="bulk-delete-form" aria-label="Role to apply to selected users">
+    <option value="viewer">Viewer</option>
+    <option value="operator">Operator</option>
+    <option value="admin">Admin</option>
+  </select>
+  <button type="submit" formaction="/users/bulk-role" form="bulk-delete-form" onclick="return confirm('Apply this role to the selected users?');">Apply role</button>
+</p>
 {% endif %}
 {% endblock %}

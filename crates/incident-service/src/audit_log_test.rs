@@ -22,6 +22,25 @@ impl AuditLogReader for InMemoryAuditLogReader {
             .cloned()
             .collect())
     }
+
+    async fn list_recent(
+        &self,
+        tenant_id: Uuid,
+        limit: u32,
+        before: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, AuditLogError> {
+        let mut entries: Vec<_> = self
+            .entries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| e.tenant_id == tenant_id && before.map_or(true, |b| e.changed_at < b))
+            .cloned()
+            .collect();
+        entries.sort_by_key(|e| std::cmp::Reverse(e.changed_at));
+        entries.truncate(limit as usize);
+        Ok(entries)
+    }
 }
 
 fn sample_entry(tenant_id: Uuid, entity_id: Uuid) -> AuditLogEntry {

@@ -3,9 +3,10 @@ use kizashi_ui::{
     HttpAuthClient, HttpBacklogClient, HttpBackupStatusClient, HttpBrandingClient,
     HttpEgressAllowlistClient, HttpEventsClient, HttpExecutionClient, HttpHealthClient,
     HttpIncidentsClient, HttpIngestionStatsClient, HttpLoginAttemptsClient, HttpMfaClient,
-    HttpNormalizationMappingsClient, HttpOidcClient, HttpRetentionPoliciesClient,
-    HttpSavedSearchQueriesClient, HttpSensorsClient, HttpTriggersClient, HttpUsersClient,
-    InMemoryPendingOidcFlowStore, InMemorySessionStore, IngestionGatewayApiKeyAuditLogClient,
+    HttpNormalizationMappingsClient, HttpOidcClient, HttpOntologyClient,
+    HttpRetentionPoliciesClient, HttpSavedSearchQueriesClient, HttpSensorsClient,
+    HttpTriggersClient, HttpUsersClient, InMemoryPendingOidcFlowStore, InMemorySessionStore,
+    IngestionGatewayApiKeyAuditLogClient,
 };
 use std::sync::Arc;
 
@@ -23,6 +24,10 @@ async fn main() {
         std::env::var("OBSERVABILITY_URL").expect("OBSERVABILITY_URL must be set");
     let ingestion_service_url =
         std::env::var("INGESTION_SERVICE_URL").expect("INGESTION_SERVICE_URL must be set");
+    let normalization_service_url =
+        std::env::var("NORMALIZATION_SERVICE_URL").expect("NORMALIZATION_SERVICE_URL must be set");
+    let analysis_service_url =
+        std::env::var("ANALYSIS_SERVICE_URL").expect("ANALYSIS_SERVICE_URL must be set");
     let ingestion_gateway_public_url = std::env::var("INGESTION_GATEWAY_PUBLIC_URL")
         .unwrap_or_else(|_| "http://localhost:8081".to_string());
     let ingestion_gateway_url =
@@ -65,6 +70,16 @@ async fn main() {
         .default_headers(default_headers)
         .build()
         .expect("failed to build reqwest client");
+    kizashi_ui::initialize_ontology_client(Arc::new(HttpOntologyClient::new(
+        client.clone(),
+        query_gateway_url.clone(),
+    )));
+    let execution_client = HttpExecutionClient::new(client.clone(), action_executor_url)
+        .with_dead_letter_services(vec![
+            ("normalization-service", normalization_service_url),
+            ("analysis-service", analysis_service_url),
+            ("trigger-engine", trigger_engine_url.clone()),
+        ]);
     let state = AppState {
         session_store: Arc::new(InMemorySessionStore::with_idle_timeout(
             chrono::Duration::minutes(session_idle_timeout_minutes),
@@ -98,7 +113,7 @@ async fn main() {
             client.clone(),
             ingestion_service_url,
         )),
-        execution_client: Arc::new(HttpExecutionClient::new(client.clone(), action_executor_url)),
+        execution_client: Arc::new(execution_client),
         analysis_config_client: Arc::new(HttpAnalysisConfigClient::new(
             client.clone(),
             config_admin_service_url.clone(),
@@ -145,12 +160,11 @@ async fn main() {
         )),
         users_client: Arc::new(HttpUsersClient::new(client.clone(), auth_service_url)),
         saved_search_queries_client: Arc::new(HttpSavedSearchQueriesClient::new(
-            client,
+            client.clone(),
             config_admin_service_url,
         )),
         ingestion_gateway_public_url,
     };
-
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "kizashi-ui listening");
     axum::serve(listener, build_router(state)).await.expect("server error");

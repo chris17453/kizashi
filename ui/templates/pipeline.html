@@ -1,22 +1,49 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Pipeline Map</h1>
-<p class="muted">Live topology of the ingest &rarr; normalize &rarr; analyze &rarr; trigger &rarr; act
-chain, with per-stage health and per-hop queue backlog.</p>
+<div class="page-header"><div><div class="page-kicker">System topology</div><h1>Pipeline Map</h1><p class="page-description">Live topology of the ingest &rarr; normalize &rarr; analyze &rarr; trigger &rarr; act chain, with per-stage health and per-hop queue backlog. Select a stage or queue to open its control surface.</p></div><div class="quick-actions"><span class="console-live" data-pipeline-live-status>Live refresh paused</span><button type="button" class="btn btn-secondary" data-pipeline-refresh-now>Refresh now</button><button type="button" class="btn btn-secondary" data-pipeline-toggle-live>Enable live mode</button><a class="btn btn-secondary" href="/health">Platform health</a><a class="btn btn-secondary" href="/configuration">Control center &rarr;</a></div></div>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+<style>
+  .pipeline-pressure-posture { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.6rem; margin:0 0 1.25rem; }
+  .pipeline-pressure-card { display:grid; gap:.15rem; padding:.7rem .8rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .pipeline-pressure-card strong { font:700 1.35rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .pipeline-pressure-card small { color:var(--text-dim); font-size:.7rem; }
+  .pipeline-pressure-map { display:grid; gap:.45rem; margin-bottom:1.5rem; }
+  .pipeline-pressure-row { display:grid; grid-template-columns:minmax(150px,.8fr) minmax(120px,2fr) 60px; align-items:center; gap:.65rem; padding:.45rem .6rem; border:1px solid var(--border-subtle); border-radius:6px; background:var(--surface); text-decoration:none; color:var(--text); }
+  .pipeline-pressure-row:hover { border-color:var(--accent); background:var(--surface-hover); text-decoration:none; }
+  .pipeline-pressure-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; }
+  .pipeline-pressure-track { height:.55rem; overflow:hidden; border-radius:99px; background:var(--surface-raised); }
+  .pipeline-pressure-fill { height:100%; min-width:2px; border-radius:inherit; background:var(--accent); }
+  .pipeline-pressure-fill.warn { background:var(--warning); } .pipeline-pressure-fill.critical { background:var(--danger); }
+  .pipeline-pressure-row strong { text-align:right; font:700 .75rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  @media(max-width:700px){.pipeline-pressure-posture{grid-template-columns:1fr 1fr}.pipeline-pressure-row{grid-template-columns:1fr 60px}.pipeline-pressure-track{grid-column:1 / -1;grid-row:2}}
+</style>
+
+<div class="kpi-grid pipeline-kpis">
+  <div class="kpi-card kpi-accent"><div class="kpi-label">Connectors</div><div class="kpi-value">{{ connector_count }}</div><div class="kpi-sub">registered sources</div></div>
+  <div class="kpi-card"><div class="kpi-label">Records</div><div class="kpi-value">{{ record_count }}</div><div class="kpi-sub">ingested across sources</div></div>
+  <div class="kpi-card"><div class="kpi-label">Signals</div><div class="kpi-value">{{ event_count }}</div><div class="kpi-sub">events generated</div></div>
+  <div class="kpi-card {% if open_incident_count > 0 %}kpi-danger{% else %}kpi-success{% endif %}"><div class="kpi-label">Cases</div><div class="kpi-value">{{ open_incident_count }}</div><div class="kpi-sub">open incidents</div></div>
+  <div class="kpi-card kpi-accent"><div class="kpi-label">Detection</div><div class="kpi-value">{{ trigger_count }}</div><div class="kpi-sub">active triggers</div></div>
+</div>
+
+<section class="pipeline-pressure-posture" aria-label="Pipeline pressure posture">
+  <div class="pipeline-pressure-card"><span class="detail-label">Queued total</span><strong>{{ queue_total }}</strong><small>messages across stage boundaries</small></div>
+  <div class="pipeline-pressure-card"><span class="detail-label">Critical queues</span><strong>{{ critical_queue_count }}</strong><small>immediate operator attention</small></div>
+  <div class="pipeline-pressure-card"><span class="detail-label">Peak boundary</span><strong>{{ max_queue }}</strong><small>highest single-hop backlog</small></div>
+</section>
 
 {% if !items.is_empty() %}
 <div class="topology-frame">
   <div class="topology">
     {% for item in items %}
     {% match item %}
-      {% when TopologyItem::Stage with { label, status } %}
-      <div class="topology-node node-{{ status }}">
+      {% when TopologyItem::Stage with { label, href, status } %}
+      <a class="topology-node node-{{ status }}" href="{{ href }}" title="Open {{ label }} control surface">
         <div><span class="node-dot"></span><span class="node-label">{{ label }}</span></div>
         <div class="node-status">{{ status }}</div>
-      </div>
-      {% when TopologyItem::Edge with { label, messages, severity, severity_label } %}
-      <div class="topology-edge edge-{{ severity }}">
+      </a>
+      {% when TopologyItem::Edge with { label, href, messages, severity, severity_label } %}
+      <a class="topology-edge edge-{{ severity }}" href="{{ href }}" title="Open {{ label }} downstream control surface">
         <div class="edge-line"></div>
         <span class="edge-label">{{ label }}</span>
         {% if let Some(count) = messages %}
@@ -28,7 +55,7 @@ chain, with per-stage health and per-hop queue backlog.</p>
            color-blind user or in a contrast-stripped view -- this makes it a visible word too,
            matching the legend's wording below. #}
         <span class="edge-severity-label muted">({{ severity_label }})</span>
-      </div>
+      </a>
     {% endmatch %}
     {% endfor %}
   </div>
@@ -41,4 +68,33 @@ chain, with per-stage health and per-hop queue backlog.</p>
   </div>
 </div>
 {% endif %}
+<div class="section-heading"><div><div class="section-title">Pressure distribution</div><p class="muted">Relative queue load is normalized to the busiest pipeline boundary.</p></div></div>
+<form class="inline" method="get" action="/pipeline" style="margin-bottom:1rem;"><label for="pipeline-severity">Queue pressure</label><select id="pipeline-severity" name="severity"><option value=""{% if severity.is_empty() %} selected{% endif %}>All states</option><option value="critical"{% if severity == "critical" %} selected{% endif %}>Critical</option><option value="warn"{% if severity == "warn" %} selected{% endif %}>Warning</option><option value="ok"{% if severity == "ok" %} selected{% endif %}>Nominal</option></select><button type="submit">Filter queues</button>{% if !severity.is_empty() %}<a class="btn-link" href="/pipeline">Clear</a>{% endif %}</form>
+<div class="pipeline-pressure-map" aria-label="Pipeline queue pressure distribution">{% for queue in queues %}<a class="pipeline-pressure-row" href="{{ queue.href }}"><span class="pipeline-pressure-label">{{ queue.label }} · {{ queue.queue_name }}</span><span class="pipeline-pressure-track"><span class="pipeline-pressure-fill {{ queue.severity }}" style="width:{{ queue.pressure_pct }}%"></span></span><strong>{{ queue.messages }}</strong></a>{% endfor %}</div>
+<div class="section-heading"><div class="section-title">Stage diagnostics</div><span class="muted">Runtime health and operator controls</span></div>
+<div class="pipeline-stage-grid">{% for stage in stages %}<a class="pipeline-stage-card" href="{{ stage.href }}"><span class="pipeline-stage-status status-{{ stage.status }}"></span><span><strong>{{ stage.label }}</strong><small>{{ stage.service }} · {{ stage.status }}</small></span><span class="type-chevron">›</span></a>{% endfor %}</div>
+
+<div class="section-heading"><div class="section-title">Queue pressure</div>{% if let Some(e) = backlog_error %}<span class="error-inline">{{ e }}</span>{% else %}<span class="muted">Observed between pipeline stages</span>{% endif %}</div>
+<div class="pipeline-queue-grid">{% for queue in queues %}<a class="pipeline-queue-card queue-{{ queue.severity }}" href="{{ queue.href }}" title="Open {{ queue.label }} control surface"><div><div class="detail-label">{{ queue.label }}</div><strong>{{ queue.messages }}</strong><small>{{ queue.queue_name }}</small></div><span class="pill {% if queue.severity == "critical" %}pill-down{% else if queue.severity == "warn" %}pill-muted{% else %}pill-up{% endif %}">{{ queue.severity_label }} &rarr;</span></a>{% endfor %}</div>
+<script>
+  (function () {
+    var key = 'kizashi.pipeline.live-refresh';
+    var status = document.querySelector('[data-pipeline-live-status]');
+    var toggle = document.querySelector('[data-pipeline-toggle-live]');
+    var refresh = document.querySelector('[data-pipeline-refresh-now]');
+    var enabled = false;
+    try { enabled = window.localStorage.getItem(key) === 'on'; } catch (_) {}
+    function render() {
+      if (status) status.textContent = enabled ? 'Live · 30s refresh' : 'Live refresh paused';
+      if (toggle) { toggle.textContent = enabled ? 'Pause live mode' : 'Enable live mode'; toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false'); }
+    }
+    if (refresh) refresh.addEventListener('click', function () { window.location.reload(); });
+    if (toggle) toggle.addEventListener('click', function () { enabled = !enabled; try { window.localStorage.setItem(key, enabled ? 'on' : 'off'); } catch (_) {} render(); });
+    render();
+    if (enabled) window.setTimeout(function () { window.location.reload(); }, 30000);
+  }());
+</script>
+<style>
+  .legend-dot { background:var(--warning) !important; }
+</style>
 {% endblock %}

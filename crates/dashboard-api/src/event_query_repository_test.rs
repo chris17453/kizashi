@@ -31,6 +31,20 @@ impl EventQueryRepository for InMemoryEventQueryRepository {
             .filter(|e| filter.since.is_none_or(|s| e.occurred_at >= s))
             .filter(|e| filter.until.is_none_or(|u| e.occurred_at <= u))
             .filter(|e| filter.record_id.is_none_or(|r| e.record_ids.contains(&r)))
+            .filter(|e| {
+                filter.search.as_deref().is_none_or(|search| {
+                    let search = search.to_ascii_lowercase();
+                    e.event_type.to_ascii_lowercase().contains(&search)
+                        || e.group_key.to_ascii_lowercase().contains(&search)
+                        || match e.status {
+                            common::EventStatus::New => "new",
+                            common::EventStatus::Triggered => "triggered",
+                            common::EventStatus::Actioned => "actioned",
+                            common::EventStatus::Dismissed => "dismissed",
+                        }
+                        .contains(&search)
+                })
+            })
             .cloned()
             .collect();
         matching.sort_by_key(|e| std::cmp::Reverse(e.occurred_at));
@@ -47,6 +61,23 @@ impl EventQueryRepository for InMemoryEventQueryRepository {
             .iter()
             .find(|e| e.tenant_id == tenant_id && e.id == id)
             .cloned())
+    }
+
+    async fn update_event_status(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        _from_status: common::EventStatus,
+        status: common::EventStatus,
+        _actor: &str,
+    ) -> Result<(), QueryError> {
+        let mut events = self.events.lock().unwrap();
+        let event = events
+            .iter_mut()
+            .find(|event| event.tenant_id == tenant_id && event.id == id)
+            .ok_or_else(|| QueryError::Rejected(404, "event not found".to_string()))?;
+        event.status = status;
+        Ok(())
     }
 
     async fn count_by_day(

@@ -13,10 +13,59 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::get;
 use axum::Router;
-use common::Role;
+use common::{Incident, IncidentSeverity, IncidentStatus, Role};
 use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
+
+#[test]
+fn signal_heatmap_scales_cells_to_the_busiest_day() {
+    let cells = build_signal_heatmap(&[
+        crate::events_client::DailyCount { date: "2026-07-21".into(), count: 2 },
+        crate::events_client::DailyCount { date: "2026-07-22".into(), count: 8 },
+    ]);
+    assert_eq!(cells.iter().filter(|cell| !cell.blank).count(), 2);
+    assert_eq!(cells[1].intensity, 1);
+    assert_eq!(cells[2].intensity, 4);
+    assert_eq!(cells[2].count, 8);
+}
+
+#[test]
+fn overview_exposes_a_linked_attention_posture() {
+    let template = include_str!("../templates/overview.html");
+    assert!(template.contains("Attention posture"));
+    assert!(template.contains("overview-attention-card"));
+    assert!(template.contains("/incidents?sla=breached"));
+    assert!(template.contains("/actions?outcome=review"));
+    assert!(template.contains("Review posture"));
+    assert!(template.contains("/actions?review=stale"));
+    assert!(template.contains("/ontology?risk={{ metric.key }}"));
+}
+
+#[test]
+fn overview_exposes_an_executive_operating_brief() {
+    let template = include_str!("../templates/overview.html");
+    assert!(template.contains("Operating brief"));
+    assert!(template.contains("Signal velocity"));
+    assert!(template.contains("Ownership coverage"));
+    assert!(template.contains("Response readiness"));
+    assert!(template.contains("/work?focus=review"));
+    assert!(template.contains("Data readiness"));
+    assert!(template.contains("normalized_records"));
+    assert!(template.contains("/data?normalized=false"));
+}
+
+#[test]
+fn signal_trend_chart_preserves_daily_drillthroughs() {
+    let chart = signal_trend_chart_json(&[
+        crate::events_client::DailyCount { date: "2026-07-18".into(), count: 3 },
+        crate::events_client::DailyCount { date: "2026-07-19".into(), count: 0 },
+    ]);
+    let value: serde_json::Value = serde_json::from_str(&chart).expect("valid chart JSON");
+    assert_eq!(value["labels"][0], "2026-07-18");
+    assert_eq!(value["values"][1], 0);
+    assert_eq!(value["hrefs"][0], "/events?from=2026-07-18&to=2026-07-18");
+}
 
 fn router(state: AppState) -> Router {
     Router::new().route("/overview", get(get_overview)).with_state(state)
@@ -141,6 +190,12 @@ async fn renders_kpi_cards_reflecting_real_data_when_signed_in() {
     assert!(body.contains("1 active")); // only support-poller has matching stats
     assert!(body.contains(">42<")); // total_records
     assert!(body.contains("1/2 services up"));
+    assert!(body.contains("data-overview-live-status"));
+    assert!(body.contains("data-overview-refresh"));
+    assert!(body.contains("data-overview-toggle-live"));
+    assert!(body.contains("kizashi.overview.live-refresh"));
+    assert!(!body.contains("critical · <a href=\"/incidents\">"));
+    assert!(!body.contains("needs review · <a href=\"/actions\">"));
 }
 
 #[tokio::test]
@@ -203,6 +258,66 @@ async fn shows_an_empty_state_for_recent_activity_when_there_are_no_events() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("No recent activity"));
+}
+
+#[tokio::test]
+async fn decision_queue_excludes_resolved_cases_and_prioritizes_critical_work() {
+    let (mut state, session_id, tenant_id) = state_with_session().await;
+    let incidents_client = Arc::new(
+        crate::incidents_client::incidents_client_test::InMemoryIncidentsClient::default(),
+    );
+    let now = chrono::Utc::now();
+    incidents_client.incidents.lock().unwrap().extend([
+        crate::IncidentDetail {
+            incident: Incident {
+                id: Uuid::new_v4(),
+                tenant_id,
+                title: "resolved case".into(),
+                summary: String::new(),
+                severity: IncidentSeverity::Critical,
+                status: IncidentStatus::Resolved,
+                assigned_to: None,
+                created_at: now,
+                updated_at: now,
+                resolved_at: Some(now),
+            },
+            event_ids: vec![],
+            notes: vec![],
+        },
+        crate::IncidentDetail {
+            incident: Incident {
+                id: Uuid::new_v4(),
+                tenant_id,
+                title: "open critical case".into(),
+                summary: String::new(),
+                severity: IncidentSeverity::Critical,
+                status: IncidentStatus::Open,
+                assigned_to: None,
+                created_at: now,
+                updated_at: now,
+                resolved_at: None,
+            },
+            event_ids: vec![],
+            notes: vec![],
+        },
+    ]);
+    state.incidents_client = incidents_client;
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/overview")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("open critical case"));
+    assert!(!body.contains("resolved case"));
 }
 
 #[tokio::test]
@@ -296,4 +411,13 @@ async fn redirects_to_login_when_not_signed_in() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[test]
+fn overview_governed_decisions_link_to_modeled_targets() {
+    let source = include_str!("overview_handler.rs");
+    assert!(source.contains("struct OverviewActionTarget"));
+    let template = include_str!("../templates/overview.html");
+    assert!(template.contains("/ontology?object_id={{ target.id }}#object-{{ target.id }}"));
+    assert!(template.contains("action.targets.is_empty()"));
 }

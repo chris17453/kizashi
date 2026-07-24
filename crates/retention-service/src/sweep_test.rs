@@ -1,8 +1,10 @@
 use super::*;
 use crate::archive_store::archive_store_test::{FailingArchiveStore, InMemoryArchiveStore};
+use crate::compliance_hold::compliance_hold_test::InMemoryComplianceHoldRepository;
 use crate::raw_record_client::raw_record_client_test::InMemoryRawRecordClient;
 use crate::retention_policy::retention_policy_test::InMemoryRetentionPolicyRepository;
 use crate::retention_policy::RetentionPolicy;
+use crate::ComplianceHold;
 use common::{RawRecord, SourceType};
 use uuid::Uuid;
 
@@ -42,6 +44,7 @@ async fn archives_and_deletes_records_older_than_the_policy_ttl_but_leaves_recen
         policy_repository,
         record_client: record_client.clone(),
         archive_store: archive_store.clone(),
+        hold_repository: None,
     };
 
     let summary = sweep(&state, now, 100).await.unwrap();
@@ -53,6 +56,38 @@ async fn archives_and_deletes_records_older_than_the_policy_ttl_but_leaves_recen
 
     let (_, archived) = archive_store.read_batch(&summary.batches_written[0]).await.unwrap();
     assert_eq!(archived, vec![old]);
+}
+
+#[tokio::test]
+async fn active_compliance_hold_prevents_archive_and_delete() {
+    let now = Utc::now();
+    let tenant_id = Uuid::new_v4();
+    let record = record_ingested_at(tenant_id, now - chrono::Duration::days(200));
+    let record_client = Arc::new(InMemoryRawRecordClient::default());
+    record_client.records.lock().unwrap().push(record);
+    let holds = Arc::new(InMemoryComplianceHoldRepository::default());
+    holds.holds.lock().unwrap().push(ComplianceHold {
+        id: Uuid::new_v4(),
+        tenant_id,
+        data_class: DataClass::Raw,
+        reason: "legal review".into(),
+        active: true,
+        created_by: "legal".into(),
+        created_at: now,
+        released_at: None,
+    });
+    let state = SweepState {
+        policy_repository: Arc::new(InMemoryRetentionPolicyRepository::with_policy(raw_policy(
+            tenant_id, 90,
+        ))),
+        record_client: record_client.clone(),
+        archive_store: Arc::new(InMemoryArchiveStore::default()),
+        hold_repository: Some(holds),
+    };
+    let summary = sweep(&state, now, 100).await.unwrap();
+    assert_eq!(summary.records_archived, 0);
+    assert_eq!(record_client.deleted.lock().unwrap().len(), 0);
+    assert_eq!(record_client.records.lock().unwrap().len(), 1);
 }
 
 #[tokio::test]
@@ -71,8 +106,12 @@ async fn disabled_policies_are_not_swept() {
 
     let policy_repository = Arc::new(InMemoryRetentionPolicyRepository::with_policy(policy));
     let archive_store = Arc::new(InMemoryArchiveStore::default());
-    let state =
-        SweepState { policy_repository, record_client: record_client.clone(), archive_store };
+    let state = SweepState {
+        policy_repository,
+        record_client: record_client.clone(),
+        archive_store,
+        hold_repository: None,
+    };
 
     let summary = sweep(&state, now, 100).await.unwrap();
 
@@ -96,8 +135,12 @@ async fn non_raw_data_classes_are_not_swept_in_v1() {
 
     let policy_repository = Arc::new(InMemoryRetentionPolicyRepository::with_policy(policy));
     let archive_store = Arc::new(InMemoryArchiveStore::default());
-    let state =
-        SweepState { policy_repository, record_client: record_client.clone(), archive_store };
+    let state = SweepState {
+        policy_repository,
+        record_client: record_client.clone(),
+        archive_store,
+        hold_repository: None,
+    };
 
     let summary = sweep(&state, now, 100).await.unwrap();
 
@@ -121,8 +164,12 @@ async fn pages_through_more_records_than_the_batch_limit() {
     let policy_repository =
         Arc::new(InMemoryRetentionPolicyRepository::with_policy(raw_policy(tenant_id, 90)));
     let archive_store = Arc::new(InMemoryArchiveStore::default());
-    let state =
-        SweepState { policy_repository, record_client: record_client.clone(), archive_store };
+    let state = SweepState {
+        policy_repository,
+        record_client: record_client.clone(),
+        archive_store,
+        hold_repository: None,
+    };
 
     let summary = sweep(&state, now, 2).await.unwrap();
 
@@ -145,8 +192,12 @@ async fn archive_failure_stops_that_policys_sweep_without_deleting() {
     let policy_repository =
         Arc::new(InMemoryRetentionPolicyRepository::with_policy(raw_policy(tenant_id, 90)));
     let archive_store = Arc::new(FailingArchiveStore);
-    let state =
-        SweepState { policy_repository, record_client: record_client.clone(), archive_store };
+    let state = SweepState {
+        policy_repository,
+        record_client: record_client.clone(),
+        archive_store,
+        hold_repository: None,
+    };
 
     let summary = sweep(&state, now, 100).await.unwrap();
 

@@ -1,21 +1,70 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Audit Log</h1>
+<style>
+  .audit-posture { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin:0 0 1.25rem; }
+  .audit-posture-panel { padding:1rem; }
+  .audit-posture-panel h2 { margin:0 0 .25rem; font-size:1rem; }
+  .audit-posture-list { display:grid; gap:.65rem; margin-top:1rem; }
+  .audit-posture-row { display:grid; grid-template-columns:minmax(8rem, .9fr) 1fr auto; gap:.65rem; align-items:center; color:var(--text); text-decoration:none; }
+  .audit-posture-row:hover { color:var(--accent); text-decoration:none; }
+  .audit-posture-track { height:.55rem; overflow:hidden; border-radius:99px; background:var(--surface-3,#e8edf3); }
+  .audit-posture-fill { height:100%; border-radius:inherit; background:#4d82b6; }
+  .audit-posture-fill.accent { background:#16a34a; }
+  .audit-posture-count { font:700 .8rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .audit-timeline { display:flex; align-items:flex-end; gap:.5rem; min-height:175px; overflow-x:auto; padding:1rem .55rem .3rem; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+  .audit-timeline-day { display:grid; gap:.3rem; min-width:3.8rem; height:145px; align-content:end; }
+  .audit-timeline-stack { display:flex; flex-direction:column; justify-content:flex-end; height:100%; }
+  .audit-timeline-stack a { display:block; min-height:2px; opacity:.92; }
+  .audit-timeline-stack a:hover { opacity:1; outline:1px solid var(--text); }
+  .audit-timeline-config { background:#4d82b6; } .audit-timeline-retention { background:#8b6fc3; }
+  .audit-timeline-auth { background:#d39b4a; } .audit-timeline-incident { background:#d26170; }
+  .audit-timeline-ontology { background:#42a77e; }
+  .audit-timeline-label { color:var(--text-dim); font-size:.64rem; white-space:nowrap; }
+  .audit-timeline-total { color:var(--text); font-size:.68rem; font-weight:700; text-align:center; }
+  .audit-timeline-legend { display:flex; flex-wrap:wrap; gap:.8rem; margin-top:.65rem; color:var(--text-dim); font-size:.72rem; }
+  .audit-timeline-legend span::before { content:''; display:inline-block; width:.55rem; height:.55rem; margin-right:.28rem; border-radius:2px; background:#4d82b6; }
+  .audit-timeline-legend .retention::before { background:#8b6fc3; } .audit-timeline-legend .auth::before { background:#d39b4a; }
+  .audit-timeline-legend .incident::before { background:#d26170; } .audit-timeline-legend .ontology::before { background:#42a77e; }
+  @media(max-width:760px){.audit-posture{grid-template-columns:1fr}.audit-posture-row{grid-template-columns:7rem 1fr auto}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / evidence</div><h1>Audit Log</h1><p class="page-description">Immutable workspace activity across configuration, access, retention, governed actions, incidents, and outbound controls.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/security/compliance-report">Compliance snapshot</a><a class="btn btn-secondary" href="/audit-log/export.csv?q={{ q|urlencode }}&service={{ service|urlencode }}&change_type={{ change_type|urlencode }}&date={{ date|urlencode }}">Export filtered CSV &rarr;</a></div></div>
 <p class="muted">Every admin/config change across this workspace — sensors, triggers, field
-mappings, AI analysis config, retention policies, users, and branding — most recent first. Each
+mappings, AI analysis config, retention policies, users, branding, incident changes, and governed
+actions — most recent first. Each
 row is an immutable database record, written in the same transaction as the change itself, and
 never editable or deletable, even by an admin. Drill into a specific record's own page for its
 full before/after diff.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
-<p><a href="/audit-log/export.csv" class="btn-link">Download CSV &#8595;</a></p>
+<p><a href="/audit-log/export.csv?q={{ q|urlencode }}&service={{ service|urlencode }}&change_type={{ change_type|urlencode }}&date={{ date|urlencode }}" class="btn-link">Download filtered CSV &#8595;</a>{% if !date.is_empty() %} <span class="pill pill-muted">Day: {{ date }}</span> <a href="/audit-log?q={{ q|urlencode }}&service={{ service|urlencode }}&change_type={{ change_type|urlencode }}" class="btn-link">Clear day</a>{% endif %}</p>
 
-<form class="inline" method="get" action="/audit-log" style="margin-bottom:1rem;">
+<form class="inline audit-filter-form" method="get" action="/audit-log" style="margin-bottom:1rem;">
   <label for="q">Search</label>
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by actor, entity, or change&hellip;">
-  <button type="submit">Search</button>
-  {% if !q.is_empty() %}<a href="/audit-log" class="btn-link">Clear</a>{% endif %}
+  <label for="audit-service">Source</label>
+  <select id="audit-service" name="service"><option value="">All services</option><option value="config-admin-service"{% if service == "config-admin-service" %} selected{% endif %}>Config/Admin</option><option value="retention-service"{% if service == "retention-service" %} selected{% endif %}>Retention</option><option value="auth-service"{% if service == "auth-service" %} selected{% endif %}>Auth</option><option value="incident-service"{% if service == "incident-service" %} selected{% endif %}>Incidents</option><option value="ontology-service"{% if service == "ontology-service" %} selected{% endif %}>Ontology</option></select>
+  <label for="audit-change">Change</label><input type="text" id="audit-change" name="change_type" value="{{ change_type }}" placeholder="created, updated...">
+  <label for="audit-date">Day</label><input type="date" id="audit-date" name="date" value="{{ date }}">
+  <button type="submit">Filter</button>
+  {% if !q.is_empty() || !service.is_empty() || !change_type.is_empty() || !date.is_empty() %}<a href="/audit-log" class="btn-link">Clear</a>{% endif %}
 </form>
+
+{% if !entries.is_empty() %}
+<section class="audit-posture" aria-label="Audit activity posture">
+  <div class="panel audit-posture-panel"><div class="page-kicker">Control-plane activity</div><h2>Activity by source</h2><p class="muted">Distribution across the currently visible evidence window.</p><div class="audit-posture-list">{% for row in service_posture %}<a class="audit-posture-row" href="/audit-log?service={{ row.label|urlencode }}&date={{ date|urlencode }}"><span>{{ row.label }}</span><span class="audit-posture-track"><span class="audit-posture-fill accent" style="width:{{ row.percentage }}%"></span></span><strong class="audit-posture-count">{{ row.count }}</strong></a>{% endfor %}</div></div>
+  <div class="panel audit-posture-panel"><div class="page-kicker">Change concentration</div><h2>Mutation types</h2><p class="muted">The most frequent change classes in this page of the audit ledger.</p><div class="audit-posture-list">{% for row in change_posture %}<a class="audit-posture-row" href="/audit-log?change_type={{ row.label|urlencode }}&date={{ date|urlencode }}"><span>{{ row.label }}</span><span class="audit-posture-track"><span class="audit-posture-fill" style="width:{{ row.percentage }}%"></span></span><strong class="audit-posture-count">{{ row.count }}</strong></a>{% endfor %}</div></div>
+</section>
+{% endif %}
+
+{% if !timeline.is_empty() %}
+<section class="panel" aria-label="Audit activity timeline">
+  <div class="panel-heading"><div><h2>Control-plane activity timeline</h2><p class="muted">Daily activity in the visible audit window. Select a colored segment to isolate that owning service.</p></div><span class="pill pill-muted">{{ timeline.len() }} days · {{ entries.len() }} events</span></div>
+  <div class="audit-timeline" role="img" aria-label="Daily audit activity by service">
+    {% for day in timeline %}<div class="audit-timeline-day" title="{{ day.date }} · {{ day.total }} audit events"><span class="audit-timeline-total">{{ day.total }}</span><span class="audit-timeline-stack" style="height:{{ day.height_pct }}%"><a class="audit-timeline-ontology" style="flex:{{ day.ontology }}" href="/audit-log?service=ontology-service&date={{ day.date|urlencode }}" aria-label="{{ day.date }} ontology events"></a><a class="audit-timeline-incident" style="flex:{{ day.incident }}" href="/audit-log?service=incident-service&date={{ day.date|urlencode }}" aria-label="{{ day.date }} incident events"></a><a class="audit-timeline-auth" style="flex:{{ day.auth }}" href="/audit-log?service=auth-service&date={{ day.date|urlencode }}" aria-label="{{ day.date }} auth events"></a><a class="audit-timeline-retention" style="flex:{{ day.retention }}" href="/audit-log?service=retention-service&date={{ day.date|urlencode }}" aria-label="{{ day.date }} retention events"></a><a class="audit-timeline-config" style="flex:{{ day.config }}" href="/audit-log?service=config-admin-service&date={{ day.date|urlencode }}" aria-label="{{ day.date }} config events"></a></span><span class="audit-timeline-label">{{ day.date }}</span></div>{% endfor %}
+  </div>
+  <div class="audit-timeline-legend"><span>config/admin</span><span class="retention">retention</span><span class="auth">auth</span><span class="incident">incidents</span><span class="ontology">governed actions</span></div>
+</section>
+{% endif %}
 
 {% if entries.is_empty() %}
 <div class="empty-state">
@@ -23,31 +72,32 @@ full before/after diff.</p>
   {% if q.is_empty() %}
   <p>No audit activity yet.</p>
   {% else %}
-  <p>No audit activity on this page matches &ldquo;{{ q }}&rdquo;.</p>
+  <p>No audit activity on this page matches the current filters.</p>
   {% endif %}
 </div>
 {% else %}
 <table>
   <thead>
-    <tr><th scope="col">When</th><th scope="col">Service</th><th scope="col">Entity</th><th scope="col">Change</th><th scope="col">Actor</th></tr>
+    <tr><th scope="col">When</th><th scope="col">Service</th><th scope="col">Entity</th><th scope="col">Change</th><th scope="col">Actor</th><th scope="col">Evidence</th></tr>
   </thead>
   <tbody>
     {% for entry in entries %}
     <tr>
       <td>{{ entry.changed_at }}</td>
       <td><code>{{ entry.service }}</code></td>
-      <td>{{ entry.entity_type }}</td>
+      <td>{% if !entry.entity_href.is_empty() %}<a href="{{ entry.entity_href }}">{{ entry.entity_type }}</a>{% else %}{{ entry.entity_type }}{% endif %}</td>
       <td>{{ entry.change_type }}</td>
       <td><code>{{ entry.actor }}</code></td>
+      <td><details class="audit-evidence"><summary>Inspect diff</summary><div class="audit-evidence-meta"><span>Entity {% if !entry.entity_href.is_empty() %}<a href="{{ entry.entity_href }}"><code>{{ entry.entity_id }}</code></a>{% else %}<code>{{ entry.entity_id }}</code>{% endif %}</span><span>Entry <code>{{ entry.id }}</code></span></div><div class="audit-diff-grid"><div><div class="detail-label">Before</div><pre>{{ entry.before }}</pre></div><div><div class="detail-label">After</div><pre>{{ entry.after }}</pre></div></div></details></td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 {% if let Some(before) = next_before %}
 <p>
-  <a href="/audit-log?q={{ q|urlencode }}&before={{ before|urlencode }}">Load older &rarr;</a>
+  <a href="/audit-log?q={{ q|urlencode }}&service={{ service|urlencode }}&change_type={{ change_type|urlencode }}{% if !date.is_empty() %}&date={{ date|urlencode }}{% endif %}&before={{ before|urlencode }}">Load older &rarr;</a>
   &middot;
-  <a href="/audit-log/export.csv?before={{ before|urlencode }}" class="btn-link">Download CSV from here &#8595;</a>
+  <a href="/audit-log/export.csv?q={{ q|urlencode }}&service={{ service|urlencode }}&change_type={{ change_type|urlencode }}{% if !date.is_empty() %}&date={{ date|urlencode }}{% endif %}&before={{ before|urlencode }}" class="btn-link">Download filtered CSV from here &#8595;</a>
 </p>
 {% endif %}
 {% endif %}

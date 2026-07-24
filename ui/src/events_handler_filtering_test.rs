@@ -14,6 +14,78 @@ use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+#[test]
+fn potential_clusters_only_surface_shared_groups_with_unlinked_evidence() {
+    let first = EventRow {
+        event: EventSummary {
+            id: Uuid::new_v4(),
+            event_type: "customer.health.degraded".to_string(),
+            group_key: "Northwind Health".to_string(),
+            status: "new".to_string(),
+            occurred_at: chrono::Utc::now(),
+            record_ids: vec![],
+        },
+        incident: Some(IncidentBadge {
+            id: Uuid::new_v4(),
+            title: "Existing case".to_string(),
+            severity: "high".to_string(),
+            status: "open".to_string(),
+        }),
+    };
+    let second_id = Uuid::new_v4();
+    let second = EventRow {
+        event: EventSummary {
+            id: second_id,
+            event_type: "access.role_mapping.review".to_string(),
+            group_key: "Northwind Health".to_string(),
+            status: "new".to_string(),
+            occurred_at: chrono::Utc::now(),
+            record_ids: vec![],
+        },
+        incident: None,
+    };
+    let clusters = build_potential_clusters(&[first, second]);
+    assert_eq!(clusters.len(), 1);
+    assert_eq!(clusters[0].total_count, 2);
+    assert_eq!(clusters[0].unlinked_count, 1);
+    assert_eq!(clusters[0].unlinked_event_ids, vec![second_id]);
+}
+
+#[test]
+fn case_scope_selects_linked_and_unlinked_signals() {
+    let linked = EventRow {
+        event: EventSummary {
+            id: Uuid::new_v4(),
+            event_type: "linked".into(),
+            group_key: "g".into(),
+            status: "new".into(),
+            occurred_at: chrono::Utc::now(),
+            record_ids: vec![],
+        },
+        incident: Some(IncidentBadge {
+            id: Uuid::new_v4(),
+            title: "Case".into(),
+            severity: "high".into(),
+            status: "open".into(),
+        }),
+    };
+    let unlinked = EventRow {
+        event: EventSummary {
+            id: Uuid::new_v4(),
+            event_type: "unlinked".into(),
+            group_key: "g".into(),
+            status: "new".into(),
+            occurred_at: chrono::Utc::now(),
+            record_ids: vec![],
+        },
+        incident: None,
+    };
+    assert!(matches_case_scope(&linked, "linked"));
+    assert!(!matches_case_scope(&linked, "unlinked"));
+    assert!(matches_case_scope(&unlinked, "unlinked"));
+    assert!(matches_case_scope(&unlinked, ""));
+}
+
 fn router(state: AppState) -> Router {
     Router::new().route("/events", get(get_events)).with_state(state)
 }

@@ -1,12 +1,21 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Record Journey</h1>
-<p class="muted">Traces this record through the pipeline: what it produced, and what happened
-because of it.</p>
+<style>
+  .journey-posture { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:.6rem; margin:1rem 0 1.25rem; }
+  .journey-posture-card { display:grid; gap:.2rem; padding:.75rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .journey-posture-card strong { font:700 1.35rem ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); }
+  .journey-posture-card small { color:var(--text-dim); }
+  .journey-timing{display:grid;gap:.55rem;margin:0 0 1.25rem}.journey-timing-row{display:grid;grid-template-columns:minmax(10rem,1fr) minmax(10rem,2fr) minmax(6rem,.7fr);gap:.7rem;align-items:center;padding:.55rem .65rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface);text-decoration:none;color:var(--text)}.journey-timing-row:hover{border-color:var(--accent);text-decoration:none}.journey-timing-label{display:grid;gap:.15rem;min-width:0}.journey-timing-label strong,.journey-timing-label small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.journey-timing-label small{color:var(--text-dim)}.journey-timing-track{height:.7rem;overflow:hidden;border-radius:99px;background:var(--surface-raised)}.journey-timing-fill{display:block;height:100%;min-width:5px;border-radius:inherit;background:linear-gradient(90deg,#4d82b6,#65c4aa)}.journey-timing-fill.failure{background:linear-gradient(90deg,#b95d68,#e39a78)}.journey-timing-time{color:var(--text-dim);font-size:.72rem;text-align:right;white-space:nowrap}.journey-timing-legend{display:flex;gap:1rem;margin-top:.55rem;color:var(--text-dim);font-size:.72rem}.journey-timing-legend span::before{content:'';display:inline-block;width:.55rem;height:.55rem;border-radius:2px;margin-right:.3rem;background:#65c4aa}.journey-timing-legend .failure::before{background:#d47772}@media(max-width:700px){.journey-timing-row{grid-template-columns:1fr;gap:.35rem}.journey-timing-time{text-align:left}}
+  .journey-handoff{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:.7rem;margin:0 0 1.25rem}.journey-handoff-card{display:grid;gap:.55rem;padding:.85rem;border:1px solid var(--border-subtle);border-radius:8px;background:var(--surface)}.journey-handoff-card h2{margin:0;font-size:.95rem}.journey-handoff-card p{margin:0;color:var(--text-dim);font-size:.78rem}.journey-handoff-card form{display:flex;gap:.5rem;align-items:end;flex-wrap:wrap}.journey-handoff-card label{display:grid;gap:.25rem;flex:1;min-width:12rem;font-size:.7rem;color:var(--text-dim)}.journey-handoff-card select{width:100%}@media(max-width:700px){.journey-handoff{grid-template-columns:1fr}}
+  @media(max-width:900px){.journey-posture{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media(max-width:520px){.journey-posture{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Source evidence / lineage</div><h1>Record Journey</h1><p class="page-description">Trace this record through the pipeline: what it produced, which cases it informed, and what response followed.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/data">Back to data explorer</a><a class="btn btn-secondary" href="/ontology">Open ontology</a><a class="btn btn-secondary" href="/actions">Action ledger &rarr;</a></div></div>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 
-{% if let Some(record) = record %}
-<div class="journey">
+{% if let Some(record) = source_record %}
+<section class="journey-posture" aria-label="Journey impact summary"><div class="journey-posture-card"><span class="detail-label">Events</span><strong>{{ event_count }}</strong><small>signals derived</small></div><div class="journey-posture-card"><span class="detail-label">Executions</span><strong>{{ execution_count }}</strong><small>action attempts</small></div><div class="journey-posture-card"><span class="detail-label">Incidents</span><strong>{{ incident_count }}</strong><small>cases informed</small></div><div class="journey-posture-card"><span class="detail-label">Ontology</span><strong>{{ modeled_object_count }}</strong><small>modeled objects</small></div><div class="journey-posture-card"><span class="detail-label">Decisions</span><strong>{{ decision_count }}</strong><small>governed changes</small></div></section>
+<div class="journey" id="journey">
   <div class="journey-node journey-record">
     <div class="journey-node-label">Raw Record</div>
     <div class="journey-node-title"><a href="/data/{{ record.id }}">{{ record.id }}</a></div>
@@ -22,12 +31,16 @@ because of it.</p>
       {% if let Some(latency) = link.latency_from_ingest %}
       <div class="journey-latency muted">+{{ latency }}</div>
       {% endif %}
-      <div class="journey-node">
+      <a class="journey-node" href="/events/{{ link.event.id }}" title="Open event detail">
         <div class="journey-node-label">Event</div>
         <div class="journey-node-title">{{ link.event.event_type }}</div>
         <div class="journey-node-sub">{{ link.event.group_key }} &middot; {{ link.event.status }}</div>
         <div class="journey-node-timestamp muted">occurred {{ link.event.occurred_at }}</div>
-      </div>
+      </a>
+      {% if let Some(incident) = link.incident %}
+      <div class="journey-connector"></div>
+      <a class="journey-case" href="/incidents/{{ incident.id }}"><span class="pill {% if incident.severity == "critical" || incident.severity == "high" %}pill-down{% else %}pill-muted{% endif %}">{{ incident.severity }}</span><span><strong>{{ incident.title }}</strong><small>{{ incident.status }} · incident case &rarr;</small></span></a>
+      {% endif %}
       {% if !link.executions.is_empty() %}
       <div class="journey-connector"></div>
       <div class="journey-executions">
@@ -51,7 +64,30 @@ because of it.</p>
   <p class="journey-empty">This record hasn't contributed to any events yet.</p>
   {% endif %}
 </div>
+{% if can_write %}
+<section class="journey-handoff" aria-label="Evidence handoff actions">
+  <div class="journey-handoff-card"><div><div class="page-kicker">Promote evidence</div><h2>Create a governed ontology object</h2></div><p>Use the normalized payload when available and preserve this record as source lineage.</p>{% if object_types.is_empty() %}<p class="status-down">No ontology object types are available. Configure the model first.</p>{% else %}<form method="post" action="/data/model-selected"><input type="hidden" name="ids" value="{{ record.id }}"><label>Object type<select name="object_type_id" required><option value="">Choose a type…</option>{% for object_type in object_types %}<option value="{{ object_type.id }}">{{ object_type.name }}</option>{% endfor %}</select></label><button class="btn" type="submit">Create object &rarr;</button></form>{% endif %}</div>
+  <div class="journey-handoff-card"><div><div class="page-kicker">Pipeline recovery</div><h2>Replay this record</h2></div><p>Republish it for normalization, analysis, detection, and downstream lineage.</p><form method="post" action="/data/reprocess-selected"><input type="hidden" name="ids" value="{{ record.id }}"><button class="btn btn-secondary" type="submit">Reprocess record &rarr;</button></form></div>
+</section>
+{% endif %}
+{% if !timing.is_empty() %}<section class="panel" aria-label="Lineage timing profile"><div class="panel-heading"><div><h2>Pipeline timing profile</h2><p class="muted">Relative latency from ingestion through event generation and execution. Select a step to inspect its evidence.</p></div><span class="pill pill-muted">{{ timing.len() }} steps</span></div><div class="journey-timing">{% for bar in timing %}<a class="journey-timing-row" href="{{ bar.href }}"><span class="journey-timing-label"><strong>{{ bar.label }}</strong><small>{{ bar.detail }}</small></span><span class="journey-timing-track"><span class="journey-timing-fill{% if bar.failure %} failure{% endif %}" style="width:{{ bar.width_pct }}%"></span></span><span class="journey-timing-time">+{{ bar.latency }}</span></a>{% endfor %}</div><div class="journey-timing-legend"><span>completed / recorded</span><span class="failure">failed / needs review</span></div></section>{% endif %}
 {% else %}
 <p class="muted">Record not found.</p>
+{% endif %}
+
+{% if !modeled_objects.is_empty() %}
+<section class="panel journey-modeled-panel" id="modeled-entities">
+  <div class="panel-heading"><div><h2>Modeled entities</h2><p class="muted">Ontology objects created from this source record’s lineage.</p></div><a class="btn-link" href="/ontology">Open ontology &rarr;</a></div>
+  <div class="record-context-list">{% for object in modeled_objects %}<a href="/ontology?object_id={{ object.id }}#object-{{ object.id }}"><strong>{{ object.label }}</strong><small>{{ object.type_name }} · Inspect modeled object &rarr;</small></a>{% endfor %}</div>
+</section>
+{% endif %}
+
+{% if !governed_decisions.is_empty() %}
+<section class="panel journey-governed-panel" id="governed-decisions">
+  <div class="panel-heading"><div><h2>Governed object decisions</h2><p class="muted">Ontology actions that changed modeled entities derived from this record.</p></div><a class="btn-link" href="/actions">Open action ledger &rarr;</a></div>
+  <table><thead><tr><th>Action</th><th>Target object</th><th>Outcome</th><th>Human review</th><th>Executed</th></tr></thead><tbody>
+  {% for decision in governed_decisions %}<tr><td><strong>{{ decision.action_name }}</strong><br><a class="btn-link" href="/actions/{{ decision.invocation_id }}">Open decision record &rarr;</a></td><td><a href="/ontology?object_id={{ decision.target_id }}#object-{{ decision.target_id }}">{{ decision.target_label }}</a></td><td><span class="pill {% if decision.outcome == "Completed" %}pill-up{% else %}pill-down{% endif %}">{{ decision.outcome }}</span></td><td><span class="pill {% if decision.review_status == "approved" %}pill-up{% else if decision.review_stale %}pill-down{% else %}pill-muted{% endif %}">{{ decision.review_status }}{% if decision.review_stale %} · overdue{% endif %}</span>{% if let Some(owner) = decision.review_assignee %}<br><small class="muted">Owner: {{ owner }}</small>{% endif %}</td><td>{{ decision.executed_at }}</td></tr>{% endfor %}
+  </tbody></table>
+</section>
 {% endif %}
 {% endblock %}

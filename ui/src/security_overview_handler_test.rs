@@ -163,6 +163,21 @@ async fn only_counts_activity_from_the_last_seven_days() {
 }
 
 #[tokio::test]
+async fn activity_timeline_links_each_day_to_a_scoped_audit_log() {
+    let (mut state, session_id, _tenant_id) =
+        state_with_session(InMemorySessionStore::default()).await;
+    let recent = Arc::new(InMemoryAuditLogClient::default());
+    *recent.recent.lock().unwrap() = vec![entry("2026-07-18T12:00:00Z")];
+    state.config_audit_log_client = recent;
+
+    let response = get_page(state, &session_id).await;
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("href=\"/audit-log?date=2026-07-18\""));
+    assert!(body.contains("Select a day to inspect its exact events"));
+}
+
+#[tokio::test]
 async fn shows_the_rbac_role_distribution() {
     let (mut state, session_id, tenant_id) =
         state_with_session(InMemorySessionStore::default()).await;
@@ -255,4 +270,13 @@ async fn redirects_to_login_when_not_signed_in() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[test]
+fn security_overview_exposes_role_distribution_visualization() {
+    let template = include_str!("../templates/security_overview.html");
+    assert!(template.contains("Role distribution"));
+    assert!(template.contains("security-rbac-fill admin"));
+    assert!(template.contains("security-rbac-fill operator"));
+    assert!(template.contains("security-rbac-fill viewer"));
 }

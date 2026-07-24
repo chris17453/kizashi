@@ -234,6 +234,25 @@ async fn filters_by_the_q_query_param_case_insensitively() {
 }
 
 #[tokio::test]
+async fn filters_by_recent_session_age_and_preserves_scope_controls() {
+    let store = InMemorySessionStore::default();
+    let tenant_id = Uuid::new_v4();
+    let session_id = store.create(sample_session(tenant_id, Role::Admin, "alice")).await;
+    store.create(sample_session(tenant_id, Role::Operator, "bob")).await;
+    let state = state_with_store(store).await;
+
+    let response =
+        get_page_at(state, &session_id, "/security/sessions?age=recent&role=operator").await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Session age"));
+    assert!(body.contains("value=\"recent\""));
+    assert!(body.contains("value=\"operator\""));
+}
+
+#[tokio::test]
 async fn shows_a_no_match_empty_state_for_an_unmatched_query() {
     let store = InMemorySessionStore::default();
     let tenant_id = Uuid::new_v4();

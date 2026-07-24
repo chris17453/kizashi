@@ -85,6 +85,7 @@ pub async fn process_event(deps: &ActionDeps, event: &Event) -> Result<usize, Pr
             parameters: action.config.clone(),
             outcome: format!("{:?}", status),
             triggering_event_ref: serde_json::json!({"event_id": event.id, "trigger_id": trigger_id}),
+            contract_snapshot: None,
             executed_at: chrono::Utc::now(),
         };
 

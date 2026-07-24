@@ -14,6 +14,33 @@ use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+#[test]
+fn queue_views_keep_pipeline_pressure_visible_and_classified() {
+    let views = queue_views(vec![crate::QueueDepthSummary {
+        stage: "analyze_to_trigger".into(),
+        queue_name: "events".into(),
+        messages: 75,
+    }]);
+    let view = views
+        .iter()
+        .find(|item| item.label == "analyze_to_trigger")
+        .or_else(|| views.iter().find(|item| item.queue_name == "events"))
+        .unwrap();
+    assert_eq!(view.messages, 75);
+    assert_eq!(view.severity, "critical");
+    assert_eq!(view.severity_label, "critical");
+    assert_eq!(view.pressure_pct, 100);
+}
+
+#[test]
+fn data_plane_funnel_preserves_cross_layer_counts_and_handoffs() {
+    let funnel = data_plane_funnel(6, 19, 12, 3, 11, 5);
+    assert_eq!(funnel.len(), 6);
+    assert_eq!(funnel[1].count, 19);
+    assert_eq!(funnel[2].href, "/events");
+    assert!(funnel.iter().all(|stage| stage.percent > 0));
+}
+
 fn router(state: AppState) -> Router {
     Router::new().route("/health", get(get_health)).with_state(state)
 }
@@ -93,6 +120,10 @@ async fn renders_platform_health_when_signed_in() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("ingestion-service"));
+    assert!(body.contains("Platform health posture"));
+    assert!(body.contains("Queue pressure heatmap"));
+    assert!(body.contains("Data plane conversion"));
+    assert!(body.contains("inspect backlog"));
 }
 
 #[tokio::test]

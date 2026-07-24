@@ -14,6 +14,7 @@ pub struct InMemoryIncidentsClient {
     pub updated: Mutex<Vec<Incident>>,
     pub linked: Mutex<Vec<(Uuid, Uuid)>>,
     pub unlinked: Mutex<Vec<(Uuid, Uuid)>>,
+    pub audit: Mutex<Vec<AuditLogEntry>>,
 }
 
 #[async_trait]
@@ -52,7 +53,7 @@ impl IncidentsClient for InMemoryIncidentsClient {
             return Err(IncidentsClientError::Rejected(403));
         }
         self.created.lock().unwrap().push(incident.clone());
-        Ok(IncidentDetail { incident, event_ids: vec![] })
+        Ok(IncidentDetail { incident, event_ids: vec![], notes: vec![] })
     }
 
     async fn update_incident(
@@ -65,7 +66,7 @@ impl IncidentsClient for InMemoryIncidentsClient {
             return Err(IncidentsClientError::Rejected(403));
         }
         self.updated.lock().unwrap().push(incident.clone());
-        Ok(IncidentDetail { incident, event_ids: vec![] })
+        Ok(IncidentDetail { incident, event_ids: vec![], notes: vec![] })
     }
 
     async fn link_event(
@@ -96,6 +97,21 @@ impl IncidentsClient for InMemoryIncidentsClient {
         }
         self.unlinked.lock().unwrap().push((incident_id, event_id));
         Ok(())
+    }
+
+    async fn list_audit_log_for_entity(
+        &self,
+        _tenant_id: Uuid,
+        entity_id: Uuid,
+    ) -> Result<Vec<AuditLogEntry>, IncidentsClientError> {
+        Ok(self
+            .audit
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry.entity_id == entity_id)
+            .cloned()
+            .collect())
     }
 }
 
@@ -169,6 +185,7 @@ fn sample_incident() -> Incident {
         summary: String::new(),
         severity: IncidentSeverity::High,
         status: IncidentStatus::Open,
+        assigned_to: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
         resolved_at: None,

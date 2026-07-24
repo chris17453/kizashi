@@ -90,6 +90,22 @@ fn sample_event(id: Uuid, record_ids: Vec<Uuid>) -> EventDetail {
     }
 }
 
+#[test]
+fn event_object_matching_uses_source_lineage_when_entity_ref_differs() {
+    let record_id = Uuid::new_v4();
+    let object = common::ontology::Object {
+        id: Uuid::new_v4(),
+        tenant_id: Uuid::new_v4(),
+        object_type_id: Uuid::new_v4(),
+        properties: serde_json::json!({"name": "Northwind"}),
+        source_lineage: serde_json::json!([record_id]),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+    assert!(object_matches_event(&object, "entity-ref-from-signal", &[record_id]));
+    assert!(!object_matches_event(&object, "other-entity", &[Uuid::new_v4()]));
+}
+
 #[tokio::test]
 async fn renders_event_detail_with_payload() {
     let (mut state, session_id, _tenant_id) = state_with_session().await;
@@ -115,6 +131,10 @@ async fn renders_event_detail_with_payload() {
     assert!(body.contains("sentiment_spike"));
     assert!(body.contains("cust-42"));
     assert!(body.contains("-0.8"));
+    assert!(body.contains("Source records"));
+    assert!(body.contains("Modeled handoff"));
+    assert!(body.contains("Evidence-to-action lineage"));
+    assert!(body.contains("event-lineage"));
 }
 
 #[tokio::test]
@@ -189,6 +209,8 @@ async fn shows_contributing_records_and_their_executions_in_the_timeline() {
     assert!(body.contains("Action: webhook"));
     assert!(body.contains(&record_id.to_string()));
     assert!(body.contains("View journey"));
+    assert!(body.contains("Source records"));
+    assert!(body.contains("Response executions"));
 }
 
 #[tokio::test]
@@ -234,4 +256,12 @@ async fn redirects_to_login_when_not_signed_in() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[test]
+fn event_response_exposes_case_handoff_preflight() {
+    let template = include_str!("../templates/event_detail.html");
+    assert!(template.contains("event-response-preflight"));
+    assert!(template.contains("original evidence remains attached and auditable"));
+    assert!(template.contains("no source payload changes occur"));
 }

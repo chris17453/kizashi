@@ -2,8 +2,9 @@
 #[cfg(test)]
 pub(crate) mod incidents_client_test;
 
+use crate::audit_log_client::AuditLogEntry;
 use async_trait::async_trait;
-use common::{Incident, IncidentStatus, Role};
+use common::{Incident, IncidentNote, IncidentStatus, Role};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -20,6 +21,8 @@ pub struct IncidentDetail {
     #[serde(flatten)]
     pub incident: Incident,
     pub event_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub notes: Vec<IncidentNote>,
 }
 
 /// Reads/writes Incidents via incident-service (ADR-0111) — same direct-call trust boundary as
@@ -73,6 +76,34 @@ pub trait IncidentsClient: Send + Sync {
         incident_id: Uuid,
         event_id: Uuid,
     ) -> Result<(), IncidentsClientError>;
+
+    async fn add_note(
+        &self,
+        _role: Role,
+        _actor: &str,
+        _tenant_id: Uuid,
+        _incident_id: Uuid,
+        _body: &str,
+    ) -> Result<IncidentNote, IncidentsClientError> {
+        Err(IncidentsClientError::Unreachable("incident notes are unavailable".to_string()))
+    }
+
+    async fn list_audit_log_for_entity(
+        &self,
+        _tenant_id: Uuid,
+        _entity_id: Uuid,
+    ) -> Result<Vec<AuditLogEntry>, IncidentsClientError> {
+        Err(IncidentsClientError::Unreachable("incident audit log is unavailable".to_string()))
+    }
+
+    async fn list_recent_audit_log(
+        &self,
+        _tenant_id: Uuid,
+        _limit: u32,
+        _before: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, IncidentsClientError> {
+        Err(IncidentsClientError::Unreachable("incident audit log is unavailable".to_string()))
+    }
 }
 
 pub struct HttpIncidentsClient {
@@ -149,6 +180,7 @@ impl IncidentsClient for HttpIncidentsClient {
             "summary": incident.summary,
             "severity": incident.severity.to_string(),
             "status": incident.status.to_string(),
+            "assigned_to": incident.assigned_to,
             "created_at": incident.created_at,
             "updated_at": incident.updated_at,
             "resolved_at": incident.resolved_at,
@@ -184,6 +216,7 @@ impl IncidentsClient for HttpIncidentsClient {
             "summary": incident.summary,
             "severity": incident.severity.to_string(),
             "status": incident.status.to_string(),
+            "assigned_to": incident.assigned_to,
             "created_at": incident.created_at,
             "updated_at": incident.updated_at,
             "resolved_at": incident.resolved_at,
@@ -255,5 +288,69 @@ impl IncidentsClient for HttpIncidentsClient {
             return Err(IncidentsClientError::Rejected(response.status().as_u16()));
         }
         Ok(())
+    }
+
+    async fn add_note(
+        &self,
+        role: Role,
+        actor: &str,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        body: &str,
+    ) -> Result<IncidentNote, IncidentsClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/incidents/{incident_id}/notes", self.incident_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
+            .header("x-username", actor)
+            .json(&serde_json::json!({"body": body}))
+            .send()
+            .await
+            .map_err(|e| IncidentsClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(IncidentsClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| IncidentsClientError::Unreachable(e.to_string()))
+    }
+
+    async fn list_audit_log_for_entity(
+        &self,
+        tenant_id: Uuid,
+        entity_id: Uuid,
+    ) -> Result<Vec<AuditLogEntry>, IncidentsClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/audit-log/{entity_id}", self.incident_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .send()
+            .await
+            .map_err(|e| IncidentsClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(IncidentsClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| IncidentsClientError::Unreachable(e.to_string()))
+    }
+
+    async fn list_recent_audit_log(
+        &self,
+        tenant_id: Uuid,
+        limit: u32,
+        before: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<Vec<AuditLogEntry>, IncidentsClientError> {
+        let mut request = self
+            .client
+            .get(format!("{}/v1/audit-log", self.incident_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .query(&[("limit", limit.to_string())]);
+        if let Some(before) = before {
+            request = request.query(&[("before", before.to_rfc3339())]);
+        }
+        let response =
+            request.send().await.map_err(|e| IncidentsClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(IncidentsClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| IncidentsClientError::Unreachable(e.to_string()))
     }
 }

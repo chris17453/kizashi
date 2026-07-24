@@ -1,6 +1,18 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Field Mappings</h1>
+<style>
+  .mapping-coverage { margin:1.25rem 0 1.5rem; }
+  .mapping-coverage-list { display:grid; gap:.7rem; }
+  .mapping-coverage-row { display:grid; grid-template-columns:minmax(110px,.6fr) 1.6fr auto; gap:.75rem; align-items:center; padding:.6rem .7rem; border:1px solid var(--border-subtle); border-radius:7px; color:var(--text); text-decoration:none; }
+  .mapping-coverage-row:hover { border-color:var(--accent); background:var(--surface-hover); text-decoration:none; }
+  .mapping-coverage-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:600 .75rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .mapping-coverage-track { display:flex; height:.6rem; overflow:hidden; border-radius:99px; background:var(--surface-3,#e8edf3); }
+  .mapping-coverage-good { background:var(--success,#16a34a); } .mapping-coverage-risk { background:var(--danger,#dc2626); }
+  .mapping-coverage-count { color:var(--text-dim); font-size:.7rem; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .mapping-coverage-legend { display:flex; gap:.8rem; color:var(--text-dim); font-size:.7rem; } .mapping-coverage-legend span::before { content:''; display:inline-block; width:.5rem; height:.5rem; margin-right:.3rem; border-radius:50%; background:var(--success); } .mapping-coverage-legend span:last-child::before { background:var(--danger); }
+  @media(max-width:620px){.mapping-coverage-row{grid-template-columns:1fr auto}.mapping-coverage-track{grid-column:1/-1;grid-row:2}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Control plane / normalization</div><h1>Field Mappings</h1><p class="page-description">Translate connector payloads into stable fields that the ontology, analysis, and detection layers can reason over.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/data">Inspect source data</a><a class="btn btn-secondary" href="/pipeline">View pipeline &rarr;</a></div></div>
 <p class="muted">How raw payloads from a connector get mapped into normalized fields before
 analysis. One mapping per source type — the most specific one for a record's
 <code>source_type</code> is used at normalization time.</p>
@@ -11,12 +23,22 @@ analysis. One mapping per source type — the most specific one for a record's
 <div class="form-row">
   <div class="panel">
     <h2>Create a mapping</h2>
-    <form class="inline" method="post" action="/normalization-mappings">
+    <form class="inline mapping-line-form" method="post" action="/normalization-mappings" data-field-map-builder>
       <label for="source_type">Source type</label>
       <input type="text" id="source_type" name="source_type" placeholder="ticket" required>
 
-      <label for="field_map">Field mappings (one per line)</label>
-      <textarea id="field_map" name="field_map" rows="6" placeholder="text = $.description&#10;urgency = $.priority&#10;entity_ref = $.customer.id" required></textarea>
+      <div class="field-map-builder" data-field-map-editor><div class="detail-label">Normalized fields <span class="muted">structured</span></div><p class="muted">Map stable fields from the raw connector payload.</p></div>
+      <button type="button" class="btn-link" data-add-field-map>+ Add field mapping</button>
+      <details class="advanced-json-editor"><summary>Advanced mapping text</summary><textarea id="field_map" name="field_map" rows="6" data-field-map-json placeholder="text = $.description&#10;urgency = $.priority&#10;entity_ref = $.customer.id">text = $.description
+urgency = $.priority
+entity_ref = $.customer.id</textarea><p class="muted">One mapping per line: <code>normalized_field = $.raw.payload.path</code>.</p></details>
+      <details class="mapping-preview"><summary>Preview normalized output</summary><textarea rows="5" data-mapping-sample>{"description":"Example support request","priority":3,"customer":{"id":"cust-42"}}</textarea><button type="button" class="btn btn-secondary" data-preview-mapping>Preview mapping</button><pre class="compact-json mapping-preview-output" data-mapping-preview-output>Run the preview to inspect the normalized payload.</pre></details>
+
+      <label for="dedup_fields">Duplicate fingerprint fields <span class="muted">optional</span></label>
+      <input type="text" id="dedup_fields" name="dedup_fields" placeholder="entity_ref, text">
+
+      <label for="dedup_window_seconds">Duplicate window (seconds) <span class="muted">optional</span></label>
+      <input type="number" id="dedup_window_seconds" name="dedup_window_seconds" min="1" placeholder="3600">
 
       <button type="submit">Create mapping</button>
     </form>
@@ -30,6 +52,8 @@ analysis. One mapping per source type — the most specific one for a record's
         group repeated events by (e.g. per-customer) instead of per-record.</li>
       <li>A missing/unmatched path yields <code>null</code> for that field rather than
         failing normalization — safe to map speculatively.</li>
+      <li>Optional fingerprint fields suppress exact duplicates before they retrigger
+        analysis and response. Raw records remain available for evidence.</li>
       <li>Every create is written to an immutable audit log for compliance review.</li>
     </ul>
   </div>
@@ -41,18 +65,25 @@ analysis. One mapping per source type — the most specific one for a record's
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by source type&hellip;">
   <input type="hidden" name="sort" value="{{ sort }}">
   <input type="hidden" name="dir" value="{{ dir }}">
+  <label for="coverage">Coverage</label>
+  <select id="coverage" name="coverage"><option value=""{% if coverage_scope.is_empty() %} selected{% endif %}>All coverage</option><option value="unmapped"{% if coverage_scope == "unmapped" %} selected{% endif %}>Unmapped sources</option><option value="pending"{% if coverage_scope == "pending" %} selected{% endif %}>Pending normalization</option><option value="complete"{% if coverage_scope == "complete" %} selected{% endif %}>Fully normalized</option></select>
   <button type="submit">Search</button>
-  {% if !q.is_empty() %}<a href="/normalization-mappings" class="btn-link">Clear</a>{% endif %}
+  {% if !q.is_empty() || !coverage_scope.is_empty() %}<a href="/normalization-mappings" class="btn-link">Clear</a>{% endif %}
 </form>
 
-{% if mappings.is_empty() %}
+<section class="panel mapping-coverage" aria-label="Normalization coverage">
+  <div class="panel-heading"><div><h2>Live normalization coverage</h2><p class="muted">Source types in the current evidence set, split by normalized and pending records.</p></div><div class="mapping-coverage-legend"><span>normalized</span><span>pending</span></div></div>
+  {% if coverage.is_empty() %}<div class="empty-state compact"><p>No source records are available for coverage analysis.</p></div>{% else %}<div class="mapping-coverage-list">{% for row in coverage %}<a class="mapping-coverage-row" href="/data?source_type={{ row.source_type|urlencode }}"><span class="mapping-coverage-name">{{ row.source_type }}{% if !row.mapped %} <span class="pill pill-down">unmapped</span>{% endif %}</span><span class="mapping-coverage-track"><span class="mapping-coverage-good" style="width:{{ row.normalized_percent }}%"></span><span class="mapping-coverage-risk" style="width:{% if row.normalized_percent < 100 %}{{ 100 - row.normalized_percent }}{% else %}0{% endif %}%"></span></span><span class="mapping-coverage-count">{{ row.normalized }}/{{ row.total }} normalized</span></a>{% endfor %}</div>{% endif %}
+</section>
+
+  {% if mappings.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#9636;</div>
-  {% if q.is_empty() %}
+  {% if q.is_empty() && coverage_scope.is_empty() %}
   <p>No normalization mappings configured yet for this tenant.</p>
   {% if can_write %}<p>Use the form above to create your first one.</p>{% endif %}
   {% else %}
-  <p>No mappings match &ldquo;{{ q }}&rdquo;.</p>
+  <p>No mappings match the current coverage scope.</p>
   {% endif %}
 </div>
 {% else %}
@@ -60,16 +91,17 @@ analysis. One mapping per source type — the most specific one for a record's
   <thead>
     <tr>
       <th scope="col">
-        <a href="/normalization-mappings?q={{ q|urlencode }}&sort=source_type&dir={% if sort == "source_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/normalization-mappings?q={{ q|urlencode }}&coverage={{ coverage_scope|urlencode }}&sort=source_type&dir={% if sort == "source_type" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Source Type{% if sort == "source_type" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
       <th scope="col">Fields</th>
       <th scope="col">
-        <a href="/normalization-mappings?q={{ q|urlencode }}&sort=version&dir={% if sort == "version" && dir != "desc" %}desc{% else %}asc{% endif %}">
+        <a href="/normalization-mappings?q={{ q|urlencode }}&coverage={{ coverage_scope|urlencode }}&sort=version&dir={% if sort == "version" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Version{% if sort == "version" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
         </a>
       </th>
+      <th scope="col">Duplicate guard</th>
       {% if can_write %}<th scope="col"></th>{% endif %}
       <th scope="col"></th>
     </tr>
@@ -84,8 +116,20 @@ analysis. One mapping per source type — the most specific one for a record's
         {% endfor %}
       </td>
       <td>{{ mapping.version }}</td>
+      <td>{% if mapping.dedup_fields.is_empty() %}<span class="muted">Off</span>{% else %}<span class="pill pill-up">{{ mapping.dedup_fields.len() }} field{% if mapping.dedup_fields.len() != 1 %}s{% endif %}</span><small class="muted">{% if let Some(seconds) = mapping.dedup_window_seconds %}{{ seconds }}s window{% else %}no expiry{% endif %}</small>{% endif %}</td>
       {% if can_write %}
       <td>
+        <details class="inline-edit mapping-edit"><summary>Edit mapping</summary>
+          <form class="inline mapping-line-form" method="post" action="/normalization-mappings/{{ mapping.id }}/edit" data-field-map-builder>
+            <label>Source type</label><input name="source_type" value="{{ mapping.source_type }}" required>
+            <div class="field-map-builder" data-field-map-editor><div class="detail-label">Normalized fields <span class="muted">structured</span></div></div><button type="button" class="btn-link" data-add-field-map>+ Add field mapping</button><details class="advanced-json-editor"><summary>Advanced mapping text</summary><textarea name="field_map" rows="5" data-field-map-json required>{% for (field, path) in mapping.field_map %}{{ field }} = {{ path }}{% if !loop.last %}
+{% endif %}{% endfor %}</textarea><p class="muted">One mapping per line: <code>normalized_field = $.raw.payload.path</code>.</p></details><details class="mapping-preview"><summary>Preview normalized output</summary><textarea rows="5" data-mapping-sample>{"description":"Example support request","priority":3,"customer":{"id":"cust-42"}}</textarea><button type="button" class="btn btn-secondary" data-preview-mapping>Preview mapping</button><pre class="compact-json mapping-preview-output" data-mapping-preview-output>Run the preview to inspect the normalized payload.</pre></details>
+            <label>Duplicate fingerprint fields <span class="muted">comma or newline separated</span></label><input name="dedup_fields" value="{% for field in mapping.dedup_fields %}{{ field }}{% if !loop.last %}, {% endif %}{% endfor %}" placeholder="entity_ref, text">
+            <label>Duplicate window (seconds)</label><input type="number" name="dedup_window_seconds" min="1" value="{% if let Some(seconds) = mapping.dedup_window_seconds %}{{ seconds }}{% endif %}" placeholder="3600">
+            <input type="hidden" name="version" value="{{ mapping.version + 1 }}">
+            <button class="btn" type="submit">Save version {{ mapping.version + 1 }}</button>
+          </form>
+        </details>
         <form class="inline" method="post" action="/normalization-mappings/{{ mapping.id }}/delete" style="display:inline" onsubmit="return confirm('Remove this mapping? This cannot be undone.');">
           <button type="submit" class="btn-danger">Remove</button>
         </form>
@@ -97,4 +141,67 @@ analysis. One mapping per source type — the most specific one for a record's
   </tbody>
 </table>
 {% endif %}
+<script>
+  (function () {
+    document.querySelectorAll('[data-field-map-builder]').forEach(function (form) {
+      var editor = form.querySelector('[data-field-map-editor]');
+      var raw = form.querySelector('[data-field-map-json]');
+      var add = form.querySelector('[data-add-field-map]');
+      if (!editor || !raw) return;
+      function readMappings() {
+        return (raw.value || '').split(/\r?\n/).map(function (line) {
+          var match = line.match(/^\s*([^=]+?)\s*=\s*(.+?)\s*$/);
+          return match ? { field: match[1].trim(), path: match[2].trim() } : null;
+        }).filter(Boolean);
+      }
+      function addRow(field, path) {
+        var row = document.createElement('div'); row.className = 'field-map-row';
+        var fieldLabel = document.createElement('label'); fieldLabel.textContent = 'Normalized field';
+        var fieldInput = document.createElement('input'); fieldInput.type = 'text'; fieldInput.value = field || ''; fieldInput.placeholder = 'entity_ref'; fieldInput.dataset.fieldMapKey = 'field'; fieldLabel.appendChild(fieldInput);
+        var pathLabel = document.createElement('label'); pathLabel.textContent = 'Raw payload path';
+        var pathInput = document.createElement('input'); pathInput.type = 'text'; pathInput.value = path || ''; pathInput.placeholder = '$.customer.id'; pathInput.dataset.fieldMapKey = 'path'; pathLabel.appendChild(pathInput);
+        var remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn-link btn-danger-link'; remove.textContent = 'Remove'; remove.addEventListener('click', function () { row.remove(); });
+        row.appendChild(fieldLabel); row.appendChild(pathLabel); row.appendChild(remove); editor.appendChild(row);
+      }
+      function render() {
+        editor.querySelectorAll('.field-map-row, .field-map-empty').forEach(function (item) { item.remove(); });
+        var mappings = readMappings(); mappings.forEach(function (item) { addRow(item.field, item.path); });
+        if (!mappings.length) { var empty = document.createElement('p'); empty.className = 'muted field-map-empty'; empty.textContent = 'No normalized fields defined yet.'; editor.appendChild(empty); }
+      }
+      function collectMappings() {
+        var seen = {}; var mappings = [];
+        editor.querySelectorAll('.field-map-row').forEach(function (row) {
+          var fields = row.querySelectorAll('input'); var field = fields[0].value.trim(); var path = fields[1].value.trim();
+          if (!field || !path || seen[field]) throw new Error('Field mappings must be complete and unique');
+          seen[field] = true; mappings.push({ field: field, path: path });
+        });
+        if (!mappings.length) throw new Error('At least one field mapping is required');
+        return mappings;
+      }
+      function sync() {
+        raw.value = collectMappings().map(function (item) { return item.field + ' = ' + item.path; }).join('\n');
+      }
+      if (add) add.addEventListener('click', function () { addRow('', ''); });
+      var previewButton = form.querySelector('[data-preview-mapping]');
+      var sample = form.querySelector('[data-mapping-sample]');
+      var output = form.querySelector('[data-mapping-preview-output]');
+      if (previewButton && sample && output) previewButton.addEventListener('click', function () {
+        try {
+          var payload = JSON.parse(sample.value || '{}');
+          var normalized = {};
+          collectMappings().forEach(function (item) {
+            var path = item.path.replace(/^\$\.?/, '');
+            var value = payload;
+            if (path) path.split('.').forEach(function (segment) { value = value == null ? undefined : value[segment]; });
+            normalized[item.field] = value === undefined ? null : value;
+          });
+          output.textContent = JSON.stringify(normalized, null, 2);
+        } catch (_) { output.textContent = 'Preview failed: provide valid sample JSON and complete, unique mappings.'; }
+      });
+      raw.addEventListener('change', render);
+      form.addEventListener('submit', function (event) { try { sync(); } catch (_) { event.preventDefault(); window.alert('Complete each normalized field mapping before saving.'); } });
+      render();
+    });
+  }());
+</script>
 {% endblock %}

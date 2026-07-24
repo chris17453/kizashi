@@ -5,11 +5,16 @@ use std::sync::Mutex;
 pub struct InMemoryIncidentRepository {
     pub incidents: Mutex<Vec<Incident>>,
     pub links: Mutex<Vec<(Uuid, Uuid)>>,
+    pub notes: Mutex<Vec<IncidentNote>>,
 }
 
 impl InMemoryIncidentRepository {
     pub fn with_incident(incident: Incident) -> Self {
-        Self { incidents: Mutex::new(vec![incident]), links: Mutex::new(vec![]) }
+        Self {
+            incidents: Mutex::new(vec![incident]),
+            links: Mutex::new(vec![]),
+            notes: Mutex::new(vec![]),
+        }
     }
 }
 
@@ -130,6 +135,49 @@ impl IncidentRepository for InMemoryIncidentRepository {
             .map(|(_, e)| *e)
             .collect())
     }
+
+    async fn list_notes(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+    ) -> Result<Vec<IncidentNote>, IncidentRepositoryError> {
+        Ok(self
+            .notes
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|note| note.tenant_id == tenant_id && note.incident_id == incident_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn add_note(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        author: &str,
+        body: &str,
+    ) -> Result<IncidentNote, IncidentRepositoryError> {
+        if !self
+            .incidents
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|incident| incident.tenant_id == tenant_id && incident.id == incident_id)
+        {
+            return Err(IncidentRepositoryError::NotFound(incident_id));
+        }
+        let note = IncidentNote {
+            id: Uuid::new_v4(),
+            tenant_id,
+            incident_id,
+            author: author.to_string(),
+            body: body.to_string(),
+            created_at: chrono::Utc::now(),
+        };
+        self.notes.lock().unwrap().push(note.clone());
+        Ok(note)
+    }
 }
 
 pub struct FailingIncidentRepository;
@@ -195,6 +243,24 @@ impl IncidentRepository for FailingIncidentRepository {
     ) -> Result<Vec<Uuid>, IncidentRepositoryError> {
         Err(IncidentRepositoryError::Backend("simulated failure".to_string()))
     }
+
+    async fn list_notes(
+        &self,
+        _tenant_id: Uuid,
+        _incident_id: Uuid,
+    ) -> Result<Vec<IncidentNote>, IncidentRepositoryError> {
+        Err(IncidentRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn add_note(
+        &self,
+        _tenant_id: Uuid,
+        _incident_id: Uuid,
+        _author: &str,
+        _body: &str,
+    ) -> Result<IncidentNote, IncidentRepositoryError> {
+        Err(IncidentRepositoryError::Backend("simulated failure".to_string()))
+    }
 }
 
 fn sample_incident(tenant_id: Uuid) -> Incident {
@@ -205,6 +271,7 @@ fn sample_incident(tenant_id: Uuid) -> Incident {
         summary: String::new(),
         severity: IncidentSeverity::High,
         status: IncidentStatus::Open,
+        assigned_to: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
         resolved_at: None,

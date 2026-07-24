@@ -113,6 +113,10 @@ services:
       RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
       AZURE_AI_FOUNDRY_ENDPOINT: "${AZURE_AI_FOUNDRY_ENDPOINT:-}"
       AZURE_AI_FOUNDRY_API_KEY: "${AZURE_AI_FOUNDRY_API_KEY:-}"
+      ANALYSIS_FALLBACK_ENDPOINT: "${ANALYSIS_FALLBACK_ENDPOINT:-}"
+      ANALYSIS_FALLBACK_MODEL: "${ANALYSIS_FALLBACK_MODEL:-}"
+      ANALYSIS_FALLBACK_API_KEY: "${ANALYSIS_FALLBACK_API_KEY:-}"
+      ANALYSIS_OPENAI_CONCURRENCY: "${ANALYSIS_OPENAI_CONCURRENCY:-4}"
       INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
     ports: ["8086:8080"]
     depends_on:
@@ -247,6 +251,39 @@ services:
       dashboard-api: { condition: service_healthy }
     healthcheck: *healthz
 
+  report-scheduler:
+    build: { context: ., args: { BIN: report-scheduler } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      QUERY_GATEWAY_URL: http://query-gateway:8080
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
+      REPORT_ARTIFACT_BASE_URL: "${REPORT_ARTIFACT_BASE_URL:-http://localhost:8093}"
+      REPORT_SCHEDULER_INTERVAL_SECONDS: "${REPORT_SCHEDULER_INTERVAL_SECONDS:-60}"
+      REPORT_SMTP_HOST: "${REPORT_SMTP_HOST:-}"
+      REPORT_SMTP_PORT: "${REPORT_SMTP_PORT:-587}"
+      REPORT_SMTP_USERNAME: "${REPORT_SMTP_USERNAME:-}"
+      REPORT_SMTP_PASSWORD: "${REPORT_SMTP_PASSWORD:-}"
+      REPORT_FROM_EMAIL: "${REPORT_FROM_EMAIL:-}"
+    ports: ["8098:8080"]
+    depends_on:
+      query-gateway: { condition: service_healthy }
+      config-admin-service: { condition: service_healthy }
+    healthcheck: *healthz
+
+  ontology-service:
+    build: { context: ., args: { BIN: ontology-service } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
+    ports: ["8097:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      normalization-service: { condition: service_healthy }
+    healthcheck: *healthz
+
   retention-service:
     build: { context: ., args: { BIN: retention-service } }
     environment:
@@ -351,7 +388,7 @@ services:
     environment:
       BIND_ADDR: "0.0.0.0:8080"
       RABBITMQ_MANAGEMENT_URL: http://kizashi:kizashi@rabbitmq:15672
-      SERVICE_REGISTRY: "ingestion-gateway=http://ingestion-gateway:8080,ingestion-service=http://ingestion-service:8080,query-gateway=http://query-gateway:8080,dashboard-api=http://dashboard-api:8080,normalization-service=http://normalization-service:8080,analysis-service=http://analysis-service:8080,trigger-engine=http://trigger-engine:8080,action-executor=http://action-executor:8080,auth-service=http://auth-service:8080,config-admin-service=http://config-admin-service:8080,retention-service=http://retention-service:8080"
+      SERVICE_REGISTRY: "ingestion-gateway=http://ingestion-gateway:8080,ingestion-service=http://ingestion-service:8080,query-gateway=http://query-gateway:8080,dashboard-api=http://dashboard-api:8080,normalization-service=http://normalization-service:8080,analysis-service=http://analysis-service:8080,trigger-engine=http://trigger-engine:8080,action-executor=http://action-executor:8080,auth-service=http://auth-service:8080,config-admin-service=http://config-admin-service:8080,report-scheduler=http://report-scheduler:8080,retention-service=http://retention-service:8080"
     ports: ["8092:8080"]
     depends_on:
       rabbitmq: { condition: service_healthy }
@@ -366,6 +403,8 @@ services:
       CONFIG_ADMIN_SERVICE_URL: http://config-admin-service:8080
       OBSERVABILITY_URL: http://observability:8080
       INGESTION_SERVICE_URL: http://ingestion-service:8080
+      NORMALIZATION_SERVICE_URL: http://normalization-service:8080
+      ANALYSIS_SERVICE_URL: http://analysis-service:8080
       INGESTION_GATEWAY_URL: http://ingestion-gateway:8080
       INGESTION_GATEWAY_PUBLIC_URL: "${INGESTION_GATEWAY_PUBLIC_URL:-http://localhost:8081}"
       ACTION_EXECUTOR_URL: http://action-executor:8080
@@ -475,15 +514,3 @@ volumes:
   rabbitmq_data:
   clickhouse_data:
   minio_data:
-
-  ontology-service:
-    build: { context: ., args: { BIN: ontology-service } }
-    environment:
-      BIND_ADDR: "0.0.0.0:8080"
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/kizashi
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/%2f
-    ports: ["8093:8080"]
-    depends_on:
-      postgres: { condition: service_healthy }
-      rabbitmq: { condition: service_healthy }
-    healthcheck: *healthz

@@ -29,6 +29,7 @@ fn default_state() -> AppState {
         record_client: Arc::new(InMemoryRawRecordClient::default()),
         archive_store: Arc::new(InMemoryArchiveStore::default()),
         internal_secret: TEST_SECRET.to_string(),
+        hold_repository: None,
     }
 }
 

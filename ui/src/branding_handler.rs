@@ -23,6 +23,11 @@ struct BrandingTemplate {
     can_write: bool,
     saved: bool,
     error: Option<String>,
+    configured_count: usize,
+}
+
+fn configured_count(product_name: &str, logo_url: &str, accent_color: &str) -> usize {
+    [product_name, logo_url, accent_color].iter().filter(|value| !value.trim().is_empty()).count()
 }
 
 fn empty_branding() -> Branding {
@@ -45,18 +50,23 @@ pub async fn get_branding_page(State(state): State<AppState>, headers: HeaderMap
         Ok(branding) => (branding, None),
         Err(e) => (empty_branding(), Some(e.to_string())),
     };
+    let product_name = branding.product_name.unwrap_or_default();
+    let logo_url = branding.logo_url.unwrap_or_default();
+    let accent_color = branding.accent_color.unwrap_or_default();
+    let configured_count = configured_count(&product_name, &logo_url, &accent_color);
 
     Html(
         BrandingTemplate {
             show_nav: true,
             is_admin,
             tenant_id: session.tenant_id,
-            product_name: branding.product_name.unwrap_or_default(),
-            logo_url: branding.logo_url.unwrap_or_default(),
-            accent_color: branding.accent_color.unwrap_or_default(),
+            product_name,
+            logo_url,
+            accent_color,
             can_write,
             saved: false,
             error,
+            configured_count,
         }
         .render()
         .unwrap(),
@@ -110,18 +120,23 @@ pub async fn post_branding(
         Ok(()) => (true, None),
         Err(e) => (false, Some(e.to_string())),
     };
+    let product_name = branding.product_name.clone().unwrap_or_default();
+    let logo_url = branding.logo_url.clone().unwrap_or_default();
+    let accent_color = branding.accent_color.clone().unwrap_or_default();
+    let configured_count = configured_count(&product_name, &logo_url, &accent_color);
 
     Html(
         BrandingTemplate {
             show_nav: true,
             is_admin,
             tenant_id: session.tenant_id,
-            product_name: branding.product_name.unwrap_or_default(),
-            logo_url: branding.logo_url.unwrap_or_default(),
-            accent_color: branding.accent_color.unwrap_or_default(),
+            product_name,
+            logo_url,
+            accent_color,
             can_write: true,
             saved,
             error,
+            configured_count,
         }
         .render()
         .unwrap(),

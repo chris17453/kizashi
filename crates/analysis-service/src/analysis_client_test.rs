@@ -37,6 +37,15 @@ impl AnalysisClient for FailingAnalysisClient {
     }
 }
 
+#[test]
+fn analysis_errors_only_classify_transient_provider_failures_as_retryable() {
+    assert!(AnalysisError::Unreachable("timeout".to_string()).is_retryable());
+    assert!(AnalysisError::Rejected(429).is_retryable());
+    assert!(AnalysisError::Rejected(503).is_retryable());
+    assert!(!AnalysisError::Rejected(400).is_retryable());
+    assert!(!AnalysisError::ResultCountMismatch { expected: 2, got: 1 }.is_retryable());
+}
+
 fn sample_record() -> RawRecord {
     RawRecord::new("zendesk", SourceType::Ticket, Uuid::new_v4(), json!({"description": "hi"}))
 }
@@ -182,6 +191,38 @@ pub(crate) async fn spawn_stub_chat_completions(
     let app = Router::new()
         .route("/v1/chat/completions", post(handler))
         .with_state((captured_clone, reply_content));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (format!("http://{addr}/v1"), captured)
+}
+
+pub(crate) async fn spawn_stub_chat_completions_status(
+    reply_content: String,
+    status: axum::http::StatusCode,
+) -> (String, std::sync::Arc<Mutex<Vec<serde_json::Value>>>) {
+    let captured = std::sync::Arc::new(Mutex::new(Vec::new()));
+    let captured_clone = captured.clone();
+    async fn handler(
+        axum::extract::State((captured, reply_content, status)): axum::extract::State<(
+            std::sync::Arc<Mutex<Vec<serde_json::Value>>>,
+            String,
+            axum::http::StatusCode,
+        )>,
+        Json(body): Json<serde_json::Value>,
+    ) -> axum::response::Response {
+        use axum::response::IntoResponse;
+        captured.lock().unwrap().push(body);
+        (status, Json(json!({"choices": [{"message": {"content": reply_content}}]})))
+            .into_response()
+    }
+    let app = Router::new().route("/v1/chat/completions", post(handler)).with_state((
+        captured_clone,
+        reply_content,
+        status,
+    ));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {

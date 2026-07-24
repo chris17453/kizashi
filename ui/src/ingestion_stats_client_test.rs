@@ -13,6 +13,8 @@ pub struct InMemoryIngestionStatsClient {
     pub records: Mutex<Vec<RecordSummary>>,
     pub has_more: Mutex<bool>,
     pub reprocessed: Mutex<usize>,
+    pub reprocessed_connector: Mutex<Option<String>>,
+    pub reprocessed_records: Mutex<Vec<Uuid>>,
 }
 
 #[async_trait]
@@ -53,6 +55,24 @@ impl IngestionStatsClient for InMemoryIngestionStatsClient {
 
     async fn reprocess(&self, _tenant_id: Uuid) -> Result<usize, IngestionStatsClientError> {
         Ok(*self.reprocessed.lock().unwrap())
+    }
+
+    async fn reprocess_for_connector(
+        &self,
+        _tenant_id: Uuid,
+        connector_id: Option<&str>,
+    ) -> Result<usize, IngestionStatsClientError> {
+        *self.reprocessed_connector.lock().unwrap() = connector_id.map(str::to_string);
+        Ok(*self.reprocessed.lock().unwrap())
+    }
+
+    async fn reprocess_record(
+        &self,
+        _tenant_id: Uuid,
+        record_id: Uuid,
+    ) -> Result<usize, IngestionStatsClientError> {
+        self.reprocessed_records.lock().unwrap().push(record_id);
+        Ok(1)
     }
 }
 

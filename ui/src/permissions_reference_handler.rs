@@ -5,16 +5,20 @@ mod permissions_reference_handler_test;
 use crate::session_guard::require_session;
 use crate::AppState;
 use askama::Template;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Response};
 
 struct PermissionRow {
     area: String,
+    href: String,
     viewer: String,
     operator: String,
     admin: String,
     note: Option<String>,
+    viewer_state: String,
+    operator_state: String,
+    admin_state: String,
 }
 
 #[derive(Template)]
@@ -23,15 +27,69 @@ struct PermissionsReferenceTemplate {
     show_nav: bool,
     is_admin: bool,
     rows: Vec<PermissionRow>,
+    viewer_allowed_count: usize,
+    operator_allowed_count: usize,
+    admin_allowed_count: usize,
+    active_role: String,
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct PermissionsQuery {
+    #[serde(default)]
+    role: String,
+}
+
+fn normalize_role(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "viewer" | "operator" | "admin" => value.trim().to_ascii_lowercase(),
+        _ => "".to_string(),
+    }
+}
+
+fn area_href(area: &str) -> String {
+    match area {
+        "Sensors / Connectors" => "/sensors",
+        "Triggers" => "/triggers",
+        "Field Mappings" => "/normalization-mappings",
+        "Retention Policies" => "/retention-policies",
+        "Egress Allowlist" => "/egress-allowlist",
+        "AI Analysis Config" => "/analysis-config",
+        "API Keys" => "/api-keys",
+        "Users / RBAC" => "/users",
+        "Audit Log" => "/audit-log",
+        "Active Sessions" => "/security/sessions",
+        "Login Attempts" => "/security/login-attempts",
+        "Backups" => "/security/backups",
+        "Compliance Report" => "/security/compliance-report",
+        "Security Overview" => "/security",
+        "Branding" => "/branding",
+        "Saved Searches" => "/search",
+        _ => "/security/permissions",
+    }
+    .to_string()
+}
+
+fn access_state(value: &str) -> String {
+    if value == "No access" {
+        "deny".to_string()
+    } else if value == "View" || value.contains("Full read") {
+        "read".to_string()
+    } else {
+        "write".to_string()
+    }
 }
 
 fn row(area: &str, viewer: &str, operator: &str, admin: &str, note: Option<&str>) -> PermissionRow {
     PermissionRow {
         area: area.to_string(),
+        href: area_href(area),
         viewer: viewer.to_string(),
         operator: operator.to_string(),
         admin: admin.to_string(),
         note: note.map(str::to_string),
+        viewer_state: access_state(viewer),
+        operator_state: access_state(operator),
+        admin_state: access_state(admin),
     }
 }
 
@@ -123,6 +181,7 @@ fn permission_rows() -> Vec<PermissionRow> {
 pub async fn get_permissions_reference(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<PermissionsQuery>,
 ) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(session) => session,
@@ -130,10 +189,22 @@ pub async fn get_permissions_reference(
     };
     let is_admin = session.role.at_least(common::Role::Admin);
 
+    let rows = permission_rows();
+    let viewer_allowed_count = rows.iter().filter(|row| row.viewer_state != "deny").count();
+    let operator_allowed_count = rows.iter().filter(|row| row.operator_state != "deny").count();
+    let admin_allowed_count = rows.iter().filter(|row| row.admin_state != "deny").count();
     Html(
-        PermissionsReferenceTemplate { show_nav: true, is_admin, rows: permission_rows() }
-            .render()
-            .unwrap(),
+        PermissionsReferenceTemplate {
+            show_nav: true,
+            is_admin,
+            rows,
+            viewer_allowed_count,
+            operator_allowed_count,
+            admin_allowed_count,
+            active_role: normalize_role(&query.role),
+        }
+        .render()
+        .unwrap(),
     )
     .into_response()
 }

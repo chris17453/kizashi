@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+{% block content %}
+<style>
+  .config-readiness { display:grid; grid-template-columns:minmax(220px,.8fr) minmax(0,1.2fr); gap:1rem; margin:1.25rem 0 1.5rem; }
+  .config-readiness-summary, .config-attention-list { min-width:0; }
+  .config-readiness-summary { display:grid; gap:.7rem; padding:1rem; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+  .config-readiness-summary h2 { margin:0; font-size:1rem; }
+  .config-readiness-value { display:flex; align-items:baseline; gap:.35rem; }
+  .config-readiness-value strong { font:700 2rem ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent); }
+  .config-readiness-value span { color:var(--text-dim); font-size:.75rem; }
+  .config-readiness-track { display:flex; height:.7rem; overflow:hidden; border-radius:99px; background:var(--surface-3,#e8edf3); }
+  .config-readiness-good { background:var(--success,#16a34a); } .config-readiness-risk { background:var(--danger,#dc2626); }
+  .config-attention-list { display:grid; gap:.5rem; padding:1rem; border:1px solid rgba(220,38,38,.35); border-radius:8px; background:rgba(220,38,38,.04); }
+  .config-attention-list h2 { margin:0 0 .2rem; font-size:1rem; }
+  .config-attention-row { display:flex; align-items:center; justify-content:space-between; gap:.7rem; padding:.55rem .6rem; border:1px solid var(--border-subtle); border-radius:6px; color:var(--text); text-decoration:none; }
+  .config-attention-row:hover { border-color:var(--accent); background:var(--surface-hover); text-decoration:none; }
+  .config-attention-row span { display:grid; gap:.12rem; min-width:0; } .config-attention-row small { color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .config-flow-stage{position:relative;display:grid;gap:.25rem}.config-flow-stage.config-flow-risk{border-color:color-mix(in srgb,var(--danger) 48%,var(--border))}.config-flow-stage .flow-posture{position:absolute;top:.65rem;right:.65rem;width:.45rem;height:.45rem;border-radius:50%;background:var(--success)}.config-flow-stage.config-flow-risk .flow-posture{background:var(--danger)}.config-flow-stage .flow-index{color:var(--text-dim)}
+  @media(max-width:760px){.config-readiness{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Control plane</div><h1>Configuration Center</h1><p class="page-description">One operational view of how data enters the workspace, becomes intelligence, and is governed at the boundary.</p></div><a class="btn btn-secondary" href="/pipeline">View pipeline map &rarr;</a></div>
+{% for error in errors %}<p class="error">{{ error }}</p>{% endfor %}
+
+<div class="config-flow" aria-label="Configuration operating flow">{% for stage in flow %}<a class="config-flow-stage config-flow-{{ stage.state }}" href="{{ stage.href }}"><span class="flow-index">{{ stage.index }}</span><span class="flow-posture" aria-label="{{ stage.state }}"></span><strong>{{ stage.label }}</strong><small>{{ stage.detail }}</small></a>{% if !loop.last %}<span class="flow-arrow" aria-hidden="true">→</span>{% endif %}{% endfor %}</div>
+
+<div class="section-heading"><div class="section-title">Control posture</div><span class="muted">Live tenant configuration</span></div>
+<div class="config-card-grid">{% for card in cards %}<a class="config-card config-{{ card.state }}" href="{{ card.href }}"><div class="config-card-top"><span class="kpi-label">{{ card.label }}</span><span class="posture-dot {% if card.state == "good" %}posture-good{% else %}posture-risk{% endif %}"></span></div><div class="config-card-value">{{ card.value }}</div><div class="config-card-detail">{{ card.detail }}</div><span class="config-card-link">Open control &rarr;</span></a>{% endfor %}</div>
+<section class="config-readiness" aria-label="Configuration readiness">
+  <div class="config-readiness-summary"><div class="page-kicker">Readiness score</div><h2>Control domains ready</h2><div class="config-readiness-value"><strong>{{ control_good_count }}/{{ control_good_count + control_attention_count }}</strong><span>domains healthy</span></div><div class="config-readiness-track"><span class="config-readiness-good" style="width:{% if control_good_count + control_attention_count > 0 %}{{ control_good_count * 100 / (control_good_count + control_attention_count) }}{% else %}0{% endif %}%"></span><span class="config-readiness-risk" style="width:{% if control_good_count + control_attention_count > 0 %}{{ control_attention_count * 100 / (control_good_count + control_attention_count) }}{% else %}0{% endif %}%"></span></div><p class="muted">Derived from connector freshness, detection, normalization, analysis, retention, egress, ontology modeling, and governed response controls.</p></div>
+  <div class="config-attention-list"><h2>Attention routing</h2>{% if control_attention_count == 0 %}<p class="muted">All configuration domains are within the current readiness policy.</p>{% else %}{% for card in cards %}{% if card.state == "risk" %}<a class="config-attention-row" href="{{ card.href }}"><span><strong>{{ card.label }}</strong><small>{{ card.detail }}</small></span><span class="posture-dot posture-risk" aria-label="Needs attention"></span></a>{% endif %}{% endfor %}{% endif %}</div>
+</section>
+
+<div class="panel config-summary"><div><div class="page-kicker">Governance boundary</div><h2>Data leaves through an explicit allowlist</h2><p class="muted">{{ egress_count }} external destination{% if egress_count != 1 %}s{% endif %} are currently permitted. Review retention and outbound policy before enabling a new connector or analysis provider.</p></div><a class="btn btn-secondary" href="/egress-allowlist">Review egress policy</a></div>
+{% endblock %}

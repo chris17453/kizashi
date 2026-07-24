@@ -3,6 +3,7 @@
 mod analysis_config_handler_test;
 
 use crate::analysis_config_client::{AnalysisConfigInput, AnalysisConfigView};
+use crate::execution_client::AnalysisResilienceSummary;
 use crate::session_guard::require_session;
 use crate::AppState;
 use askama::Template;
@@ -27,6 +28,30 @@ struct AnalysisConfigTemplate {
     can_write: bool,
     saved: bool,
     error: Option<String>,
+    prompt_configured: bool,
+    provider_label: String,
+    connection_ready: bool,
+    secret_configured: bool,
+    analysis_queue_count: Option<u32>,
+    fallback_status: String,
+    consumer_status: String,
+}
+
+fn posture_fields(
+    prompt: &str,
+    is_openai_compatible: bool,
+    model: &str,
+    endpoint: &str,
+) -> (bool, String, bool) {
+    let prompt_configured = !prompt.trim().is_empty();
+    let provider_label = if is_openai_compatible {
+        "OpenAI-compatible".to_string()
+    } else {
+        "Azure AI Foundry".to_string()
+    };
+    let connection_ready =
+        !is_openai_compatible || (!model.trim().is_empty() && !endpoint.trim().is_empty());
+    (prompt_configured, provider_label, connection_ready)
 }
 
 fn empty_template(
@@ -35,6 +60,9 @@ fn empty_template(
     tenant_id: Uuid,
     can_write: bool,
     error: Option<String>,
+    analysis_queue_count: Option<u32>,
+    fallback_status: String,
+    consumer_status: String,
 ) -> AnalysisConfigTemplate {
     AnalysisConfigTemplate {
         show_nav,
@@ -49,6 +77,13 @@ fn empty_template(
         can_write,
         saved: false,
         error,
+        prompt_configured: false,
+        provider_label: "Azure AI Foundry".to_string(),
+        connection_ready: true,
+        secret_configured: false,
+        analysis_queue_count,
+        fallback_status,
+        consumer_status,
     }
 }
 
@@ -63,21 +98,53 @@ fn template_from_view(
     tenant_id: Uuid,
     can_write: bool,
     saved: bool,
+    analysis_queue_count: Option<u32>,
+    fallback_status: String,
+    consumer_status: String,
 ) -> AnalysisConfigTemplate {
+    let model = view.model.unwrap_or_default();
+    let endpoint = view.endpoint.unwrap_or_default();
+    let (prompt_configured, provider_label, connection_ready) = posture_fields(
+        &view.prompt,
+        view.provider == AnalysisProvider::OpenAiCompatible,
+        &model,
+        &endpoint,
+    );
     AnalysisConfigTemplate {
         show_nav: true,
         is_admin,
         tenant_id,
         prompt: view.prompt,
         is_openai_compatible: view.provider == AnalysisProvider::OpenAiCompatible,
-        model: view.model.unwrap_or_default(),
-        endpoint: view.endpoint.unwrap_or_default(),
+        model,
+        endpoint,
         api_key: String::new(),
         api_key_configured: view.api_key_configured,
         can_write,
         saved,
         error: None,
+        prompt_configured,
+        provider_label,
+        connection_ready,
+        secret_configured: view.api_key_configured,
+        analysis_queue_count,
+        fallback_status,
+        consumer_status,
     }
+}
+
+fn resilience_labels(summary: Option<&AnalysisResilienceSummary>) -> (String, String) {
+    match summary {
+        Some(summary) => (
+            if summary.fallback_configured { "configured" } else { "not configured" }.into(),
+            if summary.consumer_alive { "online" } else { "stalled" }.into(),
+        ),
+        None => ("unavailable".into(), "unavailable".into()),
+    }
+}
+
+async fn analysis_resilience(state: &AppState) -> Option<AnalysisResilienceSummary> {
+    state.execution_client.analysis_resilience().await.ok().flatten()
 }
 
 /// GET /analysis-config — the "AI Analysis" page (ADR-0019 / task "AI prompt generation for
@@ -94,22 +161,55 @@ pub async fn get_analysis_config_page(
     };
     let is_admin = session.role.at_least(common::Role::Admin);
     let can_write = session.role.at_least(common::Role::Operator);
+    let analysis_resilience = analysis_resilience(&state).await;
+    let analysis_queue_count =
+        analysis_resilience.as_ref().map(|summary| summary.dead_letter_count);
+    let (fallback_status, consumer_status) = resilience_labels(analysis_resilience.as_ref());
 
     match state.analysis_config_client.get_analysis_config(session.tenant_id).await {
         Ok(Some(config)) => Html(
-            template_from_view(config, is_admin, session.tenant_id, can_write, false)
-                .render()
-                .unwrap(),
+            template_from_view(
+                config,
+                is_admin,
+                session.tenant_id,
+                can_write,
+                false,
+                analysis_queue_count,
+                fallback_status,
+                consumer_status,
+            )
+            .render()
+            .unwrap(),
         )
         .into_response(),
         Ok(None) => Html(
-            empty_template(true, is_admin, session.tenant_id, can_write, None).render().unwrap(),
+            empty_template(
+                true,
+                is_admin,
+                session.tenant_id,
+                can_write,
+                None,
+                analysis_queue_count,
+                fallback_status,
+                consumer_status,
+            )
+            .render()
+            .unwrap(),
         )
         .into_response(),
         Err(e) => Html(
-            empty_template(true, is_admin, session.tenant_id, can_write, Some(e.to_string()))
-                .render()
-                .unwrap(),
+            empty_template(
+                true,
+                is_admin,
+                session.tenant_id,
+                can_write,
+                Some(e.to_string()),
+                analysis_queue_count,
+                fallback_status,
+                consumer_status,
+            )
+            .render()
+            .unwrap(),
         )
         .into_response(),
     }
@@ -143,6 +243,10 @@ pub async fn post_analysis_config(
         Err(response) => return response,
     };
     let is_admin = session.role.at_least(common::Role::Admin);
+    let analysis_resilience = analysis_resilience(&state).await;
+    let analysis_queue_count =
+        analysis_resilience.as_ref().map(|summary| summary.dead_letter_count);
+    let (fallback_status, consumer_status) = resilience_labels(analysis_resilience.as_ref());
     if !session.role.at_least(common::Role::Operator) {
         return StatusCode::FORBIDDEN.into_response();
     }
@@ -174,29 +278,55 @@ pub async fn post_analysis_config(
         .await
     {
         Ok(config) => Html(
-            template_from_view(config, is_admin, session.tenant_id, true, true).render().unwrap(),
-        )
-        .into_response(),
-        Err(e) => Html(
-            AnalysisConfigTemplate {
-                show_nav: true,
+            template_from_view(
+                config,
                 is_admin,
-                tenant_id: session.tenant_id,
-                prompt: form.prompt,
-                is_openai_compatible: form.provider == AnalysisProvider::OpenAiCompatible,
-                model: form.model,
-                endpoint: form.endpoint,
-                api_key: String::new(),
-                // Best-effort on this error-re-render path: we don't know whether a key was
-                // already configured before this failed submission, so don't claim one is.
-                api_key_configured: false,
-                can_write: true,
-                saved: false,
-                error: Some(e.to_string()),
-            }
+                session.tenant_id,
+                true,
+                true,
+                analysis_queue_count,
+                fallback_status,
+                consumer_status,
+            )
             .render()
             .unwrap(),
         )
         .into_response(),
+        Err(e) => {
+            let (prompt_configured, provider_label, connection_ready) = posture_fields(
+                &form.prompt,
+                form.provider == AnalysisProvider::OpenAiCompatible,
+                &form.model,
+                &form.endpoint,
+            );
+            Html(
+                AnalysisConfigTemplate {
+                    show_nav: true,
+                    is_admin,
+                    tenant_id: session.tenant_id,
+                    prompt: form.prompt,
+                    is_openai_compatible: form.provider == AnalysisProvider::OpenAiCompatible,
+                    model: form.model,
+                    endpoint: form.endpoint,
+                    api_key: String::new(),
+                    // Best-effort on this error-re-render path: we don't know whether a key was
+                    // already configured before this failed submission, so don't claim one is.
+                    api_key_configured: false,
+                    can_write: true,
+                    saved: false,
+                    error: Some(e.to_string()),
+                    prompt_configured,
+                    provider_label,
+                    connection_ready,
+                    secret_configured: false,
+                    analysis_queue_count,
+                    fallback_status,
+                    consumer_status,
+                }
+                .render()
+                .unwrap(),
+            )
+            .into_response()
+        }
     }
 }

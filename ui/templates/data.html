@@ -1,23 +1,41 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Data Viewer</h1>
+<style>
+  .data-visuals{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin:18px 0}.data-visual-panel{min-height:190px}.data-source-bars{display:grid;gap:12px;margin-top:17px}.data-source-row{display:grid;grid-template-columns:90px 1fr 42px;gap:12px;align-items:center;color:var(--text);text-decoration:none;border-radius:6px;padding:4px}.data-source-row:hover{background:var(--surface-hover);color:var(--accent)}.data-source-row strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.data-source-track{height:9px;border-radius:99px;background:#17263a;overflow:hidden}.data-source-fill{height:100%;min-width:3px;border-radius:99px;background:linear-gradient(90deg,#4f9bdf,#7ad5bf)}.data-source-count{text-align:right;color:var(--text);font-variant-numeric:tabular-nums}.data-posture-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:17px}.data-posture-cell{display:block;padding:14px;border:1px solid var(--border);border-radius:11px;background:#101e31;color:var(--text);text-decoration:none}.data-posture-cell:hover{border-color:var(--accent);background:var(--surface-hover)}.data-posture-cell strong{display:block;font-size:24px}.data-posture-cell span{display:block;color:var(--muted);font-size:11px;margin-top:5px}.data-posture-good{border-color:#2b7258}.data-posture-risk{border-color:#754e4d}@media(max-width:820px){.data-visuals{grid-template-columns:1fr}}
+  .data-analytics-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;margin:0 0 18px}.data-timeline{display:flex;align-items:end;gap:7px;min-height:150px;padding:18px 10px 4px;border-top:1px solid var(--border-subtle);overflow-x:auto}.data-timeline-bar{display:flex;flex-direction:column;align-items:center;justify-content:end;gap:6px;min-width:34px;height:125px;color:var(--text);text-decoration:none}.data-timeline-bar:hover{color:var(--accent);text-decoration:none}.data-timeline-bar i{display:block;width:18px;min-height:8px;border-radius:4px 4px 2px 2px;background:linear-gradient(180deg,#73c9c3,#4384c4);box-shadow:0 0 12px rgba(94,234,212,.12)}.data-timeline-bar strong{font-size:.68rem;font-variant-numeric:tabular-nums}.data-timeline-bar small{color:var(--text-dim);font-size:.62rem;white-space:nowrap}.data-heatmap{display:grid;gap:10px;margin-top:16px}.data-heatmap-row{display:grid;grid-template-columns:minmax(100px,1fr) 1.6fr 42px;gap:10px;align-items:center}.data-heatmap-row>a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font:600 .72rem ui-monospace,SFMono-Regular,Menlo,monospace}.data-heatmap-track{display:flex;height:12px;overflow:hidden;border-radius:99px;background:#17263a}.data-heatmap-good{background:#4fbc8b}.data-heatmap-risk{background:#b65d68}.data-heatmap-count{color:var(--text-dim);text-align:right;font-size:.7rem;font-variant-numeric:tabular-nums}@media(max-width:820px){.data-analytics-grid{grid-template-columns:1fr}}
+  .data-selection-preflight{flex-basis:100%;padding-top:.35rem;color:var(--text-dim);font-size:.72rem}.data-selection-preflight strong{color:var(--text)}
+</style>
+<div class="page-header"><div><div class="page-kicker">Evidence / source records</div><h1>Data Explorer</h1><p class="page-description">Search tenant-scoped source records, inspect normalization state, and trace each record into the model and response pipeline.</p></div><div class="quick-actions"><span class="console-live" data-data-live-status>Live refresh paused</span><button type="button" class="btn btn-secondary" data-data-refresh>Refresh now</button><button type="button" class="btn btn-secondary" data-data-toggle-live>Enable live mode</button><a class="btn btn-secondary" href="/ontology">Open ontology</a><a class="btn btn-secondary" href="/pipeline">View pipeline</a></div></div>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if query.notice == "saved" %}<p class="success-banner" role="status">Source-data search saved for this exact filter scope.</p>{% endif %}{% if query.notice == "save_failed" %}<p class="warning-banner" role="alert">The source-data search could not be saved. Your active filters are still intact.</p>{% endif %}
+<div class="kpi-grid data-kpis"><div class="kpi-card kpi-accent"><div class="kpi-label">Records on page</div><div class="kpi-value">{{ visible_count }}</div><div class="kpi-sub">current result window</div></div><div class="kpi-card"><div class="kpi-label">Normalized</div><div class="kpi-value">{{ normalized_count }}</div><div class="kpi-sub">ready for downstream analysis</div></div><div class="kpi-card {% if unnormalized_count > 0 %}kpi-danger{% else %}kpi-success{% endif %}"><div class="kpi-label">Needs normalization</div><div class="kpi-value">{{ unnormalized_count }}</div><div class="kpi-sub">available for reprocessing</div></div><div class="kpi-card"><div class="kpi-label">Connectors</div><div class="kpi-value">{{ connector_count }}</div><div class="kpi-sub">represented in this window</div></div></div>
+<section class="data-visuals" aria-label="Evidence set summary">
+  <div class="panel data-visual-panel"><div class="panel-heading"><div><h2>Evidence composition</h2><p class="muted">Source types in the current result window. Select a bar to filter the explorer.</p></div><span class="pill pill-muted">{{ visible_count }} records</span></div>{% if source_buckets.is_empty() %}<div class="empty-state compact"><p>No source types in this scope.</p></div>{% else %}<div class="data-source-bars">{% for bucket in source_buckets %}<a class="data-source-row" href="{{ bucket.href }}"><strong>{{ bucket.source_type }}</strong><span class="data-source-track"><span class="data-source-fill" style="width:{% if bucket.percent > 0 %}{{ bucket.percent }}{% else %}2{% endif %}%"></span></span><span class="data-source-count">{{ bucket.count }}</span></a>{% endfor %}</div>{% endif %}</div>
+  <div class="panel data-visual-panel"><div class="panel-heading"><div><h2>Normalization posture</h2><p class="muted">Readiness of the current evidence set. Select a state to filter the explorer.</p></div><span class="pill pill-muted">pipeline</span></div><div class="data-posture-grid"><a class="data-posture-cell data-posture-good" href="/data?connector_id={{ query.connector_id|urlencode }}&amp;source_type={{ query.source_type|urlencode }}&amp;q={{ query.q|urlencode }}&amp;subject={{ query.subject|urlencode }}&amp;email_from={{ query.email_from|urlencode }}&amp;attachment_filename={{ query.attachment_filename|urlencode }}&amp;from={{ query.from|urlencode }}&amp;to={{ query.to|urlencode }}&amp;normalized=true"><strong>{{ normalized_count }}</strong><span>Normalized</span></a><a class="data-posture-cell {% if unnormalized_count > 0 %}data-posture-risk{% endif %}" href="/data?connector_id={{ query.connector_id|urlencode }}&amp;source_type={{ query.source_type|urlencode }}&amp;q={{ query.q|urlencode }}&amp;subject={{ query.subject|urlencode }}&amp;email_from={{ query.email_from|urlencode }}&amp;attachment_filename={{ query.attachment_filename|urlencode }}&amp;from={{ query.from|urlencode }}&amp;to={{ query.to|urlencode }}&amp;normalized=false"><strong>{{ unnormalized_count }}</strong><span>Needs review</span></a></div></div>
+</section>
+<section class="data-analytics-grid" aria-label="Evidence analytics">
+  <div class="panel data-visual-panel"><div class="panel-heading"><div><h2>Ingestion timeline</h2><p class="muted">Daily record volume in the current result window. Select a day to scope the explorer.</p></div><span class="pill pill-muted">{{ ingestion_timeline.len() }} days</span></div>{% if ingestion_timeline.is_empty() %}<div class="empty-state compact"><p>No ingestion activity in this scope.</p></div>{% else %}<div class="data-timeline">{% for point in ingestion_timeline %}<a class="data-timeline-bar" href="{{ point.href }}" title="{{ point.count }} records on {{ point.label }}"><strong>{{ point.count }}</strong><i style="height:{{ point.height_pct }}%"></i><small>{{ point.label }}</small></a>{% endfor %}</div>{% endif %}</div>
+  <div class="panel data-visual-panel"><div class="panel-heading"><div><h2>Connector normalization heatmap</h2><p class="muted">Green is normalized; red is waiting for mapping or reprocessing.</p></div><span class="pill pill-muted">{{ connector_heatmap.len() }} connectors</span></div>{% if connector_heatmap.is_empty() %}<div class="empty-state compact"><p>No connector activity in this scope.</p></div>{% else %}<div class="data-heatmap">{% for row in connector_heatmap %}<div class="data-heatmap-row"><a href="{{ row.href }}" title="Open {{ row.connector_id }}">{{ row.connector_id }}</a><span class="data-heatmap-track"><span class="data-heatmap-good" style="width:{{ row.normalized_percent }}%"></span><span class="data-heatmap-risk" style="width:{% if row.normalized_percent < 100 %}{{ 100 - row.normalized_percent }}{% else %}0{% endif %}%"></span></span><span class="data-heatmap-count">{{ row.normalized_count }}/{{ row.normalized_count + row.unnormalized_count }}</span></div>{% endfor %}</div>{% endif %}</div>
+</section>
 {% if let Some(n) = reprocessed %}
 <p class="status-up">Republished {{ n }} unnormalized record(s) for reprocessing — they'll flow
-  through normalization/analysis/triggers again shortly.</p>
+  through normalization/analysis/triggers again shortly.{% if let Some(connector) = query.reprocessed_connector %} Scope: <strong>{{ connector }}</strong>.{% endif %}</p>
 {% endif %}
+{% if query.notice == "model-selected" %}<p class="status-up">Modeled {{ query.modeled.unwrap_or(0) }} selected record(s) into the ontology.{% if query.model_failed.unwrap_or(0) > 0 %} {{ query.model_failed.unwrap_or(0) }} could not be promoted and remain available for review.{% endif %} <a href="/ontology">Open ontology &rarr;</a></p>{% endif %}{% if query.notice == "model-selected-failed" %}<p class="error">The ontology service was unavailable; no selected records were modeled.</p>{% endif %}
 
 {% if can_write %}
-<form method="post" action="/data/reprocess" style="margin-bottom: 1rem;">
-  <button type="submit" class="btn">Reprocess unnormalized records</button>
+<div class="data-reprocess-bar"><form method="post" action="/data/reprocess" data-data-context-form>
+  <input type="hidden" name="connector_id" value="{{ query.connector_id }}">
+  <button type="submit" class="btn">{% if query.connector_id.is_empty() %}Reprocess unnormalized records{% else %}Reprocess {{ query.connector_id }} records{% endif %}</button>
   <span class="muted">Re-runs normalization/analysis for records ingested before a mapping
-    existed for their source type (up to 500 per click).</span>
-</form>
+    existed for their source type{% if !query.connector_id.is_empty() %} on this connector{% endif %} (up to 500 per click).</span>
+</form></div>
 {% endif %}
 
+<div class="section-heading"><div class="section-title">Investigate source data</div><span class="muted">Filters are tenant-scoped and composable</span></div>
 <div class="form-row">
-  <div class="panel">
-    <h2>Search</h2>
+  <div class="panel data-search-panel">
+    <div class="panel-heading"><div><h2>Search records</h2><p class="muted">Combine fields to narrow the evidence set.</p></div></div>
     <form class="inline" method="get" action="/data">
       <label for="connector_id">Connector ID</label>
       <input type="text" id="connector_id" name="connector_id" value="{{ query.connector_id }}" placeholder="zendesk" list="sensor-names" autocomplete="off">
@@ -71,8 +89,8 @@
       <button type="submit" class="btn">Save search</button>
     </form>
   </div>
-  <div class="info-panel">
-    <h2>Search tips</h2>
+  <div class="info-panel data-search-tips">
+    <div class="panel-heading"><div><h2>Explorer guide</h2><p class="muted">Useful paths through the evidence.</p></div></div>
     <ul>
       <li><code>Connector ID</code> and <code>Source type</code> narrow by where a record came
         from; leave either blank to match all.</li>
@@ -105,6 +123,7 @@
   <p>Try widening the filters above, or check that an agent has ingested data for this tenant.</p>
 </div>
 {% else %}
+<section class="panel data-results-panel">
 <form method="get" action="/data/export.csv" style="margin-bottom:0.5rem;">
   <input type="hidden" name="connector_id" value="{{ query.connector_id }}">
   <input type="hidden" name="source_type" value="{{ query.source_type }}">
@@ -117,20 +136,23 @@
   <input type="hidden" name="normalized" value="{{ query.normalized }}">
   <button type="submit" class="btn-link">Download CSV of this search &#8595;</button>
 </form>
+<div class="data-selection-bar" data-compare-bar hidden><span><strong data-compare-count>0</strong> selected</span><a class="btn" data-compare-link href="/data/compare">Compare selected</a>{% if can_write %}<form method="post" action="/data/reprocess-selected" data-reprocess-selected-form data-data-context-form><button class="btn btn-secondary" type="submit">Reprocess selected</button></form>{% if !model_types.is_empty() %}<form method="post" action="/data/model-selected" data-model-selected-form data-data-context-form><select name="object_type_id" aria-label="Object type for selected records" required><option value="">Model as…</option>{% for object_type in model_types %}<option value="{{ object_type.id }}">{{ object_type.name }}</option>{% endfor %}</select><button class="btn btn-secondary" type="submit">Create objects</button></form>{% endif %}{% endif %}<button type="button" class="btn-link" data-clear-selection>Clear</button></div>
 <table>
   <thead>
-    <tr><th scope="col">Record ID</th><th scope="col">Connector</th><th scope="col">Source Type</th><th scope="col">Ingested At</th><th scope="col">Normalized</th></tr>
+    <tr><th scope="col"><input type="checkbox" data-select-all aria-label="Select all records on this page"></th><th scope="col">Record</th><th scope="col">Connector</th><th scope="col">Source Type</th><th scope="col">Ingested At</th><th scope="col">Normalized</th><th scope="col">Lineage</th></tr>
   </thead>
   <tbody>
     {% for record in records %}
     <tr>
-      <td><a href="/data/{{ record.id }}">{{ record.id }}</a></td>
+      <td><input type="checkbox" data-record-id="{{ record.id }}" data-record-normalized="{% if record.is_normalized() %}true{% else %}false{% endif %}" aria-label="Select {{ record.preview() }}"></td>
+      <td><a href="/data/{{ record.id }}">{{ record.preview() }}</a><small class="record-id">{{ record.id }}</small></td>
       <td>{{ record.connector_id }}</td>
       <td>{{ record.source_type }}</td>
       <td>{{ record.ingested_at }}</td>
       <td class="status-{% if record.is_normalized() %}up{% else %}down{% endif %}">
         {% if record.is_normalized() %}yes{% else %}no{% endif %}
       </td>
+      <td><a href="/data/{{ record.id }}/journey">Trace journey &rarr;</a></td>
     </tr>
     {% endfor %}
   </tbody>
@@ -169,5 +191,95 @@
   </form>
   {% endif %}
 </div>
+</section>
+<script>
+(() => {
+  const bar = document.querySelector('[data-compare-bar]');
+  if (!bar) return;
+  const boxes = [...document.querySelectorAll('[data-record-id]')];
+  const all = document.querySelector('[data-select-all]');
+  const count = document.querySelector('[data-compare-count]');
+  const link = document.querySelector('[data-compare-link]');
+  const reprocessForm = document.querySelector('[data-reprocess-selected-form]');
+  const modelForm = document.querySelector('[data-model-selected-form]');
+  const preflight = document.createElement('span');
+  preflight.className = 'data-selection-preflight';
+  preflight.innerHTML = '<strong>Selection preflight:</strong> choose records to inspect the batch scope.';
+  bar.appendChild(preflight);
+  const selectionKey = 'kizashi.data.selection';
+  let persisted = [];
+  try { persisted = JSON.parse(localStorage.getItem(selectionKey) || '[]').filter(value => typeof value === 'string'); } catch (_) { persisted = []; }
+  const selectedIds = () => {
+    const visibleIds = new Set(boxes.map(box => box.dataset.recordId));
+    return Array.from(new Set(persisted.filter(id => !visibleIds.has(id)).concat(boxes.filter(box => box.checked).map(box => box.dataset.recordId))));
+  };
+  boxes.forEach(box => { box.checked = persisted.includes(box.dataset.recordId); });
+  const sync = () => {
+    persisted = selectedIds();
+    try { localStorage.setItem(selectionKey, JSON.stringify(persisted)); } catch (_) {}
+    const selected = persisted;
+    count.textContent = selected.length;
+    bar.hidden = selected.length === 0;
+    link.href = selected.length ? '/data/compare?ids=' + encodeURIComponent(selected.slice(0, 4).join(',')) : '/data/compare';
+    link.textContent = selected.length > 4 ? 'Compare first 4 selected' : 'Compare selected';
+    const visibleSelected = boxes.filter(box => box.checked);
+    const normalized = visibleSelected.filter(box => box.dataset.recordNormalized === 'true').length;
+    const unnormalized = visibleSelected.length - normalized;
+    const offPage = Math.max(0, selected.length - visibleSelected.length);
+    preflight.innerHTML = '<strong>Selection preflight:</strong> ' + normalized + ' normalized · ' + unnormalized + ' need normalization' + (offPage ? ' · ' + offPage + ' selected off this page' : '') + '. Batch actions affect the selected record IDs only.';
+    all.checked = boxes.length > 0 && boxes.every(box => box.checked);
+  };
+  boxes.forEach(box => box.addEventListener('change', sync));
+  if (reprocessForm) reprocessForm.addEventListener('submit', () => {
+    const input = document.createElement('input'); input.type = 'hidden'; input.name = 'ids';
+    input.value = selectedIds().join(',');
+    reprocessForm.appendChild(input);
+  });
+  if (modelForm) modelForm.addEventListener('submit', (event) => {
+    const selected = selectedIds();
+    if (!selected.length) { event.preventDefault(); return; }
+    const input = document.createElement('input'); input.type = 'hidden'; input.name = 'ids'; input.value = selected.join(',');
+    modelForm.appendChild(input);
+  });
+  all.addEventListener('change', () => { boxes.forEach(box => box.checked = all.checked); sync(); });
+  document.querySelector('[data-clear-selection]').addEventListener('click', () => { boxes.forEach(box => box.checked = false); persisted = []; try { localStorage.removeItem(selectionKey); } catch (_) {} sync(); });
+  sync();
+})();
+</script>
 {% endif %}
+<script>
+  (function () {
+    var keys = ['connector_id', 'source_type', 'q', 'subject', 'email_from', 'attachment_filename', 'from', 'to', 'normalized'];
+    document.querySelectorAll('[data-data-context-form]').forEach(function (form) {
+      form.addEventListener('submit', function () {
+        var params = new URLSearchParams(window.location.search);
+        keys.forEach(function (key) {
+          if (!params.has(key)) return;
+          var input = form.querySelector('input[data-data-context="' + key + '"]');
+          if (!input) { input = document.createElement('input'); input.type = 'hidden'; input.name = key; input.dataset.dataContext = key; form.appendChild(input); }
+          input.value = params.get(key) || '';
+        });
+      });
+    });
+  }());
+</script>
+<script>
+  (function () {
+    var key = 'kizashi.data.live-refresh'; var status = document.querySelector('[data-data-live-status]'); var toggle = document.querySelector('[data-data-toggle-live]'); var refresh = document.querySelector('[data-data-refresh]'); var enabled = false;
+    try { enabled = localStorage.getItem(key) === '1'; } catch (_) {}
+    function setState(next) { enabled = next; try { localStorage.setItem(key, enabled ? '1' : '0'); } catch (_) {} if (status) status.textContent = enabled ? 'Live · refreshes every 30s' : 'Live refresh paused'; if (toggle) toggle.textContent = enabled ? 'Pause live mode' : 'Enable live mode'; }
+    if (refresh) refresh.addEventListener('click', function () { window.location.reload(); }); if (toggle) toggle.addEventListener('click', function () { setState(!enabled); }); setState(enabled); if (enabled) window.setInterval(function () { window.location.reload(); }, 30000);
+  }());
+</script>
+<style>
+  /* Evidence analytics use the same shell tokens as the rest of the operator console. */
+  .data-source-track, .data-heatmap-track { background:var(--surface-raised); }
+  .data-source-fill { background:linear-gradient(90deg,var(--accent-dim),var(--accent)); }
+  .data-posture-cell { background:var(--surface-raised); border-color:var(--border); }
+  .data-posture-cell:hover { background:var(--surface-hover); border-color:var(--accent); }
+  .data-posture-good { border-color:color-mix(in srgb,var(--success) 45%,var(--border)); }
+  .data-posture-risk { border-color:color-mix(in srgb,var(--danger) 45%,var(--border)); }
+  .data-timeline-bar i { background:linear-gradient(180deg,var(--accent),var(--accent-dim)); box-shadow:0 0 12px color-mix(in srgb,var(--accent) 16%,transparent); }
+  .data-heatmap-good { background:var(--success); } .data-heatmap-risk { background:var(--danger); }
+</style>
 {% endblock %}

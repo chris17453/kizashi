@@ -31,20 +31,159 @@ struct SensorRow {
     enabled: bool,
     record_count: Option<i64>,
     last_ingested_at: Option<DateTime<Utc>>,
+    health: String,
+}
+
+struct SensorActivityBar {
+    name: String,
+    connector_type: String,
+    count: i64,
+    height: i32,
+}
+
+struct SensorHealthBucket {
+    key: String,
+    label: String,
+    count: usize,
+}
+
+struct ConnectorLibraryItem {
+    key: String,
+    name: String,
+    description: String,
+    protocol: String,
+    auth: String,
+    registered_count: usize,
+    healthy_count: usize,
+}
+
+fn connector_library(rows: &[SensorRow]) -> Vec<ConnectorLibraryItem> {
+    [
+        (
+            "zendesk",
+            "Zendesk",
+            "Support tickets, users, and event history",
+            "ZD",
+            "REST API",
+            "API token",
+        ),
+        (
+            "graph-mail",
+            "Microsoft Graph Mail",
+            "Mailbox messages and collaboration signals",
+            "M",
+            "Graph API",
+            "OAuth 2.0",
+        ),
+        (
+            "graph-teams",
+            "Microsoft Graph Teams",
+            "Teams messages, channels, and membership context",
+            "T",
+            "Graph API",
+            "OAuth 2.0",
+        ),
+        (
+            "sql",
+            "SQL database",
+            "Tables and incremental operational extracts",
+            "SQL",
+            "JDBC / SQL",
+            "Credentials",
+        ),
+        (
+            "fabric",
+            "Microsoft Fabric",
+            "Lakehouse and warehouse data products",
+            "F",
+            "Fabric API",
+            "Workspace token",
+        ),
+        (
+            "generic",
+            "Generic webhook",
+            "Bring any signed event stream into the workspace",
+            "{}",
+            "HTTP webhook",
+            "API key",
+        ),
+    ]
+    .into_iter()
+    .map(|(key, name, description, _icon, protocol, auth)| {
+        let matching = rows.iter().filter(|row| row.connector_type == key).collect::<Vec<_>>();
+        ConnectorLibraryItem {
+            key: key.to_string(),
+            name: name.to_string(),
+            description: description.to_string(),
+            protocol: protocol.to_string(),
+            auth: auth.to_string(),
+            registered_count: matching.len(),
+            healthy_count: matching.iter().filter(|row| row.health == "healthy").count(),
+        }
+    })
+    .collect()
+}
+
+fn sensor_visuals(rows: &[SensorRow]) -> (Vec<SensorActivityBar>, Vec<SensorHealthBucket>) {
+    let max_count = rows.iter().filter_map(|row| row.record_count).max().unwrap_or(0).max(1);
+    let activity = rows
+        .iter()
+        .take(8)
+        .map(|row| {
+            let count = row.record_count.unwrap_or(0);
+            let height =
+                if count == 0 { 8 } else { (count * 100 / max_count).clamp(12, 100) as i32 };
+            SensorActivityBar {
+                name: row.name.clone(),
+                connector_type: row.connector_type.clone(),
+                count,
+                height,
+            }
+        })
+        .collect();
+    let states = [
+        ("healthy", "Healthy"),
+        ("stale", "Stale"),
+        ("no_data", "No data"),
+        ("disabled", "Disabled"),
+    ];
+    let health = states
+        .into_iter()
+        .map(|(key, label)| SensorHealthBucket {
+            key: key.to_string(),
+            label: label.to_string(),
+            count: rows.iter().filter(|row| row.health == key).count(),
+        })
+        .collect();
+    (activity, health)
 }
 
 fn join_sensor_stats(sensors: Vec<Sensor>, stats: Vec<ConnectorStatSummary>) -> Vec<SensorRow> {
+    let now = Utc::now();
     sensors
         .into_iter()
         .map(|sensor| {
             let matched = stats.iter().find(|s| s.connector_id == sensor.name);
+            let last_ingested_at = matched.map(|s| s.last_ingested_at);
+            let health = if !sensor.enabled {
+                "disabled"
+            } else if let Some(last) = last_ingested_at {
+                if now - last <= chrono::Duration::hours(1) {
+                    "healthy"
+                } else {
+                    "stale"
+                }
+            } else {
+                "no_data"
+            };
             SensorRow {
                 id: sensor.id,
                 connector_type: sensor.connector_type,
                 name: sensor.name,
                 enabled: sensor.enabled,
                 record_count: matched.map(|s| s.record_count),
-                last_ingested_at: matched.map(|s| s.last_ingested_at),
+                last_ingested_at,
+                health: health.to_string(),
             }
         })
         .collect()
@@ -64,13 +203,27 @@ pub struct SensorsQuery {
     pub sort: String,
     #[serde(default)]
     pub dir: String,
+    #[serde(default)]
+    pub health: String,
+    #[serde(default)]
+    pub install: String,
+}
+
+fn normalize_install_type(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "zendesk" | "graph-mail" | "graph-teams" | "sql" | "fabric" | "generic" => {
+            value.trim().to_ascii_lowercase()
+        }
+        _ => String::new(),
+    }
 }
 
 /// Case-insensitive substring match on name -- same shape as Triggers' search (ADR-0066). Like
 /// Triggers, `list_sensors` is server-paginated, so this only filters the *current page's*
 /// already-fetched sensors, not the tenant's full set.
-fn matches_query(row: &SensorRow, q: &str) -> bool {
-    q.is_empty() || row.name.to_lowercase().contains(&q.to_lowercase())
+fn matches_query(row: &SensorRow, q: &str, health: &str) -> bool {
+    (q.is_empty() || row.name.to_lowercase().contains(&q.to_lowercase()))
+        && (health.is_empty() || row.health == health)
 }
 
 /// Same shape as Triggers' sortable columns (ADR-0070), applied after the search filter and,
@@ -103,6 +256,11 @@ struct SensorsTemplate {
     q: String,
     sort: String,
     dir: String,
+    health: String,
+    install: String,
+    activity: Vec<SensorActivityBar>,
+    health_buckets: Vec<SensorHealthBucket>,
+    library: Vec<ConnectorLibraryItem>,
 }
 
 pub async fn get_sensors(
@@ -137,6 +295,11 @@ pub async fn get_sensors(
                     q: query.q,
                     sort: query.sort,
                     dir: query.dir,
+                    health: query.health,
+                    install: normalize_install_type(&query.install),
+                    activity: vec![],
+                    health_buckets: vec![],
+                    library: connector_library(&[]),
                 }
                 .render()
                 .unwrap(),
@@ -146,11 +309,12 @@ pub async fn get_sensors(
     };
 
     let stats = state.stats_client.connector_stats(session.tenant_id).await.unwrap_or_default();
-    let mut rows: Vec<SensorRow> = join_sensor_stats(sensors, stats)
-        .into_iter()
-        .filter(|r| matches_query(r, &query.q))
-        .collect();
+    let all_rows = join_sensor_stats(sensors, stats);
+    let library = connector_library(&all_rows);
+    let mut rows: Vec<SensorRow> =
+        all_rows.into_iter().filter(|r| matches_query(r, &query.q, &query.health)).collect();
     sort_rows(&mut rows, &query.sort, &query.dir);
+    let (activity, health_buckets) = sensor_visuals(&rows);
 
     Html(
         SensorsTemplate {
@@ -164,6 +328,11 @@ pub async fn get_sensors(
             q: query.q,
             sort: query.sort,
             dir: query.dir,
+            health: query.health,
+            install: normalize_install_type(&query.install),
+            activity,
+            health_buckets,
+            library,
         }
         .render()
         .unwrap(),
@@ -193,11 +362,14 @@ async fn rerender_with_error(
         .map(|p| p.sensors)
         .unwrap_or_default();
     let stats = state.stats_client.connector_stats(tenant_id).await.unwrap_or_default();
+    let rows = join_sensor_stats(sensors, stats);
+    let library = connector_library(&rows);
+    let (activity, health_buckets) = sensor_visuals(&rows);
     Html(
         SensorsTemplate {
             show_nav: true,
             is_admin,
-            sensors: join_sensor_stats(sensors, stats),
+            sensors: rows,
             page: 0,
             has_more: false,
             can_write,
@@ -205,6 +377,11 @@ async fn rerender_with_error(
             q: String::new(),
             sort: String::new(),
             dir: String::new(),
+            health: String::new(),
+            install: String::new(),
+            activity,
+            health_buckets,
+            library,
         }
         .render()
         .unwrap(),

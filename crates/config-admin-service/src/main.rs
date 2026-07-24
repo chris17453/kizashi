@@ -1,10 +1,10 @@
 use config_admin_service::{
     build_router, AdminState, AnalysisConfigState, ApiKeyEncryptor,
     PostgresAnalysisConfigRepository, PostgresAuditLogReader,
-    PostgresNormalizationMappingRepository, PostgresSavedSearchQueryRepository,
-    PostgresSensorRepository, PostgresTriggerDefinitionRepository, RabbitMqAnalysisConfigPublisher,
-    RabbitMqMappingPublisher, RabbitMqSensorPublisher, RabbitMqTriggerPublisher,
-    SavedSearchQueryState, SensorState,
+    PostgresEventTypeDefinitionRepository, PostgresNormalizationMappingRepository,
+    PostgresReportRunRepository, PostgresSavedSearchQueryRepository, PostgresSensorRepository,
+    PostgresTriggerDefinitionRepository, RabbitMqAnalysisConfigPublisher, RabbitMqMappingPublisher,
+    RabbitMqSensorPublisher, RabbitMqTriggerPublisher, SavedSearchQueryState, SensorState,
 };
 use std::sync::Arc;
 
@@ -65,6 +65,10 @@ async fn main() {
         audit_reader: Arc::new(PostgresAuditLogReader::new(pool.clone())),
         trigger_publisher: Arc::new(trigger_publisher),
         mapping_publisher: Arc::new(mapping_publisher),
+        event_type_repository: Some(Arc::new(PostgresEventTypeDefinitionRepository::new(
+            pool.clone(),
+        ))),
+        report_run_repository: Some(Arc::new(PostgresReportRunRepository::new(pool.clone()))),
     };
     let sensor_state = SensorState {
         sensor_repository: Arc::new(PostgresSensorRepository::new(pool.clone())),

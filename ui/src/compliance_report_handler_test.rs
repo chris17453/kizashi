@@ -154,6 +154,10 @@ async fn admin_sees_a_full_snapshot() {
     assert!(body.contains("Minimum 12 characters"));
     assert!(body.contains("1 failed local-login attempt"));
     assert!(body.contains("success"));
+    assert!(body.contains("Connector freshness"));
+    assert!(body.contains("/sensors?health=stale"));
+    assert!(body.contains("Normalization completeness"));
+    assert!(body.contains("/normalization-mappings?coverage=pending"));
 }
 
 #[tokio::test]
@@ -187,4 +191,19 @@ async fn redirects_to_login_when_not_signed_in() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
+}
+
+#[test]
+fn compliance_control_state_scope_accepts_only_known_states() {
+    assert_eq!(normalize_control_state("ATTENTION"), "attention");
+    assert_eq!(normalize_control_state("ready"), "ready");
+    assert_eq!(normalize_control_state("everything"), "");
+}
+
+#[test]
+fn compliance_snapshot_includes_connector_freshness_control() {
+    let template = include_str!("../templates/compliance_report.html");
+    assert!(template.contains("enabled_connector_count"));
+    assert!(template.contains("normalized_record_count"));
+    assert!(template.contains("stale_connector_count"));
 }

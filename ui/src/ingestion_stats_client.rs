@@ -30,6 +30,26 @@ impl RecordSummary {
     pub fn is_normalized(&self) -> bool {
         self.normalized_payload.is_some()
     }
+
+    /// A compact operator-facing label for list views. Raw records are intentionally kept
+    /// schemaless, so the viewer promotes the most useful common identifiers without pretending
+    /// every connector has the same shape.
+    pub fn preview(&self) -> String {
+        let payload = self.normalized_payload.as_ref().unwrap_or(&self.raw_payload);
+        for key in ["subject", "name", "title", "ticket_id", "external_id"] {
+            if let Some(value) = payload.get(key).and_then(serde_json::Value::as_str) {
+                if !value.is_empty() {
+                    return value.to_string();
+                }
+            }
+        }
+        let compact = payload.to_string();
+        if compact.chars().count() > 84 {
+            format!("{}…", compact.chars().take(81).collect::<String>())
+        } else {
+            compact
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +142,29 @@ pub trait IngestionStatsClient: Send + Sync {
     /// `NormalizationMapping` existed for their source type. Returns how many were
     /// republished (bounded to Ingestion Service's own per-call cap).
     async fn reprocess(&self, tenant_id: Uuid) -> Result<usize, IngestionStatsClientError>;
+
+    /// Republishes one tenant-scoped unnormalized record for targeted recovery. Normalized
+    /// records are a no-op and return zero.
+    async fn reprocess_record(
+        &self,
+        tenant_id: Uuid,
+        record_id: Uuid,
+    ) -> Result<usize, IngestionStatsClientError> {
+        let _ = (tenant_id, record_id);
+        Ok(0)
+    }
+
+    /// Connector-scoped variant used by the Data Explorer when an operator has narrowed the
+    /// investigation to one source. Implementations that only support the original tenant-wide
+    /// recovery path retain that behavior through this default.
+    async fn reprocess_for_connector(
+        &self,
+        tenant_id: Uuid,
+        connector_id: Option<&str>,
+    ) -> Result<usize, IngestionStatsClientError> {
+        let _ = connector_id;
+        self.reprocess(tenant_id).await
+    }
 }
 
 pub struct HttpIngestionStatsClient {
@@ -274,10 +317,45 @@ impl IngestionStatsClient for HttpIngestionStatsClient {
     }
 
     async fn reprocess(&self, tenant_id: Uuid) -> Result<usize, IngestionStatsClientError> {
+        self.reprocess_for_connector(tenant_id, None).await
+    }
+
+    async fn reprocess_record(
+        &self,
+        tenant_id: Uuid,
+        record_id: Uuid,
+    ) -> Result<usize, IngestionStatsClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/records/{record_id}/reprocess", self.ingestion_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .send()
+            .await
+            .map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(IngestionStatsClientError::Rejected(response.status().as_u16()));
+        }
+        #[derive(serde::Deserialize)]
+        struct ReprocessResponse {
+            republished: usize,
+        }
+        response
+            .json::<ReprocessResponse>()
+            .await
+            .map(|body| body.republished)
+            .map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))
+    }
+
+    async fn reprocess_for_connector(
+        &self,
+        tenant_id: Uuid,
+        connector_id: Option<&str>,
+    ) -> Result<usize, IngestionStatsClientError> {
         let response = self
             .client
             .post(format!("{}/v1/records/reprocess", self.ingestion_service_url))
             .header("x-tenant-id", tenant_id.to_string())
+            .query(&connector_id.map(|connector_id| [("connector_id", connector_id)]))
             .send()
             .await
             .map_err(|e| IngestionStatsClientError::Unreachable(e.to_string()))?;

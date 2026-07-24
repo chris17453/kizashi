@@ -1,7 +1,7 @@
 use super::*;
 use crate::InMemoryOntologyRepository;
-use common::ontology::ObjectType;
 use chrono::Utc;
+use common::ontology::ObjectType;
 use serde_json::json;
 
 #[tokio::test]
@@ -54,7 +54,7 @@ async fn test_process_record_creates_object() {
     let obj = &objects[0];
     assert_eq!(obj.object_type_id, ot_id);
     assert_eq!(obj.properties, json!({"name": "Alice"}));
-    
+
     // Test idempotency/upsert
     let record2 = RawRecord {
         id: Uuid::new_v4(), // Different record ID
@@ -69,7 +69,7 @@ async fn test_process_record_creates_object() {
         ingested_at: Utc::now(),
         occurred_at: Some(Utc::now()),
     };
-    
+
     engine.process_record(record2).await.unwrap();
     let objects_after = repo.get_objects(tenant_id).await.unwrap();
     assert_eq!(objects_after.len(), 1); // Should still be 1 object

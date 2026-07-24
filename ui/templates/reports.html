@@ -1,10 +1,66 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Reports</h1>
-{% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+<style>
+  .report-chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}.report-chart-card{min-width:0}.report-chart-card .chart{min-height:180px;padding:10px 0}.report-chart-card .chart-row{display:block}.report-chart-card table{margin-top:10px}.report-chart-card .section-link{font-size:12px}@media(max-width:900px){.report-chart-grid{grid-template-columns:1fr}}
+  .report-matrix{margin:1.25rem 0}.report-matrix table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--border);border-radius:9px;overflow:hidden}.report-matrix th,.report-matrix td{padding:.7rem .8rem;border-bottom:1px solid var(--border);text-align:right}.report-matrix th{font-size:.7rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em}.report-matrix th:first-child,.report-matrix td:first-child{text-align:left}.report-matrix tr:last-child td{border-bottom:0}.report-matrix a{color:var(--text);text-decoration:none;font-weight:650}.report-matrix a:hover{color:var(--accent)}.report-matrix .severity-critical{color:var(--danger,#f87171)}.report-matrix .severity-high{color:#e49a75}.report-matrix .severity-medium{color:var(--warning,#e2c06b)}.report-matrix .severity-low{color:var(--success,#4ade80)}.report-matrix .breach{color:var(--danger,#f87171);font-weight:800}
+  .report-readiness{margin:0 0 1.25rem}.report-readiness-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem}.report-readiness-card{display:grid;gap:.3rem;padding:.8rem;border:1px solid var(--border-subtle);border-radius:8px;background:var(--surface);color:var(--text);text-decoration:none}.report-readiness-card:hover{border-color:var(--accent);background:var(--surface-hover);text-decoration:none}.report-readiness-card strong{font:700 1.2rem var(--mono)}.report-readiness-card small{color:var(--text-dim);line-height:1.35}.report-readiness-card .readiness-track{height:.45rem;overflow:hidden;border-radius:99px;background:var(--surface-raised)}.report-readiness-card .readiness-fill{display:block;height:100%;min-width:2px;border-radius:inherit;background:var(--accent)}.report-readiness-card.good .readiness-fill{background:var(--success)}.report-readiness-card.warning .readiness-fill{background:var(--warning)}.report-readiness-card.risk .readiness-fill{background:var(--danger)}@media(max-width:850px){.report-readiness-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.report-readiness-grid{grid-template-columns:1fr}}
+  .report-funnel{margin:0 0 1.25rem}.report-funnel-track{display:grid;gap:.55rem;margin-top:.9rem}.report-funnel-stage{display:grid;grid-template-columns:6.5rem minmax(0,1fr) 4rem;gap:.7rem;align-items:center;padding:.6rem .7rem;border:1px solid var(--border-subtle);border-radius:8px;background:var(--surface);color:var(--text);text-decoration:none}.report-funnel-stage:hover{border-color:var(--accent);background:var(--surface-hover);text-decoration:none}.report-funnel-stage strong{font:700 .8rem var(--mono)}.report-funnel-stage small{grid-column:1/-1;color:var(--text-dim);font-size:.68rem;margin-top:-.35rem}.report-funnel-bar{height:.72rem;overflow:hidden;border-radius:99px;background:var(--surface-raised)}.report-funnel-bar span{display:block;height:100%;min-width:3px;border-radius:inherit;background:linear-gradient(90deg,var(--accent-dim),var(--accent))}.report-funnel-stage.risk .report-funnel-bar span{background:var(--danger)}.report-funnel-count{text-align:right;font:700 .9rem var(--mono)}@media(max-width:600px){.report-funnel-stage{grid-template-columns:5.5rem minmax(0,1fr) 3rem}}
+  .report-window-presets{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin:.7rem 0 0}.report-window-presets .detail-label{margin-right:.2rem}.report-window-preset{border:1px solid var(--border);border-radius:999px;background:var(--surface-raised);color:var(--text-dim);padding:.35rem .65rem;font:inherit;font-size:.72rem;cursor:pointer}.report-window-preset:hover,.report-window-preset:focus-visible{border-color:var(--accent);color:var(--text);outline:none}
+  .report-comparison{margin:0 0 1.25rem}.report-comparison-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem}.report-comparison-card{display:grid;grid-template-columns:1fr auto;gap:.2rem .8rem;padding:.85rem;border:1px solid var(--border-subtle);border-radius:9px;background:var(--surface);color:var(--text);text-decoration:none}.report-comparison-card:hover{border-color:var(--accent);background:var(--surface-hover);text-decoration:none}.report-comparison-card small{color:var(--text-dim);font-size:.68rem}.report-comparison-card strong{font:700 1.25rem var(--mono);grid-row:span 2}.report-comparison-card .comparison-delta{grid-column:1/-1;margin-top:.35rem;font:700 .76rem var(--mono)}.report-comparison-card .comparison-delta.warning{color:var(--warning)}.report-comparison-card .comparison-delta.good{color:var(--success)}.report-comparison-card .comparison-delta.neutral{color:var(--text-dim)}@media(max-width:600px){.report-comparison-grid{grid-template-columns:1fr}}
+</style>
+<div class="page-header report-context"><div><div class="page-kicker">Executive signal</div><h1>Reports</h1><p class="page-description">Current operational posture across incidents, knowledge coverage, ingestion, event generation, and governed response.</p></div><div class="quick-actions"><span class="console-live" data-report-live-status>Live refresh paused</span><button type="button" class="btn btn-secondary" data-report-refresh>Refresh now</button><button type="button" class="btn btn-secondary" data-report-toggle-live>Enable live mode</button><a class="btn btn-secondary" href="/incidents">Open triage console &rarr;</a><a class="btn btn-secondary" href="/reports/schedules">Schedule delivery</a><a class="btn btn-secondary" href="/configuration">Review controls</a></div></div>
+{% if let Some(e) = error %}<p class="warning-banner">Report data warning: {{ e }}</p>{% endif %}
+{% if notice == "view_saved" %}<p class="success-banner" role="status">Report view saved for this signal window.</p>{% else if notice == "view_failed" %}<p class="warning-banner" role="alert">The report view could not be saved. Your signal window is still intact.</p>{% endif %}
+<section class="panel report-window-panel">
+  <div class="panel-heading"><div><h2>Signal window</h2><p class="muted">Scope the signal aggregates below to a period you can defend in a review.</p></div><a class="btn-link" href="/reports">Reset window</a></div>
+  <form class="inline report-window-form" method="get" action="/reports">
+    <label for="report-from">From</label><input id="report-from" type="date" name="from" value="{{ from }}">
+    <label for="report-to">To</label><input id="report-to" type="date" name="to" value="{{ to }}">
+    <button type="submit">Apply window</button>
+    <a class="btn-link" href="/reports/export.csv?from={{ from|urlencode }}&to={{ to|urlencode }}">Export CSV &darr;</a>
+    <a class="btn-link" href="/reports/export.pdf?from={{ from|urlencode }}&to={{ to|urlencode }}">Export PDF &darr;</a>
+  </form>
+  <div class="report-window-presets" aria-label="Signal window presets"><span class="detail-label">Quick scope</span><button type="button" class="report-window-preset" data-report-window-preset="1">24 hours</button><button type="button" class="report-window-preset" data-report-window-preset="7">7 days</button><button type="button" class="report-window-preset" data-report-window-preset="30">30 days</button></div>
+  <form class="inline report-save-view-form" method="post" action="/reports/saved-views">
+    <input type="hidden" name="from" value="{{ from }}"><input type="hidden" name="to" value="{{ to }}">
+    <label for="save-report-view-name">Save this report view</label><input id="save-report-view-name" name="name" placeholder="Weekly operating posture" required>
+    <button type="submit" class="btn">Save view</button>
+  </form>
+  {% if !saved_views.is_empty() %}<div class="saved-view-strip"><span class="detail-label">Saved report views</span>{% for view in saved_views %}<span class="saved-view-chip"><a href="{{ view.load_url }}">{{ view.name }}</a><form method="post" action="/reports/saved-views/{{ view.id }}/delete"><button class="btn-link btn-danger-link" type="submit" aria-label="Remove {{ view.name }}">&times;</button></form></span>{% endfor %}</div>{% endif %}
+</section>
+<section class="panel report-readiness" aria-label="Executive readiness gates"><div class="panel-heading"><div><div class="page-kicker">Executive decision gates</div><h2>Readiness to act</h2><p class="muted">A compact control view of whether the selected reporting window has evidence, modeled context, case control, and governed response coverage.</p></div><span class="pill pill-muted">{{ readiness_metrics.len() }} gates</span></div><div class="report-readiness-grid">{% for metric in readiness_metrics %}<a class="report-readiness-card {{ metric.tone }}" href="{{ metric.href }}"><span class="detail-label">{{ metric.label }}</span><strong>{{ metric.count }}</strong><span class="readiness-track"><span class="readiness-fill" style="width:{{ metric.percent }}%"></span></span><small>{{ metric.detail }}</small></a>{% endfor %}</div></section>
+<section class="panel report-funnel" aria-label="Operating model conversion funnel"><div class="panel-heading"><div><div class="page-kicker">System of action</div><h2>Evidence to response conversion</h2><p class="muted">Follow the selected window from source evidence through signals, cases, modeled entities, and governed decisions. Each stage opens the underlying operational surface.</p></div><span class="pill pill-muted">{{ operating_funnel.len() }} stages</span></div><div class="report-funnel-track">{% for stage in operating_funnel %}<a class="report-funnel-stage {{ stage.tone }}" href="{{ stage.href }}"><strong>{{ stage.label }}</strong><span class="report-funnel-bar" aria-hidden="true"><span style="width:{{ stage.percent }}%"></span></span><strong class="report-funnel-count">{{ stage.count }}</strong><small>{{ stage.detail }}</small></a>{% endfor %}</div></section>
+{% if !comparison_metrics.is_empty() %}<section class="panel report-comparison" aria-label="Prior window comparison"><div class="panel-heading"><div><div class="page-kicker">Trend context</div><h2>Current window vs prior window</h2><p class="muted">Compare the selected period with the immediately preceding period of equal length.</p></div><span class="pill pill-muted">same duration</span></div><div class="report-comparison-grid">{% for metric in comparison_metrics %}<a class="report-comparison-card" href="{{ metric.href }}"><span class="detail-label">{{ metric.label }}</span><strong>{{ metric.current }}</strong><small>Prior window · {{ metric.previous }}</small><span class="comparison-delta {{ metric.tone }}">{{ metric.delta }} vs prior</span></a>{% endfor %}</div></section>{% endif %}
+<div class="kpi-grid">
+  <div class="kpi-card {% if open_incidents > 0 %}kpi-danger{% else %}kpi-success{% endif %}"><div class="kpi-label">Open incidents</div><div class="kpi-value">{{ open_incidents }}</div><div class="kpi-sub">{{ acknowledged_incidents }} acknowledged</div></div>
+  <div class="kpi-card {% if critical_incidents > 0 %}kpi-danger{% else %}kpi-success{% endif %}"><div class="kpi-label">Critical exposure</div><div class="kpi-value">{{ critical_incidents }}</div><div class="kpi-sub">unresolved critical incidents</div></div>
+  <div class="kpi-card kpi-accent"><div class="kpi-label">Knowledge coverage</div><div class="kpi-value">{{ ontology_objects }}</div><div class="kpi-sub">window-evidenced objects across {{ ontology_types }} types</div></div>
+  <a class="kpi-card kpi-card-link {% if sla_breached_incidents > 0 %}kpi-danger{% else %}kpi-success{% endif %}" href="/incidents?sla=breached"><div class="kpi-label">SLA breaches</div><div class="kpi-value">{{ sla_breached_incidents }}</div><div class="kpi-sub">cases past response target</div></a>
+  <div class="kpi-card"><div class="kpi-label">Signals in window</div><div class="kpi-value">{{ signal_count }}</div><div class="kpi-sub">{{ event_counts.len() }} event classes · {{ signal_delta }}</div></div>
+  <a class="kpi-card kpi-card-link {% if review_actions > 0 %}kpi-danger{% else %}kpi-success{% endif %}" href="/actions"><div class="kpi-label">Response assurance</div><div class="kpi-value">{{ completed_actions }}</div><div class="kpi-sub">{{ review_actions }} needs review · action ledger</div></a>
+</div>
 
-<div class="section-title">Ingestion volume by connector</div>
-<div class="chart-row">
+<div class="section-heading"><div><div class="section-title">Ontology coverage</div><p class="muted">Modeled entities with source evidence in the selected window, grouped by type. Relationship structure remains available from each investigation handoff.</p></div><a class="section-link" href="/ontology">Open ontology &rarr;</a></div>
+{% if ontology_coverage.is_empty() %}<div class="empty-state compact"><p>No modeled object types are available.</p></div>{% else %}<div class="table-wrap"><table><thead><tr><th>Object type</th><th>Entities</th><th>Defined properties</th><th>Relationship types</th><th></th></tr></thead><tbody>{% for row in ontology_coverage %}<tr><td><strong>{{ row.name }}</strong></td><td>{{ row.object_count }}</td><td>{{ row.property_count }}</td><td>{{ row.relationship_count }}</td><td><a href="/ontology?type_id={{ row.id }}">Investigate type &rarr;</a></td></tr>{% endfor %}</tbody></table></div>{% endif %}
+
+<div class="section-heading"><div class="section-title">Incident posture</div><a class="section-link" href="/incidents">View all incidents &rarr;</a></div>
+<section class="panel report-matrix"><div class="panel-heading"><div><h2>Severity × lifecycle control board</h2><p class="muted">Open, acknowledged, resolved, and SLA-breached cases by severity. Each cell opens the corresponding triage scope.</p></div><span class="pill pill-muted">{{ incident_matrix.len() }} severity bands</span></div><table><thead><tr><th>Severity</th><th>Total</th><th>Open</th><th>Acknowledged</th><th>Resolved</th><th>SLA breached</th></tr></thead><tbody>{% for row in incident_matrix %}<tr><td class="severity-{{ row.severity }}"><strong>{{ row.severity }}</strong></td><td><a href="/incidents?from={{ from|urlencode }}&amp;to={{ to|urlencode }}&amp;severity={{ row.severity }}">{{ row.total }}</a></td><td><a href="/incidents?from={{ from|urlencode }}&amp;to={{ to|urlencode }}&amp;severity={{ row.severity }}&amp;status=open">{{ row.open }}</a></td><td><a href="/incidents?from={{ from|urlencode }}&amp;to={{ to|urlencode }}&amp;severity={{ row.severity }}&amp;status=acknowledged">{{ row.acknowledged }}</a></td><td><a href="/incidents?from={{ from|urlencode }}&amp;to={{ to|urlencode }}&amp;severity={{ row.severity }}&amp;status=resolved">{{ row.resolved }}</a></td><td><a class="{% if row.breached > 0 %}breach{% endif %}" href="/incidents?from={{ from|urlencode }}&amp;to={{ to|urlencode }}&amp;severity={{ row.severity }}&amp;sla=breached">{{ row.breached }}</a></td></tr>{% endfor %}</tbody></table></section>
+{% if incident_rows.is_empty() %}<div class="empty-state compact"><p>No incidents are currently recorded.</p></div>{% else %}<div class="table-wrap"><table><thead><tr><th>Incident</th><th>Severity</th><th>Status</th><th>Evidence handoff</th></tr></thead><tbody>{% for incident in incident_rows %}<tr><td><a href="/incidents/{{ incident.id }}">{{ incident.title }}</a></td><td><span class="pill {% if incident.severity == "critical" || incident.severity == "high" %}pill-down{% else %}pill-muted{% endif %}">{{ incident.severity }}</span></td><td>{{ incident.status }}</td><td>{% if incident.event_links.is_empty() %}<span class="muted">{{ incident.event_count }} linked signals in window</span>{% else %}{% for event in incident.event_links %}<a href="/events/{{ event.id }}">{{ event.event_type }}</a>{% if !loop.last %}<br>{% endif %}{% endfor %}{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+
+<div class="section-heading"><div><div class="section-title">Governed response posture</div><p class="muted">The latest action decisions in the selected window, with their operational source.</p></div><a class="section-link" href="/actions">Open action ledger &rarr;</a></div>
+{% if action_rows.is_empty() %}<div class="empty-state compact"><p>No governed responses were recorded in this window.</p></div>{% else %}<div class="table-wrap"><table><thead><tr><th>Action</th><th>Outcome</th><th>Targets</th><th>Source</th><th>Executed</th></tr></thead><tbody>{% for action in action_rows %}<tr><td><a href="/actions/{{ action.id }}">{{ action.action_name }}</a><br><small class="muted">Decision record &rarr;</small></td><td><span class="pill {% if action.outcome == "Completed" %}pill-up{% else %}pill-down{% endif %}">{{ action.outcome }}</span></td><td>{% if action.targets.is_empty() %}{{ action.target_count }}{% else %}{% for target in action.targets %}<a href="/ontology?object_id={{ target.id }}#object-{{ target.id }}">{{ target.label }}</a>{% if !loop.last %}<br>{% endif %}{% endfor %}{% endif %}</td><td>{% if let Some(event_id) = action.event_id %}<a href="/events/{{ event_id }}">Event signal</a>{% else if let Some(incident_id) = action.incident_id %}<a href="/incidents/{{ incident_id }}">Case response</a>{% else %}<a href="/actions">Action ledger</a>{% endif %}</td><td>{{ action.executed_at }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+
+<section class="report-chart-grid" aria-label="Report visualizations"><div class="panel report-chart-card"><div class="panel-heading"><div><h2>Signal trend</h2><p class="muted">Daily signals in the selected window. Spikes are a direct route into event investigation.</p></div><a class="section-link" href="/events?from={{ from|urlencode }}&to={{ to|urlencode }}">Inspect signals &rarr;</a></div><div class="chart-row">
+  <div class="chart" data-chart-source="signal-trend-chart-data" data-chart-kind="line"></div>
+  <script type="application/json" id="signal-trend-chart-data">{{ signal_trend_chart_json|safe }}</script>
+</div></div>
+
+<div class="panel report-chart-card"><div class="panel-heading"><div><h2>Case posture</h2><p class="muted">Lifecycle and response-target exposure across the current incident population.</p></div><a class="section-link" href="/incidents">Inspect cases &rarr;</a></div><div class="chart-row">
+  <div class="chart" data-chart-source="incident-posture-chart-data"></div>
+  <script type="application/json" id="incident-posture-chart-data">{{ incident_posture_chart_json|safe }}</script>
+</div></div>
+
+<div class="panel report-chart-card"><div class="panel-heading"><div><h2>Ingestion volume</h2><p class="muted">Records by connector in the selected signal window.</p></div><a class="section-link" href="/data?from={{ from|urlencode }}&to={{ to|urlencode }}">Inspect evidence &rarr;</a></div><div class="chart-row">
   <div class="chart" data-chart-source="connector-stats-chart-data"></div>
   <script type="application/json" id="connector-stats-chart-data">{{ connector_stats_chart_json|safe }}</script>
   <table>
@@ -14,17 +70,16 @@
     <tbody>
       {% for row in connector_stats %}
       <tr>
-        <td>{{ row.connector_id }}</td>
+        <td><a href="/data?connector_id={{ row.connector_id|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}">{{ row.connector_id }}</a></td>
         <td>{{ row.record_count }}</td>
         <td>{{ row.last_ingested_at }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-</div>
+</div></div>
 
-<div class="section-title">Events by type</div>
-<div class="chart-row">
+<div class="panel report-chart-card"><div class="panel-heading"><div><h2>Signal composition</h2><p class="muted">Event classes generated in the selected signal window.</p></div><a class="section-link" href="/events?from={{ from|urlencode }}&to={{ to|urlencode }}">Inspect signals &rarr;</a></div><div class="chart-row">
   <div class="chart" data-chart-source="event-counts-chart-data"></div>
   <script type="application/json" id="event-counts-chart-data">{{ event_counts_chart_json|safe }}</script>
   <table>
@@ -34,11 +89,43 @@
     <tbody>
       {% for row in event_counts %}
       <tr>
-        <td>{{ row.event_type }}</td>
-        <td>{{ row.count }}</td>
+        <td><a href="/events?q={{ row.event_type|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}">{{ row.event_type }}</a></td>
+        <td><a href="/events?q={{ row.event_type|urlencode }}&from={{ from|urlencode }}&to={{ to|urlencode }}">{{ row.count }}</a></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-</div>
+</div></div></section>
+<script>
+  (function () {
+    var fromInput = document.getElementById('report-from');
+    var toInput = document.getElementById('report-to');
+    document.querySelectorAll('[data-report-window-preset]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var days = Number(button.getAttribute('data-report-window-preset')) || 7;
+        var end = new Date();
+        var start = new Date(end.getTime() - ((days - 1) * 24 * 60 * 60 * 1000));
+        var iso = function (date) { return date.toISOString().slice(0, 10); };
+        if (fromInput) fromInput.value = iso(start);
+        if (toInput) toInput.value = iso(end);
+        var form = document.querySelector('.report-window-form');
+        if (form) form.submit();
+      });
+    });
+    var storageKey = 'kizashi.reports.live-refresh';
+    var status = document.querySelector('[data-report-live-status]');
+    var toggle = document.querySelector('[data-report-toggle-live]');
+    var refresh = document.querySelector('[data-report-refresh]');
+    var enabled = false;
+    try { enabled = window.localStorage.getItem(storageKey) === 'on'; } catch (_) {}
+    function render() {
+      if (status) status.textContent = enabled ? 'Live · 60s refresh' : 'Live refresh paused';
+      if (toggle) { toggle.textContent = enabled ? 'Pause live mode' : 'Enable live mode'; toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false'); }
+    }
+    if (refresh) refresh.addEventListener('click', function () { window.location.reload(); });
+    if (toggle) toggle.addEventListener('click', function () { enabled = !enabled; try { window.localStorage.setItem(storageKey, enabled ? 'on' : 'off'); } catch (_) {} render(); if (enabled) window.setTimeout(function () { window.location.reload(); }, 60000); });
+    render();
+    if (enabled) window.setTimeout(function () { window.location.reload(); }, 60000);
+  }());
+</script>
 {% endblock %}

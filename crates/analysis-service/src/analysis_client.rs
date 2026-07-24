@@ -18,6 +18,19 @@ pub enum AnalysisError {
     ResultCountMismatch { expected: usize, got: usize },
 }
 
+impl AnalysisError {
+    /// Whether retrying this request against an alternate model is likely to help. A malformed
+    /// response contract is not treated as transient: silently moving it to another model would
+    /// hide a provider integration defect.
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            Self::Unreachable(_) => true,
+            Self::Rejected(status) => matches!(status, 408 | 409 | 429 | 500 | 502 | 503 | 504),
+            Self::ResultCountMismatch { .. } => false,
+        }
+    }
+}
+
 /// Calls Azure AI Foundry/ML for a tenant-homogeneous batch of records (ADR-0004: analysis is
 /// invoked in micro-batches, never mixing tenants in one call). Returns exactly one analysis
 /// result per input record, in the same order, so callers can zip results back onto records

@@ -179,3 +179,11 @@ async fn shows_an_empty_state_with_no_policies_configured() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("No retention policies"));
 }
+
+#[test]
+fn retention_console_exposes_a_data_class_ttl_profile() {
+    let template = include_str!("../templates/retention_policies.html");
+    assert!(template.contains("Retention contract by data class"));
+    assert!(template.contains("retention-ttl-fill"));
+    assert!(template.contains("policy.ttl_days * 100 / longest_ttl"));
+}

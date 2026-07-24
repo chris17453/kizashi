@@ -165,6 +165,15 @@ async fn renders_events_and_their_executions() {
     assert!(body.contains("sent"));
 }
 
+#[test]
+fn record_journey_exposes_modeled_entity_handoffs() {
+    let template = include_str!("../templates/record_journey.html");
+    assert!(template.contains("Modeled entities"));
+    assert!(template.contains("/ontology?object_id={{ object.id }}#object-{{ object.id }}"));
+    let source = include_str!("record_journey_handler.rs");
+    assert!(source.contains("struct ModeledJourneyObject"));
+}
+
 #[tokio::test]
 async fn renders_event_with_no_executions_when_execution_client_fails() {
     let (mut state, session_id, _tenant_id) = state_with_session().await;

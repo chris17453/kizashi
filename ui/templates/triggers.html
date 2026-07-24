@@ -1,14 +1,28 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Triggers</h1>
+<style>
+  .trigger-telemetry{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0}.trigger-telemetry-panel{min-height:185px}.trigger-metric-row{display:grid;grid-template-columns:90px 1fr 38px;gap:12px;align-items:center;text-decoration:none;padding:17px}.trigger-metric-row strong{font-size:12px}.trigger-metric-track{height:9px;border-radius:99px;background:#17263a;overflow:hidden}.trigger-metric-fill{height:100%;min-width:3px;border-radius:99px}.trigger-metric-fill.good{background:linear-gradient(90deg,#3e9b79,#78d5a4)}.trigger-metric-fill.risk{background:linear-gradient(90deg,#b76870,#e49a75)}.trigger-metric-count{text-align:right;color:#e4effc;font-variant-numeric:tabular-nums}.trigger-metric-row:hover{opacity:.86}@media(max-width:700px){.trigger-telemetry{grid-template-columns:1fr}}
+  .trigger-metric-track{background:var(--surface-raised)}.trigger-metric-count{color:var(--text)}
+  .trigger-coverage-panel{margin:0 0 1.25rem}.trigger-coverage-list{display:grid;gap:.55rem}.trigger-coverage-row{display:grid;grid-template-columns:minmax(9rem,1fr) minmax(8rem,2fr) 2.5rem;gap:.65rem;align-items:center;padding:.5rem .6rem;border:1px solid var(--border-subtle);border-radius:7px;color:var(--text);text-decoration:none}.trigger-coverage-row:hover{border-color:var(--accent);background:var(--surface-hover);text-decoration:none}.trigger-coverage-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.76rem}.trigger-coverage-track{height:.55rem;overflow:hidden;border-radius:99px;background:var(--surface-raised)}.trigger-coverage-fill{display:block;height:100%;min-width:3px;border-radius:inherit;background:linear-gradient(90deg,var(--accent-dim),var(--accent))}.trigger-coverage-count{text-align:right;font:700 .75rem var(--mono);color:var(--text)}
+  .trigger-selection-preflight{flex-basis:100%;padding-top:.35rem;color:var(--text-dim);font-size:.72rem}.trigger-selection-preflight strong{color:var(--text)}
+</style>
+<div class="page-header"><div><div class="page-kicker">Control plane / detection</div><h1>Triggers</h1><p class="page-description">Turn analyzed signals into explainable events with explicit windows, conditions, and governed response hooks.</p></div><div class="quick-actions"><span class="console-live" data-triggers-live-status>Live refresh paused</span><button type="button" class="btn btn-secondary" data-triggers-refresh>Refresh now</button><button type="button" class="btn btn-secondary" data-triggers-toggle-live>Enable live mode</button><a class="btn btn-secondary" href="/events">Inspect events &rarr;</a><a class="btn btn-secondary" href="/analysis-config">Analysis configuration</a></div></div>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 {% if let Some(e) = form_error %}<p class="error">{{ e }}</p>{% endif %}
+{% if notice == "bulk_updated" %}<p class="success-banner">Selected triggers were updated and audited.</p>{% endif %}
+{% if notice == "bulk_empty" %}<p class="warning-banner">No selected triggers required a change.</p>{% endif %}
+{% if notice == "bulk_invalid" %}<p class="error">Choose an enabled state and at least one trigger.</p>{% endif %}
 {% if let Some(r) = test_result %}
-<p class="{% if r.would_fire %}status-up{% else %}status-down{% endif %}">
+<div class="panel trigger-test-result"><p class="{% if r.would_fire %}status-up{% else %}status-down{% endif %}">
   Test for entity "{{ r.group_key }}": would {% if !r.would_fire %}not {% endif %}fire
   ({{ r.contributing_record_count }} contributing record{% if r.contributing_record_count != 1 %}s{% endif %} found).
-</p>
+</p></div>
 {% endif %}
+
+<section class="trigger-telemetry" aria-label="Trigger posture telemetry">
+  {% for metric in posture_metrics %}<a class="panel trigger-telemetry-panel trigger-metric-row" href="{{ metric.href }}"><strong>{{ metric.label }}</strong><span class="trigger-metric-track"><span class="trigger-metric-fill {{ metric.tone }}" style="width:{% if metric.percent > 0 %}{{ metric.percent }}{% else %}2{% endif %}%"></span></span><span class="trigger-metric-count">{{ metric.count }}</span></a>{% endfor %}
+</section>
+<section class="panel trigger-coverage-panel" aria-label="Trigger event coverage"><div class="panel-heading"><div><h2>Detection coverage</h2><p class="muted">Event types with governed trigger coverage in the current inventory. Select a row to inspect its rules.</p></div><span class="pill pill-muted">{{ trigger_coverage.len() }} sources shown</span></div>{% if trigger_coverage.is_empty() %}<p class="muted">No event-type coverage is available yet.</p>{% else %}<div class="trigger-coverage-list">{% for row in trigger_coverage %}<a class="trigger-coverage-row" href="{{ row.href }}"><strong class="trigger-coverage-label">{{ row.label }}</strong><span class="trigger-coverage-track"><span class="trigger-coverage-fill" style="width:{{ row.percent }}%"></span></span><span class="trigger-coverage-count">{{ row.count }}</span></a>{% endfor %}</div>{% endif %}</section>
 
 {% if can_write %}
 <div class="form-row">
@@ -98,8 +112,73 @@
         })();
       </script>
 
-      <label for="action_url">Webhook URL to call when this fires (optional)</label>
-      <input type="text" id="action_url" name="action_url" placeholder="https://...">
+      <label for="action_type">Response provider (optional)</label>
+      <select id="action_type" name="action_type" onchange="kizashiUpdateActionProviderFields()">
+        <option value="">No automated response</option>
+        <option value="webhook">Webhook / HTTP relay</option>
+        <option value="email">Email</option>
+        <option value="teams_alert">Microsoft Teams alert</option>
+        <option value="create_ticket">Create ticket</option>
+        <option value="custom">Custom provider</option>
+      </select>
+      <div id="action-provider-fields" style="display:none">
+        <label for="action_url">Provider URL <span class="muted">required by webhook, Teams, and ticket relays</span></label>
+        <input type="text" id="action_url" name="action_url" placeholder="https://...">
+        <label for="action_config">Provider configuration <span class="muted">JSON</span></label>
+        <textarea id="action_config" name="action_config" rows="4" placeholder='{"url":"https://...","body_template":{"text":"&#123;&#123;event_type&#125;&#125; for &#123;&#123;group_key&#125;&#125;"}}'>{}</textarea>
+        <div class="provider-fields" data-provider-panel="email">
+          <div class="detail-label">Email delivery</div>
+          <label>Delivery mode <select data-provider-mode><option value="smtp">SMTP</option><option value="graph">Microsoft Graph</option></select></label>
+          <label data-provider-field="smtp">SMTP host <input type="text" data-provider-key="smtp_host" placeholder="smtp.example.com"></label>
+          <label data-provider-field="smtp">SMTP port <input type="number" data-provider-key="smtp_port" value="587"></label>
+          <label data-provider-field="smtp">From address <input type="email" data-provider-key="from" placeholder="alerts@example.com"></label>
+          <label data-provider-field="smtp">Recipients <input type="text" data-provider-key="to" placeholder="oncall@example.com, exec@example.com"></label>
+          <label data-provider-field="smtp">SMTP username <input type="text" data-provider-key="smtp_username"></label>
+          <label data-provider-field="smtp">SMTP password <input type="password" data-provider-key="smtp_password" autocomplete="new-password"></label>
+          <label data-provider-field="graph">Graph token URL <input type="url" data-provider-key="graph_token_url" placeholder="https://login.microsoftonline.com/.../oauth2/v2.0/token"></label>
+          <label data-provider-field="graph">Graph client ID <input type="text" data-provider-key="graph_client_id"></label>
+          <label data-provider-field="graph">Graph client secret <input type="password" data-provider-key="graph_client_secret" autocomplete="new-password"></label>
+          <label data-provider-field="graph">From mailbox/user ID <input type="text" data-provider-key="graph_from_user_id"></label>
+          <label>Subject <input type="text" data-provider-key="subject" placeholder="Kizashi alert"></label>
+        </div>
+        <div class="provider-fields" data-provider-panel="teams"><div class="detail-label">Microsoft Teams</div><p class="muted">The URL above is used for a real Teams MessageCard. Optionally provide a title below.</p><label>Card title <input type="text" data-provider-key="title" placeholder="Kizashi alert"></label></div>
+        <div class="provider-fields" data-provider-panel="http"><div class="detail-label">HTTP relay payload</div><p class="muted">Use the advanced JSON configuration for <code>body_template</code> and provider-specific headers.</p></div>
+        <p class="muted">Secrets are submitted only with this governed configuration and should be rotated through tenant policy. The action executor owns dispatch, egress, retry, and auditability.</p>
+      </div>
+      <script>
+        (function () {
+          var form = document.querySelector('form[action="/triggers"]');
+          var provider = document.getElementById("action_type");
+          var raw = document.getElementById("action_config");
+          var panels = document.querySelectorAll("[data-provider-panel]");
+          function updateProviderFields() {
+            panels.forEach(function (panel) { panel.style.display = panel.dataset.providerPanel === (provider.value === "email" ? "email" : provider.value === "teams_alert" ? "teams" : provider.value ? "http" : "none") ? "grid" : "none"; });
+            var mode = document.querySelector("[data-provider-mode]");
+            document.querySelectorAll("[data-provider-field]").forEach(function (field) { field.style.display = mode && mode.value === field.dataset.providerField ? "block" : "none"; });
+          }
+          provider.addEventListener("change", updateProviderFields);
+          var mode = document.querySelector("[data-provider-mode]");
+          if (mode) mode.addEventListener("change", updateProviderFields);
+          if (form) form.addEventListener("submit", function () {
+            var config = {};
+            try { config = JSON.parse(raw.value || "{}"); } catch (_) { config = {}; }
+            document.querySelectorAll("[data-provider-key]").forEach(function (field) {
+              if (field.offsetParent === null || !field.value.trim()) return;
+              config[field.dataset.providerKey] = field.dataset.providerKey === "to" ? field.value.split(",").map(function (value) { return value.trim(); }).filter(Boolean) : (field.type === "number" ? Number(field.value) : field.value);
+            });
+            raw.value = JSON.stringify(config, null, 2);
+          });
+          updateProviderFields();
+        }());
+      </script>
+      <script>
+        function kizashiUpdateActionProviderFields() {
+          var type = document.getElementById("action_type").value;
+          document.getElementById("action-provider-fields").style.display = type ? "block" : "none";
+          document.getElementById("action_url").required = type === "webhook" || type === "teams_alert" || type === "create_ticket";
+        }
+        kizashiUpdateActionProviderFields();
+      </script>
 
       <button type="submit">Create trigger</button>
     </form>
@@ -124,7 +203,9 @@
 </div>
 {% endif %}
 
-<form class="inline" method="get" action="/triggers" style="margin-bottom:1rem;">
+<section class="panel triggers-filter-panel">
+<div class="panel-heading"><div><h2>Detection inventory</h2><p class="muted">Test rules against a real entity, then review their audit history.</p></div><span class="pill pill-muted">{{ triggers.len() }} visible</span></div>
+<form class="inline" method="get" action="/triggers">
   <label for="q">Search</label>
   <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by name&hellip;">
   <input type="hidden" name="sort" value="{{ sort }}">
@@ -132,6 +213,7 @@
   <button type="submit">Search</button>
   {% if !q.is_empty() %}<a href="/triggers" class="btn-link">Clear</a>{% endif %}
 </form>
+</section>
 
 {% if triggers.is_empty() && page == 0 && !has_more %}
 <div class="empty-state">
@@ -144,9 +226,14 @@
   {% endif %}
 </div>
 {% else %}
+{% if can_write %}<form method="post" action="/triggers/bulk-toggle" id="bulk-trigger-form" onsubmit="return confirm('Apply this enabled state to the selected triggers?');"></form>{% endif %}
+<section class="panel triggers-table-panel">
+<div class="table-toolbar"><div><h2>Configured rules</h2><p class="muted">Enabled rules evaluate incoming events; disabled rules remain available for review.</p></div></div>
+{% if can_write %}<div class="bulk-action-bar"><label class="bulk-select-all"><input type="checkbox" id="select-visible-triggers"> Select visible rules</label><span class="bulk-divider"></span><label for="target-enabled">Set state</label><select id="target-enabled" name="target_enabled" form="bulk-trigger-form"><option value="enabled">Enable</option><option value="disabled">Disable</option></select><span class="muted">Each change is audited</span><button class="btn" type="submit" form="bulk-trigger-form">Apply to selected &rarr;</button><span id="trigger-selection-preflight" class="trigger-selection-preflight"><strong>Change preflight:</strong> select rules to preview the audited state change.</span></div>{% endif %}
 <table>
   <thead>
     <tr>
+      {% if can_write %}<th scope="col"></th>{% endif %}
       <th scope="col">
         <a href="/triggers?q={{ q|urlencode }}&sort=name&dir={% if sort == "name" && dir != "desc" %}desc{% else %}asc{% endif %}">
           Name{% if sort == "name" %}{% if dir == "desc" %} &#9660;{% else %} &#9650;{% endif %}{% endif %}
@@ -168,8 +255,9 @@
   <tbody>
     {% for trigger in triggers %}
     <tr>
-      <td>{{ trigger.name }}</td>
-      <td>{{ trigger.event_type_match }}</td>
+      {% if can_write %}<td><input type="checkbox" name="ids" value="{{ trigger.id }}" form="bulk-trigger-form" aria-label="Select {{ trigger.name }} for bulk state change"></td>{% endif %}
+      <td><a href="/triggers/{{ trigger.id }}">{{ trigger.name }}</a></td>
+      <td><a href="/events?q={{ trigger.event_type_match|urlencode }}">{{ trigger.event_type_match }}</a></td>
       <td class="status-{% if trigger.enabled %}up{% else %}down{% endif %}">
         {% if trigger.enabled %}enabled{% else %}disabled{% endif %}
       </td>
@@ -217,5 +305,33 @@
   </form>
   {% endif %}
 </div>
+</section>
 {% endif %}
+{% if can_write %}<script>
+  (function () {
+    var master = document.getElementById('select-visible-triggers');
+    if (!master) return;
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('#bulk-trigger-form input[name="ids"]'));
+    var target = document.getElementById('target-enabled');
+    function sync() {
+      var selected = boxes.filter(function (box) { return box.checked; }).length;
+      var preflight = document.getElementById('trigger-selection-preflight');
+      if (preflight) preflight.innerHTML = '<strong>Change preflight:</strong> ' + (selected ? selected + ' rule' + (selected === 1 ? '' : 's') + ' will be set to ' + (target ? target.value : 'enabled') : 'select rules') + '. No evaluation changes occur until submit; each change is audited.';
+      master.checked = boxes.length > 0 && selected === boxes.length;
+      master.indeterminate = selected > 0 && selected < boxes.length;
+    }
+    master.addEventListener('change', function () { boxes.forEach(function (box) { box.checked = master.checked; }); sync(); });
+    boxes.forEach(function (box) { box.addEventListener('change', sync); });
+    if (target) target.addEventListener('change', sync);
+    sync();
+  }());
+</script>{% endif %}
+<script>
+  (function () {
+    var key = 'kizashi.triggers.live-refresh'; var status = document.querySelector('[data-triggers-live-status]'); var toggle = document.querySelector('[data-triggers-toggle-live]'); var refresh = document.querySelector('[data-triggers-refresh]'); var enabled = false;
+    try { enabled = localStorage.getItem(key) === '1'; } catch (_) {}
+    function setState(next) { enabled = next; try { localStorage.setItem(key, enabled ? '1' : '0'); } catch (_) {} if (status) status.textContent = enabled ? 'Live · refreshes every 30s' : 'Live refresh paused'; if (toggle) toggle.textContent = enabled ? 'Pause live mode' : 'Enable live mode'; }
+    if (refresh) refresh.addEventListener('click', function () { window.location.reload(); }); if (toggle) toggle.addEventListener('click', function () { setState(!enabled); }); setState(enabled); if (enabled) window.setInterval(function () { window.location.reload(); }, 30000);
+  }());
+</script>
 {% endblock %}

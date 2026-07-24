@@ -37,10 +37,12 @@ pub(crate) const CRITICAL_BACKLOG_THRESHOLD: u64 = 50;
 pub(crate) enum TopologyItem {
     Stage {
         label: &'static str,
+        href: &'static str,
         status: String,
     },
     Edge {
         label: &'static str,
+        href: &'static str,
         messages: Option<u64>,
         severity: &'static str,
         severity_label: &'static str,
@@ -88,7 +90,20 @@ pub(crate) fn build_topology_items(
     let edge_for = |key: &str, label: &'static str| -> TopologyItem {
         let messages = depths.iter().find(|d| d.stage == key).map(|d| d.messages);
         let severity = messages.map(severity_for).unwrap_or("unknown");
-        TopologyItem::Edge { label, messages, severity, severity_label: severity_label(severity) }
+        let href = match key {
+            "ingest_to_normalize" => "/data?normalized=false",
+            "normalize_to_analyze" => "/data?normalized=true",
+            "analyze_to_trigger" => "/events?status=new",
+            "trigger_to_action" => "/actions?outcome=review",
+            _ => "/pipeline",
+        };
+        TopologyItem::Edge {
+            label,
+            href,
+            messages,
+            severity,
+            severity_label: severity_label(severity),
+        }
     };
 
     let mut items = Vec::with_capacity(PIPELINE_STAGES.len() + PIPELINE_EDGES.len());
@@ -97,7 +112,19 @@ pub(crate) fn build_topology_items(
             let (edge_key, edge_label) = PIPELINE_EDGES[i - 1];
             items.push(edge_for(edge_key, edge_label));
         }
-        items.push(TopologyItem::Stage { label: stage_label, status: stage_status(stage_key) });
+        let href = match *stage_key {
+            "ingestion-service" => "/sensors",
+            "normalization-service" => "/normalization-mappings",
+            "analysis-service" => "/analysis-config",
+            "trigger-engine" => "/triggers",
+            "action-executor" => "/actions",
+            _ => "/pipeline",
+        };
+        items.push(TopologyItem::Stage {
+            label: stage_label,
+            href,
+            status: stage_status(stage_key),
+        });
     }
     items
 }

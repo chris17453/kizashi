@@ -1,12 +1,39 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Data Retention</h1>
+<style>
+  .retention-posture { display:grid; grid-template-columns:1.25fr 1fr; gap:1rem; margin:0 0 1.25rem; }
+  .retention-posture-panel { padding:1rem; }
+  .retention-posture-panel h2 { margin:0 0 .25rem; font-size:1rem; }
+  .retention-posture-list { display:grid; gap:.65rem; margin-top:1rem; }
+  .retention-posture-row { display:grid; grid-template-columns:6.5rem 1fr auto; gap:.65rem; align-items:center; }
+  .retention-posture-track { height:.55rem; overflow:hidden; border-radius:99px; background:var(--surface-3,#e8edf3); }
+  .retention-posture-fill { height:100%; border-radius:inherit; background:#16a34a; }
+  .retention-posture-fill.risk { background:#dc2626; }
+  .retention-posture-fill.neutral { background:#4d82b6; }
+  .retention-posture-count { font:700 .8rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .retention-posture-kpis { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; margin-top:1rem; }
+  .retention-posture-kpi { display:grid; gap:.2rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .retention-posture-kpi strong { font:700 1.25rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .retention-posture-kpi small { color:var(--text-dim); }
+  .retention-ttl-panel{margin:0 0 1.25rem}.retention-ttl-list{display:grid;gap:.75rem;margin-top:1rem}.retention-ttl-row{display:grid;grid-template-columns:7rem 1fr auto;gap:.7rem;align-items:center;color:var(--text);text-decoration:none}.retention-ttl-row:hover{color:var(--accent);text-decoration:none}.retention-ttl-label{font-size:.76rem;font-weight:650;text-transform:capitalize}.retention-ttl-track{height:.65rem;overflow:hidden;border-radius:99px;background:var(--surface-raised)}.retention-ttl-fill{height:100%;min-width:3px;border-radius:inherit;background:linear-gradient(90deg,var(--accent-dim),var(--accent))}.retention-ttl-fill.disabled{background:var(--text-dim)}.retention-ttl-value{font:700 .75rem var(--mono,ui-monospace);font-variant-numeric:tabular-nums;color:var(--text)}
+  @media(max-width:760px){.retention-posture{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / lifecycle</div><h1>Data Retention</h1><p class="page-description">Set the lifecycle contract for raw, normalized, and event data, with archive-first handling and auditable changes.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/security/compliance-report">Compliance posture</a><a class="btn btn-secondary" href="/audit-log">Review audit trail &rarr;</a></div></div>
 <p class="muted">How long each data class is kept before it's archived and deleted. One policy
 per data class per tenant — <code>retention-service</code>'s scheduled sweep archives aged
 records to blob storage in a replayable format, then deletes them, unless a compliance hold
 overrides it.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
 {% if let Some(e) = form_error %}<p class="error">{{ e }}</p>{% endif %}
+{% if notice == "reimported" %}<p class="success-banner">Reimport completed: {{ count }} record{% if count != 1 %}s{% endif %} fed back into the pipeline.</p>{% endif %}{% if notice == "invalid-archive" %}<p class="error">That archive key is not inside the current tenant's archive namespace.</p>{% endif %}{% if notice == "reimport-failed" %}<p class="error">The archive could not be reimported. Verify the key and archive service health.</p>{% endif %}
+{% if notice == "hold-created" %}<p class="success-banner">Compliance hold created. Matching data will be preserved during retention sweeps.</p>{% endif %}{% if notice == "hold-released" %}<p class="success-banner">Compliance hold released. Future sweeps may enforce the configured TTL.</p>{% endif %}{% if notice == "invalid-hold" || notice == "hold-failed" %}<p class="error">The compliance hold could not be created. Provide a data class and reason.</p>{% endif %}
+
+<section class="retention-posture" aria-label="Retention policy posture">
+  <div class="panel retention-posture-panel"><div class="page-kicker">Lifecycle enforcement</div><h2>Policy state</h2><p class="muted">Coverage across raw, normalized, and event data classes.</p><div class="retention-posture-list"><div class="retention-posture-row"><span>Enabled</span><span class="retention-posture-track"><span class="retention-posture-fill" style="width:{% if policies.len() > 0 %}{{ enabled_count * 100 / policies.len() }}{% else %}0{% endif %}%"></span></span><strong class="retention-posture-count">{{ enabled_count }}</strong></div><div class="retention-posture-row"><span>Disabled</span><span class="retention-posture-track"><span class="retention-posture-fill risk" style="width:{% if policies.len() > 0 %}{{ disabled_count * 100 / policies.len() }}{% else %}0{% endif %}%"></span></span><strong class="retention-posture-count">{{ disabled_count }}</strong></div><div class="retention-posture-row"><span>Active holds</span><span class="retention-posture-track"><span class="retention-posture-fill neutral" style="width:{% if holds.len() > 0 %}{{ active_hold_count * 100 / holds.len() }}{% else %}0{% endif %}%"></span></span><strong class="retention-posture-count">{{ active_hold_count }}</strong></div></div></div>
+  <div class="panel retention-posture-panel"><div class="page-kicker">Lifecycle inventory</div><h2>Configured coverage</h2><div class="retention-posture-kpis"><div class="retention-posture-kpi"><strong>{{ configured_class_count }}/3</strong><small>data classes covered</small></div><div class="retention-posture-kpi"><strong>{{ active_hold_count }}</strong><small>active compliance holds</small></div><div class="retention-posture-kpi"><strong>{{ shortest_ttl }}</strong><small>shortest TTL days</small></div><div class="retention-posture-kpi"><strong>{{ longest_ttl }}</strong><small>longest TTL days</small></div></div><p class="muted">A hold overrides disposal for its data class until explicitly released.</p></div>
+</section>
+
+{% if !policies.is_empty() %}<section class="panel retention-ttl-panel" aria-label="Retention TTL profile"><div class="panel-heading"><div><h2>Retention contract by data class</h2><p class="muted">Relative TTL length across the configured lifecycle classes. Disabled policies remain visible so gaps are explicit.</p></div><span class="pill pill-muted">{{ policies.len() }} configured{% if !data_class.is_empty() %} · {{ data_class }} scope{% endif %}</span></div><div class="retention-ttl-list">{% for policy in policies %}<a class="retention-ttl-row" href="/retention-policies?data_class={{ policy.data_class }}"><span class="retention-ttl-label">{{ policy.data_class }}</span><span class="retention-ttl-track"><span class="retention-ttl-fill{% if !policy.enabled %} disabled{% endif %}" style="width:{% if longest_ttl > 0 %}{{ policy.ttl_days * 100 / longest_ttl }}{% else %}0{% endif %}%"></span></span><span class="retention-ttl-value">{{ policy.ttl_days }} days{% if !policy.enabled %} · off{% endif %}</span></a>{% endfor %}</div>{% if !data_class.is_empty() %}<p><a class="btn-link" href="/retention-policies">Clear data-class scope</a></p>{% endif %}</section>{% endif %}
 
 {% if can_write %}
 <div class="form-row">
@@ -39,6 +66,8 @@ overrides it.</p>
     </ul>
   </div>
 </div>
+<div class="panel lifecycle-reimport-panel" style="max-width:none"><div class="panel-heading"><div><h2>Reimport from archive</h2><p class="muted">Replay an archived batch through ingestion, normalization, analysis, and triggering. Only archive keys belonging to this workspace are accepted.</p></div><span class="pill pill-muted">Operator+</span></div><form class="inline" method="post" action="/retention-policies/reimport" onsubmit="return confirm('Replay this archived batch through the pipeline?');"><label for="archive-key">Archive key</label><input id="archive-key" name="archive_key" type="text" placeholder="archive/&lt;workspace-id&gt;/raw/2026/07/23/batch.ndjson.gz" required style="min-width:28rem"><button class="btn btn-secondary" type="submit">Replay batch &rarr;</button></form></div>
+<div class="panel lifecycle-hold-panel" style="max-width:none"><div class="panel-heading"><div><h2>Compliance holds</h2><p class="muted">Pause archive/disposal for a data class while legal, security, or executive review is active. Holds are tenant-scoped and audit logged.</p></div><span class="pill pill-muted">{{ holds.len() }} total</span></div><form class="inline" method="post" action="/retention-policies/holds"><label for="hold-data-class">Data class</label><select id="hold-data-class" name="data_class"><option value="raw">Raw</option><option value="normalized">Normalized</option><option value="event">Event</option></select><label for="hold-reason">Reason</label><input id="hold-reason" name="reason" placeholder="Customer dispute / legal preservation" required style="min-width:24rem"><button class="btn" type="submit">Place hold</button></form>{% if holds.is_empty() %}<p class="muted">No holds have been created for this workspace.</p>{% else %}<table class="compact-table"><thead><tr><th>Data class</th><th>Reason</th><th>Created by</th><th>Status</th><th></th></tr></thead><tbody>{% for hold in holds %}<tr><td>{{ hold.data_class }}</td><td>{{ hold.reason }}</td><td>{{ hold.created_by }}</td><td>{% if hold.active %}<span class="pill pill-down">Active</span>{% else %}<span class="pill pill-muted">Released</span>{% endif %}</td><td>{% if hold.active %}<form method="post" action="/retention-policies/holds/{{ hold.id }}/release"><button class="btn btn-secondary" type="submit">Release</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>{% endif %}</div>
 {% endif %}
 
 {% if policies.is_empty() %}
@@ -105,4 +134,9 @@ overrides it.</p>
 <p><button type="submit" form="bulk-delete-form" class="btn-danger">Remove selected</button></p>
 {% endif %}
 {% endif %}
+<style>
+  .retention-posture-track { background:var(--surface-raised); }
+  .retention-posture-fill { background:var(--success); } .retention-posture-fill.risk { background:var(--danger); } .retention-posture-fill.neutral { background:var(--accent); }
+  .retention-posture-kpi { background:var(--surface-raised); border-color:var(--border); }
+</style>
 {% endblock %}

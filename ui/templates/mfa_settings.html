@@ -1,9 +1,25 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Two-Factor Authentication</h1>
+<style>
+  .mfa-posture { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; margin:0 0 1.25rem; }
+  .mfa-posture-card { padding:1rem; }
+  .mfa-posture-card h2 { margin:.2rem 0 .35rem; font-size:1rem; }
+  .mfa-posture-value { font:700 1.1rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .mfa-posture-card small { color:var(--text-dim); }
+  .mfa-posture-state { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .5rem; border-radius:99px; background:var(--state-good-bg); color:var(--state-good-text); font-size:.75rem; font-weight:700; }
+  .mfa-posture-state.warn { background:var(--state-warn-bg); color:var(--state-warn-text); }
+  @media(max-width:820px){.mfa-posture{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / identity</div><h1>Two-Factor Authentication</h1><p class="page-description">Add a second factor to your own Console login using a standard TOTP authenticator.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/security">Security overview</a><a class="btn btn-secondary" href="/security/password">Password settings &rarr;</a></div></div>
 <p class="muted">Add a second factor to your own login using any TOTP authenticator app
 (Google Authenticator, 1Password, Authy, etc). This only affects your account.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+
+<section class="mfa-posture" aria-label="MFA security posture">
+  <div class="panel mfa-posture-card"><div class="page-kicker">Account factor</div><h2>{% if let Some(_) = enrollment %}Enrollment in progress{% else if enabled %}Protected{% else %}Needs enrollment{% endif %}</h2>{% if let Some(_) = enrollment %}<span class="mfa-posture-state warn">! Verification required</span><small style="display:block;margin-top:.45rem;">Scan the authenticator QR code and confirm a current code.</small>{% else if enabled %}<span class="mfa-posture-state">&#10003; TOTP enabled</span><small style="display:block;margin-top:.45rem;">This account requires a second factor during login.</small>{% else %}<span class="mfa-posture-state warn">! Not enrolled</span><small style="display:block;margin-top:.45rem;">Enable MFA to protect this account with a second factor.</small>{% endif %}</div>
+  <div class="panel mfa-posture-card"><div class="page-kicker">Factor standard</div><h2>TOTP authenticator</h2><div class="mfa-posture-value">RFC-compatible codes</div><small>Works with Google Authenticator, 1Password, Authy, and other standard authenticator apps.</small></div>
+  <div class="panel mfa-posture-card"><div class="page-kicker">Control boundary</div><h2>Self-service</h2><div class="mfa-posture-value">Your account only</div><small>Enrollment and disable actions affect this login identity and do not change tenant-wide MFA policy.</small></div>
+</section>
 
 {% if let Some(enrollment) = enrollment %}
 <div class="panel">

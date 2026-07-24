@@ -25,6 +25,14 @@ pub struct DailyEventCount {
     pub count: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct EventStatusHistoryEntry {
+    pub from_status: String,
+    pub to_status: String,
+    pub actor: String,
+    pub changed_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct EventFilter {
     pub event_type: Option<String>,
@@ -36,6 +44,8 @@ pub struct EventFilter {
     /// lineage lookup (ADR-0017) a record-journey view uses to find what a record contributed
     /// to.
     pub record_id: Option<Uuid>,
+    /// Case-insensitive substring search across the operator-facing event fields.
+    pub search: Option<String>,
     pub limit: u32,
     pub offset: u32,
 }
@@ -52,6 +62,30 @@ pub trait EventQueryRepository: Send + Sync {
         filter: &EventFilter,
     ) -> Result<Vec<Event>, QueryError>;
     async fn get_event(&self, tenant_id: Uuid, id: Uuid) -> Result<Option<Event>, QueryError>;
+
+    async fn list_status_history(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<Vec<EventStatusHistoryEntry>, QueryError> {
+        let _ = (tenant_id, id);
+        Ok(vec![])
+    }
+
+    /// Changes the operator lifecycle state for one tenant-scoped event. The aggregate store is
+    /// append-oriented for ingestion, but lifecycle state is an explicit operator projection and
+    /// is therefore updated independently of the immutable signal payload.
+    async fn update_event_status(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        from_status: common::EventStatus,
+        status: common::EventStatus,
+        actor: &str,
+    ) -> Result<(), QueryError> {
+        let _ = (tenant_id, id, from_status, status, actor);
+        Err(QueryError::Rejected(501, "event lifecycle updates are not supported".to_string()))
+    }
 
     /// Daily event counts within `[since, until]`, ascending by date, optionally scoped to one
     /// `event_type` — powers the Events page's over-time chart.
@@ -72,6 +106,23 @@ pub struct ClickHouseEventQueryRepository {
 impl ClickHouseEventQueryRepository {
     pub fn new(client: reqwest::Client, base_url: String) -> Self {
         Self { client, base_url }
+    }
+
+    pub async fn ensure_schema(&self) -> Result<(), QueryError> {
+        let ddl = "CREATE TABLE IF NOT EXISTS event_status_history (event_id UUID, tenant_id UUID, from_status String, to_status String, actor String, changed_at DateTime64(3)) ENGINE = MergeTree() ORDER BY (tenant_id, event_id, changed_at)";
+        let response = self
+            .client
+            .post(&self.base_url)
+            .body(ddl.to_string())
+            .send()
+            .await
+            .map_err(|e| QueryError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            let code = response.status().as_u16();
+            let body = response.text().await.unwrap_or_default();
+            return Err(QueryError::Rejected(code, body));
+        }
+        Ok(())
     }
 
     async fn run_query(
@@ -104,6 +155,36 @@ impl ClickHouseEventQueryRepository {
             .filter(|line| !line.trim().is_empty())
             .map(|line| serde_json::from_str(line).map_err(|e| QueryError::Parse(e.to_string())))
             .collect()
+    }
+
+    async fn run_query_raw(
+        &self,
+        query: &str,
+        params: &[(&str, String)],
+    ) -> Result<Vec<String>, QueryError> {
+        let mut request = self
+            .client
+            .post(&self.base_url)
+            .query(&[("query", query)])
+            .header(reqwest::header::CONTENT_LENGTH, "0")
+            .body(Vec::new());
+        for (key, value) in params {
+            request = request.query(&[(format!("param_{key}"), value.clone())]);
+        }
+        let response = request.send().await.map_err(|e| QueryError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().await.unwrap_or_default();
+            return Err(QueryError::Rejected(status, body));
+        }
+        Ok(response
+            .text()
+            .await
+            .map_err(|e| QueryError::Unreachable(e.to_string()))?
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(str::to_string)
+            .collect())
     }
 }
 
@@ -191,6 +272,10 @@ impl EventQueryRepository for ClickHouseEventQueryRepository {
             conditions.push("has(record_ids, {record_id:UUID})".to_string());
             params.push(("record_id".to_string(), record_id.to_string()));
         }
+        if let Some(search) = &filter.search {
+            conditions.push("(lower(event_type) LIKE concat('%', lower({search:String}), '%') OR lower(group_key) LIKE concat('%', lower({search:String}), '%') OR lower(status) LIKE concat('%', lower({search:String}), '%'))".to_string());
+            params.push(("search".to_string(), search.clone()));
+        }
 
         let limit = filter.limit.clamp(1, 1000);
         let query = format!(
@@ -211,6 +296,94 @@ impl EventQueryRepository for ClickHouseEventQueryRepository {
             .run_query(query, &[("tenant_id", tenant_id.to_string()), ("id", id.to_string())])
             .await?;
         rows.into_iter().next().map(Event::try_from).transpose()
+    }
+
+    async fn list_status_history(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+    ) -> Result<Vec<EventStatusHistoryEntry>, QueryError> {
+        #[derive(serde::Deserialize)]
+        struct Row {
+            from_status: String,
+            to_status: String,
+            actor: String,
+            changed_at: String,
+        }
+        let query = "SELECT from_status, to_status, actor, changed_at FROM event_status_history WHERE tenant_id = {tenant_id:UUID} AND event_id = {event_id:UUID} ORDER BY changed_at ASC FORMAT JSONEachRow";
+        let rows = self
+            .run_query_raw(
+                query,
+                &[("tenant_id", tenant_id.to_string()), ("event_id", id.to_string())],
+            )
+            .await?;
+        rows.into_iter()
+            .map(|line| {
+                let row: Row =
+                    serde_json::from_str(&line).map_err(|e| QueryError::Parse(e.to_string()))?;
+                let changed_at = parse_clickhouse_datetime(&row.changed_at)?;
+                Ok(EventStatusHistoryEntry {
+                    from_status: row.from_status,
+                    to_status: row.to_status,
+                    actor: row.actor,
+                    changed_at,
+                })
+            })
+            .collect()
+    }
+
+    async fn update_event_status(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        from_status: common::EventStatus,
+        status: common::EventStatus,
+        actor: &str,
+    ) -> Result<(), QueryError> {
+        let query = "ALTER TABLE events UPDATE status = {status:String} WHERE tenant_id = {tenant_id:UUID} AND id = {id:UUID}";
+        let params = [
+            ("status", status_str(status).to_string()),
+            ("tenant_id", tenant_id.to_string()),
+            ("id", id.to_string()),
+        ];
+        let mut request = self
+            .client
+            .post(&self.base_url)
+            .query(&[("query", query)])
+            .header(reqwest::header::CONTENT_LENGTH, "0")
+            .body(Vec::new());
+        for (key, value) in params {
+            request = request.query(&[(format!("param_{key}"), value)]);
+        }
+        let response = request.send().await.map_err(|e| QueryError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().await.unwrap_or_default();
+            return Err(QueryError::Rejected(status, body));
+        }
+        let history_query = "INSERT INTO event_status_history (event_id, tenant_id, from_status, to_status, actor, changed_at) FORMAT JSONEachRow";
+        let history = serde_json::json!({
+            "event_id": id,
+            "tenant_id": tenant_id,
+            "from_status": status_str(from_status),
+            "to_status": status_str(status),
+            "actor": actor,
+            "changed_at": chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
+        });
+        let history_response = self
+            .client
+            .post(&self.base_url)
+            .query(&[("query", history_query)])
+            .body(serde_json::to_vec(&history).unwrap_or_default())
+            .send()
+            .await
+            .map_err(|e| QueryError::Unreachable(e.to_string()))?;
+        if !history_response.status().is_success() {
+            let code = history_response.status().as_u16();
+            let body = history_response.text().await.unwrap_or_default();
+            return Err(QueryError::Rejected(code, body));
+        }
+        Ok(())
     }
 
     async fn count_by_day(

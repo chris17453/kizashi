@@ -128,6 +128,7 @@ async fn admin_can_view_backup_status() {
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("postgres/test.dump"));
     assert!(body.contains("Success"));
+    assert!(body.contains("Run backup now"));
 }
 
 #[tokio::test]
@@ -236,6 +237,40 @@ async fn shows_an_empty_state_with_no_runs() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("No backup runs recorded"));
+}
+
+#[tokio::test]
+async fn filters_backup_history_by_outcome_and_preserves_selected_control() {
+    let store = InMemorySessionStore::default();
+    let session_id = store.create(sample_session(Role::Admin)).await;
+    let now = chrono::Utc::now();
+    let client = InMemoryBackupStatusClient {
+        runs: std::sync::Mutex::new(vec![
+            BackupRun {
+                started_at: now,
+                completed_at: Some(now),
+                status: "success".into(),
+                target: "postgres/success.dump".into(),
+                size_bytes: Some(100),
+                error: None,
+            },
+            BackupRun {
+                started_at: now - chrono::Duration::hours(1),
+                completed_at: Some(now),
+                status: "failed".into(),
+                target: "postgres/failed.dump".into(),
+                size_bytes: None,
+                error: Some("relay unavailable".into()),
+            },
+        ]),
+    };
+    let state = state_with(store, Arc::new(client)).await;
+    let response = get_page_at(state, &session_id, "/security/backups?status=failed").await;
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("postgres/failed.dump"));
+    assert!(!body.contains("postgres/success.dump"));
+    assert!(body.contains("value=\"failed\" selected"));
 }
 
 #[tokio::test]

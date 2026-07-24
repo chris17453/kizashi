@@ -7,6 +7,9 @@ mod handlers_test;
 mod audit_log_handlers_test;
 
 use crate::audit_log::AuditLogReader;
+use crate::event_type_definition_repository::{
+    EventTypeDefinitionRepository, EventTypeDefinitionRepositoryError,
+};
 use crate::mapping_publisher::MappingPublisher;
 use crate::normalization_mapping_repository::{
     NormalizationMappingRepository, NormalizationMappingRepositoryError,
@@ -19,7 +22,8 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use common::{
-    MappingChangeEvent, NormalizationMapping, Role, TriggerChangeEvent, TriggerDefinition,
+    EventTypeDefinition, MappingChangeEvent, NormalizationMapping, Role, TriggerChangeEvent,
+    TriggerDefinition,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -31,6 +35,8 @@ pub struct AdminState {
     pub audit_reader: Arc<dyn AuditLogReader>,
     pub trigger_publisher: Arc<dyn TriggerPublisher>,
     pub mapping_publisher: Arc<dyn MappingPublisher>,
+    pub event_type_repository: Option<Arc<dyn EventTypeDefinitionRepository>>,
+    pub report_run_repository: Option<Arc<dyn crate::report_run_repository::ReportRunRepository>>,
 }
 
 #[derive(serde::Serialize)]
@@ -88,6 +94,25 @@ fn mapping_error_response(e: NormalizationMappingRepositoryError) -> Response {
             error_response(StatusCode::INTERNAL_SERVER_ERROR, msg)
         }
     }
+}
+
+fn event_type_error_response(e: EventTypeDefinitionRepositoryError) -> Response {
+    match e {
+        EventTypeDefinitionRepositoryError::NotFound(id) => {
+            error_response(StatusCode::NOT_FOUND, format!("no event type definition with id {id}"))
+        }
+        EventTypeDefinitionRepositoryError::Backend(message) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, message)
+        }
+    }
+}
+
+fn event_type_repository(
+    state: &AdminState,
+) -> Result<&Arc<dyn EventTypeDefinitionRepository>, Response> {
+    state.event_type_repository.as_ref().ok_or_else(|| {
+        error_response(StatusCode::NOT_IMPLEMENTED, "event type registry is unavailable")
+    })
 }
 
 pub(crate) fn tenant_mismatch(headers: &HeaderMap, entity_tenant_id: Uuid) -> Option<Response> {
@@ -224,6 +249,187 @@ pub async fn get_trigger(
             error_response(StatusCode::NOT_FOUND, format!("no trigger definition with id {id}"))
         }
         Err(e) => trigger_error_response(e),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct EventTypeVersionRequest {
+    pub field_schema: serde_json::Value,
+}
+
+pub async fn create_event_type(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Json(definition): Json<EventTypeDefinition>,
+) -> Response {
+    if let Some(response) = tenant_mismatch(&headers, definition.tenant_id) {
+        return response;
+    }
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
+    let actor = match username_from_headers(&headers) {
+        Ok(actor) => actor,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let repository = match event_type_repository(&state) {
+        Ok(repository) => repository,
+        Err(response) => return response,
+    };
+    match repository.create(definition, &actor).await {
+        Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
+        Err(error) => event_type_error_response(error),
+    }
+}
+
+pub async fn list_event_types(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Query(query): Query<ListEventTypesQuery>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let repository = match event_type_repository(&state) {
+        Ok(repository) => repository,
+        Err(response) => return response,
+    };
+    match repository.list(tenant_id, query.all_versions).await {
+        Ok(definitions) => Json(definitions).into_response(),
+        Err(error) => event_type_error_response(error),
+    }
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct ListEventTypesQuery {
+    #[serde(default)]
+    pub all_versions: bool,
+}
+
+pub async fn get_event_type(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let repository = match event_type_repository(&state) {
+        Ok(repository) => repository,
+        Err(response) => return response,
+    };
+    match repository.get(tenant_id, id).await {
+        Ok(Some(definition)) => Json(definition).into_response(),
+        Ok(None) => {
+            error_response(StatusCode::NOT_FOUND, format!("no event type definition with id {id}"))
+        }
+        Err(error) => event_type_error_response(error),
+    }
+}
+
+fn report_run_repository(
+    state: &AdminState,
+) -> Result<&Arc<dyn crate::report_run_repository::ReportRunRepository>, Response> {
+    state.report_run_repository.as_ref().ok_or_else(|| {
+        error_response(StatusCode::NOT_IMPLEMENTED, "report run ledger is unavailable")
+    })
+}
+
+pub async fn create_report_run(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Json(run): Json<common::ReportRun>,
+) -> Response {
+    if let Some(response) = tenant_mismatch(&headers, run.tenant_id) {
+        return response;
+    }
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
+    let repository = match report_run_repository(&state) {
+        Ok(repository) => repository,
+        Err(response) => return response,
+    };
+    match repository.create(run).await {
+        Ok(run) => (StatusCode::CREATED, Json(run)).into_response(),
+        Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
+    }
+}
+
+pub async fn update_report_run(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(mut run): Json<common::ReportRun>,
+) -> Response {
+    if let Some(response) = tenant_mismatch(&headers, run.tenant_id) {
+        return response;
+    }
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
+    run.id = id;
+    let repository = match report_run_repository(&state) {
+        Ok(repository) => repository,
+        Err(response) => return response,
+    };
+    match repository.update(run).await {
+        Ok(run) => Json(run).into_response(),
+        Err(error) => error_response(StatusCode::NOT_FOUND, error.to_string()),
+    }
+}
+
+pub async fn list_report_runs(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Query(query): Query<ListReportRunsQuery>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let repository = match report_run_repository(&state) {
+        Ok(repository) => repository,
+        Err(response) => return response,
+    };
+    match repository.list(tenant_id, query.schedule_id).await {
+        Ok(runs) => Json(runs).into_response(),
+        Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
+    }
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct ListReportRunsQuery {
+    #[serde(default)]
+    pub schedule_id: Option<Uuid>,
+}
+
+pub async fn create_event_type_version(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<EventTypeVersionRequest>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    if let Some(response) = require_operator(&headers) {
+        return response;
+    }
+    let actor = match username_from_headers(&headers) {
+        Ok(actor) => actor,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    let repository = match event_type_repository(&state) {
+        Ok(repository) => repository,
+        Err(response) => return response,
+    };
+    match repository.create_version(tenant_id, id, request.field_schema, &actor).await {
+        Ok(created) => (StatusCode::CREATED, Json(created)).into_response(),
+        Err(error) => event_type_error_response(error),
     }
 }
 

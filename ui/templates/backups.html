@@ -1,10 +1,46 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Backups</h1>
+<style>
+  .backup-posture { display:grid; grid-template-columns:1.25fr 1fr; gap:1rem; margin:0 0 1.25rem; }
+  .backup-posture-panel { padding:1rem; }
+  .backup-posture-panel h2 { margin:0 0 .25rem; font-size:1rem; }
+  .backup-posture-list { display:grid; gap:.65rem; margin-top:1rem; }
+  .backup-posture-row { display:grid; grid-template-columns:6.5rem 1fr auto; gap:.65rem; align-items:center; }
+  .backup-posture-track { height:.55rem; overflow:hidden; border-radius:99px; background:var(--surface-3,#e8edf3); }
+  .backup-posture-fill { height:100%; border-radius:inherit; background:#16a34a; }
+  .backup-posture-fill.risk { background:#dc2626; }
+  .backup-posture-fill.neutral { background:#4d82b6; }
+  .backup-posture-count { font:700 .8rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .backup-posture-kpis { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; margin-top:1rem; }
+  .backup-posture-kpi { display:grid; gap:.2rem; padding:.7rem; border:1px solid var(--border-subtle); border-radius:7px; background:var(--surface); }
+  .backup-posture-kpi strong { font:700 1.15rem ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .backup-posture-kpi small { color:var(--text-dim); }
+  .backup-timeline { max-width:none; }
+  .backup-run-strip { display:flex; align-items:flex-end; gap:.45rem; min-height:145px; overflow-x:auto; padding:1rem .3rem .35rem; border-top:1px solid var(--border-subtle); }
+  .backup-run-point { display:grid; justify-items:center; align-items:end; gap:.3rem; min-width:72px; height:120px; color:var(--text); }
+  .backup-run-point:hover { color:var(--accent); }
+  .backup-run-mark { width:100%; max-width:42px; min-height:14px; border-radius:4px 4px 2px 2px; background:var(--success); }
+  .backup-run-mark.failed { background:var(--danger); }
+  .backup-run-mark.running { background:#4d82b6; }
+  .backup-run-status { font:700 .65rem var(--mono,ui-monospace); text-transform:uppercase; }
+  .backup-run-label, .backup-run-size { color:var(--text-dim); font-size:.62rem; white-space:nowrap; }
+  @media(max-width:760px){.backup-posture{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / disaster recovery</div><h1>Backups</h1><p class="page-description">Recent whole-platform backup runs and their operational outcome.</p></div><div class="quick-actions"><form method="post" action="/security/backups/run" onsubmit="return confirm('Run a whole-platform backup now?');"><button class="btn" type="submit">Run backup now</button></form><a class="btn btn-secondary" href="/security/compliance-report">Compliance snapshot</a><a class="btn btn-secondary" href="/health">Platform health &rarr;</a></div></div>
 <p class="muted">Recent scheduled backups of the platform database, successful or not. This is a
 whole-database backup, not scoped to one tenant — it's an operational/DR record, not tenant
 application data.</p>
 {% if let Some(e) = error %}<p class="error">{{ e }}</p>{% endif %}
+{% if notice == "triggered" %}<p class="success-banner">Backup completed successfully and is now recorded in the recovery timeline.</p>{% endif %}{% if notice == "trigger-failed" %}<p class="error">The backup could not be completed. Review the newest run below for the recorded failure.</p>{% endif %}
+
+{% if !runs.is_empty() %}
+<section class="backup-posture" aria-label="Backup posture">
+  <div class="panel backup-posture-panel"><div class="page-kicker">Recovery readiness</div><h2>Run outcome distribution</h2><p class="muted">Select an outcome to isolate the exact recovery evidence below.</p><div class="backup-posture-list"><a class="backup-posture-row" href="/security/backups?status=success#run-history"><span>Successful</span><span class="backup-posture-track"><span class="backup-posture-fill" style="width:{% if runs.len() > 0 %}{{ successful_count * 100 / runs.len() }}{% else %}0{% endif %}%"></span></span><strong class="backup-posture-count">{{ successful_count }}</strong></a><a class="backup-posture-row" href="/security/backups?status=failed#run-history"><span>Failed</span><span class="backup-posture-track"><span class="backup-posture-fill risk" style="width:{% if runs.len() > 0 %}{{ failed_count * 100 / runs.len() }}{% else %}0{% endif %}%"></span></span><strong class="backup-posture-count">{{ failed_count }}</strong></a><a class="backup-posture-row" href="/security/backups?status=running#run-history"><span>Running</span><span class="backup-posture-track"><span class="backup-posture-fill neutral" style="width:{% if runs.len() > 0 %}{{ running_count * 100 / runs.len() }}{% else %}0{% endif %}%"></span></span><strong class="backup-posture-count">{{ running_count }}</strong></a></div></div>
+  <div class="panel backup-posture-panel"><div class="page-kicker">Artifact coverage</div><h2>Recovery inventory</h2><div class="backup-posture-kpis"><div class="backup-posture-kpi"><strong>{{ runs.len() }}</strong><small>runs in view</small></div><div class="backup-posture-kpi"><strong>{{ total_size_bytes }}</strong><small>bytes recorded</small></div><div class="backup-posture-kpi"><strong>{{ freshness_label }}</strong><small>latest successful artifact</small></div></div><p class="muted">{% if let Some(last_success) = last_success_at %}Last successful artifact completed at {{ last_success }}.{% else %}No successful artifact has been recorded in this window.{% endif %} Size totals include only runs that reported a completed artifact.</p></div>
+</section>
+<form class="inline" method="get" action="/security/backups" style="margin-bottom:1rem;"><label for="backup-status">Run outcome</label><select id="backup-status" name="status"><option value=""{% if status.is_empty() %} selected{% endif %}>All outcomes</option><option value="success"{% if status == "success" %} selected{% endif %}>Successful</option><option value="failed"{% if status == "failed" %} selected{% endif %}>Failed</option><option value="running"{% if status == "running" %} selected{% endif %}>Running</option></select><button type="submit">Filter runs</button>{% if !status.is_empty() %}<a class="btn-link" href="/security/backups#run-history">Clear</a>{% endif %}</form>
+<section class="panel backup-timeline" id="run-history"><div class="panel-heading"><div><h2>Recovery run timeline</h2><p class="muted">Chronological run outcomes make gaps and repeated failures visible at a glance.</p></div><span class="pill pill-muted">{{ timeline.len() }} runs</span></div><div class="backup-run-strip" aria-label="Chronological backup run outcomes">{% for point in timeline %}<div class="backup-run-point" title="{{ point.label }} · {{ point.status }} · {{ point.size_label }}"><span class="backup-run-status">{{ point.status }}</span><span class="backup-run-mark {% if point.status == "failed" %}failed{% else if point.status != "success" %}running{% endif %}" style="height:{% if point.status == "success" %}72{% else %}42{% endif %}%;"></span><span class="backup-run-label">{{ point.label }}</span><span class="backup-run-size">{{ point.size_label }}</span></div>{% endfor %}</div></section>
+{% endif %}
 
 {% if runs.is_empty() %}
 <div class="empty-state">
@@ -38,7 +74,13 @@ application data.</p>
   </tbody>
 </table>
 {% if let Some(before) = next_before %}
-<p><a href="/security/backups?before={{ before|urlencode }}">Load older &rarr;</a></p>
+<p><a href="/security/backups?before={{ before|urlencode }}&status={{ status|urlencode }}">Load older &rarr;</a></p>
 {% endif %}
 {% endif %}
+<style>
+  .backup-posture-track { background:var(--surface-raised); }
+  .backup-posture-fill { background:var(--success); } .backup-posture-fill.risk { background:var(--danger); } .backup-posture-fill.neutral { background:var(--accent); }
+  .backup-posture-kpi { background:var(--surface-raised); border-color:var(--border); }
+  .backup-run-mark { background:var(--success); } .backup-run-mark.failed { background:var(--danger); } .backup-run-mark.running { background:var(--accent); }
+</style>
 {% endblock %}

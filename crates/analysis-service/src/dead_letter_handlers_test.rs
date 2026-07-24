@@ -1,5 +1,6 @@
 use super::*;
 use crate::dead_letter::dead_letter_test::{FailingDeadLetterManager, InMemoryDeadLetterManager};
+use crate::health::ConsumerHeartbeat;
 use axum::body::Body;
 use axum::http::Request;
 use axum::routing::{get, post};
@@ -12,11 +13,39 @@ fn router(state: DeadLetterState) -> Router {
     Router::new()
         .route("/v1/dead-letter", get(get_dead_letter_count))
         .route("/v1/dead-letter/replay", post(post_dead_letter_replay))
+        .route("/v1/resilience", get(get_resilience))
         .with_state(state)
 }
 
 fn state(manager: Arc<dyn DeadLetterManager>) -> DeadLetterState {
-    DeadLetterState { dead_letter_manager: manager, internal_secret: SECRET.to_string() }
+    DeadLetterState {
+        dead_letter_manager: manager,
+        internal_secret: SECRET.to_string(),
+        consumer_heartbeat: Arc::new(ConsumerHeartbeat::new()),
+        fallback_configured: true,
+    }
+}
+
+#[tokio::test]
+async fn resilience_reports_safe_fallback_and_backlog_posture() {
+    let manager = Arc::new(InMemoryDeadLetterManager::default());
+    manager.queue.lock().unwrap().push(b"one".to_vec());
+    let response = router(state(manager))
+        .oneshot(
+            Request::builder()
+                .uri("/v1/resilience")
+                .header("x-internal-secret", SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["consumer_alive"], true);
+    assert_eq!(body["fallback_configured"], true);
+    assert_eq!(body["dead_letter_count"], 1);
 }
 
 #[tokio::test]

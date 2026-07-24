@@ -304,6 +304,7 @@ async fn a_raw_record_flows_all_the_way_from_ingestion_to_a_dispatched_action() 
         .expect("failed to declare record.analyzed exchange");
     let analysis_deps = AnalysisDeps {
         analysis_client: Arc::new(StubAnalysisClient),
+        fallback_analysis_client: None,
         publisher: Arc::new(analysis_publisher),
         analysis_config_repository: Arc::new(PostgresAnalysisConfigRepository::new(analysis_pool)),
         http_client: reqwest::Client::new(),

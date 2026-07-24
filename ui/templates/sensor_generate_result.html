@@ -1,14 +1,34 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>{{ connector_type_label }} deploy script</h1>
-<p class="muted">Copy the option that fits how you want to run it. Nothing here was stored — copy it now.</p>
+<style>
+  .deploy-runbook{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0 24px}.deploy-step{padding:15px;border:1px solid var(--border);border-radius:11px;background:var(--panel)}.deploy-step b{display:grid;place-items:center;width:25px;height:25px;margin-bottom:10px;border-radius:50%;background:#2d6ca8;color:#fff;font-size:12px}.deploy-step strong{display:block;font-size:13px}.deploy-step p{margin:7px 0 0;color:var(--muted);font-size:12px;line-height:1.45}.deploy-script{position:relative;margin:0 0 18px}.deploy-script-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px}.deploy-script-head .section-title{margin:0}.deploy-copy{white-space:nowrap}.deploy-script pre{margin:0;max-width:none;overflow:auto;padding:18px}.deploy-verification{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 16px;border:1px solid #2b7258;border-radius:10px;background:rgba(42,114,88,.12);color:var(--text)}@media(max-width:760px){.deploy-runbook{grid-template-columns:1fr}}
+</style>
+<div class="page-header"><div><div class="page-kicker">Control plane / deployment output</div><h1>{{ connector_type_label }} deploy script</h1><p class="page-description">Your deployment package is ready. Choose a runtime, launch the connector, then register the same connector identity in the Console.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/sensors">Connector inventory</a><a class="btn btn-secondary" href="/sensors/generate">Generate another &rarr;</a></div></div>
 
-<div class="section-title">Docker Compose (from this repo)</div>
-<pre class="panel" style="max-width:none; overflow-x:auto;">{{ docker_command }}</pre>
+<section class="deploy-runbook" aria-label="Deployment runbook">
+  <div class="deploy-step"><b>1</b><strong>Preflight</strong><p>Confirm the generated gateway URL and API key are available in the environment where the connector will run.</p></div>
+  <div class="deploy-step"><b>2</b><strong>Launch</strong><p>Run one script below. Keep the process or container running so it can publish records continuously.</p></div>
+  <div class="deploy-step"><b>3</b><strong>Verify in Console</strong><p>Register the connector with the same <code>CONNECTOR_ID</code>, then inspect freshness and records in the inventory.</p></div>
+</section>
 
-<div class="section-title">Bash (build from source)</div>
-<pre class="panel" style="max-width:none; overflow-x:auto;">{{ bash_script }}</pre>
+<div class="deploy-verification"><strong>After launch:</strong><span class="muted">Register the connector identity and confirm it reaches Healthy status.</span><a class="btn btn-secondary" href="/sensors#register-sensor">Register connector &rarr;</a><a class="btn-link" href="/sensors">Open inventory</a></div>
 
-<div class="section-title">PowerShell (build from source)</div>
-<pre class="panel" style="max-width:none; overflow-x:auto;">{{ powershell_script }}</pre>
+<section class="deploy-script"><div class="deploy-script-head"><div class="section-title">Docker Compose <span class="muted">from this repo</span></div><button type="button" class="btn btn-secondary deploy-copy" data-copy-target="deploy-docker">Copy</button></div><pre id="deploy-docker" class="panel">{{ docker_command }}</pre></section>
+
+<section class="deploy-script"><div class="deploy-script-head"><div class="section-title">Bash <span class="muted">build from source</span></div><button type="button" class="btn btn-secondary deploy-copy" data-copy-target="deploy-bash">Copy</button></div><pre id="deploy-bash" class="panel">{{ bash_script }}</pre></section>
+
+<section class="deploy-script"><div class="deploy-script-head"><div class="section-title">PowerShell <span class="muted">build from source</span></div><button type="button" class="btn btn-secondary deploy-copy" data-copy-target="deploy-powershell">Copy</button></div><pre id="deploy-powershell" class="panel">{{ powershell_script }}</pre></section>
+<script>
+  (function () {
+    document.querySelectorAll('[data-copy-target]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var target = document.getElementById(button.getAttribute('data-copy-target'));
+        if (!target) return;
+        var text = target.textContent || '';
+        function copied() { var original = button.textContent; button.textContent = 'Copied'; window.setTimeout(function () { button.textContent = original; }, 1400); }
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(copied).catch(function () {}); else { var range = document.createRange(); range.selectNodeContents(target); var selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); try { document.execCommand('copy'); copied(); } catch (_) {} selection.removeAllRanges(); }
+      });
+    });
+  }());
+</script>
 {% endblock %}
