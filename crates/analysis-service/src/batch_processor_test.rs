@@ -5,11 +5,50 @@ use crate::analysis_client::analysis_client_test::{
 };
 use crate::analysis_config_repository::analysis_config_repository_test::InMemoryAnalysisConfigRepository;
 use crate::event_publisher::event_publisher_test::{FailingEventPublisher, InMemoryEventPublisher};
+use crate::AnalysisError;
+use async_trait::async_trait;
 use common::{AnalysisConfig, AnalysisProvider, SourceType};
 use serde_json::json;
 
 fn record_for(tenant_id: Uuid) -> RawRecord {
     RawRecord::new("zendesk", SourceType::Ticket, tenant_id, json!({"description": "hi"}))
+}
+
+struct BriefAnalysisClient;
+
+#[async_trait]
+impl AnalysisClient for BriefAnalysisClient {
+    async fn analyze_batch(
+        &self,
+        _tenant_id: Uuid,
+        records: &[RawRecord],
+        _prompt: Option<&str>,
+    ) -> Result<Vec<serde_json::Value>, AnalysisError> {
+        Ok(records.iter().map(|_| json!({"text": "bounded impact and next step"})).collect())
+    }
+}
+
+#[tokio::test]
+async fn generate_incident_brief_uses_the_tenant_analysis_boundary() {
+    let tenant_id = Uuid::new_v4();
+    let deps = AnalysisDeps {
+        analysis_client: Arc::new(BriefAnalysisClient),
+        fallback_analysis_client: None,
+        publisher: Arc::new(InMemoryEventPublisher::default()),
+        analysis_config_repository: Arc::new(InMemoryAnalysisConfigRepository::default()),
+        http_client: reqwest::Client::new(),
+        openai_compatible_concurrency: 4,
+    };
+
+    let summary = generate_incident_brief(
+        &deps,
+        tenant_id,
+        json!({"incident": {"severity": "high"}, "events": [{"status": "open"}]}),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(summary, "bounded impact and next step");
 }
 
 #[test]

@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct EventSummary {
     pub id: Uuid,
     pub event_type: String,
@@ -32,7 +32,7 @@ pub struct EventsPage {
 /// The full `common::Event` shape, as opposed to `EventSummary`'s list-view subset -- fetched
 /// once per event-detail-page view, not once per row in a list of dozens, so the extra fields
 /// (payload, entity_ref, source_connector_ids, created_at) are worth the larger response here.
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct EventDetail {
     pub id: Uuid,
     pub event_type: String,
@@ -47,7 +47,7 @@ pub struct EventDetail {
     pub record_ids: Vec<Uuid>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct StatusHistoryEntry {
     pub from_status: String,
     pub to_status: String,

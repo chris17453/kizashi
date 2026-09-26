@@ -12,6 +12,13 @@ impl DeadLetterManager for InMemoryDeadLetterManager {
         Ok(self.queue.lock().unwrap().len() as u32)
     }
 
+    async fn peek_oldest(&self) -> Result<Option<DeadLetterPreview>, DeadLetterError> {
+        Ok(self.queue.lock().unwrap().first().map(|body| DeadLetterPreview {
+            size: body.len(),
+            body: String::from_utf8_lossy(body).to_string(),
+        }))
+    }
+
     async fn replay_oldest(&self) -> Result<bool, DeadLetterError> {
         let mut queue = self.queue.lock().unwrap();
         if queue.is_empty() {
@@ -30,6 +37,10 @@ impl DeadLetterManager for FailingDeadLetterManager {
         Err(DeadLetterError::Backend("simulated failure".to_string()))
     }
 
+    async fn peek_oldest(&self) -> Result<Option<DeadLetterPreview>, DeadLetterError> {
+        Err(DeadLetterError::Backend("simulated failure".to_string()))
+    }
+
     async fn replay_oldest(&self) -> Result<bool, DeadLetterError> {
         Err(DeadLetterError::Backend("simulated failure".to_string()))
     }
@@ -42,6 +53,18 @@ async fn count_reflects_the_number_of_queued_messages() {
     manager.queue.lock().unwrap().push(b"two".to_vec());
 
     assert_eq!(manager.count().await.unwrap(), 2);
+}
+
+#[tokio::test]
+async fn peek_oldest_does_not_remove_the_message() {
+    let manager = InMemoryDeadLetterManager::default();
+    manager.queue.lock().unwrap().push(b"one".to_vec());
+
+    let preview = manager.peek_oldest().await.unwrap().unwrap();
+
+    assert_eq!(preview.size, 3);
+    assert_eq!(preview.body, "one");
+    assert_eq!(manager.count().await.unwrap(), 1);
 }
 
 #[tokio::test]

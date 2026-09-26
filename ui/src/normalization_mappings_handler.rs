@@ -3,6 +3,7 @@
 mod normalization_mappings_handler_test;
 
 use crate::ingestion_stats_client::{RecordSearchFilter, RecordSummary};
+use crate::normalization_telemetry_client::DedupSummary;
 use crate::session_guard::require_session;
 use crate::AppState;
 use askama::Template;
@@ -58,6 +59,7 @@ struct NormalizationMappingsTemplate {
     dir: String,
     coverage: Vec<MappingCoverageRow>,
     coverage_scope: String,
+    dedup_summary: Option<DedupSummary>,
 }
 
 fn normalize_coverage_scope(value: &str) -> String {
@@ -135,6 +137,10 @@ pub async fn get_normalization_mappings(
 
     match state.normalization_mappings_client.list_mappings(session.tenant_id).await {
         Ok(mappings) => {
+            let dedup_summary = match crate::normalization_telemetry_client::global() {
+                Some(client) => client.dedup_summary(session.tenant_id).await.ok(),
+                None => None,
+            };
             let records = state
                 .stats_client
                 .search_records(
@@ -177,6 +183,7 @@ pub async fn get_normalization_mappings(
                     dir: query.dir,
                     coverage,
                     coverage_scope,
+                    dedup_summary,
                 }
                 .render()
                 .unwrap(),
@@ -196,6 +203,7 @@ pub async fn get_normalization_mappings(
                 dir: query.dir,
                 coverage: vec![],
                 coverage_scope: normalize_coverage_scope(&query.coverage),
+                dedup_summary: None,
             }
             .render()
             .unwrap(),
@@ -305,6 +313,7 @@ pub async fn post_normalization_mapping(
                     dir: String::new(),
                     coverage: vec![],
                     coverage_scope: String::new(),
+                    dedup_summary: None,
                 }
                 .render()
                 .unwrap(),
@@ -350,6 +359,7 @@ pub async fn post_normalization_mapping(
                     dir: String::new(),
                     coverage: vec![],
                     coverage_scope: String::new(),
+                    dedup_summary: None,
                 }
                 .render()
                 .unwrap(),
@@ -382,6 +392,7 @@ async fn render_mapping_form_error(
             dir: String::new(),
             coverage: vec![],
             coverage_scope: String::new(),
+            dedup_summary: None,
         }
         .render()
         .unwrap(),

@@ -98,12 +98,17 @@ fn login_error(form: &LoginForm, message: impl Into<String>) -> Response {
 /// then establishes its own session (ADR-0014, since Auth Service has no session/cookie layer
 /// of its own per ADR-0009).
 pub async fn post_login(State(state): State<AppState>, Form(form): Form<LoginForm>) -> Response {
-    let (bearer_token, tenant_id, role) = match state
+    let (bearer_token, tenant_id, role, enrollment_required) = match state
         .auth_client
         .local_login(&form.tenant_name, &form.username, &form.password)
         .await
     {
-        Ok(LocalLoginResult::LoggedIn { token, tenant_id, role }) => (token, tenant_id, role),
+        Ok(LocalLoginResult::LoggedIn { token, tenant_id, role }) => {
+            (token, tenant_id, role, false)
+        }
+        Ok(LocalLoginResult::MfaEnrollmentRequired { token, tenant_id, role }) => {
+            (token, tenant_id, role, true)
+        }
         Ok(LocalLoginResult::MfaRequired { challenge_token }) => {
             let secure = crate::cookie_secure_suffix(crate::cookie_secure());
             let mut response = Redirect::to("/login/mfa").into_response();
@@ -158,7 +163,9 @@ pub async fn post_login(State(state): State<AppState>, Form(form): Form<LoginFor
     let secure = crate::cookie_secure_suffix(crate::cookie_secure());
     let cookie =
         format!("{SESSION_COOKIE_NAME}={session_id}; Path=/; HttpOnly; SameSite=Strict{secure}");
-    let mut response = Redirect::to("/overview").into_response();
+    let mut response =
+        Redirect::to(if enrollment_required { "/security/mfa?required=true" } else { "/overview" })
+            .into_response();
     response.headers_mut().insert(SET_COOKIE, cookie.parse().unwrap());
     response.headers_mut().append(
         SET_COOKIE,

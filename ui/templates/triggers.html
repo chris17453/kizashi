@@ -113,6 +113,7 @@
       </script>
 
       <label for="action_type">Response provider (optional)</label>
+      {% if !action_templates.is_empty() %}<label for="action_template_id">Reusable action template <span class="muted">selecting one overrides inline provider fields</span></label><select id="action_template_id" name="action_template_id"><option value="">Use inline provider configuration</option>{% for template in action_templates %}<option value="{{ template.id }}">{{ template.name }} · {{ template.action_type }}</option>{% endfor %}</select>{% endif %}
       <select id="action_type" name="action_type" onchange="kizashiUpdateActionProviderFields()">
         <option value="">No automated response</option>
         <option value="webhook">Webhook / HTTP relay</option>
@@ -120,6 +121,8 @@
         <option value="teams_alert">Microsoft Teams alert</option>
         <option value="create_ticket">Create ticket</option>
         <option value="custom">Custom provider</option>
+        <option value="generate_pdf">Generate PDF artifact</option>
+        <option value="generate_xlsx">Generate XLSX artifact</option>
       </select>
       <div id="action-provider-fields" style="display:none">
         <label for="action_url">Provider URL <span class="muted">required by webhook, Teams, and ticket relays</span></label>

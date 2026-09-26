@@ -13,7 +13,9 @@ use tower::ServiceExt;
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(get_platform_health))
+        .route("/v1/service-metrics", get(get_service_metrics))
         .route("/v1/backlog", get(get_backlog))
+        .route("/metrics", get(get_metrics))
         .with_state(state)
 }
 
@@ -101,4 +103,42 @@ async fn backlog_returns_500_on_backend_failure() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn metrics_exposes_platform_service_and_queue_gauges() {
+    let checker = InMemoryServiceHealthChecker::default();
+    checker.statuses.lock().unwrap().insert("api".to_string(), Status::Up);
+    let reader = InMemoryBacklogReader::default();
+    reader.depths.lock().unwrap().push(QueueDepth {
+        stage: "ingest_to_normalize".to_string(),
+        queue_name: "records".to_string(),
+        messages: 7,
+    });
+    let state = AppState {
+        health_checker: Arc::new(checker),
+        registry: Arc::new(vec![ServiceEndpoint {
+            name: "api".to_string(),
+            url: "http://api".to_string(),
+        }]),
+        backlog_reader: Arc::new(reader),
+    };
+    let response = router(state)
+        .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[axum::http::header::CONTENT_TYPE],
+        "text/plain; version=0.0.4; charset=utf-8"
+    );
+    let body = String::from_utf8(
+        axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec(),
+    )
+    .unwrap();
+    assert!(body.contains("kizashi_platform_up 1"));
+    assert!(body.contains("kizashi_service_up{service=\"api\"} 1"));
+    assert!(
+        body.contains("kizashi_queue_messages{stage=\"ingest_to_normalize\",queue=\"records\"} 7")
+    );
 }

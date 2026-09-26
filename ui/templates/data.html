@@ -145,7 +145,7 @@
     {% for record in records %}
     <tr>
       <td><input type="checkbox" data-record-id="{{ record.id }}" data-record-normalized="{% if record.is_normalized() %}true{% else %}false{% endif %}" aria-label="Select {{ record.preview() }}"></td>
-      <td><a href="/data/{{ record.id }}">{{ record.preview() }}</a><small class="record-id">{{ record.id }}</small></td>
+      <td><a data-investigation-context="{{ record.id }}" data-investigation-label="{{ record.preview() }}" data-investigation-type="Evidence" data-investigation-href="/data/{{ record.id }}" data-investigation-route href="/data/{{ record.id }}">{{ record.preview() }}</a><small class="record-id">{{ record.id }}</small></td>
       <td>{{ record.connector_id }}</td>
       <td>{{ record.source_type }}</td>
       <td>{{ record.ingested_at }}</td>

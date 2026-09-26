@@ -1,5 +1,6 @@
 use incident_service::{
-    build_router, IncidentState, PostgresAuditLogReader, PostgresIncidentRepository,
+    build_router, run_correlation_consumer, IncidentState, PostgresAuditLogReader,
+    PostgresIncidentRepository,
 };
 use std::sync::Arc;
 
@@ -25,8 +26,13 @@ async fn main() {
         incident_repository: Arc::new(PostgresIncidentRepository::new(pool.clone())),
         audit_log_reader: Arc::new(PostgresAuditLogReader::new(pool)),
     };
+    let rabbitmq_url = std::env::var("RABBITMQ_URL").expect("RABBITMQ_URL must be set");
+    tokio::spawn(run_correlation_consumer(rabbitmq_url, state.incident_repository.clone()));
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "incident-service listening");
-    axum::serve(listener, build_router(state)).await.expect("server error");
+    let metrics = Arc::new(common::HttpMetrics::default());
+    axum::serve(listener, common::instrument_router(build_router(state), metrics))
+        .await
+        .expect("server error");
 }

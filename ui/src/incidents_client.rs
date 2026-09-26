@@ -16,7 +16,7 @@ pub enum IncidentsClientError {
     Rejected(u16),
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct IncidentDetail {
     #[serde(flatten)]
     pub incident: Incident,
@@ -67,6 +67,19 @@ pub trait IncidentsClient: Send + Sync {
         incident_id: Uuid,
         event_id: Uuid,
     ) -> Result<(), IncidentsClientError>;
+
+    async fn link_event_with_context(
+        &self,
+        role: Role,
+        actor: &str,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        event_id: Uuid,
+        group_key: &str,
+    ) -> Result<(), IncidentsClientError> {
+        let _ = group_key;
+        self.link_event(role, actor, tenant_id, incident_id, event_id).await
+    }
 
     async fn unlink_event(
         &self,
@@ -257,6 +270,31 @@ impl IncidentsClient for HttpIncidentsClient {
             .await
             .map_err(|e| IncidentsClientError::Unreachable(e.to_string()))?;
 
+        if !response.status().is_success() {
+            return Err(IncidentsClientError::Rejected(response.status().as_u16()));
+        }
+        Ok(())
+    }
+
+    async fn link_event_with_context(
+        &self,
+        role: Role,
+        actor: &str,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        event_id: Uuid,
+        group_key: &str,
+    ) -> Result<(), IncidentsClientError> {
+        let response = self
+            .client
+            .post(format!("{}/v1/incidents/{incident_id}/events", self.incident_service_url))
+            .header("x-tenant-id", tenant_id.to_string())
+            .header("x-role", role.to_string())
+            .header("x-username", actor)
+            .json(&serde_json::json!({ "event_id": event_id, "group_key": group_key }))
+            .send()
+            .await
+            .map_err(|e| IncidentsClientError::Unreachable(e.to_string()))?;
         if !response.status().is_success() {
             return Err(IncidentsClientError::Rejected(response.status().as_u16()));
         }

@@ -17,6 +17,7 @@ struct PipelineTemplate {
     is_admin: bool,
     items: Vec<TopologyItem>,
     connector_count: usize,
+    connector_nodes: Vec<ConnectorNode>,
     record_count: i64,
     event_count: usize,
     open_incident_count: usize,
@@ -29,6 +30,13 @@ struct PipelineTemplate {
     max_queue: u64,
     backlog_error: Option<String>,
     severity: String,
+}
+
+struct ConnectorNode {
+    id: uuid::Uuid,
+    name: String,
+    connector_type: String,
+    enabled: bool,
 }
 
 struct StageDiagnostic {
@@ -79,7 +87,20 @@ pub async fn get_pipeline(
         state.incidents_client.list_incidents(session.tenant_id, None),
         state.triggers_client.list_triggers(session.tenant_id, 1000, 0),
     );
-    let connector_count = sensors.map(|page| page.sensors.len()).unwrap_or(0);
+    let connector_nodes = sensors
+        .map(|page| {
+            page.sensors
+                .into_iter()
+                .map(|sensor| ConnectorNode {
+                    id: sensor.id,
+                    name: sensor.name,
+                    connector_type: sensor.connector_type,
+                    enabled: sensor.enabled,
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let connector_count = connector_nodes.len();
     let record_count =
         stats.map(|items| items.iter().map(|item| item.record_count).sum()).unwrap_or(0);
     let event_count = events.map(|page| page.events.len()).unwrap_or(0);
@@ -103,6 +124,7 @@ pub async fn get_pipeline(
                     is_admin,
                     items: vec![],
                     connector_count,
+                    connector_nodes,
                     record_count,
                     event_count,
                     open_incident_count,
@@ -204,6 +226,7 @@ pub async fn get_pipeline(
             is_admin,
             items,
             connector_count,
+            connector_nodes,
             record_count,
             event_count,
             open_incident_count,

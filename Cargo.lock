@@ -503,9 +503,11 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 name = "auth-service"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "argon2",
  "async-trait",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "common",
  "oauth2",
@@ -513,6 +515,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "sqlx",
  "thiserror 1.0.69",
  "tokio",
@@ -1347,6 +1350,7 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "chrono",
  "proptest",
  "reqwest 0.12.28",
@@ -1355,6 +1359,7 @@ dependencies = [
  "sqlx",
  "thiserror 1.0.69",
  "tokio",
+ "tower",
  "uuid",
 ]
 
@@ -2855,6 +2860,8 @@ dependencies = [
  "axum",
  "chrono",
  "common",
+ "futures-util",
+ "lapin",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -3627,6 +3634,27 @@ dependencies = [
  "flume",
  "parking_lot",
  "tracing",
+]
+
+[[package]]
+name = "pipeline-runtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "common",
+ "lapin",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

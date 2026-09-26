@@ -11,8 +11,32 @@ const SECRET: &str = "test-secret";
 fn router(state: DeadLetterState) -> Router {
     Router::new()
         .route("/v1/dead-letter", get(get_dead_letter_count))
+        .route("/v1/dead-letter/peek", get(get_dead_letter_preview))
         .route("/v1/dead-letter/replay", post(post_dead_letter_replay))
         .with_state(state)
+}
+
+#[tokio::test]
+async fn preview_returns_the_oldest_message_without_consuming_it() {
+    let manager = Arc::new(InMemoryDeadLetterManager::default());
+    manager.queue.lock().unwrap().push(br#"{"tenant":"demo"}"#.to_vec());
+
+    let response = router(state(manager.clone()))
+        .oneshot(
+            Request::builder()
+                .uri("/v1/dead-letter/peek")
+                .header("x-internal-secret", SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["preview"]["body"], r#"{"tenant":"demo"}"#);
+    assert_eq!(manager.count().await.unwrap(), 1);
 }
 
 fn state(manager: Arc<dyn DeadLetterManager>) -> DeadLetterState {

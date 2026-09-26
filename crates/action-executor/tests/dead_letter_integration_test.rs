@@ -9,14 +9,16 @@ use lapin::types::FieldTable;
 use lapin::BasicProperties;
 use uuid::Uuid;
 
-async fn test_channel() -> lapin::Channel {
-    let rabbitmq_url =
-        std::env::var("RABBITMQ_URL").expect("RABBITMQ_URL must be set to run this test");
+async fn test_channel() -> Option<lapin::Channel> {
+    let Ok(rabbitmq_url) = std::env::var("RABBITMQ_URL") else {
+        eprintln!("skipping RabbitMQ integration test: RABBITMQ_URL is not set");
+        return None;
+    };
     let connection =
         lapin::Connection::connect(&rabbitmq_url, lapin::ConnectionProperties::default())
             .await
             .expect("failed to connect to rabbitmq");
-    connection.create_channel().await.expect("failed to open channel")
+    Some(connection.create_channel().await.expect("failed to open channel"))
 }
 
 async fn declare_queue(channel: &lapin::Channel, name: &str) {
@@ -47,7 +49,7 @@ async fn wait_for_count(manager: &impl DeadLetterManager, expected: u32) {
 
 #[tokio::test]
 async fn count_reflects_messages_actually_published_to_a_real_queue() {
-    let channel = test_channel().await;
+    let Some(channel) = test_channel().await else { return };
     let main_queue = format!("test.dead-letter-main.{}", Uuid::new_v4());
     let dead_letter_queue = format!("test.dead-letter-dead.{}", Uuid::new_v4());
     declare_queue(&channel, &main_queue).await;
@@ -74,7 +76,7 @@ async fn count_reflects_messages_actually_published_to_a_real_queue() {
 
 #[tokio::test]
 async fn replay_oldest_moves_the_message_from_dead_letter_back_onto_the_main_queue() {
-    let channel = test_channel().await;
+    let Some(channel) = test_channel().await else { return };
     let main_queue = format!("test.dead-letter-main.{}", Uuid::new_v4());
     let dead_letter_queue = format!("test.dead-letter-dead.{}", Uuid::new_v4());
     declare_queue(&channel, &main_queue).await;
@@ -123,7 +125,7 @@ async fn replay_oldest_moves_the_message_from_dead_letter_back_onto_the_main_que
 
 #[tokio::test]
 async fn replay_oldest_returns_false_when_the_dead_letter_queue_is_empty() {
-    let channel = test_channel().await;
+    let Some(channel) = test_channel().await else { return };
     let main_queue = format!("test.dead-letter-main.{}", Uuid::new_v4());
     let dead_letter_queue = format!("test.dead-letter-dead.{}", Uuid::new_v4());
     declare_queue(&channel, &main_queue).await;

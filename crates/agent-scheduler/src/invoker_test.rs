@@ -1,4 +1,10 @@
 use super::*;
+use axum::{
+    extract::Path,
+    routing::{get, post},
+    Json, Router,
+};
+use std::future::IntoFuture;
 use std::sync::Mutex;
 
 #[derive(Default)]
@@ -72,6 +78,92 @@ fn docker_invoker_builds_env_args_from_sensor_config_and_identity() {
     assert!(joined.contains("ZENDESK_SUBDOMAIN=acme"));
     assert!(joined.contains("ZENDESK_API_TOKEN=tok"));
     assert!(joined.contains("kizashi-zendesk-connector"));
+}
+
+#[test]
+fn kubernetes_job_manifest_preserves_tenant_env_and_checkpoint() {
+    let invoker = KubernetesJobInvoker::new(
+        reqwest::Client::new(),
+        "https://kubernetes.test".to_string(),
+        "kizashi".to_string(),
+        "token".to_string(),
+        "kizashi".to_string(),
+        "http://ingestion-gateway:8080".to_string(),
+        "gateway-key".to_string(),
+        std::time::Duration::from_secs(30),
+    );
+    let sensor = imap_sensor("2025-01-19");
+    let manifest = invoker.job_manifest(
+        &sensor,
+        "kizashi-mail-poller-abc123",
+        "http://ingestion-gateway:8080",
+        "gateway-key",
+        Some("42"),
+    );
+    assert_eq!(manifest["kind"], "Job");
+    assert_eq!(manifest["metadata"]["name"], "kizashi-mail-poller-abc123");
+    assert_eq!(manifest["spec"]["backoffLimit"], 0);
+    let env = manifest["spec"]["template"]["spec"]["containers"][0]["env"].as_array().unwrap();
+    let env_map = env
+        .iter()
+        .filter_map(|item| Some((item["name"].as_str()?, item["value"].as_str()?)))
+        .collect::<std::collections::HashMap<_, _>>();
+    let tenant_id = sensor.tenant_id.to_string();
+    assert_eq!(env_map.get("TENANT_ID").copied(), Some(tenant_id.as_str()));
+    assert_eq!(env_map.get("IMAP_SINCE_UID"), Some(&"42"));
+    assert_eq!(
+        manifest["spec"]["template"]["spec"]["containers"][0]["image"],
+        "kizashi-imap-connector"
+    );
+}
+
+async fn fake_kubernetes_create_job(
+    Json(body): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "metadata": {"name": body["metadata"]["name"].clone()}
+    }))
+}
+
+async fn fake_kubernetes_job_status(Path(_job_name): Path<String>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({"status": {"succeeded": 1}}))
+}
+
+async fn fake_kubernetes_pods() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "items": [{"metadata": {"name": "connector-pod"}}]
+    }))
+}
+
+async fn fake_kubernetes_pod_logs() -> &'static str {
+    "connector started\nKIZASHI_CHECKPOINT=99\n"
+}
+
+#[tokio::test]
+async fn kubernetes_invoker_runs_the_job_lifecycle_and_returns_checkpoint() {
+    let app = Router::new()
+        .route("/apis/batch/v1/namespaces/kizashi/jobs", post(fake_kubernetes_create_job))
+        .route("/apis/batch/v1/namespaces/kizashi/jobs/:job_name", get(fake_kubernetes_job_status))
+        .route("/api/v1/namespaces/kizashi/pods", get(fake_kubernetes_pods))
+        .route("/api/v1/namespaces/kizashi/pods/:pod_name/log", get(fake_kubernetes_pod_logs));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(axum::serve(listener, app).into_future());
+
+    let invoker = KubernetesJobInvoker::new(
+        reqwest::Client::new(),
+        format!("http://{address}"),
+        "kizashi".to_string(),
+        "test-token".to_string(),
+        "kizashi".to_string(),
+        "http://ingestion-gateway:8080".to_string(),
+        "gateway-key".to_string(),
+        std::time::Duration::from_secs(5),
+    );
+    let checkpoint = invoker.invoke(&sample_sensor(), None).await.unwrap();
+
+    server.abort();
+    assert_eq!(checkpoint, Some("99".to_string()));
 }
 
 fn imap_sensor(since_date: &str) -> Sensor {

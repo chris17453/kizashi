@@ -4,6 +4,7 @@ use auth_service::{
     PostgresMfaChallengeRepository, PostgresSessionAuditWriter, PostgresTenantBrandingRepository,
     PostgresTenantRepository, StandardOidcClient,
 };
+use axum::{middleware, routing::get, Extension};
 use std::sync::Arc;
 
 fn oidc_client_from_env(
@@ -107,7 +108,12 @@ async fn main() {
         session_audit_writer: Arc::new(PostgresSessionAuditWriter::new(pool)),
     };
 
-    let app = health_router().merge(build_router(state, internal_secret));
+    let metrics = Arc::new(common::HttpMetrics::default());
+    let app = health_router()
+        .merge(build_router(state, internal_secret))
+        .route("/metrics", get(common::metrics_handler))
+        .layer(middleware::from_fn(common::record_request))
+        .layer(Extension(metrics));
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "auth-service listening");
     axum::serve(listener, app).await.expect("server error");

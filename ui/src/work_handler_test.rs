@@ -106,6 +106,16 @@ fn work_queue_surfaces_sla_posture_on_each_case() {
 }
 
 #[test]
+fn work_queue_exposes_persistent_investigation_focus_routes() {
+    let template = include_str!("../templates/work.html");
+    assert!(template.contains("data-investigation-context=\"{{ item.id }}\""));
+    assert!(template.contains("data-investigation-type=\"Case\""));
+    assert!(template.contains("data-investigation-type=\"Decision\""));
+    assert!(template.contains("data-investigation-type=\"Signal\""));
+    assert!(template.contains("data-investigation-route"));
+}
+
+#[test]
 fn work_review_actions_link_to_modeled_targets() {
     let source = include_str!("work_handler.rs");
     assert!(source.contains("struct WorkActionTarget"));
@@ -155,5 +165,9 @@ fn bulk_claim_exposes_ownership_impact_preflight() {
     assert!(template.contains("id=\"work-claim-preflight\""));
     assert!(template.contains("data-work-severity=\"{{ item.severity }}\""));
     assert!(template.contains("data-work-sla=\"{{ item.sla_state }}\""));
+    assert!(template.contains("data-work-count=\"assigned\""));
+    assert!(template.contains("/api/v1/work?"));
+    assert!(template.contains("cache: 'no-store'"));
+    assert!(template.contains("changes detected · refresh to inspect"));
     assert!(template.contains("Ownership changes are audited per case."));
 }

@@ -105,9 +105,13 @@ async fn main() {
     };
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "action-executor http listening");
-    let http_router = health_router()
-        .merge(execution_router(ExecutionState { execution_repository }))
-        .merge(dead_letter_router(dead_letter_state));
+    let metrics = Arc::new(common::HttpMetrics::default());
+    let http_router = common::instrument_router(
+        health_router()
+            .merge(execution_router(ExecutionState { execution_repository }))
+            .merge(dead_letter_router(dead_letter_state)),
+        metrics,
+    );
     tokio::spawn(async move {
         axum::serve(listener, http_router).await.expect("http server error");
     });

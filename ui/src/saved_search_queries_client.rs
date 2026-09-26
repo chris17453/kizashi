@@ -35,6 +35,14 @@ pub trait SavedSearchQueriesClient: Send + Sync {
 
     async fn delete(&self, tenant_id: Uuid, id: Uuid) -> Result<(), SavedSearchQueriesClientError>;
 
+    async fn update(
+        &self,
+        _tenant_id: Uuid,
+        _query: SavedSearchQuery,
+    ) -> Result<SavedSearchQuery, SavedSearchQueriesClientError> {
+        Err(SavedSearchQueriesClientError::Rejected(501))
+    }
+
     /// Event-contract registry calls share the same Config/Admin connection and error boundary.
     /// Defaults keep lightweight test doubles source-compatible while production's HTTP client
     /// exposes the governed schema editor without adding another AppState dependency.
@@ -155,6 +163,25 @@ impl SavedSearchQueriesClient for HttpSavedSearchQueriesClient {
             return Err(SavedSearchQueriesClientError::Rejected(response.status().as_u16()));
         }
         Ok(())
+    }
+
+    async fn update(
+        &self,
+        tenant_id: Uuid,
+        query: SavedSearchQuery,
+    ) -> Result<SavedSearchQuery, SavedSearchQueriesClientError> {
+        let response = self
+            .client
+            .put(format!("{}/v1/saved-search-queries/{}", self.config_admin_service_url, query.id))
+            .header("x-tenant-id", tenant_id.to_string())
+            .json(&query)
+            .send()
+            .await
+            .map_err(|e| SavedSearchQueriesClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(SavedSearchQueriesClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| SavedSearchQueriesClientError::Unreachable(e.to_string()))
     }
 
     async fn list_event_types(

@@ -7,7 +7,7 @@ use common::Role;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, serde::Deserialize)]
 pub struct UiUser {
     pub id: Uuid,
     pub tenant_id: Uuid,
@@ -20,7 +20,7 @@ pub struct UiUser {
 /// The live-enforced password policy parameters (ADR-0056), for the compliance report to
 /// describe accurately rather than hardcoding a copy that could drift from what
 /// `password_policy::validate_password_strength` actually enforces.
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, serde::Deserialize)]
 pub struct PasswordPolicySummary {
     pub min_length: usize,
     pub max_length: usize,

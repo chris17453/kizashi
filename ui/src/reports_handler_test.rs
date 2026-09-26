@@ -195,6 +195,14 @@ fn report_incident_rows_link_window_events_into_evidence() {
 }
 
 #[test]
+fn reports_expose_persistent_investigation_focus_routes() {
+    let template = include_str!("../templates/reports.html");
+    assert!(template.contains("data-investigation-type=\"Case\""));
+    assert!(template.contains("data-investigation-type=\"Signal\""));
+    assert!(template.contains("data-investigation-route"));
+}
+
+#[test]
 fn report_exposes_ontology_coverage_handoffs() {
     let source = include_str!("reports_handler.rs");
     assert!(source.contains("struct OntologyCoverageRow"));

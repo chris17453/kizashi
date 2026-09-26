@@ -69,6 +69,28 @@ pub async fn list_saved_search_queries(
     }
 }
 
+pub async fn update_saved_search_query(
+    State(state): State<SavedSearchQueryState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(query): Json<SavedSearchQuery>,
+) -> Response {
+    let tenant_id = match tenant_id_from_headers(&headers) {
+        Ok(id) => id,
+        Err((status, msg)) => return error_response(status, msg),
+    };
+    if query.id != id {
+        return error_response(StatusCode::BAD_REQUEST, "path id must match query id");
+    }
+    if query.tenant_id != tenant_id {
+        return error_response(StatusCode::FORBIDDEN, "tenant mismatch");
+    }
+    match state.saved_search_query_repository.update(query).await {
+        Ok(updated) => Json(updated).into_response(),
+        Err(e) => saved_search_query_error_response(e),
+    }
+}
+
 pub async fn delete_saved_search_query(
     State(state): State<SavedSearchQueryState>,
     headers: HeaderMap,

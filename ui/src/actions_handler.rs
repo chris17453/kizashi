@@ -10,6 +10,10 @@ use chrono::{DateTime, Utc};
 use common::SavedSearchQuery;
 use uuid::Uuid;
 
+#[path = "actions_handler_test.rs"]
+#[cfg(test)]
+mod actions_handler_test;
+
 struct ActionDefinition {
     id: Uuid,
     name: String,
@@ -1567,6 +1571,15 @@ mod tests {
         assert!(template.contains("data-action-execution-preflight"));
         assert!(template.contains("visible contract gate"));
         assert!(template.contains("No state changes occur until you submit."));
+    }
+
+    #[test]
+    fn action_detail_exposes_persistent_investigation_focus_routes() {
+        let template = include_str!("../templates/action_detail.html");
+        assert!(template.contains("data-investigation-type=\"Decision\""));
+        assert!(template.contains("data-investigation-type=\"Signal\""));
+        assert!(template.contains("data-investigation-type=\"Case\""));
+        assert!(template.contains("data-investigation-route"));
     }
 
     #[test]

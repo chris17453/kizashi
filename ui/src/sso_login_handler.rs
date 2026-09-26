@@ -12,9 +12,9 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 
 const OIDC_FLOW_COOKIE_NAME: &str = "kizashi_oidc_flow";
 
-/// Only provider wired up so far — mirrors `entra_oidc_client()` being the only OIDC client
-/// Auth Service configures today (ADR-0009). Extending this to a per-tenant provider picker is
-/// a follow-up, not a v1 requirement.
+/// Used when a caller does not explicitly select a provider. The login form exposes both
+/// configured provider families; Auth Service returns a clear error when the selected provider
+/// has not been configured in the deployment.
 const DEFAULT_PROVIDER: &str = "entra";
 
 #[derive(Template)]
@@ -65,7 +65,11 @@ pub async fn get_sso_login(
 ) -> Response {
     let provider = query.provider.as_deref().unwrap_or(DEFAULT_PROVIDER);
 
-    let authorization = match state.oidc_client.authorize(provider).await {
+    let authorization = match state
+        .oidc_client
+        .authorize_for_tenant(provider, &query.tenant_name)
+        .await
+    {
         Ok(authorization) => authorization,
         Err(e) => {
             tracing::warn!(error = %e, "sso authorize failed");

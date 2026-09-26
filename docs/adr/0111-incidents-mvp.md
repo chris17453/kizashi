@@ -14,10 +14,9 @@ correlate Events by eye across the flat Events table.
 
 Full parity with Keep's Incidents feature includes rule-based auto-correlation, AI-generated
 summaries, and alert deduplication/fingerprinting ahead of trigger evaluation — each a
-substantial feature in its own right. Scoping all of that into one PR would be too large a unit
-of work to TDD, review, and live-verify safely. This ADR scopes an MVP: manual incident
-creation and lifecycle management, with auto-correlation and dedup explicitly deferred to
-follow-up ADRs once the core entity and UI exist to build on.
+substantial feature in its own right. The original MVP shipped the core entity and lifecycle
+management first; follow-up slices now provide operator-assisted safe correlation, governed AI
+briefs, and upstream deduplication telemetry without weakening the audited case boundary.
 
 ## Decision
 
@@ -55,10 +54,11 @@ config-admin-service's audit pattern):**
   natural trigger for incident creation and the same bulk-select UI pattern already used on
   Sensors/API Keys bulk-delete, reused here for a create rather than a delete.
 
-**Explicitly deferred** (separate future ADRs): rule-based auto-correlation (group_by on
-TriggerDefinition or a new CorrelationRule attaching matching Events to an open Incident
-automatically), alert fingerprint/dedup ahead of trigger evaluation, AI-generated incident
-summaries, and a Providers-style marketplace reskin of the Sensors page.
+**Still deferred** (separate future ADRs): partial-duplicate-as-update semantics and richer
+multi-match correlation policies. Operator-assisted correlation, governed AI briefs, alert
+fingerprint suppression, and the Sensors marketplace have shipped as follow-up slices. The
+incident service now consumes `event.created` for the narrow, safe case of exactly one active
+tenant-scoped match; see ADR-0116.
 
 ## Consequences
 
@@ -66,6 +66,6 @@ Operators get a real place to track "this is one ongoing problem" instead of man
 cross-referencing the flat Events table — the single biggest gap identified against Keep. A new
 service means new deployment surface (docker-compose entry, migrations, `scripts/run-local.sh`
 wiring) but keeps the same operational shape every other service already has, so it costs no
-new operational patterns to learn. Manual-only correlation in this MVP means an operator still
-has to notice related Events and group them by hand; auto-correlation is the natural, valuable
-next increment once this foundation exists.
+new operational patterns to learn. The event-driven consumer deliberately ignores blank,
+ambiguous, and resolved matches, leaving those cases for operator review and the existing
+previewed correlation workflow.

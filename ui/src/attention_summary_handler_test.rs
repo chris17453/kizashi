@@ -45,6 +45,7 @@ fn attention_summary_counts_operational_pressure() {
         &[action],
         &[QueueDepthSummary { stage: "event".into(), queue_name: "events".into(), messages: 50 }],
         0,
+        2,
     );
     assert_eq!(summary.open_incidents, 2);
     assert_eq!(summary.critical_incidents, 1);
@@ -52,9 +53,10 @@ fn attention_summary_counts_operational_pressure() {
     assert_eq!(summary.review_actions, 1);
     assert_eq!(summary.critical_queues, 1);
     assert_eq!(summary.sla_breaches, 0);
+    assert_eq!(summary.dead_letter_messages, 2);
     // The critical case is also unassigned; command posture counts that case once, then adds
     // the independent review action and critical queue signals.
-    assert_eq!(summary.attention_count, 3);
+    assert_eq!(summary.attention_count, 4);
 }
 
 #[test]
@@ -76,7 +78,7 @@ fn attention_summary_routes_breached_sla_cases() {
         event_ids: vec![],
         notes: vec![],
     };
-    let summary = build_attention_summary(&[incident], &[], &[], 0);
+    let summary = build_attention_summary(&[incident], &[], &[], 0, 0);
     assert_eq!(summary.sla_breaches, 1);
     assert_eq!(summary.attention_count, 1);
 }

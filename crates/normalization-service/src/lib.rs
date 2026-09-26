@@ -4,6 +4,7 @@
 
 mod dead_letter;
 mod dead_letter_handlers;
+mod dedup_handlers;
 mod event_publisher;
 mod fingerprint;
 mod fingerprint_repository;
@@ -19,10 +20,12 @@ pub use dead_letter_handlers::{
     build_router as dead_letter_router, get_dead_letter_count, post_dead_letter_replay,
     DeadLetterState,
 };
+pub use dedup_handlers::{build_router as dedup_router, get_dedup_summary, DedupState};
 pub use event_publisher::{EventPublisher, PublishError, RabbitMqEventPublisher};
 pub use fingerprint::compute_fingerprint;
 pub use fingerprint_repository::{
-    DedupOutcome, FingerprintRepository, FingerprintRepositoryError, PostgresFingerprintRepository,
+    DedupOutcome, DedupSummary, FingerprintRepository, FingerprintRepositoryError,
+    PostgresFingerprintRepository,
 };
 pub use health::build_router as health_router;
 pub use mapping_repository::{

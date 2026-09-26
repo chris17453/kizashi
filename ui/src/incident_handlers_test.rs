@@ -799,6 +799,15 @@ fn incident_queue_navigation_preserves_sla_scope() {
 }
 
 #[test]
+fn incident_queue_exposes_persistent_investigation_focus_routes() {
+    let template = include_str!("../templates/incidents.html");
+    assert!(template.contains("data-investigation-context=\"{{ incident.id }}\""));
+    assert!(template.contains("data-investigation-label=\"{{ incident.title }}\""));
+    assert!(template.contains("data-investigation-type=\"Case\""));
+    assert!(template.contains("data-investigation-route"));
+}
+
+#[test]
 fn board_status_redirect_preserves_operational_scope() {
     let form = super::IncidentStatusTransitionForm {
         target_status: "acknowledged".into(),
@@ -843,6 +852,50 @@ fn incident_response_history_includes_case_level_invocations() {
     assert!(template.contains("Response review posture"));
     assert!(template.contains("/actions/{{ response.id }}"));
     assert!(source.contains("list_action_reviews"));
+}
+
+#[test]
+fn incident_detail_exposes_persistent_investigation_focus_routes() {
+    let template = include_str!("../templates/incident_detail.html");
+    assert!(template.contains("data-investigation-type=\"Case\""));
+    assert!(template.contains("data-investigation-type=\"Signal\""));
+    assert!(template.contains("data-investigation-type=\"Object\""));
+    assert!(template.contains("data-investigation-type=\"Decision\""));
+    assert!(template.contains("data-investigation-route"));
+}
+
+#[test]
+fn incident_detail_exposes_timeline_investigation_filters() {
+    let template = include_str!("../templates/incident_detail.html");
+    assert!(template.contains("case-timeline-tools"));
+    assert!(template.contains("case-timeline-kind"));
+    assert!(template.contains("case-timeline-query"));
+    assert!(template.contains("case-timeline-from"));
+    assert!(template.contains("case-timeline-to"));
+    assert!(template.contains("case-timeline-status"));
+    assert!(template.contains("entries shown"));
+    assert_eq!(template.matches("var t=document.querySelector('.case-timeline')").count(), 1);
+}
+
+#[test]
+fn incident_detail_exposes_bounded_investigation_export() {
+    let template = include_str!("../templates/incident_detail.html");
+    assert!(template.contains("incident-360-export"));
+    assert!(template.contains("/api/v1/incidents/"));
+    assert!(template.contains("/360"));
+    assert!(template.contains("case-investigation-"));
+}
+
+#[test]
+fn incident_impact_entities_expose_typed_ontology_handoffs() {
+    let template = include_str!("../templates/incident_detail.html");
+    let source = include_str!("incident_handlers.rs");
+    assert!(template.contains("data-case-object-id"));
+    assert!(template.contains("data-case-object-type"));
+    assert!(template.contains("data-case-compare"));
+    assert!(template.contains("data-case-load"));
+    assert!(template.contains("kizashi.ontology.selection-types"));
+    assert!(source.contains("object_type_id: object.object_type_id"));
 }
 
 #[test]
@@ -953,4 +1006,54 @@ fn incident_view_save_preserves_the_active_queue_scope() {
     assert!(location.contains("sla=breached"));
     assert!(location.contains("view=table"));
     assert!(location.contains("notice=view_saved"));
+}
+
+#[test]
+fn evidence_brief_summarizes_linked_signal_context() {
+    let tenant_id = Uuid::new_v4();
+    let mut incident = sample_incident_detail(tenant_id).incident;
+    incident.title = "Checkout degradation".into();
+    incident.assigned_to = Some("alice".into());
+    let first = chrono::Utc::now() - chrono::Duration::minutes(5);
+    let event =
+        |event_type: &str, status: &str, group_key: &str, occurred_at| super::LinkedEventRow {
+            event: super::EventDetail {
+                id: Uuid::new_v4(),
+                event_type: event_type.into(),
+                source_connector_ids: vec!["demo".into()],
+                entity_ref: "checkout".into(),
+                group_key: group_key.into(),
+                payload: serde_json::json!({"severity":"high"}),
+                occurred_at,
+                created_at: occurred_at,
+                status: status.into(),
+                record_ids: vec![],
+            },
+            correlation: "Manual link".to_string(),
+        };
+    let summary = super::evidence_brief(
+        &incident,
+        &[
+            event("payment.failure", "open", "checkout", first),
+            event(
+                "payment.latency",
+                "acknowledged",
+                "checkout",
+                first + chrono::Duration::minutes(5),
+            ),
+        ],
+    );
+    assert!(summary.contains("Checkout degradation is a high open case owned by alice"));
+    assert!(summary.contains("2 linked signals"));
+    assert!(summary.contains("payment.failure (1), payment.latency (1)"));
+    assert!(summary.contains("Group keys: checkout"));
+}
+
+#[test]
+fn incident_detail_exposes_evidence_brief_action_and_notices() {
+    let template = include_str!("../templates/incident_detail.html");
+    assert!(template.contains("/incidents/{{ inc.id }}/brief"));
+    assert!(template.contains("Regenerate evidence brief"));
+    assert!(template.contains("brief_generated"));
+    assert!(template.contains("brief_failed"));
 }

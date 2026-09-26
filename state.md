@@ -30,24 +30,29 @@ and shipped:
 | #141 | **Incidents MVP** | New `incident-service` (own Postgres schema), `/incidents` list+detail, bulk "Create Incident from Selected" on Events page. See ADR-0111. |
 | #142 | Sensors/Providers marketplace reskin | Pure UI — categorized card grid replacing a flat `<select>` on `/sensors/generate` |
 | #143 | ADR-0112 (docs only) | Scoped the alert fingerprint/dedup MVP before implementing |
-| #144 | **Alert fingerprint/dedup** | `NormalizationMapping.dedup_fields`/`dedup_window_seconds` (opt-in), SHA-256 fingerprint computed in normalization-service, new `record_fingerprints` table, suppresses `record.normalized` republish on exact duplicates. Backend-only, no UI. |
+| #144 | **Alert fingerprint/dedup** | `NormalizationMapping.dedup_fields`/`dedup_window_seconds` (opt-in), SHA-256 fingerprint computed in normalization-service, persisted suppression telemetry, and Console configuration/telemetry panels. |
+
+## Current deployment posture
+
+- **Kubernetes runtime parity**: Helm now renders Incident Service, Ontology Service, and Report
+  Scheduler and wires their URLs into the Console, Query Gateway, Action Executor, and
+  Observability. The chart still intentionally expects Postgres/RabbitMQ/ClickHouse/MinIO from
+  external charts or managed services. (ADR-0117)
 
 ## Explicitly deferred (documented in ADRs, not started)
 
-- **Incidents**: auto-correlation (rule-based grouping into existing open Incidents), alert
-  dedup *feeding* Incidents, AI-generated summaries. (ADR-0111)
-- **Alert dedup**: partial-duplicate-as-update (currently only exact-duplicate suppression
-  ships); any Console UI for configuring `dedup_fields`/`dedup_window_seconds` per mapping —
-  today it's API-only (`POST/PUT /v1/normalization-mappings` accepts the fields, no UI form).
+- **Incidents**: unambiguous event-driven correlation from the `event.created` bus is shipped;
+  blank, resolved, and ambiguous matches remain operator-assisted. Partial-duplicate-as-update
+  semantics and richer multi-match policies remain deferred. (ADR-0111, ADR-0115, ADR-0116)
+- **Alert dedup**: exact duplicate suppression, tenant-scoped suppression telemetry, and the
+  Console mapping configuration are shipped. Partial-duplicate-as-update remains open.
   (ADR-0112)
 
 ## Open backlog (tracked as tasks, not started)
 
-- **Task #75 — Extensible Action types**: Email-with-templates, Webhook (may partially exist
-  via `ActionType::Webhook`, needs review), PDF generation, XLSX generation actions, plus a
-  dedicated Console UI page for authoring Actions/Templates. Needs its own scoping ADR first —
-  open question: is "Template" a first-class versioned entity (like `NormalizationMapping`) or
-  something simpler? User explicitly asked for this; not yet scoped or started.
+- **Task #75 — Extensible Action types**: the versioned Action Template catalog, trigger-template
+  selection, SMTP/Graph email, Teams, Webhook/ticket, and bounded PDF/XLSX artifact actions are
+  shipped. Further provider-specific delivery contracts remain additive follow-ups.
 - **retention-service ops semantics**: `trigger_reimport`'s 404-vs-500 behavior — deliberately
   deferred, tracked in ADR-0103, not urgent.
 - Two other Keep-inspired ideas surfaced during research but never selected by the user: a real

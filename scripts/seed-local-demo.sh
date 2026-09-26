@@ -11,6 +11,31 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+case "${1:-}" in
+  "") ;;
+  --compose)
+    # Compose services connect to the Postgres service's primary database, while the
+    # host-process launcher deliberately uses the isolated test database from .env.
+    SEED_DATABASE_NAME="kizashi"
+    ;;
+  --help|-h)
+    cat <<'USAGE'
+Usage: scripts/seed-local-demo.sh [--compose]
+
+Seeds the host-launcher database from DATABASE_URL by default. Use --compose when
+the application is running under Docker Compose; it targets the live `kizashi`
+database used by the Compose service containers.
+
+SEED_DATABASE_NAME may also be set explicitly for another local database.
+USAGE
+    exit 0
+    ;;
+  *)
+    echo "unknown option: $1 (use --help for usage)" >&2
+    exit 2
+    ;;
+esac
+
 if [ -f .env ]; then
   set -a
   # shellcheck disable=SC1091
@@ -117,10 +142,16 @@ KEY_HASH="$(python3 -c "import hashlib,sys; print(hashlib.sha256(sys.argv[1].enc
 PASSWORD_HASH="$(cargo run -q -p auth-service --bin hash_password -- "$DEMO_PASSWORD")"
 OPERATOR_PASSWORD_HASH="$(cargo run -q -p auth-service --bin hash_password -- "$OPERATOR_PASSWORD")"
 VIEWER_PASSWORD_HASH="$(cargo run -q -p auth-service --bin hash_password -- "$VIEWER_PASSWORD")"
-# The local launcher exports the same DATABASE_URL to every service. Derive the compose database
-# from that URL so the seed follows the actual local stack (the checked-in `.env` intentionally
-# points at the isolated `kizashi_test` database).
-DB_NAME="${DATABASE_URL##*/}"
+# The host launcher exports DATABASE_URL to every service, while Docker Compose deliberately
+# uses the live `kizashi` database inside the Postgres container. Keep the launcher behavior as
+# the default, but allow an explicit target for Compose (for example,
+# `scripts/seed-local-demo.sh --compose`, or set `SEED_DATABASE_NAME` explicitly).
+DB_NAME="${SEED_DATABASE_NAME:-${DATABASE_URL##*/}}"
+if [ -z "$DB_NAME" ]; then
+  echo "could not determine the seed database; set SEED_DATABASE_NAME or DATABASE_URL" >&2
+  exit 1
+fi
+echo "==> seeding Postgres database: $DB_NAME"
 
 # ON CONFLICT (id) DO UPDATE, not DO NOTHING — the row's *id* is what's actually fixed/stable
 # across runs; if this script's own constants ever change (as they did once already, going

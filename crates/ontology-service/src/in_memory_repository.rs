@@ -1,8 +1,8 @@
 use crate::repository::{OntologyRepository, RepositoryError};
 use async_trait::async_trait;
 use common::ontology::{
-    ActionInvocation, ActionReview, ActionType, ActionTypeHistory, Link, LinkType, Object,
-    ObjectHistory, ObjectType,
+    ActionInvocation, ActionReview, ActionType, ActionTypeHistory, Link, LinkHistory, LinkType,
+    LinkTypeHistory, Object, ObjectAnnotation, ObjectHistory, ObjectType, ObjectTypeHistory,
 };
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -12,7 +12,11 @@ pub struct InMemoryOntologyRepository {
     pub object_types: Arc<Mutex<Vec<ObjectType>>>,
     pub objects: Arc<Mutex<Vec<Object>>>,
     pub object_history: Arc<Mutex<Vec<ObjectHistory>>>,
+    pub object_annotations: Arc<Mutex<Vec<ObjectAnnotation>>>,
+    pub object_type_history: Arc<Mutex<Vec<ObjectTypeHistory>>>,
     pub link_types: Arc<Mutex<Vec<LinkType>>>,
+    pub link_type_history: Arc<Mutex<Vec<LinkTypeHistory>>>,
+    pub link_history: Arc<Mutex<Vec<LinkHistory>>>,
     pub links: Arc<Mutex<Vec<Link>>>,
     pub action_invocations: Arc<Mutex<Vec<ActionInvocation>>>,
     pub action_types: Arc<Mutex<Vec<ActionType>>>,
@@ -26,7 +30,11 @@ impl InMemoryOntologyRepository {
             object_types: Arc::new(Mutex::new(Vec::new())),
             objects: Arc::new(Mutex::new(Vec::new())),
             object_history: Arc::new(Mutex::new(Vec::new())),
+            object_annotations: Arc::new(Mutex::new(Vec::new())),
+            object_type_history: Arc::new(Mutex::new(Vec::new())),
             link_types: Arc::new(Mutex::new(Vec::new())),
+            link_type_history: Arc::new(Mutex::new(Vec::new())),
+            link_history: Arc::new(Mutex::new(Vec::new())),
             links: Arc::new(Mutex::new(Vec::new())),
             action_invocations: Arc::new(Mutex::new(Vec::new())),
             action_types: Arc::new(Mutex::new(Vec::new())),
@@ -69,6 +77,47 @@ impl OntologyRepository for InMemoryOntologyRepository {
     }
     async fn delete_object_type(&self, tenant_id: Uuid, id: Uuid) -> Result<(), RepositoryError> {
         self.object_types.lock().unwrap().retain(|t| !(t.id == id && t.tenant_id == tenant_id));
+        Ok(())
+    }
+
+    async fn list_object_type_history(
+        &self,
+        tenant_id: Uuid,
+        object_type_id: Uuid,
+    ) -> Result<Vec<ObjectTypeHistory>, RepositoryError> {
+        let mut history = self
+            .object_type_history
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry.tenant_id == tenant_id && entry.object_type_id == object_type_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        history.sort_by_key(|entry| std::cmp::Reverse(entry.changed_at));
+        Ok(history)
+    }
+
+    async fn list_all_object_type_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ObjectTypeHistory>, RepositoryError> {
+        let mut history = self
+            .object_type_history
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry.tenant_id == tenant_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        history.sort_by_key(|entry| std::cmp::Reverse(entry.changed_at));
+        Ok(history)
+    }
+
+    async fn record_object_type_history(
+        &self,
+        history: ObjectTypeHistory,
+    ) -> Result<(), RepositoryError> {
+        self.object_type_history.lock().unwrap().push(history);
         Ok(())
     }
 
@@ -129,8 +178,66 @@ impl OntologyRepository for InMemoryOntologyRepository {
         Ok(history)
     }
 
+    async fn list_all_object_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ObjectHistory>, RepositoryError> {
+        let mut history = self
+            .object_history
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry.tenant_id == tenant_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        history.sort_by_key(|entry| std::cmp::Reverse(entry.changed_at));
+        Ok(history)
+    }
+
     async fn record_object_history(&self, history: ObjectHistory) -> Result<(), RepositoryError> {
         self.object_history.lock().unwrap().push(history);
+        Ok(())
+    }
+
+    async fn list_object_annotations(
+        &self,
+        tenant_id: Uuid,
+        object_id: Uuid,
+    ) -> Result<Vec<ObjectAnnotation>, RepositoryError> {
+        let mut annotations = self
+            .object_annotations
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|item| item.tenant_id == tenant_id && item.object_id == object_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        annotations.sort_by_key(|item| std::cmp::Reverse(item.created_at));
+        Ok(annotations)
+    }
+
+    async fn list_all_object_annotations(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ObjectAnnotation>, RepositoryError> {
+        let mut annotations = self
+            .object_annotations
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|item| item.tenant_id == tenant_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        annotations.sort_by_key(|item| std::cmp::Reverse(item.created_at));
+        annotations.truncate(500);
+        Ok(annotations)
+    }
+
+    async fn create_object_annotation(
+        &self,
+        annotation: ObjectAnnotation,
+    ) -> Result<(), RepositoryError> {
+        self.object_annotations.lock().unwrap().push(annotation);
         Ok(())
     }
 
@@ -199,6 +306,85 @@ impl OntologyRepository for InMemoryOntologyRepository {
     }
     async fn delete_link_type(&self, tenant_id: Uuid, id: Uuid) -> Result<(), RepositoryError> {
         self.link_types.lock().unwrap().retain(|t| !(t.id == id && t.tenant_id == tenant_id));
+        Ok(())
+    }
+
+    async fn list_link_type_history(
+        &self,
+        tenant_id: Uuid,
+        link_type_id: Uuid,
+    ) -> Result<Vec<LinkTypeHistory>, RepositoryError> {
+        let mut history = self
+            .link_type_history
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry.tenant_id == tenant_id && entry.link_type_id == link_type_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        history.sort_by_key(|entry| std::cmp::Reverse(entry.changed_at));
+        Ok(history)
+    }
+
+    async fn list_all_link_type_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<LinkTypeHistory>, RepositoryError> {
+        let mut history = self
+            .link_type_history
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry.tenant_id == tenant_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        history.sort_by_key(|entry| std::cmp::Reverse(entry.changed_at));
+        Ok(history)
+    }
+
+    async fn record_link_type_history(
+        &self,
+        history: LinkTypeHistory,
+    ) -> Result<(), RepositoryError> {
+        self.link_type_history.lock().unwrap().push(history);
+        Ok(())
+    }
+
+    async fn list_link_history(
+        &self,
+        tenant_id: Uuid,
+        link_id: Uuid,
+    ) -> Result<Vec<LinkHistory>, RepositoryError> {
+        let mut history = self
+            .link_history
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry.tenant_id == tenant_id && entry.link_id == link_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        history.sort_by_key(|entry| std::cmp::Reverse(entry.changed_at));
+        Ok(history)
+    }
+
+    async fn list_all_link_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<LinkHistory>, RepositoryError> {
+        let mut history = self
+            .link_history
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry.tenant_id == tenant_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        history.sort_by_key(|entry| std::cmp::Reverse(entry.changed_at));
+        Ok(history)
+    }
+
+    async fn record_link_history(&self, history: LinkHistory) -> Result<(), RepositoryError> {
+        self.link_history.lock().unwrap().push(history);
         Ok(())
     }
 
@@ -305,6 +491,21 @@ impl OntologyRepository for InMemoryOntologyRepository {
             .filter(|h| h.tenant_id == tenant_id && h.action_type_id == action_type_id)
             .cloned()
             .collect())
+    }
+    async fn list_all_action_type_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ActionTypeHistory>, RepositoryError> {
+        let mut history = self
+            .action_type_history
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry.tenant_id == tenant_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        history.sort_by_key(|entry| std::cmp::Reverse(entry.changed_at));
+        Ok(history)
     }
     async fn record_action_type_history(
         &self,

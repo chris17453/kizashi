@@ -84,6 +84,14 @@ pub struct MfaRequiredResponse {
 }
 
 #[derive(serde::Serialize)]
+pub struct MfaEnrollmentRequiredResponse {
+    pub mfa_enrollment_required: bool,
+    pub token: String,
+    pub tenant_id: Uuid,
+    pub role: common::Role,
+}
+
+#[derive(serde::Serialize)]
 struct ErrorBody {
     error: String,
 }
@@ -151,6 +159,14 @@ pub async fn local_login(
     }
     let user = user.expect("authenticated implies user is Some");
 
+    let tenant_mfa_required = match state.tenant_repository.mfa_required(user.tenant_id).await {
+        Ok(required) => required,
+        Err(e) => {
+            tracing::error!(error = %e, "tenant MFA policy lookup failed");
+            return error_response(StatusCode::INTERNAL_SERVER_ERROR, "auth backend error");
+        }
+    };
+
     if user.mfa_enabled {
         record_attempt(
             &state,
@@ -171,6 +187,15 @@ pub async fn local_login(
     match state.session_client.mint_session(user.tenant_id, user.role, "local-login").await {
         Ok(token) => {
             record_attempt(&state, Some(user.tenant_id), &req.username, true, "success").await;
+            if tenant_mfa_required {
+                return Json(MfaEnrollmentRequiredResponse {
+                    mfa_enrollment_required: true,
+                    token,
+                    tenant_id: user.tenant_id,
+                    role: user.role,
+                })
+                .into_response();
+            }
             Json(LoginResponse {
                 token,
                 tenant_id: user.tenant_id,

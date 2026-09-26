@@ -57,5 +57,18 @@ async fn get_command_palette_js_returns_javascript_content_type() {
         "text/javascript; charset=utf-8"
     );
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    assert!(String::from_utf8(body.to_vec()).unwrap().contains("command-palette"));
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    assert!(text.contains("command-palette"));
+    assert!(text.contains("/ontology/objects/"));
+    assert!(text.contains("data-investigation-route"));
+    assert!(text.contains("/api/v1/search"));
+    assert!(text.contains("/api/v1/saved-views?q="));
+    assert!(text.contains("Saved view"));
+    assert!(text.contains("/ontology/compare?ids="));
+    assert!(text.contains("renderSearchResults"));
+    assert!(text.contains("value.service"));
+    assert!(text.contains("value.entry || value"));
+    assert!(text.contains("/audit-log/"));
+    assert!(text.contains("service === 'ingestion-gateway' ? 'ingestion'"));
+    assert!(text.contains("service === 'egress-gateway' ? 'egress'"));
 }

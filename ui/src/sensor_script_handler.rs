@@ -176,7 +176,7 @@ fn shell_quote(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-fn build_scripts(
+pub(crate) fn build_scripts(
     connector_type: &str,
     connector_type_label: &'static str,
     name: &str,

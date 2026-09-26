@@ -265,3 +265,46 @@ fn event_response_exposes_case_handoff_preflight() {
     assert!(template.contains("original evidence remains attached and auditable"));
     assert!(template.contains("no source payload changes occur"));
 }
+
+#[test]
+fn event_detail_exposes_persistent_investigation_focus_routes() {
+    let template = include_str!("../templates/event_detail.html");
+    assert!(template.contains("data-investigation-type=\"Signal\""));
+    assert!(template.contains("data-investigation-type=\"Case\""));
+    assert!(template.contains("data-investigation-type=\"Evidence\""));
+    assert!(template.contains("data-investigation-type=\"Decision\""));
+    assert!(template.contains("data-investigation-route"));
+}
+
+#[test]
+fn event_detail_exposes_timeline_exploration_filters() {
+    let template = include_str!("../templates/event_detail.html");
+    assert!(template.contains("event-timeline-tools"));
+    assert!(template.contains("event-timeline-kind"));
+    assert!(template.contains("event-timeline-query"));
+    assert!(template.contains("event-timeline-status"));
+    assert!(template.contains("event-timeline-table"));
+    assert!(template.contains("All downstream steps"));
+    assert!(template.contains("if (!waterfall.length && !table.length)"));
+}
+
+#[test]
+fn event_detail_exposes_bounded_investigation_export() {
+    let template = include_str!("../templates/event_detail.html");
+    assert!(template.contains("event-360-export"));
+    assert!(template.contains("/api/v1/events/"));
+    assert!(template.contains("/360"));
+    assert!(template.contains("signal-investigation-"));
+}
+
+#[test]
+fn event_detail_exposes_typed_modeled_entity_handoff() {
+    let template = include_str!("../templates/event_detail.html");
+    let source = include_str!("event_detail_handler.rs");
+    assert!(template.contains("data-event-model-id"));
+    assert!(template.contains("data-event-model-type"));
+    assert!(template.contains("data-event-model-compare"));
+    assert!(template.contains("data-event-model-load"));
+    assert!(template.contains("kizashi.ontology.selection-types"));
+    assert!(source.contains("object_type_id: object.object_type_id"));
+}

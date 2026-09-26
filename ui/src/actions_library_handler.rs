@@ -468,7 +468,7 @@ pub async fn post_create_action_library(
     let Some(client) = ontology_client::global() else {
         return (StatusCode::SERVICE_UNAVAILABLE, "Ontology client unavailable").into_response();
     };
-    match client.create_action_type(&session.bearer_token, &input).await {
+    match client.create_action_type(&session.bearer_token, &session.username, &input).await {
         Ok(()) => Redirect::to("/actions/library?notice=created").into_response(),
         Err(error) => (StatusCode::BAD_GATEWAY, error.to_string()).into_response(),
     }
@@ -494,7 +494,7 @@ pub async fn post_update_action_library(
     let Some(client) = ontology_client::global() else {
         return (StatusCode::SERVICE_UNAVAILABLE, "Ontology client unavailable").into_response();
     };
-    match client.update_action_type(&session.bearer_token, id, &input).await {
+    match client.update_action_type(&session.bearer_token, &session.username, id, &input).await {
         Ok(()) => Redirect::to("/actions/library?notice=updated").into_response(),
         Err(error) => (StatusCode::BAD_GATEWAY, error.to_string()).into_response(),
     }
@@ -515,7 +515,7 @@ pub async fn post_delete_action_library(
     let Some(client) = ontology_client::global() else {
         return (StatusCode::SERVICE_UNAVAILABLE, "Ontology client unavailable").into_response();
     };
-    match client.delete_action_type(&session.bearer_token, id).await {
+    match client.delete_action_type(&session.bearer_token, &session.username, id).await {
         Ok(()) => Redirect::to("/actions/library?notice=deleted").into_response(),
         Err(error) => (StatusCode::CONFLICT, error.to_string()).into_response(),
     }

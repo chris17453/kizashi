@@ -65,8 +65,8 @@ pub async fn record_audit_entry(
 }
 
 /// Read-only access to the audit trail — no transactional-sharing constraint, so a normal
-/// mockable trait. No Console UI page reads this yet (deferred follow-up, ADR-0111); it exists
-/// so the write side (`record_audit_entry`) has a matching read contract from day one.
+/// mockable trait. The Console incident detail page reads this case-level history alongside the
+/// immutable lifecycle and evidence-link changes recorded by `record_audit_entry`.
 #[async_trait]
 pub trait AuditLogReader: Send + Sync {
     async fn list_for_entity(

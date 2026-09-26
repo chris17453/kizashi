@@ -23,6 +23,7 @@ members = [
   "crates/ingestion-gateway",
   "crates/ingestion-service",
   "crates/normalization-service",
+  "crates/pipeline-runtime",
     "crates/ontology-service",
   "crates/observability",
   "crates/query-gateway",

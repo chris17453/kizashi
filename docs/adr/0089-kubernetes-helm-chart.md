@@ -24,9 +24,8 @@ Notable judgment calls, documented in full in `deploy/helm/kizashi/README.md`:
 - `retention-sweep-scheduler`/`backup-scheduler` ship as low-replica Deployments, not CronJobs —
   docker-compose already runs them as internal `while/sleep` loops, so a Deployment is the
   faithful translation; converting to a true one-shot CronJob is a separate follow-up.
-- `agent-scheduler`'s ADR-0020 Docker-socket-shelling pattern is carried over via a `hostPath`
-  mount + root securityContext, flagged as a real limitation (breaks on containerd-only nodes,
-  grants effective node-root) with a documented Kubernetes-Jobs-API-native follow-up.
+- `agent-scheduler` uses the Kubernetes Jobs API with a dedicated ServiceAccount and
+  namespace-scoped Role/RoleBinding; the Docker socket remains only on the Docker Compose path.
 - Postgres/RabbitMQ/ClickHouse/MinIO are intentionally **not** given custom manifests — the
   README directs a production install at mature existing charts/operators (Bitnami
   postgresql/rabbitmq, clickhouse-operator, MinIO Operator) or managed equivalents, consistent
@@ -43,10 +42,9 @@ list.
 ## Consequences
 
 - No application code changed — this is new, additive deployment tooling only.
-- Verified with `helm lint` (0 failures) and `helm template` (43 objects render cleanly: 18
-  Deployments, 16 Services, 7 CronJobs, 1 ConfigMap, 1 Secret), plus `kubeconform` validation of
-  the rendered manifests against the Kubernetes 1.29 OpenAPI schema (43 valid, 0 invalid, 0
-  errors).
+- Verified with `helm lint` (0 failures) and `helm template` (46 objects render cleanly: 18
+  Deployments, 16 Services, 7 CronJobs, 1 ConfigMap, 1 Secret, 1 ServiceAccount, 1 Role, and
+  1 RoleBinding). A live Kubernetes integration test remains deployment-specific.
 - `docker-compose.yml`/`Dockerfile` remain the source of truth for the service list, build args,
   and env wiring; the README states explicitly that if they drift from this chart, the chart
   should be updated to match, not the reverse.

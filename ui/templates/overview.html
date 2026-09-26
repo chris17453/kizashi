@@ -20,6 +20,23 @@
   @media (max-width: 900px) { .overview-attention-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .overview-chain{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin:1.2rem 0 1.35rem}.overview-chain-stage{position:relative;display:grid;gap:.3rem;padding:1rem .85rem;background:var(--surface);border:1px solid var(--border);text-decoration:none;min-height:7rem}.overview-chain-stage:first-child{border-radius:9px 0 0 9px}.overview-chain-stage:last-child{border-radius:0 9px 9px 0}.overview-chain-stage:not(:last-child)::after{content:'›';position:absolute;z-index:2;right:-.7rem;top:2rem;width:1.35rem;height:1.35rem;border:1px solid var(--border);border-radius:50%;background:var(--surface-raised);color:var(--accent);font-size:1.25rem;line-height:1.1;text-align:center}.overview-chain-stage:hover{z-index:3;border-color:var(--accent);background:var(--surface-hover)}.overview-chain-stage .chain-count{font:700 1.55rem ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text)}.overview-chain-stage .chain-label{font-weight:700;color:var(--text)}.overview-chain-stage small{color:var(--text-dim);line-height:1.35}.overview-chain-stage.tone-risk .chain-count{color:var(--danger)}.overview-chain-stage.tone-good .chain-count{color:var(--success)}.overview-chain-stage.tone-warning .chain-count{color:var(--warning,#e2c06b)}.overview-chain-track{height:.35rem;margin-top:.35rem;overflow:hidden;border-radius:99px;background:var(--surface-raised)}.overview-chain-fill{display:block;height:100%;min-width:2px;border-radius:inherit;background:var(--accent)}.overview-chain-stage.tone-good .overview-chain-fill{background:var(--success)}.overview-chain-stage.tone-warning .overview-chain-fill{background:var(--warning)}.overview-chain-stage.tone-risk .overview-chain-fill{background:var(--danger)}@media(max-width:850px){.overview-chain{grid-template-columns:1fr;gap:.45rem}.overview-chain-stage,.overview-chain-stage:first-child,.overview-chain-stage:last-child{border-radius:8px}.overview-chain-stage:not(:last-child)::after{content:'↓';right:calc(50% - .7rem);top:auto;bottom:-.9rem}}
   .overview-analytics-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(18rem,.8fr);gap:1rem}.overview-heatmap{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.28rem}.overview-heatmap-header{color:var(--text-dim);font-size:.68rem;text-align:center;padding-bottom:.15rem}.overview-heat-cell{aspect-ratio:1.65;border:1px solid var(--border-subtle);border-radius:4px;background:var(--surface);min-height:1.5rem;text-decoration:none;display:grid;place-items:center;color:var(--text);font:600 .7rem ui-monospace,SFMono-Regular,Menlo,monospace}.overview-heat-cell:hover{border-color:var(--accent);transform:translateY(-1px)}.overview-heat-cell.blank{visibility:hidden}.overview-heat-cell[data-intensity="1"]{background:color-mix(in srgb,var(--accent) 22%,var(--surface))}.overview-heat-cell[data-intensity="2"]{background:color-mix(in srgb,var(--accent) 42%,var(--surface))}.overview-heat-cell[data-intensity="3"]{background:color-mix(in srgb,var(--accent) 65%,var(--surface))}.overview-heat-cell[data-intensity="4"]{background:var(--accent);color:var(--accent-contrast,#fff)}.overview-heat-legend{display:flex;align-items:center;justify-content:flex-end;gap:.3rem;margin-top:.55rem;color:var(--text-dim);font-size:.72rem}.overview-heat-legend i{display:inline-block;width:.7rem;height:.7rem;border:1px solid var(--border-subtle);border-radius:2px;background:var(--surface)}.overview-heat-legend i:nth-of-type(2){background:color-mix(in srgb,var(--accent) 22%,var(--surface))}.overview-heat-legend i:nth-of-type(3){background:color-mix(in srgb,var(--accent) 42%,var(--surface))}.overview-heat-legend i:nth-of-type(4){background:color-mix(in srgb,var(--accent) 65%,var(--surface))}.overview-heat-legend i:nth-of-type(5){background:var(--accent)}.overview-analytics-side{display:grid;align-content:start;gap:.7rem}.overview-analytics-side .metric-callout{padding:.85rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface)}.overview-analytics-side strong{display:block;font:700 1.45rem ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text)}.overview-analytics-side small{color:var(--text-dim)}.overview-trend-panel{margin-top:1rem}.overview-trend-chart{min-height:220px}@media(max-width:850px){.overview-analytics-grid{grid-template-columns:1fr}}
+  .overview-mission-bar{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem;margin:0 0 1.1rem;padding:.55rem .65rem;border:1px solid var(--border);border-radius:7px;background:var(--surface)}
+  .overview-mission-label{margin-right:.25rem;color:var(--text-dim);font:700 .65rem var(--mono);letter-spacing:.08em;text-transform:uppercase}
+  .overview-mission-mode{padding:.35rem .65rem;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--text-dim);cursor:pointer;font:650 .74rem inherit}
+  .overview-mission-mode:hover,.overview-mission-mode:focus-visible{border-color:var(--accent-dim);background:var(--surface-hover);color:var(--text);outline:none}
+  .overview-mission-mode.is-active{border-color:var(--accent-dim);background:rgba(94,234,212,.1);color:var(--accent)}
+  .overview-mission-state{margin-left:auto;color:var(--text-dim);font-size:.7rem}
+  .dashboard-widget[data-mission-hidden="true"]{display:none}
+  .dashboard-widget[data-user-hidden="true"]{display:none}
+  .dashboard-widget-picker{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem;margin:0 0 1rem;padding:.65rem .75rem;border:1px solid var(--border);border-radius:7px;background:var(--surface)}
+  .dashboard-widget-picker[hidden]{display:none}
+  .dashboard-widget-picker label{display:flex;align-items:center;gap:.4rem;padding:.4rem .45rem;border:1px solid var(--border-subtle);border-radius:5px;color:var(--text-dim);font-size:.72rem;cursor:pointer}
+  .dashboard-widget-picker label:hover{border-color:var(--accent-dim);color:var(--text);background:var(--surface-hover)}
+  .dashboard-widget-picker input{accent-color:var(--accent)}
+  .dashboard-widget-picker-heading{grid-column:1 / -1;color:var(--text-dim);font:700 .66rem var(--mono);letter-spacing:.07em;text-transform:uppercase}
+  @media(max-width:700px){.dashboard-widget-picker{grid-template-columns:1fr 1fr}}
+  @media(max-width:620px){.overview-mission-state{width:100%;margin-left:0}.overview-mission-bar{align-items:flex-start}}
+  .overview-360-panel{margin:0 0 1.35rem}.overview-360-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.65rem}.overview-360-card{display:grid;gap:.55rem;padding:.8rem;border:1px solid var(--border-subtle);border-radius:8px;background:var(--surface)}.overview-360-card:hover{border-color:var(--accent-dim);background:var(--surface-hover)}.overview-360-card-header{display:flex;align-items:center;gap:.55rem}.overview-360-card-header strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.overview-360-score{margin-left:auto;color:var(--danger);font:700 .9rem var(--mono)}.overview-360-detail{margin:0;color:var(--text-dim);font-size:.72rem;line-height:1.4}.overview-360-routes{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.1rem}.overview-360-routes a{padding:.28rem .45rem;border:1px solid var(--border);border-radius:5px;color:var(--text-dim);font-size:.68rem;text-decoration:none}.overview-360-routes a:hover{border-color:var(--accent-dim);color:var(--accent);background:var(--surface-raised)}
 </style>
 <div class="page-header">
   <div>
@@ -29,15 +46,20 @@
   </div>
   <div class="quick-actions">
     <span class="console-live" data-overview-live-status>Live refresh paused</span>
-    <button class="btn btn-secondary" type="button" data-overview-refresh>Refresh now</button>
-    <button class="btn btn-secondary" type="button" data-overview-toggle-live>Enable live mode</button>
+    <div class="action-cluster" aria-label="Overview refresh controls">
+      <button class="btn btn-secondary" type="button" data-overview-refresh>Refresh now</button>
+      <button class="btn btn-secondary" type="button" data-overview-toggle-live>Enable live mode</button>
+    </div>
     <a class="btn btn-secondary" href="/data">Search data</a>
     <a class="btn" href="/sensors">Add sensor</a>
-    <button class="btn btn-secondary" type="button" id="dashboard-customize" aria-pressed="false">Customize dashboard</button>
-    <button class="btn-link" type="button" id="dashboard-reset" hidden>Reset layout</button>
+    <div class="action-cluster" aria-label="Dashboard layout controls">
+      <button class="btn btn-secondary" type="button" id="dashboard-customize" aria-pressed="false">Customize</button>
+      <button class="btn-link" type="button" id="dashboard-reset" hidden>Reset</button>
+    </div>
   </div>
 </div>
 {% for e in errors %}<p class="error">{{ e }}</p>{% endfor %}
+<div class="dashboard-widget-picker" id="dashboard-widget-picker" hidden aria-label="Dashboard widgets"><div class="dashboard-widget-picker-heading">Choose visible widgets · Persisted dashboard layout</div>{% if can_manage %}<label class="dashboard-scope-picker" for="dashboard-scope"><span>Layout scope</span><select id="dashboard-scope"><option value="personal"{% if initial_scope == "personal" %} selected{% endif %}>Personal</option><option value="workspace"{% if initial_scope == "workspace" %} selected{% endif %}>Workspace shared</option></select></label>{% endif %}</div>
 
 <div class="kpi-grid overview-kpis">
   <a class="kpi-card kpi-card-link {% if stale_sensor_count > 0 %}kpi-danger{% else %}kpi-accent{% endif %}" href="{% if stale_sensor_count > 0 %}/sensors?health=stale{% else %}/sensors{% endif %}">
@@ -47,65 +69,75 @@
   </a>
   <a class="kpi-card kpi-card-link" href="/data">
     <div class="kpi-label">Records Ingested</div>
-    <div class="kpi-value">{{ total_records }}</div>
+    <div class="kpi-value" data-overview-count="records">{{ total_records }}</div>
     <div class="kpi-sub">across all connectors</div>
   </a>
   <a class="kpi-card kpi-card-link" href="/events?from={{ signal_from }}&to={{ signal_to }}">
     <div class="kpi-label">Events</div>
-    <div class="kpi-value">{{ event_count }}</div>
+    <div class="kpi-value" data-overview-count="events">{{ event_count }}</div>
     <div class="kpi-sub">total</div>
   </a>
   <a class="kpi-card kpi-card-link {% if open_incident_count > 0 %}kpi-danger{% else %}kpi-success{% endif %}" href="/incidents?status=open">
     <div class="kpi-label">Open incidents</div>
-    <div class="kpi-value">{{ open_incident_count }}</div>
+    <div class="kpi-value" data-overview-count="open_incidents">{{ open_incident_count }}</div>
     <div class="kpi-sub">{{ critical_incident_count }} critical · triage queue</div>
   </a>
   <a class="kpi-card kpi-card-link {% if sla_breached_count > 0 %}kpi-danger{% else %}kpi-success{% endif %}" href="/incidents?sla=breached">
     <div class="kpi-label">SLA breaches</div>
-    <div class="kpi-value">{{ sla_breached_count }}</div>
+    <div class="kpi-value" data-overview-attention="sla_breaches">{{ sla_breached_count }}</div>
     <div class="kpi-sub">past response target · <span>review queue</span></div>
   </a>
   <a class="kpi-card kpi-card-link {% if platform_status == "up" %}kpi-success{% else %}kpi-danger{% endif %}" href="/health">
     <div class="kpi-label">Platform Health</div>
-    <div class="kpi-value">{{ platform_status }}</div>
-    <div class="kpi-sub">{{ services_up }}/{{ services_total }} services up</div>
+    <div class="kpi-value" data-overview-health-status>{{ platform_status }}</div>
+    <div class="kpi-sub"><span data-overview-health-services>{{ services_up }}/{{ services_total }}</span> services up</div>
   </a>
   <a class="kpi-card kpi-card-link kpi-accent" href="/ontology">
     <div class="kpi-label">Ontology objects</div>
-    <div class="kpi-value">{{ ontology_objects }}</div>
+    <div class="kpi-value" data-overview-count="objects">{{ ontology_objects }}</div>
     <div class="kpi-sub">{{ ontology_types }} types · {{ ontology_links }} relationships</div>
   </a>
   <a class="kpi-card kpi-card-link {% if review_actions > 0 %}kpi-danger{% else %}kpi-success{% endif %}" href="/actions">
     <div class="kpi-label">Response assurance</div>
-    <div class="kpi-value">{{ completed_actions }}</div>
+    <div class="kpi-value" data-overview-count="completed_actions">{{ completed_actions }}</div>
     <div class="kpi-sub">{{ review_actions }} needs review · open ledger</div>
   </a>
 </div>
 
 <div class="overview-meta muted"><span class="live-dot"></span> System monitoring is active <span class="meta-separator">•</span> <a href="/health">View platform health</a></div>
 <section class="panel overview-brief-panel"><div class="panel-heading"><div><div class="page-kicker">Executive readout</div><h2>Operating brief</h2><p class="muted">A concise interpretation of the selected signal window and current operating queues.</p></div><a class="section-link" href="/reports">Open reports &rarr;</a></div><div class="overview-brief-grid"><a class="overview-brief-card" href="/events?from={{ signal_from }}&to={{ signal_to }}"><span class="detail-label">Signal velocity</span><strong>{{ brief.signal_summary }}</strong><small>{{ brief.signal_detail }}</small></a><a class="overview-brief-card" href="/work?focus=unassigned"><span class="detail-label">Ownership coverage</span><strong>{{ brief.ownership_summary }}</strong><small>{{ brief.ownership_detail }}</small></a><a class="overview-brief-card" href="/work?focus=review"><span class="detail-label">Response readiness</span><strong>{{ brief.response_summary }}</strong><small>{{ brief.response_detail }}</small></a></div></section>
-<section class="panel overview-attention-panel"><div class="panel-heading"><div><div class="page-kicker">Command posture</div><h2>Attention posture</h2><p class="muted">Prioritized pressure across cases, ownership, governed responses, connector freshness, service queues, and response targets.</p></div><a class="btn {% if attention.total > 0 %}btn-danger{% else %}btn-secondary{% endif %}" href="/work">{{ attention.total }} item{% if attention.total != 1 %}s{% endif %} need attention &rarr;</a></div><div class="overview-attention-grid"><a class="overview-attention-card{% if attention.critical_cases > 0 %} attention-risk{% endif %}" href="/incidents?status=open&severity=critical"><span class="detail-label">Critical cases</span><strong>{{ attention.critical_cases }}</strong><small>Immediate incident command</small></a><a class="overview-attention-card{% if attention.unassigned_work > 0 %} attention-risk{% endif %}" href="/work?focus=unassigned"><span class="detail-label">Unassigned work</span><strong>{{ attention.unassigned_work }}</strong><small>Ownership gap in the queue</small></a><a class="overview-attention-card{% if attention.review_actions > 0 %} attention-risk{% endif %}" href="/actions?outcome=review"><span class="detail-label">Action review</span><strong>{{ attention.review_actions }}</strong><small>Governed outcomes needing review</small></a><a class="overview-attention-card{% if attention.connector_attention > 0 %} attention-risk{% endif %}" href="/sensors?health=stale"><span class="detail-label">Connector freshness</span><strong>{{ attention.connector_attention }}</strong><small>Sources with stale or missing ingestion</small></a><a class="overview-attention-card{% if attention.sla_breaches > 0 %} attention-risk{% endif %}" href="/incidents?sla=breached"><span class="detail-label">SLA breaches</span><strong>{{ attention.sla_breaches }}</strong><small>Past response target</small></a><a class="overview-attention-card{% if attention.critical_queues > 0 %} attention-risk{% endif %}" href="/pipeline"><span class="detail-label">Critical queues</span><strong>{{ attention.critical_queues }}</strong><small>Pipeline pressure requiring action</small></a></div></section>
-<section class="panel overview-entity-risk"><div class="panel-heading"><div><div class="page-kicker">Object-centric command</div><h2>Entity attention</h2><p class="muted">The same live case, signal, and decision pressure used by Ontology, summarized for executive triage.</p></div><a class="section-link" href="/ontology">Open attention map &rarr;</a></div><div class="overview-risk-layout"><div class="overview-risk-bands">{% for metric in entity_risk_metrics %}<a class="overview-risk-band" href="/ontology?risk={{ metric.key }}"><strong>{{ metric.label }}</strong><span class="overview-risk-track"><span class="overview-risk-fill {{ metric.key }}" style="width:{{ metric.percent }}%"></span></span><small>{{ metric.count }}</small></a>{% endfor %}</div><div class="overview-top-risk-list">{% if top_risk_entities.is_empty() %}<p class="muted">No modeled entities are available for attention ranking.</p>{% else %}{% for entity in top_risk_entities %}<a class="overview-top-risk" href="/ontology?object_id={{ entity.id }}#object-{{ entity.id }}"><span class="overview-top-risk-score">{{ entity.score }}</span><span class="overview-top-risk-copy"><strong>{{ entity.label }}</strong><small>{{ entity.detail }}</small></span><span class="overview-top-risk-type">{{ entity.type_name }}</span></a>{% endfor %}{% endif %}</div></div></section>
+<section class="panel overview-attention-panel"><div class="panel-heading"><div><div class="page-kicker">Command posture</div><h2>Attention posture</h2><p class="muted">Prioritized pressure across cases, ownership, governed responses, connector freshness, service queues, and response targets.</p></div><a class="btn {% if attention.total > 0 %}btn-danger{% else %}btn-secondary{% endif %}" data-overview-attention-total href="/work">{{ attention.total }} item{% if attention.total != 1 %}s{% endif %} need attention &rarr;</a></div><div class="overview-attention-grid"><a class="overview-attention-card{% if attention.critical_cases > 0 %} attention-risk{% endif %}" href="/incidents?status=open&severity=critical"><span class="detail-label">Critical cases</span><strong data-overview-attention="critical_incidents">{{ attention.critical_cases }}</strong><small>Immediate incident command</small></a><a class="overview-attention-card{% if attention.unassigned_work > 0 %} attention-risk{% endif %}" href="/work?focus=unassigned"><span class="detail-label">Unassigned work</span><strong data-overview-attention="unassigned_incidents">{{ attention.unassigned_work }}</strong><small>Ownership gap in the queue</small></a><a class="overview-attention-card{% if attention.review_actions > 0 %} attention-risk{% endif %}" href="/actions?outcome=review"><span class="detail-label">Action review</span><strong data-overview-attention="review_actions">{{ attention.review_actions }}</strong><small>Governed outcomes needing review</small></a><a class="overview-attention-card{% if attention.connector_attention > 0 %} attention-risk{% endif %}" href="/sensors?health=stale"><span class="detail-label">Connector freshness</span><strong data-overview-attention="stale_connectors">{{ attention.connector_attention }}</strong><small>Sources with stale or missing ingestion</small></a><a class="overview-attention-card{% if attention.sla_breaches > 0 %} attention-risk{% endif %}" href="/incidents?sla=breached"><span class="detail-label">SLA breaches</span><strong data-overview-attention="sla_breaches">{{ attention.sla_breaches }}</strong><small>Past response target</small></a><a class="overview-attention-card{% if attention.critical_queues > 0 %} attention-risk{% endif %}" href="/pipeline"><span class="detail-label">Critical queues</span><strong data-overview-attention="critical_queues">{{ attention.critical_queues }}</strong><small>Pipeline pressure requiring action</small></a><a class="overview-attention-card{% if attention.dead_letter_messages > 0 %} attention-risk{% endif %}" href="/actions#pipeline-recovery"><span class="detail-label">Dead-letter recovery</span><strong>{{ attention.dead_letter_messages }}</strong><small>Failed messages awaiting replay</small></a></div></section>
+<section class="panel overview-entity-risk"><div class="panel-heading"><div><div class="page-kicker">Object-centric command</div><h2>Entity attention</h2><p class="muted">The same live case, signal, and decision pressure used by Ontology, summarized for executive triage.</p></div><a class="section-link" href="/ontology">Open attention map &rarr;</a></div><div class="overview-risk-layout"><div class="overview-risk-bands">{% for metric in entity_risk_metrics %}<a class="overview-risk-band" href="/ontology?risk={{ metric.key }}"><strong>{{ metric.label }}</strong><span class="overview-risk-track"><span class="overview-risk-fill {{ metric.key }}" style="width:{{ metric.percent }}%"></span></span><small>{{ metric.count }}</small></a>{% endfor %}</div><div class="overview-top-risk-list">{% if top_risk_entities.is_empty() %}<p class="muted">No modeled entities are available for attention ranking.</p>{% else %}{% for entity in top_risk_entities %}<a class="overview-top-risk" data-investigation-context="{{ entity.id }}" data-investigation-label="{{ entity.label }}" data-investigation-type="{{ entity.type_name }}" data-investigation-href="/ontology?object_id={{ entity.id }}#object-{{ entity.id }}" data-investigation-route href="/ontology?object_id={{ entity.id }}#object-{{ entity.id }}"><span class="overview-top-risk-score">{{ entity.score }}</span><span class="overview-top-risk-copy"><strong>{{ entity.label }}</strong><small>{{ entity.detail }}</small></span><span class="overview-top-risk-type">{{ entity.type_name }}</span></a>{% endfor %}{% endif %}</div></div></section>
+<section class="panel overview-360-panel"><div class="panel-heading"><div><div class="page-kicker">Object-centric command</div><h2>Object 360 triage</h2><p class="muted">Move from a ranked entity into its model context, source evidence, or governed response ledger.</p></div><a class="section-link" href="/ontology">Open full object explorer &rarr;</a></div>{% if top_risk_entities.is_empty() %}<p class="muted">No ranked entities are available for triage routes.</p>{% else %}<div class="overview-360-grid">{% for entity in top_risk_entities %}<article class="overview-360-card" data-investigation-context="{{ entity.id }}" data-investigation-label="{{ entity.label }}" data-investigation-type="{{ entity.type_name }}" data-investigation-href="/ontology?object_id={{ entity.id }}#object-{{ entity.id }}"><div class="overview-360-card-header"><span class="overview-top-risk-type">{{ entity.type_name }}</span><strong>{{ entity.label }}</strong><span class="overview-360-score">{{ entity.score }}</span></div><p class="overview-360-detail">{{ entity.detail }}</p><div class="overview-360-routes" data-investigation-route><a href="/ontology?object_id={{ entity.id }}#object-{{ entity.id }}">Open object</a><a href="/search?q={{ entity.label|urlencode }}">Evidence search</a><a href="/actions?q={{ entity.id }}">Action ledger</a></div></article>{% endfor %}</div>{% endif %}</section>
 <section class="panel overview-window-panel"><form class="overview-window-form" method="get" action="/overview"><div><label for="overview-from">Signal window</label><input id="overview-from" type="date" name="from" value="{{ signal_from }}"></div><span class="overview-window-arrow">→</span><div><label for="overview-to">Through</label><input id="overview-to" type="date" name="to" value="{{ signal_to }}"></div><button class="btn" type="submit">Apply window</button><a class="btn-link" href="/overview">Reset 30 days</a><span class="muted overview-window-label">{{ signal_window_label }}</span></form></section>
 
 <section class="panel overview-chain-panel"><div class="panel-heading"><div><div class="page-kicker">System of action</div><h2>Operating chain</h2><p class="muted">How this workspace turns source data into governed decisions. Bar length shows relative volume across stages; select a stage to inspect its evidence.</p></div><span class="pill pill-muted">live workspace counts</span></div><div class="overview-chain" aria-label="Ingestion to response operating chain">{% for stage in operating_chain %}<a class="overview-chain-stage tone-{{ stage.tone }}" href="{{ stage.href }}"><span class="chain-label">{{ stage.label }}</span><span class="chain-count">{{ stage.count }}</span><small>{{ stage.detail }}</small><span class="overview-chain-track" aria-hidden="true"><span class="overview-chain-fill" style="width:{{ stage.bar_pct }}%"></span></span></a>{% endfor %}</div></section>
 
+<section class="overview-mission-bar" aria-label="Overview mission modes">
+  <span class="overview-mission-label">Mission mode</span>
+  <button class="overview-mission-mode mission-all is-active" type="button" aria-pressed="true" data-overview-mission-mode="all">All systems</button>
+  <button class="overview-mission-mode mission-signals" type="button" aria-pressed="false" data-overview-mission-mode="signals">Signals</button>
+  <button class="overview-mission-mode mission-incidents" type="button" aria-pressed="false" data-overview-mission-mode="incidents">Incidents</button>
+  <button class="overview-mission-mode mission-response" type="button" aria-pressed="false" data-overview-mission-mode="response">Response</button>
+  <span class="overview-mission-state" data-overview-mission-state data-overview-mission-target="dashboard">Full operating picture</span>
+</section>
+
 <div class="dashboard-layout" id="overview-dashboard-layout" aria-live="polite">
-<section class="dashboard-widget" data-dashboard-widget="signal-trend"><div class="section-heading"><div><div class="section-title">Signal activity map</div><p class="muted">Daily event volume for {{ signal_window_label }}. Select a day to open that exact event slice.</p></div><a class="section-link" href="/events?from={{ signal_from }}&to={{ signal_to }}">Open event explorer &rarr;</a></div>
+<section class="dashboard-widget" data-dashboard-widget="signal-trend" data-dashboard-widget-label="Signal activity map" data-mission-target="signals"><div class="section-heading"><div><div class="section-title">Signal activity map</div><p class="muted">Daily event volume for {{ signal_window_label }}. Select a day to open that exact event slice.</p></div><a class="section-link" href="/events?from={{ signal_from }}&to={{ signal_to }}">Open event explorer &rarr;</a></div>
 {% if signal_heatmap.is_empty() %}<div class="empty-state compact"><p>No daily signal trend is available for this window.</p></div>{% else %}<div class="overview-analytics-grid"><section class="panel overview-heatmap-panel"><div class="overview-heatmap" aria-label="Daily event activity heatmap"><span class="overview-heatmap-header">Mon</span><span class="overview-heatmap-header">Tue</span><span class="overview-heatmap-header">Wed</span><span class="overview-heatmap-header">Thu</span><span class="overview-heatmap-header">Fri</span><span class="overview-heatmap-header">Sat</span><span class="overview-heatmap-header">Sun</span>{% for day in signal_heatmap %}{% if day.blank %}<span class="overview-heat-cell blank" aria-hidden="true"></span>{% else %}<a class="overview-heat-cell" data-intensity="{{ day.intensity }}" href="/events?from={{ day.date }}&to={{ day.date }}" title="{{ day.date }}: {{ day.count }} event{% if day.count != 1 %}s{% endif %}">{{ day.count }}</a>{% endif %}{% endfor %}</div><div class="overview-heat-legend"><span>Low</span><i></i><i></i><i></i><i></i><span>High</span></div></section><div class="overview-analytics-side"><div class="metric-callout"><span class="detail-label">Peak day</span><strong>{{ signal_peak_count }}</strong><small>events in the highest-volume day</small></div><div class="metric-callout"><span class="detail-label">Window total</span><strong>{{ event_count }}</strong><small>signals in this selected window</small></div><div class="metric-callout"><span class="detail-label">Investigation path</span><strong>1 click</strong><small>from any activity cell to filtered events</small></div></div></div><section class="panel overview-trend-panel"><div class="panel-heading"><div><h2>Signal velocity</h2><p class="muted">A linked time series for the same selected window. Focus or select a point to inspect that day.</p></div><span class="pill pill-muted">{{ signal_window_label }}</span></div><div class="chart overview-trend-chart" data-chart-source="overview-signal-trend-chart-data" data-chart-kind="line"></div><script type="application/json" id="overview-signal-trend-chart-data">{{ signal_trend_chart_json|safe }}</script></section>{% endif %}
 </section>
 
-<section class="dashboard-widget" data-dashboard-widget="governed-decisions"><div class="section-heading"><div><div class="section-title">Governed decisions</div><p class="muted">The latest actions taken against modeled objects, with the signal or case that caused them.</p></div><a class="section-link" href="/actions">View action center &rarr;</a></div>
+<section class="dashboard-widget" data-dashboard-widget="governed-decisions" data-dashboard-widget-label="Governed decisions"><div class="section-heading"><div><div class="section-title">Governed decisions</div><p class="muted">The latest actions taken against modeled objects, with the signal or case that caused them.</p></div><a class="section-link" href="/actions">View action center &rarr;</a></div>
 {% if recent_actions.is_empty() %}
 <div class="empty-state compact"><p>No governed decisions have been recorded yet.</p><p>Actions taken from an event, incident, or ontology object will appear here.</p></div>
 {% else %}
 <div class="table-wrap"><table><thead><tr><th>Action</th><th>Outcome</th><th>Targets</th><th>Source</th><th>Executed</th></tr></thead><tbody>
-{% for action in recent_actions %}<tr><td>{{ action.action_name }}</td><td><span class="pill {% if action.outcome == "Completed" %}pill-up{% else %}pill-down{% endif %}">{{ action.outcome }}</span></td><td>{% if action.targets.is_empty() %}{{ action.target_count }}{% else %}{% for target in action.targets %}<a href="/ontology?object_id={{ target.id }}#object-{{ target.id }}">{{ target.label }}</a>{% if !loop.last %}<br>{% endif %}{% endfor %}{% endif %}</td><td>{% if let Some(event_id) = action.event_id %}<a href="/events/{{ event_id }}">Event signal</a>{% else if let Some(incident_id) = action.incident_id %}<a href="/incidents/{{ incident_id }}">Case response</a>{% else %}<a href="/actions">Action ledger</a>{% endif %}</td><td>{{ action.executed_at }}</td></tr>{% endfor %}
+{% for action in recent_actions %}<tr><td>{{ action.action_name }}</td><td><span class="pill {% if action.outcome == "Completed" %}pill-up{% else %}pill-down{% endif %}">{{ action.outcome }}</span></td><td>{% if action.targets.is_empty() %}{{ action.target_count }}{% else %}{% for target in action.targets %}<a data-investigation-context="{{ target.id }}" data-investigation-label="{{ target.label }}" data-investigation-type="Object" data-investigation-href="/ontology?object_id={{ target.id }}#object-{{ target.id }}" data-investigation-route href="/ontology?object_id={{ target.id }}#object-{{ target.id }}">{{ target.label }}</a>{% if !loop.last %}<br>{% endif %}{% endfor %}{% endif %}</td><td>{% if let Some(event_id) = action.event_id %}<a href="/events/{{ event_id }}">Event signal</a>{% else if let Some(incident_id) = action.incident_id %}<a href="/incidents/{{ incident_id }}">Case response</a>{% else %}<a href="/actions">Action ledger</a>{% endif %}</td><td>{{ action.executed_at }}</td></tr>{% endfor %}
 </tbody></table></div>
 {% endif %}
 </section>
 
-<section class="dashboard-widget" data-dashboard-widget="knowledge-model"><div class="section-heading"><div class="section-title">Knowledge model</div><a class="section-link" href="/ontology">Explore ontology &rarr;</a></div>
+<section class="dashboard-widget" data-dashboard-widget="knowledge-model" data-dashboard-widget-label="Knowledge model"><div class="section-heading"><div class="section-title">Knowledge model</div><a class="section-link" href="/ontology">Explore ontology &rarr;</a></div>
 <div class="overview-model-strip">
   <div><span class="model-strip-value">{{ ontology_types }}</span><span class="model-strip-label">object types</span></div>
   <div><span class="model-strip-value">{{ ontology_objects }}</span><span class="model-strip-label">derived objects</span></div>
@@ -114,7 +146,7 @@
 </div>
 </section>
 
-<section class="dashboard-widget" data-dashboard-widget="pipeline-status"><div class="section-heading"><div class="section-title">Pipeline status</div><a class="section-link" href="/pipeline">Open pipeline map &rarr;</a></div>
+<section class="dashboard-widget" data-dashboard-widget="pipeline-status" data-dashboard-widget-label="Pipeline status"><div class="section-heading"><div class="section-title">Pipeline status</div><a class="section-link" href="/pipeline">Open pipeline map &rarr;</a></div>
 {% if !pipeline_items.is_empty() %}
 <div class="topology-frame">
   <div class="topology">
@@ -143,7 +175,7 @@
 {% endif %}
 </section>
 
-<section class="dashboard-widget" data-dashboard-widget="recent-activity"><div class="section-heading"><div class="section-title">Recent activity</div><a class="section-link" href="/events">View all events &rarr;</a></div>
+<section class="dashboard-widget" data-dashboard-widget="recent-activity" data-dashboard-widget-label="Recent activity"><div class="section-heading"><div class="section-title">Recent activity</div><a class="section-link" href="/events">View all events &rarr;</a></div>
 {% if recent_events.is_empty() %}
 <div class="empty-state">
   <div class="empty-icon">&#9672;</div>
@@ -169,7 +201,7 @@
 {% endif %}
 </section>
 
-<section class="dashboard-widget" data-dashboard-widget="decision-queue"><div class="section-heading"><div class="section-title">Decision queue</div><a class="section-link" href="/incidents">Open incident console &rarr;</a></div>
+<section class="dashboard-widget" data-dashboard-widget="decision-queue" data-dashboard-widget-label="Decision queue"><div class="section-heading"><div class="section-title">Decision queue</div><a class="section-link" href="/incidents">Open incident console &rarr;</a></div>
 {% if recent_incidents.is_empty() %}
 <div class="empty-state compact"><p>No open incidents are waiting for review.</p></div>
 {% else %}
@@ -197,16 +229,44 @@
     var refresh = document.querySelector('[data-overview-refresh]');
     var enabled = false;
     try { enabled = localStorage.getItem(storageKey) === '1'; } catch (_) {}
+    var inFlight = false;
     function setState(next) {
       enabled = next;
       try { localStorage.setItem(storageKey, enabled ? '1' : '0'); } catch (_) {}
-      if (status) status.textContent = enabled ? 'Live · refreshes every 30s' : 'Live refresh paused';
+      if (status && !enabled) status.textContent = 'Live refresh paused';
       if (toggle) toggle.textContent = enabled ? 'Pause live mode' : 'Enable live mode';
     }
-    if (refresh) refresh.addEventListener('click', function () { window.location.reload(); });
+    function setText(selector, value) {
+      var node = document.querySelector(selector);
+      if (node && value !== undefined && value !== null) node.textContent = String(value);
+    }
+    function updateOverview(payload) {
+      var counts = payload.counts || {};
+      var attention = payload.attention || {};
+      Object.keys(counts).forEach(function (key) { setText('[data-overview-count="' + key + '"]', counts[key]); });
+      Object.keys(attention).forEach(function (key) { setText('[data-overview-attention="' + key + '"]', attention[key]); });
+      setText('[data-overview-attention-total]', (attention.attention_count || 0) + ' item' + ((attention.attention_count || 0) === 1 ? '' : 's') + ' need attention →');
+      if (payload.health) {
+        setText('[data-overview-health-status]', payload.health.status);
+        var services = payload.health.services || [];
+        var up = services.filter(function (service) { return service.status === 'up'; }).length;
+        setText('[data-overview-health-services]', up + '/' + services.length);
+      }
+    }
+    function refreshOverview() {
+      if (inFlight) return;
+      inFlight = true;
+      if (status) { status.textContent = 'Live · updating…'; status.setAttribute('aria-busy', 'true'); }
+      fetch('/api/v1/overview', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (response) { if (!response.ok) throw new Error('overview ' + response.status); return response.json(); })
+        .then(function (payload) { updateOverview(payload); if (status) status.textContent = 'Live · updated ' + new Date().toLocaleTimeString(); })
+        .catch(function () { if (status) status.textContent = 'Live · update unavailable'; })
+        .then(function () { inFlight = false; if (status) status.removeAttribute('aria-busy'); });
+    }
+    if (refresh) refresh.addEventListener('click', refreshOverview);
     if (toggle) toggle.addEventListener('click', function () { setState(!enabled); });
     setState(enabled);
-    if (enabled) window.setInterval(function () { window.location.reload(); }, 30000);
+    if (enabled) { refreshOverview(); window.setInterval(refreshOverview, 30000); }
   }());
 </script>
 <script>
@@ -214,31 +274,60 @@
     var layout = document.getElementById('overview-dashboard-layout');
     var customize = document.getElementById('dashboard-customize');
     var reset = document.getElementById('dashboard-reset');
+    var picker = document.getElementById('dashboard-widget-picker');
+    var scopePicker = document.getElementById('dashboard-scope');
     if (!layout || !customize || !reset) return;
     var widgets = Array.prototype.slice.call(layout.querySelectorAll('[data-dashboard-widget]'));
     var editing = false;
-    var storageKey = 'kizashi.dashboard.layout.{{ tenant_id }}.{{ username|urlencode }}';
+    var hiddenWidgets = [];
+    var scope = '{{ initial_scope }}';
+    var storageKey = 'kizashi.dashboard.layout.{{ tenant_id }}.{{ username|urlencode }}.' + scope;
     function apply(saved) {
       var order = saved && Array.isArray(saved.order) ? saved.order : [];
+      hiddenWidgets = saved && Array.isArray(saved.hidden) ? saved.hidden.filter(function (id) { return widgets.some(function (widget) { return widget.dataset.dashboardWidget === id; }); }) : [];
       order.forEach(function (id, index) { var widget = layout.querySelector('[data-dashboard-widget="' + id + '"]'); if (widget) { widget.style.order = index; layout.appendChild(widget); } });
-      widgets.forEach(function (widget) { widget.setAttribute('draggable', editing ? 'true' : 'false'); });
+      widgets.forEach(function (widget) { widget.setAttribute('draggable', editing ? 'true' : 'false'); widget.dataset.userHidden = hiddenWidgets.indexOf(widget.dataset.dashboardWidget) !== -1 ? 'true' : 'false'; });
+      renderPicker();
     }
     function currentOrder() { return Array.prototype.slice.call(layout.querySelectorAll('[data-dashboard-widget]')).map(function (widget) { return widget.dataset.dashboardWidget; }); }
+    function currentHidden() { return hiddenWidgets.slice(); }
+    function renderPicker() {
+      if (!picker) return;
+      picker.querySelectorAll('[data-dashboard-widget-toggle]').forEach(function (node) { node.remove(); });
+      widgets.forEach(function (widget) {
+        var label = document.createElement('label');
+        var input = document.createElement('input'); input.type = 'checkbox'; input.checked = hiddenWidgets.indexOf(widget.dataset.dashboardWidget) === -1; input.dataset.dashboardWidgetToggle = widget.dataset.dashboardWidget;
+        var text = document.createElement('span'); text.textContent = widget.dataset.dashboardWidgetLabel || widget.dataset.dashboardWidget;
+        input.addEventListener('change', function () {
+          var visibleCount = widgets.length - hiddenWidgets.length;
+          if (!input.checked && visibleCount <= 1) { input.checked = true; return; }
+          var index = hiddenWidgets.indexOf(widget.dataset.dashboardWidget);
+          if (input.checked && index !== -1) hiddenWidgets.splice(index, 1);
+          else if (!input.checked && index === -1) hiddenWidgets.push(widget.dataset.dashboardWidget);
+          widget.dataset.userHidden = input.checked ? 'false' : 'true';
+          save();
+        });
+        label.appendChild(input); label.appendChild(text); picker.appendChild(label);
+      });
+    }
     function save() {
-      var payload = { order: currentOrder() };
+      var payload = { order: currentOrder(), hidden: currentHidden() };
       localStorage.setItem(storageKey, JSON.stringify(payload));
-      fetch('/overview/layout', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }, body: 'order=' + encodeURIComponent(JSON.stringify(payload.order)) }).catch(function () {});
+      fetch('/overview/layout', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }, body: 'order=' + encodeURIComponent(JSON.stringify(payload.order)) + '&hidden=' + encodeURIComponent(JSON.stringify(payload.hidden)) + '&scope=' + encodeURIComponent(scope) }).catch(function () {});
     }
     function setEditing(value) {
-      editing = value; layout.classList.toggle('dashboard-editing', editing); customize.setAttribute('aria-pressed', String(editing)); customize.textContent = editing ? 'Done customizing' : 'Customize dashboard'; reset.hidden = !editing;
-      apply(null);
+      editing = value; layout.classList.toggle('dashboard-editing', editing); customize.setAttribute('aria-pressed', String(editing)); customize.textContent = editing ? 'Done customizing' : 'Customize dashboard'; reset.hidden = !editing; if (picker) picker.hidden = !editing;
+      widgets.forEach(function (widget) { widget.setAttribute('draggable', editing ? 'true' : 'false'); });
+      renderPicker();
     }
     var saved = null; try { saved = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch (_) {}
-    var serverOrder = {{ initial_layout|safe }};
-    if (Array.isArray(serverOrder)) saved = { order: serverOrder };
+    if (Array.isArray(saved)) saved = { order: saved, hidden: [] };
+    var serverLayout = {{ initial_layout|safe }};
+    if (serverLayout && Array.isArray(serverLayout.order)) saved = serverLayout;
     apply(saved);
     customize.addEventListener('click', function () { setEditing(!editing); if (!editing) save(); });
-    reset.addEventListener('click', function () { localStorage.removeItem(storageKey); fetch('/overview/layout/reset', { method: 'POST', credentials: 'same-origin' }).catch(function () {}); widgets.forEach(function (widget, index) { widget.style.order = index; layout.appendChild(widget); }); });
+    reset.addEventListener('click', function () { localStorage.removeItem(storageKey); fetch('/overview/layout/reset?scope=' + encodeURIComponent(scope), { method: 'POST', credentials: 'same-origin' }).catch(function () {}); hiddenWidgets = []; widgets.forEach(function (widget, index) { widget.style.order = index; widget.dataset.userHidden = 'false'; layout.appendChild(widget); }); renderPicker(); });
+    if (scopePicker) scopePicker.addEventListener('change', function () { var url = new URL(window.location.href); url.searchParams.set('dashboard_scope', scopePicker.value); window.location.assign(url.toString()); });
     var dragged = null;
     widgets.forEach(function (widget) {
       widget.addEventListener('dragstart', function () { if (!editing) return; dragged = widget; widget.classList.add('dashboard-dragging'); });
@@ -268,6 +357,36 @@
     sync();
   }());
 </script>
+<script>
+  (function () {
+    var modes = Array.prototype.slice.call(document.querySelectorAll('[data-overview-mission-mode]'));
+    var state = document.querySelector('[data-overview-mission-state]');
+    var widgets = Array.prototype.slice.call(document.querySelectorAll('[data-dashboard-widget]'));
+    var targets = {
+      all: ['signal-trend', 'governed-decisions', 'knowledge-model', 'pipeline-status', 'recent-activity', 'decision-queue'],
+      signals: ['signal-trend', 'pipeline-status', 'recent-activity'],
+      incidents: ['decision-queue'],
+      response: ['governed-decisions', 'knowledge-model']
+    };
+    var labels = { all: 'Full operating picture', signals: 'Signal and pipeline surfaces', incidents: 'Incident command surfaces', response: 'Governed response surfaces' };
+    function activate(mode) {
+      var visible = targets[mode] || targets.all;
+      modes.forEach(function (button) {
+        var active = button.dataset.overviewMissionMode === mode;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      widgets.forEach(function (widget) { widget.dataset.missionHidden = visible.indexOf(widget.dataset.dashboardWidget) === -1 ? 'true' : 'false'; });
+      if (state) state.textContent = labels[mode] || labels.all;
+      try { localStorage.setItem('kizashi.overview.mission-mode', mode); } catch (_) {}
+    }
+    var initial = 'all';
+    try { if (targets[localStorage.getItem('kizashi.overview.mission-mode')]) initial = localStorage.getItem('kizashi.overview.mission-mode'); } catch (_) {}
+    modes.forEach(function (button) { button.addEventListener('click', function () { activate(button.dataset.overviewMissionMode); }); });
+    activate(initial);
+  }());
+</script>
 <section class="panel overview-review-posture" style="margin-top:1.35rem"><div class="panel-heading"><div><div class="page-kicker">Decision governance</div><h2>Review posture</h2><p class="muted">The same human-review state used by Action Center, including deadlines on unresolved decisions.</p></div><a class="section-link" href="/actions?review=stale">Open stale reviews &rarr;</a></div><div class="overview-brief-grid"><a class="overview-brief-card" href="/actions?outcome=review"><span class="detail-label">Awaiting review</span><strong>{{ review_actions }}</strong><small>Governed outcomes that are not completed.</small></a><a class="overview-brief-card{% if stale_reviews > 0 %} attention-risk{% endif %}" href="/actions?review=stale"><span class="detail-label">Overdue reviews</span><strong>{{ stale_reviews }}</strong><small>Open or handed-off decisions past their deadline.</small></a><a class="overview-brief-card" href="/work?focus=review"><span class="detail-label">Operator queue</span><strong>{{ review_actions }}</strong><small>Open the decision workbench with immutable evidence.</small></a></div></section>
 <section class="panel overview-data-readiness" style="margin-top:1.35rem"><div class="panel-heading"><div><div class="page-kicker">Pipeline → ontology</div><h2>Data readiness</h2><p class="muted">Normalized source records are eligible for modeling, lineage, and governed decisions.</p></div><a class="section-link" href="/data?normalized=false">Open unnormalized records &rarr;</a></div><div class="overview-brief-grid"><a class="overview-brief-card" href="/data?normalized=true"><span class="detail-label">Normalized records</span><strong>{{ normalized_records }}</strong><small>Source records with a current normalized payload.</small></a><a class="overview-brief-card{% if unmodeled_records > 0 %} attention-risk{% endif %}" href="/data?normalized=false"><span class="detail-label">Awaiting normalization</span><strong>{{ unmodeled_records }}</strong><small>Records that still need pipeline recovery or mapping.</small></a><div class="overview-brief-card"><span class="detail-label">Model coverage</span><strong>{{ model_coverage_pct }}%</strong><small>Normalized share of the sampled source-record set.</small></div></div></section>
+{% if !saved_views.is_empty() %}<section class="panel dashboard-saved-view-editor" style="margin-top:1.35rem"><div class="panel-heading"><div><h2>Edit saved operational views</h2><p class="muted">Rename an investigation without changing its filters, deep link, or saved-view identity.</p></div></div>{% for view in saved_views %}<form class="inline" method="post" action="/overview/saved-views/{{ view.id }}/edit"><span class="pill pill-muted">{{ view.surface }}</span><label for="saved-view-name-{{ view.id }}">Name</label><input id="saved-view-name-{{ view.id }}" name="name" value="{{ view.name }}" maxlength="160" required><button class="btn btn-secondary" type="submit">Save name</button></form>{% endfor %}</section>{% endif %}
 {% endblock %}

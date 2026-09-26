@@ -14,6 +14,19 @@ use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt, TokioAsyncReadCompat
 
 use crate::message::parse_message;
 
+struct Xoauth2Authenticator {
+    username: String,
+    access_token: String,
+}
+
+impl async_imap::Authenticator for Xoauth2Authenticator {
+    type Response = String;
+
+    fn process(&mut self, _challenge: &[u8]) -> Self::Response {
+        format!("user={}\x01auth=Bearer {}\x01\x01", self.username, self.access_token)
+    }
+}
+
 /// Either a TLS or a plain TCP connection to the IMAP server, so `ImapConnector::poll` doesn't
 /// need to be duplicated per transport. TLS is the production default (`use_tls: true`); plain
 /// exists for on-prem servers that terminate TLS elsewhere and, pragmatically, for testing
@@ -90,6 +103,7 @@ pub struct ImapConnector {
     port: u16,
     username: String,
     password: String,
+    access_token: Option<String>,
     mailbox: String,
     since_date: chrono::NaiveDate,
     since_uid: Option<u32>,
@@ -131,6 +145,7 @@ impl ImapConnector {
             port,
             username: username.into(),
             password: password.into(),
+            access_token: None,
             mailbox: mailbox.into(),
             since_date,
             use_tls,
@@ -139,6 +154,11 @@ impl ImapConnector {
 
     pub fn with_since_uid(mut self, since_uid: Option<u32>) -> Self {
         self.since_uid = since_uid;
+        self
+    }
+
+    pub fn with_access_token(mut self, access_token: Option<String>) -> Self {
+        self.access_token = access_token.filter(|value| !value.trim().is_empty());
         self
     }
 
@@ -191,10 +211,23 @@ impl Connector for ImapConnector {
         };
 
         let client = async_imap::Client::new(stream);
-        let mut session = client
-            .login(&self.username, &self.password)
-            .await
-            .map_err(|(e, _client)| ConnectorError::AuthFailed(e.to_string()))?;
+        let mut session = if let Some(access_token) = &self.access_token {
+            client
+                .authenticate(
+                    "XOAUTH2",
+                    Xoauth2Authenticator {
+                        username: self.username.clone(),
+                        access_token: access_token.clone(),
+                    },
+                )
+                .await
+                .map_err(|(e, _client)| ConnectorError::AuthFailed(e.to_string()))?
+        } else {
+            client
+                .login(&self.username, &self.password)
+                .await
+                .map_err(|(e, _client)| ConnectorError::AuthFailed(e.to_string()))?
+        };
 
         session
             .select(&self.mailbox)

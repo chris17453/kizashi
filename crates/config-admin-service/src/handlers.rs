@@ -107,6 +107,7 @@ fn event_type_error_response(e: EventTypeDefinitionRepositoryError) -> Response 
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn event_type_repository(
     state: &AdminState,
 ) -> Result<&Arc<dyn EventTypeDefinitionRepository>, Response> {
@@ -329,6 +330,7 @@ pub async fn get_event_type(
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn report_run_repository(
     state: &AdminState,
 ) -> Result<&Arc<dyn crate::report_run_repository::ReportRunRepository>, Response> {

@@ -168,8 +168,15 @@ async fn renders_events_and_their_executions() {
 #[test]
 fn record_journey_exposes_modeled_entity_handoffs() {
     let template = include_str!("../templates/record_journey.html");
+    assert!(template.contains("record-journey-export"));
+    assert!(template.contains("/api/v1/data/records/"));
+    assert!(template.contains("cache: 'no-store'"));
+    assert!(template.contains("evidence-journey-"));
+    assert!(template.contains("Evidence journey unavailable"));
     assert!(template.contains("Modeled entities"));
-    assert!(template.contains("/ontology?object_id={{ object.id }}#object-{{ object.id }}"));
+    assert!(template.contains("/ontology/objects/{{ object.id }}/360"));
+    assert!(template.contains("data-investigation-type=\"Object\""));
+    assert!(template.contains("data-investigation-type=\"Decision\""));
     let source = include_str!("record_journey_handler.rs");
     assert!(source.contains("struct ModeledJourneyObject"));
 }

@@ -34,7 +34,7 @@ impl AuditLogReader for InMemoryAuditLogReader {
             .lock()
             .unwrap()
             .iter()
-            .filter(|e| e.tenant_id == tenant_id && before.map_or(true, |b| e.changed_at < b))
+            .filter(|e| e.tenant_id == tenant_id && before.is_none_or(|b| e.changed_at < b))
             .cloned()
             .collect();
         entries.sort_by_key(|e| std::cmp::Reverse(e.changed_at));

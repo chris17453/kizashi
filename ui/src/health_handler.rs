@@ -4,7 +4,7 @@ mod health_handler_test;
 
 use crate::backlog_client::QueueDepthSummary;
 use crate::session_guard::require_session;
-use crate::{AppState, ServiceHealthSummary};
+use crate::{AppState, ServiceHealthSummary, ServiceMetricsSummary};
 use askama::Template;
 use axum::extract::State;
 use axum::http::HeaderMap;
@@ -17,6 +17,9 @@ struct ServiceHealthView {
     description: String,
     href: String,
     next_step: String,
+    requests: Option<u64>,
+    errors: Option<u64>,
+    latency_ms: Option<String>,
 }
 
 struct QueueHealthView {
@@ -167,7 +170,10 @@ fn queue_views(depths: Vec<QueueDepthSummary>) -> Vec<QueueHealthView> {
     views
 }
 
-fn service_view(service: ServiceHealthSummary) -> ServiceHealthView {
+fn service_view(
+    service: ServiceHealthSummary,
+    metrics: Option<ServiceMetricsSummary>,
+) -> ServiceHealthView {
     let key = service.name.to_ascii_lowercase();
     let (description, href, next_step) = if key.contains("ingest") || key.contains("connector") {
         (
@@ -206,7 +212,26 @@ fn service_view(service: ServiceHealthSummary) -> ServiceHealthView {
             "Open pipeline map".to_string(),
         )
     };
-    ServiceHealthView { name: service.name, status: service.status, description, href, next_step }
+    let (requests, errors, latency_ms) = metrics
+        .map(|metrics| {
+            let latency = if metrics.latency_seconds_count == 0 {
+                0.0
+            } else {
+                metrics.latency_seconds_sum / metrics.latency_seconds_count as f64 * 1000.0
+            };
+            (Some(metrics.requests), Some(metrics.errors), Some(format!("{latency:.1}")))
+        })
+        .unwrap_or((None, None, None));
+    ServiceHealthView {
+        name: service.name,
+        status: service.status,
+        description,
+        href,
+        next_step,
+        requests,
+        errors,
+        latency_ms,
+    }
 }
 
 #[derive(Template)]
@@ -289,9 +314,12 @@ pub async fn get_health(State(state): State<AppState>, headers: HeaderMap) -> Re
         action_contract_count,
     );
 
-    match state.health_client.platform_health().await {
+    let (health_result, metrics_result) =
+        tokio::join!(state.health_client.platform_health(), state.health_client.service_metrics(),);
+    match health_result {
         Ok(summary) => Html(
             {
+                let metrics = metrics_result.unwrap_or_default();
                 let services_up =
                     summary.services.iter().filter(|service| service.status == "up").count();
                 let services_down = summary.services.len().saturating_sub(services_up);
@@ -299,8 +327,14 @@ pub async fn get_health(State(state): State<AppState>, headers: HeaderMap) -> Re
                 let critical_queue_count =
                     queues.iter().filter(|queue| queue.severity == "critical").count();
                 let max_queue = queues.iter().map(|queue| queue.messages).max().unwrap_or(0);
-                let services: Vec<ServiceHealthView> =
-                    summary.services.into_iter().map(service_view).collect();
+                let services: Vec<ServiceHealthView> = summary
+                    .services
+                    .into_iter()
+                    .map(|service| {
+                        let metric = metrics.iter().find(|item| item.name == service.name).cloned();
+                        service_view(service, metric)
+                    })
+                    .collect();
                 let dependency_lanes = dependency_lanes(&services, &queues);
                 HealthTemplate {
                     show_nav: true,

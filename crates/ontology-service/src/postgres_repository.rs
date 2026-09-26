@@ -1,8 +1,8 @@
 use crate::repository::{OntologyRepository, RepositoryError};
 use async_trait::async_trait;
 use common::ontology::{
-    ActionInvocation, ActionReview, ActionType, ActionTypeHistory, Link, LinkType, Object,
-    ObjectHistory, ObjectType,
+    ActionInvocation, ActionReview, ActionType, ActionTypeHistory, Link, LinkHistory, LinkType,
+    LinkTypeHistory, Object, ObjectAnnotation, ObjectHistory, ObjectType, ObjectTypeHistory,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -49,6 +49,49 @@ impl OntologyRepository for PostgresOntologyRepository {
             .map(|_| ())
     }
 
+    async fn list_object_type_history(
+        &self,
+        tenant_id: Uuid,
+        object_type_id: Uuid,
+    ) -> Result<Vec<ObjectTypeHistory>, RepositoryError> {
+        sqlx::query_as("SELECT id, tenant_id, object_type_id, change_type, actor, before_state, after_state, changed_at FROM object_type_history WHERE tenant_id=$1 AND object_type_id=$2 ORDER BY changed_at DESC")
+            .bind(tenant_id)
+            .bind(object_type_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn list_all_object_type_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ObjectTypeHistory>, RepositoryError> {
+        sqlx::query_as("SELECT id, tenant_id, object_type_id, change_type, actor, before_state, after_state, changed_at FROM object_type_history WHERE tenant_id=$1 ORDER BY changed_at DESC")
+            .bind(tenant_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn record_object_type_history(
+        &self,
+        history: ObjectTypeHistory,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("INSERT INTO object_type_history (id, tenant_id, object_type_id, change_type, actor, before_state, after_state, changed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
+            .bind(history.id)
+            .bind(history.tenant_id)
+            .bind(history.object_type_id)
+            .bind(history.change_type)
+            .bind(history.actor)
+            .bind(history.before_state)
+            .bind(history.after_state)
+            .bind(history.changed_at)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+            .map(|_| ())
+    }
+
     async fn upsert_object(&self, object: Object) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
@@ -86,9 +129,10 @@ impl OntologyRepository for PostgresOntologyRepository {
         )
         .bind(object.id).bind(object.tenant_id).bind(object.object_type_id)
         .bind(object.properties).bind(object.source_lineage).bind(object.updated_at)
-        .execute(&self.pool).await.map_err(|e| RepositoryError::Database(e.to_string())).map(|result| {
-            if result.rows_affected() == 0 { () } else { () }
-        })
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+        .map(|_| ())
     }
 
     async fn delete_object(&self, tenant_id: Uuid, id: Uuid) -> Result<(), RepositoryError> {
@@ -132,6 +176,47 @@ impl OntologyRepository for PostgresOntologyRepository {
         .await
         .map_err(|e| RepositoryError::Database(e.to_string()))
         .map(|_| ())
+    }
+
+    async fn list_object_annotations(
+        &self,
+        tenant_id: Uuid,
+        object_id: Uuid,
+    ) -> Result<Vec<ObjectAnnotation>, RepositoryError> {
+        sqlx::query_as("SELECT id, tenant_id, object_id, author, body, created_at FROM object_annotations WHERE tenant_id=$1 AND object_id=$2 ORDER BY created_at DESC LIMIT 100")
+            .bind(tenant_id)
+            .bind(object_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn list_all_object_annotations(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ObjectAnnotation>, RepositoryError> {
+        sqlx::query_as("SELECT id, tenant_id, object_id, author, body, created_at FROM object_annotations WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 500")
+            .bind(tenant_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn create_object_annotation(
+        &self,
+        annotation: ObjectAnnotation,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("INSERT INTO object_annotations (id, tenant_id, object_id, author, body, created_at) VALUES ($1,$2,$3,$4,$5,$6)")
+            .bind(annotation.id)
+            .bind(annotation.tenant_id)
+            .bind(annotation.object_id)
+            .bind(annotation.author)
+            .bind(annotation.body)
+            .bind(annotation.created_at)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+            .map(|_| ())
     }
 
     async fn get_object_type(
@@ -200,6 +285,100 @@ impl OntologyRepository for PostgresOntologyRepository {
         sqlx::query("DELETE FROM link_types WHERE id=$1 AND tenant_id=$2")
             .bind(id)
             .bind(tenant_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+            .map(|_| ())
+    }
+
+    async fn list_link_type_history(
+        &self,
+        tenant_id: Uuid,
+        link_type_id: Uuid,
+    ) -> Result<Vec<LinkTypeHistory>, RepositoryError> {
+        sqlx::query_as("SELECT id, tenant_id, link_type_id, change_type, actor, before_state, after_state, changed_at FROM link_type_history WHERE tenant_id=$1 AND link_type_id=$2 ORDER BY changed_at DESC")
+            .bind(tenant_id)
+            .bind(link_type_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn list_all_object_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ObjectHistory>, RepositoryError> {
+        sqlx::query_as("SELECT id, tenant_id, object_id, change_type, actor, before_state, after_state, changed_at FROM object_history WHERE tenant_id=$1 ORDER BY changed_at DESC")
+            .bind(tenant_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn list_all_link_type_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<LinkTypeHistory>, RepositoryError> {
+        sqlx::query_as("SELECT id, tenant_id, link_type_id, change_type, actor, before_state, after_state, changed_at FROM link_type_history WHERE tenant_id=$1 ORDER BY changed_at DESC")
+            .bind(tenant_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn record_link_type_history(
+        &self,
+        history: LinkTypeHistory,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("INSERT INTO link_type_history (id, tenant_id, link_type_id, change_type, actor, before_state, after_state, changed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
+            .bind(history.id)
+            .bind(history.tenant_id)
+            .bind(history.link_type_id)
+            .bind(history.change_type)
+            .bind(history.actor)
+            .bind(history.before_state)
+            .bind(history.after_state)
+            .bind(history.changed_at)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+            .map(|_| ())
+    }
+
+    async fn list_link_history(
+        &self,
+        tenant_id: Uuid,
+        link_id: Uuid,
+    ) -> Result<Vec<LinkHistory>, RepositoryError> {
+        sqlx::query_as("SELECT id, tenant_id, link_id, change_type, actor, before_state, after_state, changed_at FROM link_history WHERE tenant_id=$1 AND link_id=$2 ORDER BY changed_at DESC")
+            .bind(tenant_id)
+            .bind(link_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn list_all_link_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<LinkHistory>, RepositoryError> {
+        sqlx::query_as("SELECT id, tenant_id, link_id, change_type, actor, before_state, after_state, changed_at FROM link_history WHERE tenant_id=$1 ORDER BY changed_at DESC")
+            .bind(tenant_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn record_link_history(&self, history: LinkHistory) -> Result<(), RepositoryError> {
+        sqlx::query("INSERT INTO link_history (id, tenant_id, link_id, change_type, actor, before_state, after_state, changed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
+            .bind(history.id)
+            .bind(history.tenant_id)
+            .bind(history.link_id)
+            .bind(history.change_type)
+            .bind(history.actor)
+            .bind(history.before_state)
+            .bind(history.after_state)
+            .bind(history.changed_at)
             .execute(&self.pool)
             .await
             .map_err(|e| RepositoryError::Database(e.to_string()))
@@ -368,7 +547,17 @@ impl OntologyRepository for PostgresOntologyRepository {
         .bind(tenant_id)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Database(e.to_string()))
+            .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+    async fn list_all_action_type_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ActionTypeHistory>, RepositoryError> {
+        sqlx::query_as("SELECT id, tenant_id, action_type_id, change_type, actor, before_state, after_state, changed_at FROM action_type_history WHERE tenant_id=$1 ORDER BY changed_at DESC")
+            .bind(tenant_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))
     }
 
     async fn upsert_action_review(&self, review: ActionReview) -> Result<(), RepositoryError> {

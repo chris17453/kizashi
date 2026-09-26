@@ -5,6 +5,8 @@ use std::sync::Mutex;
 #[derive(Default)]
 pub struct InMemoryFingerprintRepository {
     seen: Mutex<HashMap<(Uuid, String), chrono::DateTime<chrono::Utc>>>,
+    occurrences: Mutex<HashMap<(Uuid, String), i64>>,
+    suppressed: Mutex<HashMap<Uuid, i64>>,
 }
 
 #[async_trait]
@@ -34,7 +36,25 @@ impl FingerprintRepository for InMemoryFingerprintRepository {
             }
         };
         seen.insert(key, now);
+        let key = (tenant_id, fingerprint.to_string());
+        *self.occurrences.lock().unwrap().entry(key).or_default() += 1;
+        if outcome == DedupOutcome::Duplicate {
+            *self.suppressed.lock().unwrap().entry(tenant_id).or_default() += 1;
+        }
         Ok(outcome)
+    }
+
+    async fn summary(&self, tenant_id: Uuid) -> Result<DedupSummary, FingerprintRepositoryError> {
+        let occurrences = self.occurrences.lock().unwrap();
+        let fingerprint_count =
+            occurrences.keys().filter(|(tenant, _)| *tenant == tenant_id).count() as i64;
+        let active_duplicate_count = occurrences
+            .iter()
+            .filter(|((tenant, _), count)| *tenant == tenant_id && **count > 1)
+            .count() as i64;
+        let suppressed_count =
+            self.suppressed.lock().unwrap().get(&tenant_id).copied().unwrap_or_default();
+        Ok(DedupSummary { fingerprint_count, active_duplicate_count, suppressed_count })
     }
 }
 
@@ -49,6 +69,10 @@ impl FingerprintRepository for FailingFingerprintRepository {
         _record_id: Uuid,
         _window_seconds: Option<i64>,
     ) -> Result<DedupOutcome, FingerprintRepositoryError> {
+        Err(FingerprintRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn summary(&self, _tenant_id: Uuid) -> Result<DedupSummary, FingerprintRepositoryError> {
         Err(FingerprintRepositoryError::Backend("simulated failure".to_string()))
     }
 }
@@ -107,4 +131,17 @@ async fn failing_repository_returns_a_backend_error() {
     let repo = FailingFingerprintRepository;
     let err = repo.check_and_record(Uuid::new_v4(), "abc", Uuid::new_v4(), None).await.unwrap_err();
     assert!(matches!(err, FingerprintRepositoryError::Backend(_)));
+}
+
+#[tokio::test]
+async fn summary_counts_fingerprints_and_suppressed_occurrences() {
+    let repo = InMemoryFingerprintRepository::default();
+    let tenant_id = Uuid::new_v4();
+    repo.check_and_record(tenant_id, "abc", Uuid::new_v4(), None).await.unwrap();
+    repo.check_and_record(tenant_id, "abc", Uuid::new_v4(), None).await.unwrap();
+    repo.check_and_record(tenant_id, "xyz", Uuid::new_v4(), None).await.unwrap();
+    let summary = repo.summary(tenant_id).await.unwrap();
+    assert_eq!(summary.fingerprint_count, 2);
+    assert_eq!(summary.active_duplicate_count, 1);
+    assert_eq!(summary.suppressed_count, 1);
 }

@@ -23,6 +23,7 @@ pub struct AttentionSummary {
     pub critical_queues: usize,
     pub sla_breaches: usize,
     pub stale_connectors: usize,
+    pub dead_letter_messages: usize,
     pub attention_count: usize,
 }
 
@@ -59,6 +60,7 @@ fn build_attention_summary(
     actions: &[ActionInvocation],
     queues: &[QueueDepthSummary],
     stale_connectors: usize,
+    dead_letter_messages: usize,
 ) -> AttentionSummary {
     let active = incidents.iter().filter(|item| item.incident.status != IncidentStatus::Resolved);
     let active_items = active.collect::<Vec<_>>();
@@ -86,32 +88,36 @@ fn build_attention_summary(
         critical_queues,
         sla_breaches,
         stale_connectors,
+        dead_letter_messages,
         attention_count: unique_attention_case_count(incidents, chrono::Utc::now())
             + review_actions
             + critical_queues
-            + stale_connectors,
+            + stale_connectors
+            + usize::from(dead_letter_messages > 0),
     }
 }
 
-pub async fn get_attention_summary(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let session = match require_session(state.session_store.as_ref(), &headers).await {
-        Ok(session) => session,
-        Err(response) => return response,
-    };
+/// Builds the command-center attention summary for either a browser session or an API principal.
+/// Keeping this aggregation in one place prevents the REST surface and the HTML attention rail
+/// from drifting into different definitions of operational pressure.
+pub(crate) async fn attention_summary_for_tenant(
+    state: &AppState,
+    tenant_id: uuid::Uuid,
+    bearer_token: &str,
+) -> AttentionSummary {
     let action_future = async {
         match ontology_client::global() {
-            Some(client) => {
-                client.list_action_invocations(&session.bearer_token).await.unwrap_or_default()
-            }
+            Some(client) => client.list_action_invocations(bearer_token).await.unwrap_or_default(),
             None => Vec::new(),
         }
     };
-    let (incidents, queues, actions, sensors, connector_stats) = tokio::join!(
-        state.incidents_client.list_incidents(session.tenant_id, None),
+    let (incidents, queues, actions, sensors, connector_stats, dead_letter_queues) = tokio::join!(
+        state.incidents_client.list_incidents(tenant_id, None),
         state.backlog_client.queue_depths(),
         action_future,
-        state.sensors_client.list_sensors(session.tenant_id, 1000, 0),
-        state.stats_client.connector_stats(session.tenant_id),
+        state.sensors_client.list_sensors(tenant_id, 1000, 0),
+        state.stats_client.connector_stats(tenant_id),
+        state.execution_client.dead_letter_queues(),
     );
     let now = chrono::Utc::now();
     let stale_connectors = match (sensors, connector_stats) {
@@ -129,11 +135,26 @@ pub async fn get_attention_summary(State(state): State<AppState>, headers: Heade
             .count(),
         _ => 0,
     };
-    let summary = build_attention_summary(
+    build_attention_summary(
         &incidents.unwrap_or_default(),
         &actions,
         &queues.unwrap_or_default(),
         stale_connectors,
-    );
+        dead_letter_queues
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|queue| queue.count)
+            .map(|count| count as usize)
+            .sum(),
+    )
+}
+
+pub async fn get_attention_summary(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    let summary =
+        attention_summary_for_tenant(&state, session.tenant_id, &session.bearer_token).await;
     axum::Json(summary).into_response()
 }

@@ -21,6 +21,15 @@ pub struct ServiceHealth {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ServiceRequestMetrics {
+    pub name: String,
+    pub requests: u64,
+    pub errors: u64,
+    pub latency_seconds_sum: f64,
+    pub latency_seconds_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PlatformHealth {
     pub status: Status,
     pub services: Vec<ServiceHealth>,
@@ -31,6 +40,10 @@ pub struct PlatformHealth {
 #[async_trait]
 pub trait ServiceHealthChecker: Send + Sync {
     async fn check(&self, endpoint: &ServiceEndpoint) -> Status;
+
+    async fn metrics(&self, _endpoint: &ServiceEndpoint) -> Option<ServiceRequestMetrics> {
+        None
+    }
 }
 
 pub struct HttpServiceHealthChecker {
@@ -51,6 +64,41 @@ impl ServiceHealthChecker for HttpServiceHealthChecker {
             _ => Status::Down,
         }
     }
+
+    async fn metrics(&self, endpoint: &ServiceEndpoint) -> Option<ServiceRequestMetrics> {
+        let text = self
+            .client
+            .get(format!("{}/metrics", endpoint.url))
+            .send()
+            .await
+            .ok()?
+            .text()
+            .await
+            .ok()?;
+        let value = |metric: &str| {
+            text.lines().find_map(|line| {
+                line.strip_prefix(metric).and_then(|value| value.trim().parse::<f64>().ok())
+            })
+        };
+        Some(ServiceRequestMetrics {
+            name: endpoint.name.clone(),
+            requests: value("kizashi_http_requests_total")? as u64,
+            errors: value("kizashi_http_errors_total")? as u64,
+            latency_seconds_sum: value("kizashi_http_request_duration_seconds_sum")?,
+            latency_seconds_count: value("kizashi_http_request_duration_seconds_count")? as u64,
+        })
+    }
+}
+
+pub async fn collect_service_metrics(
+    checker: &dyn ServiceHealthChecker,
+    registry: &[ServiceEndpoint],
+) -> Vec<ServiceRequestMetrics> {
+    let metrics = futures_util::future::join_all(
+        registry.iter().map(|endpoint| async move { checker.metrics(endpoint).await }),
+    )
+    .await;
+    metrics.into_iter().flatten().collect()
 }
 
 /// Fans `checker.check` out concurrently across every registered service (ADR-0012) — overall

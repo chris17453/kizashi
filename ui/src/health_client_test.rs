@@ -73,3 +73,25 @@ async fn http_client_returns_unreachable_when_server_is_down() {
     let err = client.platform_health().await.unwrap_err();
     assert!(matches!(err, HealthClientError::Unreachable(_)));
 }
+
+#[tokio::test]
+async fn http_client_reads_service_metrics() {
+    async fn metrics() -> Json<Vec<ServiceMetricsSummary>> {
+        Json(vec![ServiceMetricsSummary {
+            name: "svc-a".to_string(),
+            requests: 12,
+            errors: 2,
+            latency_seconds_sum: 1.5,
+            latency_seconds_count: 10,
+        }])
+    }
+    let app = Router::new().route("/v1/service-metrics", get(metrics));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let client = HttpHealthClient::new(reqwest::Client::new(), format!("http://{addr}"));
+    let metrics = client.service_metrics().await.unwrap();
+    assert_eq!(metrics[0].requests, 12);
+}

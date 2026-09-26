@@ -68,6 +68,9 @@ missing feature to design from scratch.
   session: the graceful-degradation path (SSO not configured → clear on-page error, not a crash
   or hang) against the real deployed stack, since this environment has no real Entra tenant to
   test the success path against.
-- No SSO provider configuration UI yet — Entra credentials are still env-var-driven
-  platform-wide, not a per-tenant admin page. Building that (multi-provider, per-tenant
-  configuration, stored and audit-logged) is real follow-up work, tracked but not started.
+- Deployment-wide Entra/generic credentials remain supported for bootstrap compatibility. Tenant
+  administrators can also manage provider connections in Security Overview or through the
+  versioned API. Client secrets are AES-256-GCM encrypted in `auth_service.tenant_oidc_providers`
+  using the deployment's `OIDC_CREDENTIALS_ENCRYPTION_KEY`, are never returned to the Console, and
+  mutations write redacted immutable audit entries. A missing encryption key disables tenant-managed
+  writes rather than falling back to plaintext storage.

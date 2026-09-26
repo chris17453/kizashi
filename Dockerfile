@@ -29,9 +29,9 @@ COPY . .
 # `docker build` invocations (keyed by target path, shared by every BIN this Dockerfile builds
 # since they're all one Cargo workspace), so only the changed crate(s) actually recompile after
 # the first build.
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
     cargo build --release --bin "${BIN}" \
     && cp "target/release/${BIN}" /tmp/service
 

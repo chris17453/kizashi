@@ -30,8 +30,8 @@ use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-const SAMPLE_HTML: &str = r#"<html><head><style>:root { --accent: #22d3ee; }</style></head>
-<body><nav><span class="brand-name">Kizashi</span></nav></body></html>"#;
+const SAMPLE_HTML: &str = r#"<html><head><title>Kizashi Console</title><style>:root { --accent: #5eead4; } html[data-theme="light"] { --accent: #087f78; }</style></head>
+<body><nav><span class="brand-mark">&#9670;</span><span class="brand-name">Kizashi</span></nav></body></html>"#;
 
 #[test]
 fn apply_branding_to_html_replaces_the_product_name_and_accent_color() {
@@ -46,6 +46,65 @@ fn apply_branding_to_html_replaces_the_product_name_and_accent_color() {
     assert!(rewritten.contains(r#"<span class="brand-name">Acme Support</span>"#));
     assert!(!rewritten.contains(r#"<span class="brand-name">Kizashi</span>"#));
     assert!(rewritten.contains("--accent: #ff0000;"));
+}
+
+#[test]
+fn apply_branding_to_html_replaces_the_default_mark_with_a_safe_http_logo() {
+    let branding = Branding {
+        product_name: None,
+        logo_url: Some("https://cdn.example.com/acme-logo.svg?size=small&theme=dark".to_string()),
+        accent_color: None,
+    };
+
+    let rewritten = apply_branding_to_html(SAMPLE_HTML, &branding);
+
+    assert!(rewritten.contains(
+        r#"<img class="brand-mark brand-logo" src="https://cdn.example.com/acme-logo.svg?size=small&amp;theme=dark" alt="">"#
+    ));
+    assert!(!rewritten.contains("&#9670;"));
+}
+
+#[test]
+fn apply_branding_to_html_applies_a_logo_when_it_is_the_only_configured_field() {
+    let branding = Branding {
+        product_name: None,
+        logo_url: Some("https://cdn.example.com/logo.svg".to_string()),
+        accent_color: None,
+    };
+
+    let rewritten = apply_branding_to_html(SAMPLE_HTML, &branding);
+
+    assert!(rewritten
+        .contains(r#"class="brand-mark brand-logo" src="https://cdn.example.com/logo.svg""#));
+    assert!(!rewritten.contains("&#9670;"));
+}
+
+#[test]
+fn apply_branding_to_html_replaces_the_authenticated_document_title() {
+    let branding = Branding {
+        product_name: Some("Acme Operations".to_string()),
+        logo_url: None,
+        accent_color: None,
+    };
+
+    let rewritten = apply_branding_to_html(SAMPLE_HTML, &branding);
+
+    assert!(rewritten.contains("<title>Acme Operations Console</title>"));
+    assert!(!rewritten.contains("<title>Kizashi Console</title>"));
+}
+
+#[test]
+fn apply_branding_to_html_ignores_non_http_logo_urls() {
+    let branding = Branding {
+        product_name: None,
+        logo_url: Some("javascript:alert(document.domain)".to_string()),
+        accent_color: None,
+    };
+
+    let rewritten = apply_branding_to_html(SAMPLE_HTML, &branding);
+
+    assert!(rewritten.contains("&#9670;"));
+    assert!(!rewritten.contains("javascript:"));
 }
 
 #[test]

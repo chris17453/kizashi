@@ -14,6 +14,7 @@ use axum::extract::{Form, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use chrono::{Datelike, Duration, Utc};
+use common::Role;
 
 /// How many of the most recent events show up in the dashboard's "Recent Activity" preview —
 /// a glance, not a replacement for the full paginated Events page it links to.
@@ -24,9 +25,11 @@ const RECENT_ACTIVITY_LIMIT: usize = 5;
 struct OverviewTemplate {
     show_nav: bool,
     is_admin: bool,
+    can_manage: bool,
     tenant_id: uuid::Uuid,
     username: String,
     initial_layout: String,
+    initial_scope: String,
     sensor_count: usize,
     active_sensor_count: usize,
     stale_sensor_count: usize,
@@ -165,6 +168,15 @@ struct OverviewAttention {
     sla_breaches: usize,
     critical_queues: usize,
     connector_attention: usize,
+    dead_letter_messages: usize,
+}
+
+fn dead_letter_message_count(queues: &[crate::execution_client::DeadLetterQueueSummary]) -> usize {
+    queues
+        .iter()
+        .filter(|queue| queue.has_messages)
+        .map(|queue| queue.count.unwrap_or(1) as usize)
+        .sum()
 }
 
 struct OverviewBrief {
@@ -208,14 +220,25 @@ const DASHBOARD_WIDGETS: &[&str] = &[
     "decision-queue",
 ];
 
-fn dashboard_layout_for_user(
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct DashboardLayoutState {
+    order: Vec<String>,
+    #[serde(default)]
+    hidden: Vec<String>,
+}
+
+fn dashboard_layout_for_scope(
     queries: &[common::SavedSearchQuery],
     username: &str,
-) -> Option<Vec<String>> {
+    scope: &str,
+) -> Option<DashboardLayoutState> {
     queries.iter().rev().find_map(|query| {
         let filter = query.filter.as_object()?;
         if filter.get("view_kind")?.as_str()? != "dashboard_layout"
-            || filter.get("owner")?.as_str()? != username
+            || filter.get("scope").and_then(serde_json::Value::as_str).unwrap_or("personal")
+                != scope
+            || filter.get("owner")?.as_str()?
+                != if scope == "workspace" { "workspace" } else { username }
         {
             return None;
         }
@@ -227,7 +250,25 @@ fn dashboard_layout_for_user(
             .filter(|id| DASHBOARD_WIDGETS.contains(id))
             .map(str::to_string)
             .collect::<Vec<_>>();
-        (!order.is_empty()).then_some(order)
+        if order.len() != DASHBOARD_WIDGETS.len()
+            || !DASHBOARD_WIDGETS.iter().all(|id| order.iter().any(|value| value == id))
+        {
+            return None;
+        }
+        let hidden = filter
+            .get("hidden")
+            .and_then(serde_json::Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .filter(|id| DASHBOARD_WIDGETS.contains(id))
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        (hidden.len() == hidden.iter().collect::<std::collections::HashSet<_>>().len())
+            .then_some(DashboardLayoutState { order, hidden })
     })
 }
 
@@ -243,6 +284,20 @@ fn valid_dashboard_order(raw: &str) -> Option<Vec<String>> {
     (order.len() == DASHBOARD_WIDGETS.len()
         && DASHBOARD_WIDGETS.iter().all(|id| order.iter().any(|value| value == id)))
     .then_some(order)
+}
+
+fn valid_dashboard_hidden(raw: &str) -> Option<Vec<String>> {
+    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let values = value.as_array()?;
+    let hidden = values
+        .iter()
+        .filter_map(|value| value.as_str())
+        .filter(|id| DASHBOARD_WIDGETS.contains(id))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    (hidden.len() == values.len()
+        && hidden.iter().collect::<std::collections::HashSet<_>>().len() == hidden.len())
+    .then_some(hidden)
 }
 
 fn dashboard_saved_views(queries: &[common::SavedSearchQuery]) -> Vec<DashboardSavedView> {
@@ -401,6 +456,8 @@ pub struct OverviewQuery {
     pub from: String,
     #[serde(default)]
     pub to: String,
+    #[serde(default)]
+    pub dashboard_scope: String,
 }
 
 fn signal_window(
@@ -438,9 +495,14 @@ pub async fn get_overview(
     let signal_window_label = format!("{} → {}", signal_from, signal_to);
     let saved_queries =
         state.saved_search_queries_client.list(session.tenant_id).await.unwrap_or_default();
-    let initial_layout =
-        serde_json::to_string(&dashboard_layout_for_user(&saved_queries, &session.username))
-            .unwrap_or_else(|_| "null".to_string());
+    let requested_scope =
+        if query.dashboard_scope == "workspace" { "workspace" } else { "personal" };
+    let initial_layout = serde_json::to_string(&dashboard_layout_for_scope(
+        &saved_queries,
+        &session.username,
+        requested_scope,
+    ))
+    .unwrap_or_else(|_| "null".to_string());
     let saved_views = dashboard_saved_views(&saved_queries);
 
     let mut errors = Vec::new();
@@ -487,6 +549,13 @@ pub async fn get_overview(
         Err(e) => {
             errors.push(format!("queue depths: {e}"));
             vec![]
+        }
+    };
+    let dead_letter_messages = match state.execution_client.dead_letter_queues().await {
+        Ok(queues) => dead_letter_message_count(&queues),
+        Err(e) => {
+            errors.push(format!("dead-letter queues: {e}"));
+            0
         }
     };
     let pipeline_items =
@@ -910,13 +979,15 @@ pub async fn get_overview(
         total: unique_attention_case_count(&incidents, now)
             + review_actions
             + critical_queues
-            + stale_sensor_count,
+            + stale_sensor_count
+            + usize::from(dead_letter_messages > 0),
         critical_cases,
         unassigned_work,
         review_actions,
         sla_breaches: sla_breached_count,
         critical_queues,
         connector_attention: stale_sensor_count,
+        dead_letter_messages,
     };
     let window_days = (signal_until.date_naive() - signal_since.date_naive()).num_days() + 1;
     let daily_signal_velocity = if window_days > 0 {
@@ -971,9 +1042,11 @@ pub async fn get_overview(
         OverviewTemplate {
             show_nav: true,
             is_admin,
+            can_manage: session.role.at_least(Role::Operator),
             tenant_id: session.tenant_id,
             username: session.username,
             initial_layout,
+            initial_scope: requested_scope.to_string(),
             sensor_count: sensors.len(),
             active_sensor_count,
             stale_sensor_count,
@@ -1022,6 +1095,61 @@ pub async fn get_overview(
 #[derive(Debug, serde::Deserialize)]
 pub struct DashboardLayoutForm {
     order: String,
+    #[serde(default)]
+    hidden: String,
+    #[serde(default)]
+    scope: String,
+}
+
+fn dashboard_scope(raw: &str) -> Option<&'static str> {
+    match raw.trim() {
+        "workspace" => Some("workspace"),
+        "" | "personal" => Some("personal"),
+        _ => None,
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SavedViewNameForm {
+    name: String,
+}
+
+pub async fn post_update_saved_view_name(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+    Form(form): Form<SavedViewNameForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    let name = form.name.trim();
+    if name.is_empty() || name.len() > 160 {
+        return Redirect::to("/overview?notice=saved-view-invalid").into_response();
+    }
+    let query = state
+        .saved_search_queries_client
+        .list(session.tenant_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .find(|query| query.id == id);
+    let Some(mut query) = query else {
+        return Redirect::to("/overview?notice=saved-view-failed").into_response();
+    };
+    let is_editable = query.filter.get("view_kind").and_then(serde_json::Value::as_str)
+        != Some("dashboard_layout")
+        && query.filter.get("view_kind").and_then(serde_json::Value::as_str)
+            != Some("report_schedule");
+    if !is_editable {
+        return Redirect::to("/overview?notice=saved-view-failed").into_response();
+    }
+    query.name = name.to_string();
+    if state.saved_search_queries_client.update(session.tenant_id, query).await.is_err() {
+        return Redirect::to("/overview?notice=saved-view-failed").into_response();
+    }
+    Redirect::to("/overview?notice=saved-view-updated").into_response()
 }
 
 /// Persists the current per-user dashboard arrangement in the tenant-scoped saved-query store.
@@ -1034,24 +1162,68 @@ pub async fn post_dashboard_layout(
         Ok(session) => session,
         Err(response) => return response,
     };
+    let Some(scope) = dashboard_scope(&form.scope) else {
+        return axum::http::StatusCode::UNPROCESSABLE_ENTITY.into_response();
+    };
+    if scope == "workspace" && !session.role.at_least(Role::Operator) {
+        return axum::http::StatusCode::FORBIDDEN.into_response();
+    }
     let Some(order) = valid_dashboard_order(&form.order) else {
         return axum::http::StatusCode::UNPROCESSABLE_ENTITY.into_response();
     };
+    let hidden = if form.hidden.trim().is_empty() {
+        Vec::new()
+    } else {
+        let Some(hidden) = valid_dashboard_hidden(&form.hidden) else {
+            return axum::http::StatusCode::UNPROCESSABLE_ENTITY.into_response();
+        };
+        hidden
+    };
     let queries =
         state.saved_search_queries_client.list(session.tenant_id).await.unwrap_or_default();
+    let mut updated_existing = false;
     for query in queries {
         let owned = query.filter.get("view_kind").and_then(serde_json::Value::as_str)
             == Some("dashboard_layout")
+            && query.filter.get("scope").and_then(serde_json::Value::as_str).unwrap_or("personal")
+                == scope
             && query.filter.get("owner").and_then(serde_json::Value::as_str)
-                == Some(session.username.as_str());
+                == Some(if scope == "workspace" { "workspace" } else { session.username.as_str() });
         if owned {
-            let _ = state.saved_search_queries_client.delete(session.tenant_id, query.id).await;
+            if !updated_existing {
+                let _ = state
+                    .saved_search_queries_client
+                    .update(
+                        session.tenant_id,
+                        common::SavedSearchQuery {
+                            id: query.id,
+                            tenant_id: query.tenant_id,
+                            name: query.name,
+                            filter: serde_json::json!({"view_kind":"dashboard_layout", "scope":scope, "owner":if scope == "workspace" { "workspace" } else { session.username.as_str() }, "order":order, "hidden":hidden}),
+                        },
+                    )
+                    .await;
+                updated_existing = true;
+            } else {
+                let _ = state.saved_search_queries_client.delete(session.tenant_id, query.id).await;
+            }
         }
     }
-    let filter = serde_json::json!({"view_kind":"dashboard_layout", "owner":session.username, "order":order});
+    if updated_existing {
+        return axum::http::StatusCode::NO_CONTENT.into_response();
+    }
+    let filter = serde_json::json!({"view_kind":"dashboard_layout", "scope":scope, "owner":if scope == "workspace" { "workspace" } else { session.username.as_str() }, "order":order, "hidden":hidden});
     match state
         .saved_search_queries_client
-        .create(session.tenant_id, "Personal dashboard layout", filter)
+        .create(
+            session.tenant_id,
+            if scope == "workspace" {
+                "Workspace dashboard layout"
+            } else {
+                "Personal dashboard layout"
+            },
+            filter,
+        )
         .await
     {
         Ok(_) => axum::http::StatusCode::NO_CONTENT.into_response(),
@@ -1062,23 +1234,38 @@ pub async fn post_dashboard_layout(
 pub async fn post_reset_dashboard_layout(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<DashboardScopeQuery>,
 ) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(session) => session,
         Err(response) => return response,
     };
+    let Some(scope) = dashboard_scope(&query.scope) else {
+        return axum::http::StatusCode::UNPROCESSABLE_ENTITY.into_response();
+    };
+    if scope == "workspace" && !session.role.at_least(Role::Operator) {
+        return axum::http::StatusCode::FORBIDDEN.into_response();
+    }
     let queries =
         state.saved_search_queries_client.list(session.tenant_id).await.unwrap_or_default();
     for query in queries {
         let owned = query.filter.get("view_kind").and_then(serde_json::Value::as_str)
             == Some("dashboard_layout")
+            && query.filter.get("scope").and_then(serde_json::Value::as_str).unwrap_or("personal")
+                == scope
             && query.filter.get("owner").and_then(serde_json::Value::as_str)
-                == Some(session.username.as_str());
+                == Some(if scope == "workspace" { "workspace" } else { session.username.as_str() });
         if owned {
             let _ = state.saved_search_queries_client.delete(session.tenant_id, query.id).await;
         }
     }
     Redirect::to("/overview").into_response()
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct DashboardScopeQuery {
+    #[serde(default)]
+    pub scope: String,
 }
 
 #[cfg(test)]
@@ -1090,6 +1277,7 @@ mod dashboard_layout_tests {
         let (from, to, since, until) = signal_window(&OverviewQuery {
             from: "2026-07-01".to_string(),
             to: "2026-07-07".to_string(),
+            dashboard_scope: String::new(),
         });
         assert_eq!(from, "2026-07-01");
         assert_eq!(to, "2026-07-07");
@@ -1103,6 +1291,50 @@ mod dashboard_layout_tests {
         assert_eq!(valid_dashboard_order(&order).unwrap().len(), DASHBOARD_WIDGETS.len());
         assert!(valid_dashboard_order(r#"["signal-trend"]"#).is_none());
         assert!(valid_dashboard_order(r#"["signal-trend","signal-trend","knowledge-model","pipeline-status","recent-activity","decision-queue"]"#).is_none());
+    }
+
+    #[test]
+    fn accepts_only_known_dashboard_visibility_values() {
+        assert_eq!(
+            valid_dashboard_hidden(r#"["signal-trend","pipeline-status"]"#).unwrap().len(),
+            2
+        );
+        assert!(valid_dashboard_hidden(r#"["unknown-widget"]"#).is_none());
+        assert!(valid_dashboard_hidden(r#"["signal-trend","signal-trend"]"#).is_none());
+    }
+
+    #[test]
+    fn reads_persisted_hidden_widgets_from_a_user_layout() {
+        let query = common::SavedSearchQuery::new(
+            uuid::Uuid::new_v4(),
+            "Personal dashboard layout",
+            serde_json::json!({
+                "view_kind": "dashboard_layout",
+                "owner": "alice",
+                "order": DASHBOARD_WIDGETS,
+                "hidden": ["knowledge-model", "recent-activity"]
+            }),
+        );
+        let layout = dashboard_layout_for_scope(&[query], "alice", "personal").unwrap();
+        assert_eq!(layout.order.len(), DASHBOARD_WIDGETS.len());
+        assert_eq!(layout.hidden, vec!["knowledge-model", "recent-activity"]);
+    }
+
+    #[test]
+    fn workspace_layouts_are_selected_by_shared_scope() {
+        let query = common::SavedSearchQuery::new(
+            uuid::Uuid::new_v4(),
+            "Workspace dashboard layout",
+            serde_json::json!({
+                "view_kind": "dashboard_layout",
+                "scope": "workspace",
+                "owner": "workspace",
+                "order": DASHBOARD_WIDGETS,
+                "hidden": []
+            }),
+        );
+        assert!(dashboard_layout_for_scope(&[query], "alice", "workspace").is_some());
+        assert!(dashboard_layout_for_scope(&[], "alice", "personal").is_none());
     }
 
     #[test]

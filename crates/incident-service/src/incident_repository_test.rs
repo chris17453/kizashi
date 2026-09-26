@@ -5,6 +5,8 @@ use std::sync::Mutex;
 pub struct InMemoryIncidentRepository {
     pub incidents: Mutex<Vec<Incident>>,
     pub links: Mutex<Vec<(Uuid, Uuid)>>,
+    pub correlation_keys: Mutex<Vec<(Uuid, Uuid, String)>>,
+    pub correlation_identities: Mutex<Vec<(Uuid, Uuid, String, String)>>,
     pub notes: Mutex<Vec<IncidentNote>>,
 }
 
@@ -13,6 +15,8 @@ impl InMemoryIncidentRepository {
         Self {
             incidents: Mutex::new(vec![incident]),
             links: Mutex::new(vec![]),
+            correlation_keys: Mutex::new(vec![]),
+            correlation_identities: Mutex::new(vec![]),
             notes: Mutex::new(vec![]),
         }
     }
@@ -100,6 +104,93 @@ impl IncidentRepository for InMemoryIncidentRepository {
         }
         self.links.lock().unwrap().push((incident_id, event_id));
         Ok(())
+    }
+
+    async fn link_event_with_context(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        event_id: Uuid,
+        group_key: Option<&str>,
+        actor: &str,
+    ) -> Result<(), IncidentRepositoryError> {
+        self.link_event(tenant_id, incident_id, event_id, actor).await?;
+        if let Some(group_key) = group_key.filter(|key| !key.trim().is_empty()) {
+            self.correlation_keys.lock().unwrap().push((
+                tenant_id,
+                incident_id,
+                group_key.trim().to_ascii_lowercase(),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn link_event_with_identity(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        event_id: Uuid,
+        group_key: Option<&str>,
+        identity: EventCorrelationIdentity<'_>,
+        actor: &str,
+    ) -> Result<(), IncidentRepositoryError> {
+        self.link_event_with_context(tenant_id, incident_id, event_id, group_key, actor).await?;
+        self.correlation_identities.lock().unwrap().push((
+            tenant_id,
+            incident_id,
+            identity.event_type.trim().to_ascii_lowercase(),
+            identity.entity_ref.trim().to_string(),
+        ));
+        Ok(())
+    }
+
+    async fn active_incident_ids_for_group_key(
+        &self,
+        tenant_id: Uuid,
+        group_key: &str,
+    ) -> Result<Vec<Uuid>, IncidentRepositoryError> {
+        let key = group_key.trim().to_ascii_lowercase();
+        let keys = self.correlation_keys.lock().unwrap();
+        let incidents = self.incidents.lock().unwrap();
+        Ok(keys
+            .iter()
+            .filter(|(candidate_tenant, _, candidate_key)| {
+                *candidate_tenant == tenant_id && *candidate_key == key
+            })
+            .filter_map(|(_, incident_id, _)| {
+                incidents.iter().find(|incident| {
+                    incident.id == *incident_id
+                        && incident.tenant_id == tenant_id
+                        && incident.status != IncidentStatus::Resolved
+                })
+            })
+            .map(|incident| incident.id)
+            .collect())
+    }
+
+    async fn active_incident_ids_for_event_identity(
+        &self,
+        tenant_id: Uuid,
+        identity: EventCorrelationIdentity<'_>,
+    ) -> Result<Vec<Uuid>, IncidentRepositoryError> {
+        let identities = self.correlation_identities.lock().unwrap();
+        let incidents = self.incidents.lock().unwrap();
+        Ok(identities
+            .iter()
+            .filter(|(candidate_tenant, _, event_type, entity_ref)| {
+                *candidate_tenant == tenant_id
+                    && event_type == &identity.event_type.trim().to_ascii_lowercase()
+                    && entity_ref == identity.entity_ref.trim()
+            })
+            .filter_map(|(_, incident_id, _, _)| {
+                incidents.iter().find(|incident| {
+                    incident.id == *incident_id
+                        && incident.tenant_id == tenant_id
+                        && incident.status != IncidentStatus::Resolved
+                })
+            })
+            .map(|incident| incident.id)
+            .collect())
     }
 
     async fn unlink_event(

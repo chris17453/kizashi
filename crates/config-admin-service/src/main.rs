@@ -1,7 +1,9 @@
 use config_admin_service::{
-    build_router, AdminState, AnalysisConfigState, ApiKeyEncryptor,
-    PostgresAnalysisConfigRepository, PostgresAuditLogReader,
-    PostgresEventTypeDefinitionRepository, PostgresNormalizationMappingRepository,
+    build_router, ActionTemplateState, AdminState, AnalysisConfigState, ApiKeyEncryptor,
+    AppDefinitionState, DataSourceState, PipelineDefinitionState, PostgresActionTemplateRepository,
+    PostgresAnalysisConfigRepository, PostgresAppDefinitionRepository, PostgresAuditLogReader,
+    PostgresDataSourceRepository, PostgresEventTypeDefinitionRepository,
+    PostgresNormalizationMappingRepository, PostgresPipelineDefinitionRepository,
     PostgresReportRunRepository, PostgresSavedSearchQueryRepository, PostgresSensorRepository,
     PostgresTriggerDefinitionRepository, RabbitMqAnalysisConfigPublisher, RabbitMqMappingPublisher,
     RabbitMqSensorPublisher, RabbitMqTriggerPublisher, SavedSearchQueryState, SensorState,
@@ -82,21 +84,36 @@ async fn main() {
         publisher: Arc::new(analysis_config_publisher),
     };
     let saved_search_query_state = SavedSearchQueryState {
-        saved_search_query_repository: Arc::new(PostgresSavedSearchQueryRepository::new(pool)),
+        saved_search_query_repository: Arc::new(PostgresSavedSearchQueryRepository::new(
+            pool.clone(),
+        )),
+    };
+    let action_template_state = ActionTemplateState {
+        repository: Arc::new(PostgresActionTemplateRepository::new(pool.clone())),
+    };
+    let data_source_state =
+        DataSourceState { repository: Arc::new(PostgresDataSourceRepository::new(pool.clone())) };
+    let pipeline_definition_state = PipelineDefinitionState {
+        repository: Arc::new(PostgresPipelineDefinitionRepository::new(pool.clone())),
+        data_source_repository: Arc::new(PostgresDataSourceRepository::new(pool.clone())),
+    };
+    let app_definition_state = AppDefinitionState {
+        repository: Arc::new(PostgresAppDefinitionRepository::new(pool.clone())),
     };
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "config-admin-service listening");
-    axum::serve(
-        listener,
-        build_router(
-            state,
-            sensor_state,
-            analysis_config_state,
-            saved_search_query_state,
-            internal_secret,
-        ),
-    )
-    .await
-    .expect("server error");
+    let metrics = Arc::new(common::HttpMetrics::default());
+    let app = build_router(
+        state,
+        sensor_state,
+        analysis_config_state,
+        saved_search_query_state,
+        action_template_state,
+        data_source_state,
+        pipeline_definition_state,
+        app_definition_state,
+        internal_secret,
+    );
+    axum::serve(listener, common::instrument_router(app, metrics)).await.expect("server error");
 }

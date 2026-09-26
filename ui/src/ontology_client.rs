@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use common::ontology::{
-    ActionInvocation, ActionReview, ActionType, ActionTypeHistory, Link, LinkType, Object,
-    ObjectHistory, ObjectType,
+    ActionInvocation, ActionReview, ActionType, ActionTypeHistory, Link, LinkType, LinkTypeHistory,
+    Object, ObjectAnnotation, ObjectHistory, ObjectType,
 };
 use std::sync::{Arc, OnceLock};
 use thiserror::Error;
@@ -29,7 +29,25 @@ pub enum OntologyClientError {
 pub trait OntologyClient: Send + Sync {
     async fn list_object_types(&self, token: &str) -> Result<Vec<ObjectType>, OntologyClientError>;
     async fn list_link_types(&self, token: &str) -> Result<Vec<LinkType>, OntologyClientError>;
+    async fn list_link_type_history(
+        &self,
+        token: &str,
+        id: Uuid,
+    ) -> Result<Vec<LinkTypeHistory>, OntologyClientError>;
+    async fn list_all_link_type_history(
+        &self,
+        token: &str,
+    ) -> Result<Vec<LinkTypeHistory>, OntologyClientError>;
     async fn list_links(&self, token: &str) -> Result<Vec<Link>, OntologyClientError>;
+    async fn list_link_history(
+        &self,
+        token: &str,
+        id: Uuid,
+    ) -> Result<Vec<common::ontology::LinkHistory>, OntologyClientError>;
+    async fn list_all_link_history(
+        &self,
+        token: &str,
+    ) -> Result<Vec<common::ontology::LinkHistory>, OntologyClientError>;
     async fn list_objects(
         &self,
         token: &str,
@@ -40,6 +58,35 @@ pub trait OntologyClient: Send + Sync {
         token: &str,
         id: Uuid,
     ) -> Result<Vec<ObjectHistory>, OntologyClientError>;
+    async fn list_all_object_history(
+        &self,
+        token: &str,
+    ) -> Result<Vec<ObjectHistory>, OntologyClientError>;
+    async fn list_object_annotations(
+        &self,
+        token: &str,
+        id: Uuid,
+    ) -> Result<Vec<ObjectAnnotation>, OntologyClientError>;
+    async fn list_all_object_annotations(
+        &self,
+        token: &str,
+    ) -> Result<Vec<ObjectAnnotation>, OntologyClientError>;
+    async fn create_object_annotation(
+        &self,
+        token: &str,
+        actor: &str,
+        id: Uuid,
+        input: &CreateObjectAnnotationRequest,
+    ) -> Result<ObjectAnnotation, OntologyClientError>;
+    async fn list_object_type_history(
+        &self,
+        token: &str,
+        id: Uuid,
+    ) -> Result<Vec<common::ontology::ObjectTypeHistory>, OntologyClientError>;
+    async fn list_all_object_type_history(
+        &self,
+        token: &str,
+    ) -> Result<Vec<common::ontology::ObjectTypeHistory>, OntologyClientError>;
     async fn create_object(
         &self,
         token: &str,
@@ -71,6 +118,10 @@ pub trait OntologyClient: Send + Sync {
         token: &str,
         id: Uuid,
     ) -> Result<Vec<ActionTypeHistory>, OntologyClientError>;
+    async fn list_all_action_type_history(
+        &self,
+        token: &str,
+    ) -> Result<Vec<ActionTypeHistory>, OntologyClientError>;
     async fn invoke_action(
         &self,
         token: &str,
@@ -97,36 +148,57 @@ pub trait OntologyClient: Send + Sync {
     async fn create_link_type(
         &self,
         token: &str,
+        actor: &str,
         input: &CreateLinkTypeRequest,
     ) -> Result<(), OntologyClientError>;
-    async fn delete_link_type(&self, token: &str, id: Uuid) -> Result<(), OntologyClientError>;
+    async fn delete_link_type(
+        &self,
+        token: &str,
+        actor: &str,
+        id: Uuid,
+    ) -> Result<(), OntologyClientError>;
     async fn update_link_type(
         &self,
         token: &str,
+        actor: &str,
         id: Uuid,
         input: &CreateLinkTypeRequest,
     ) -> Result<(), OntologyClientError>;
     async fn create_link(
         &self,
         token: &str,
+        actor: &str,
         input: &CreateLinkRequest,
     ) -> Result<(), OntologyClientError>;
     async fn update_link(
         &self,
         token: &str,
+        actor: &str,
         id: Uuid,
         input: &CreateLinkRequest,
     ) -> Result<(), OntologyClientError>;
-    async fn delete_link(&self, token: &str, id: Uuid) -> Result<(), OntologyClientError>;
+    async fn delete_link(
+        &self,
+        token: &str,
+        actor: &str,
+        id: Uuid,
+    ) -> Result<(), OntologyClientError>;
     async fn create_action_type(
         &self,
         token: &str,
+        actor: &str,
         input: &CreateActionTypeRequest,
     ) -> Result<(), OntologyClientError>;
-    async fn delete_action_type(&self, token: &str, id: Uuid) -> Result<(), OntologyClientError>;
+    async fn delete_action_type(
+        &self,
+        token: &str,
+        actor: &str,
+        id: Uuid,
+    ) -> Result<(), OntologyClientError>;
     async fn update_action_type(
         &self,
         token: &str,
+        actor: &str,
         id: Uuid,
         input: &CreateActionTypeRequest,
     ) -> Result<(), OntologyClientError>;
@@ -144,6 +216,10 @@ pub struct CreateObjectRequest {
     pub object_type_id: Uuid,
     pub properties: serde_json::Value,
     pub source_lineage: serde_json::Value,
+}
+#[derive(Debug, serde::Serialize)]
+pub struct CreateObjectAnnotationRequest {
+    pub body: String,
 }
 #[derive(Debug, serde::Serialize)]
 pub struct CreateLinkTypeRequest {
@@ -186,7 +262,7 @@ pub struct ActionReviewRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due_at: Option<chrono::DateTime<chrono::Utc>>,
 }
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct TraversalResult {
     pub links: Vec<Link>,
     pub targets: Vec<Object>,
@@ -231,8 +307,36 @@ impl OntologyClient for HttpOntologyClient {
     async fn list_link_types(&self, token: &str) -> Result<Vec<LinkType>, OntologyClientError> {
         self.get(token, "/api/ontology/links/types").await
     }
+    async fn list_link_type_history(
+        &self,
+        token: &str,
+        id: Uuid,
+    ) -> Result<Vec<LinkTypeHistory>, OntologyClientError> {
+        self.get(token, &format!("/api/ontology/links/types/{id}/history")).await
+    }
+
+    async fn list_all_link_type_history(
+        &self,
+        token: &str,
+    ) -> Result<Vec<LinkTypeHistory>, OntologyClientError> {
+        self.get(token, "/api/ontology/links/types/history").await
+    }
     async fn list_links(&self, token: &str) -> Result<Vec<Link>, OntologyClientError> {
         self.get(token, "/api/ontology/links").await
+    }
+    async fn list_link_history(
+        &self,
+        token: &str,
+        id: Uuid,
+    ) -> Result<Vec<common::ontology::LinkHistory>, OntologyClientError> {
+        self.get(token, &format!("/api/ontology/links/{id}/history")).await
+    }
+
+    async fn list_all_link_history(
+        &self,
+        token: &str,
+    ) -> Result<Vec<common::ontology::LinkHistory>, OntologyClientError> {
+        self.get(token, "/api/ontology/links/history").await
     }
 
     async fn list_objects(
@@ -253,6 +357,65 @@ impl OntologyClient for HttpOntologyClient {
         id: Uuid,
     ) -> Result<Vec<ObjectHistory>, OntologyClientError> {
         self.get(token, &format!("/api/ontology/objects/{id}/history")).await
+    }
+
+    async fn list_all_object_history(
+        &self,
+        token: &str,
+    ) -> Result<Vec<ObjectHistory>, OntologyClientError> {
+        self.get(token, "/api/ontology/objects/history").await
+    }
+
+    async fn list_object_annotations(
+        &self,
+        token: &str,
+        id: Uuid,
+    ) -> Result<Vec<ObjectAnnotation>, OntologyClientError> {
+        self.get(token, &format!("/api/ontology/objects/{id}/annotations")).await
+    }
+
+    async fn list_all_object_annotations(
+        &self,
+        token: &str,
+    ) -> Result<Vec<ObjectAnnotation>, OntologyClientError> {
+        self.get(token, "/api/ontology/objects/annotations").await
+    }
+
+    async fn create_object_annotation(
+        &self,
+        token: &str,
+        actor: &str,
+        id: Uuid,
+        input: &CreateObjectAnnotationRequest,
+    ) -> Result<ObjectAnnotation, OntologyClientError> {
+        let response = self
+            .client
+            .post(format!("{}/api/ontology/objects/{id}/annotations", self.query_gateway_url))
+            .bearer_auth(token)
+            .header("x-actor", actor)
+            .json(input)
+            .send()
+            .await
+            .map_err(|e| OntologyClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(OntologyClientError::Rejected(response.status().as_u16()));
+        }
+        response.json().await.map_err(|e| OntologyClientError::Unreachable(e.to_string()))
+    }
+
+    async fn list_object_type_history(
+        &self,
+        token: &str,
+        id: Uuid,
+    ) -> Result<Vec<common::ontology::ObjectTypeHistory>, OntologyClientError> {
+        self.get(token, &format!("/api/ontology/objects/types/{id}/history")).await
+    }
+
+    async fn list_all_object_type_history(
+        &self,
+        token: &str,
+    ) -> Result<Vec<common::ontology::ObjectTypeHistory>, OntologyClientError> {
+        self.get(token, "/api/ontology/objects/types/history").await
     }
 
     async fn create_object(
@@ -290,6 +453,12 @@ impl OntologyClient for HttpOntologyClient {
         id: Uuid,
     ) -> Result<Vec<ActionTypeHistory>, OntologyClientError> {
         self.get(token, &format!("/api/ontology/actions/types/{id}/history")).await
+    }
+    async fn list_all_action_type_history(
+        &self,
+        token: &str,
+    ) -> Result<Vec<ActionTypeHistory>, OntologyClientError> {
+        self.get(token, "/api/ontology/actions/types/history").await
     }
     async fn list_action_reviews(
         &self,
@@ -389,56 +558,79 @@ impl OntologyClient for HttpOntologyClient {
     async fn create_link_type(
         &self,
         token: &str,
+        actor: &str,
         input: &CreateLinkTypeRequest,
     ) -> Result<(), OntologyClientError> {
-        self.post_json(token, "/api/ontology/links/types", input).await
+        self.post_json_with_actor(token, actor, "/api/ontology/links/types", input).await
     }
-    async fn delete_link_type(&self, token: &str, id: Uuid) -> Result<(), OntologyClientError> {
-        self.delete(token, &format!("/api/ontology/links/types/{id}")).await
+    async fn delete_link_type(
+        &self,
+        token: &str,
+        actor: &str,
+        id: Uuid,
+    ) -> Result<(), OntologyClientError> {
+        self.delete_with_actor(token, actor, &format!("/api/ontology/links/types/{id}")).await
     }
     async fn update_link_type(
         &self,
         token: &str,
+        actor: &str,
         id: Uuid,
         input: &CreateLinkTypeRequest,
     ) -> Result<(), OntologyClientError> {
-        self.post_json(token, &format!("/api/ontology/links/types/{id}"), input).await
+        self.post_json_with_actor(token, actor, &format!("/api/ontology/links/types/{id}"), input)
+            .await
     }
     async fn create_link(
         &self,
         token: &str,
+        actor: &str,
         input: &CreateLinkRequest,
     ) -> Result<(), OntologyClientError> {
-        self.post_json(token, "/api/ontology/links", input).await
+        self.post_json_with_actor(token, actor, "/api/ontology/links", input).await
     }
     async fn update_link(
         &self,
         token: &str,
+        actor: &str,
         id: Uuid,
         input: &CreateLinkRequest,
     ) -> Result<(), OntologyClientError> {
-        self.post_json(token, &format!("/api/ontology/links/{id}"), input).await
+        self.post_json_with_actor(token, actor, &format!("/api/ontology/links/{id}"), input).await
     }
-    async fn delete_link(&self, token: &str, id: Uuid) -> Result<(), OntologyClientError> {
-        self.delete(token, &format!("/api/ontology/links/{id}")).await
+    async fn delete_link(
+        &self,
+        token: &str,
+        actor: &str,
+        id: Uuid,
+    ) -> Result<(), OntologyClientError> {
+        self.delete_with_actor(token, actor, &format!("/api/ontology/links/{id}")).await
     }
     async fn create_action_type(
         &self,
         token: &str,
+        actor: &str,
         input: &CreateActionTypeRequest,
     ) -> Result<(), OntologyClientError> {
-        self.post_json(token, "/api/ontology/actions/types", input).await
+        self.post_json_with_actor(token, actor, "/api/ontology/actions/types", input).await
     }
-    async fn delete_action_type(&self, token: &str, id: Uuid) -> Result<(), OntologyClientError> {
-        self.delete(token, &format!("/api/ontology/actions/types/{id}")).await
+    async fn delete_action_type(
+        &self,
+        token: &str,
+        actor: &str,
+        id: Uuid,
+    ) -> Result<(), OntologyClientError> {
+        self.delete_with_actor(token, actor, &format!("/api/ontology/actions/types/{id}")).await
     }
     async fn update_action_type(
         &self,
         token: &str,
+        actor: &str,
         id: Uuid,
         input: &CreateActionTypeRequest,
     ) -> Result<(), OntologyClientError> {
-        self.post_json(token, &format!("/api/ontology/actions/types/{id}"), input).await
+        self.post_json_with_actor(token, actor, &format!("/api/ontology/actions/types/{id}"), input)
+            .await
     }
 }
 
@@ -463,11 +655,53 @@ impl HttpOntologyClient {
             Err(OntologyClientError::Rejected(response.status().as_u16()))
         }
     }
+    async fn post_json_with_actor<T: serde::Serialize>(
+        &self,
+        token: &str,
+        actor: &str,
+        path: &str,
+        input: &T,
+    ) -> Result<(), OntologyClientError> {
+        let response = self
+            .client
+            .post(format!("{}{}", self.query_gateway_url, path))
+            .bearer_auth(token)
+            .header("x-actor", actor)
+            .json(input)
+            .send()
+            .await
+            .map_err(|e| OntologyClientError::Unreachable(e.to_string()))?;
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(OntologyClientError::Rejected(response.status().as_u16()))
+        }
+    }
     async fn delete(&self, token: &str, path: &str) -> Result<(), OntologyClientError> {
         let response = self
             .client
             .delete(format!("{}{}", self.query_gateway_url, path))
             .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|e| OntologyClientError::Unreachable(e.to_string()))?;
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(OntologyClientError::Rejected(response.status().as_u16()))
+        }
+    }
+    async fn delete_with_actor(
+        &self,
+        token: &str,
+        actor: &str,
+        path: &str,
+    ) -> Result<(), OntologyClientError> {
+        let response = self
+            .client
+            .delete(format!("{}{}", self.query_gateway_url, path))
+            .bearer_auth(token)
+            .header("x-actor", actor)
             .send()
             .await
             .map_err(|e| OntologyClientError::Unreachable(e.to_string()))?;

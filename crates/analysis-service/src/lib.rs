@@ -4,6 +4,7 @@
 mod analysis_client;
 mod analysis_config_repository;
 mod batch_processor;
+mod brief_handlers;
 mod dead_letter;
 mod dead_letter_handlers;
 mod event_publisher;
@@ -16,7 +17,13 @@ pub use analysis_client::{
 pub use analysis_config_repository::{
     AnalysisConfigRepository, AnalysisConfigRepositoryError, PostgresAnalysisConfigRepository,
 };
-pub use batch_processor::{group_by_tenant, process_batch, AnalysisDeps, BatchError};
+pub use batch_processor::{
+    generate_incident_brief, group_by_tenant, process_batch, AnalysisDeps, BatchError,
+};
+pub use brief_handlers::{
+    build_router as incident_brief_router, AnalysisIncidentBriefGenerator, BriefState,
+    IncidentBriefGenerator,
+};
 pub use common::{
     ANALYSIS_CONFIG_CHANGED_EXCHANGE, RECORD_ANALYZED_EXCHANGE, RECORD_NORMALIZED_EXCHANGE,
 };

@@ -44,6 +44,14 @@ pub struct OidcSession {
 pub trait OidcClient: Send + Sync {
     async fn authorize(&self, provider: &str) -> Result<OidcAuthorization, OidcClientError>;
 
+    async fn authorize_for_tenant(
+        &self,
+        provider: &str,
+        _tenant_name: &str,
+    ) -> Result<OidcAuthorization, OidcClientError> {
+        self.authorize(provider).await
+    }
+
     async fn callback(
         &self,
         provider: &str,
@@ -100,6 +108,42 @@ impl OidcClient for HttpOidcClient {
             )));
         }
 
+        let body: AuthorizeResponse =
+            response.json().await.map_err(|e| OidcClientError::Unreachable(e.to_string()))?;
+        Ok(OidcAuthorization {
+            authorization_url: body.authorization_url,
+            csrf_token: body.csrf_token,
+            code_verifier: body.code_verifier,
+        })
+    }
+
+    async fn authorize_for_tenant(
+        &self,
+        provider: &str,
+        tenant_name: &str,
+    ) -> Result<OidcAuthorization, OidcClientError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/auth/oidc/{provider}/authorize", self.auth_service_url))
+            .query(&[("tenant_name", tenant_name)])
+            .send()
+            .await
+            .map_err(|e| OidcClientError::Unreachable(e.to_string()))?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(OidcClientError::UnknownProvider);
+        }
+        if response.status() == reqwest::StatusCode::BAD_REQUEST {
+            return Err(OidcClientError::UnknownWorkspace);
+        }
+        if response.status() == reqwest::StatusCode::FORBIDDEN {
+            return Err(OidcClientError::UnknownProvider);
+        }
+        if !response.status().is_success() {
+            return Err(OidcClientError::Unreachable(format!(
+                "unexpected status {}",
+                response.status()
+            )));
+        }
         let body: AuthorizeResponse =
             response.json().await.map_err(|e| OidcClientError::Unreachable(e.to_string()))?;
         Ok(OidcAuthorization {

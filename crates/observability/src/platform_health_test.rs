@@ -99,3 +99,25 @@ async fn http_checker_reports_down_when_server_is_unreachable() {
         .await;
     assert_eq!(status, Status::Down);
 }
+
+#[tokio::test]
+async fn http_checker_reads_request_metrics_when_instrumented() {
+    async fn metrics() -> &'static str {
+        "kizashi_http_requests_total 12\nkizashi_http_errors_total 2\nkizashi_http_request_duration_seconds_sum 1.5\nkizashi_http_request_duration_seconds_count 10\n"
+    }
+    let app = axum::Router::new().route("/metrics", axum::routing::get(metrics));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let checker = HttpServiceHealthChecker::new(reqwest::Client::new());
+    let metrics = checker
+        .metrics(&ServiceEndpoint { name: "svc".to_string(), url: format!("http://{addr}") })
+        .await
+        .unwrap();
+    assert_eq!(metrics.name, "svc");
+    assert_eq!(metrics.requests, 12);
+    assert_eq!(metrics.errors, 2);
+    assert_eq!(metrics.latency_seconds_count, 10);
+}

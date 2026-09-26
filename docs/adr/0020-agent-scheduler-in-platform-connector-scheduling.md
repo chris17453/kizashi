@@ -49,10 +49,10 @@ i.e., automate exactly what the deploy-script wizard's output does by hand today
    stance, and requires zero changes to any existing connector crate.
 4. **A pluggable `Invoker` trait** abstracts *how* a due poll actually gets run, with two
    implementations: `DockerInvoker` (runs `docker run --rm <image> ...` against the local
-   Docker socket — the docker-compose deployment path) and `KubernetesJobInvoker` (creates a
-   one-shot `batch/v1 Job` from a per-connector-type template — the K8s deployment path spec
-   §10 describes as the eventual target). v1 ships `DockerInvoker` only; `KubernetesJobInvoker`
-   is a documented follow-up, not built speculatively now.
+   Docker socket — the docker-compose deployment path) and `KubernetesJobInvoker` (creates and
+   monitors a bounded `batch/v1 Job` — the Helm deployment path). The Helm chart grants its
+   dedicated ServiceAccount only namespace-scoped Job/Pod read and create permissions; Compose
+   retains the Docker invoker.
 5. **API key handling stays exactly as today**: Agent Scheduler does not mint or store API
    keys itself. Each Agent's `config` must already carry a reference to (not the plaintext of)
    an API key — in practice, the same key the deploy-script wizard mints and shows once. This
@@ -85,6 +85,7 @@ panic/hang into an outage for every tenant's scheduling, not just that Agent's.
   10–30s, checking which Agents are due) means actual invocation can lag an Agent's configured
   interval by up to one tick — acceptable for a poller, not acceptable if a future feature ever
   needs cron-precision scheduling (flagged, not solved, here).
-- **First deployment of `KubernetesJobInvoker` is unscoped** — this ADR documents the shape
-  (`Invoker` trait, one impl per orchestrator) but only Phase 1 (`DockerInvoker`) ships with
-  this decision. Do not assume K8s scheduling works until that follow-up lands.
+- **Kubernetes execution is bounded but cluster-dependent.** Jobs use a configurable timeout,
+  no retries, TTL cleanup, and pod-log checkpoint recovery. The Helm chart supplies the required
+  namespace-scoped RBAC; image pull credentials, network reachability, and live-cluster admission
+  policy remain deployment-specific and require an in-cluster integration test.

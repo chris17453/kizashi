@@ -102,7 +102,11 @@ async fn main() {
     tracing::info!(%addr, "ontology-service listening");
 
     let state = ApiState { repository: repo.clone() };
-    let app = build_router(state.clone()).merge(ontology_router(state));
+    let metrics = Arc::new(common::HttpMetrics::default());
+    let app = common::instrument_router(
+        build_router(state.clone()).merge(ontology_router(state)),
+        metrics,
+    );
 
     axum::serve(listener, app).await.expect("server error");
 }

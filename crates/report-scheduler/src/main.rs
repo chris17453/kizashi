@@ -248,7 +248,7 @@ fn render_pdf(events: &[EventRow]) -> Vec<u8> {
         ));
     }
     content.push_str("ET\n");
-    let objects = vec![
+    let objects = [
         "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>".to_string(),
@@ -452,7 +452,10 @@ async fn main() {
             .await;
         }
     });
-    let app = Router::new().route("/healthz", get(|| async { "ok" }));
+    let app = common::instrument_router(
+        Router::new().route("/healthz", get(|| async { "ok" })),
+        std::sync::Arc::new(common::HttpMetrics::default()),
+    );
     let listener = tokio::net::TcpListener::bind(&bind_addr).await.expect("bind failed");
     tracing::info!(%bind_addr, interval_seconds = interval, "report-scheduler listening");
     axum::serve(listener, app).await.expect("server error");

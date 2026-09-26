@@ -148,7 +148,7 @@
       {% if can_write %}
       <td><input type="checkbox" name="ids" value="{{ event.event.id }}" data-event-linked="{% if event.incident.is_some() %}true{% else %}false{% endif %}" form="create-incident-form" aria-label="Select {{ event.event.event_type }} for incident creation"></td>
       {% endif %}
-      <td><a href="/events/{{ event.event.id }}">{{ event.event.event_type }}</a></td>
+      <td><a data-investigation-context="{{ event.event.id }}" data-investigation-label="{{ event.event.event_type }} · {{ event.event.group_key }}" data-investigation-type="Signal" data-investigation-href="/events/{{ event.event.id }}" data-investigation-route href="/events/{{ event.event.id }}">{{ event.event.event_type }}</a></td>
       <td>{{ event.event.group_key }}</td>
       <td class="status-{{ event.event.status }}">{{ event.event.status }}</td>
       <td>{{ event.event.occurred_at }}</td>

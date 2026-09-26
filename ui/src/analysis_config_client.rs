@@ -7,7 +7,7 @@ use common::{AnalysisProvider, Role};
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq)]
 pub struct AnalysisConfigView {
     pub prompt: String,
     #[serde(default)]

@@ -1,0 +1,5 @@
+{% extends "layout.html" %}{% block content %}
+<div class="page-header"><div><div class="page-kicker">Build Studio</div><h1>Data Sources</h1><p class="page-description">Define governed connections to authoritative systems. Credentials stay in a secret reference.</p></div>{% if can_manage %}<a class="btn btn-primary" href="/build/data-sources/new">New Data Source</a>{% endif %}</div>
+{% if let Some(message) = error %}<p class="error">{{ message }}</p>{% endif %}
+<section class="panel"><div class="panel-heading"><h2>Configured sources</h2><span class="pill pill-muted">{{ sources.len() }}</span></div>{% if sources.is_empty() %}<p class="muted">No Data Sources configured.</p>{% else %}<table><thead><tr><th>Name</th><th>Kind</th><th>Mode</th><th>State</th><th></th></tr></thead><tbody>{% for source in sources %}<tr><td><a href="/build/data-sources/{{ source.id }}">{{ source.name }}</a></td><td>{{ source.kind }}</td><td>{{ source.mode }}</td><td>{% if source.enabled %}Enabled{% else %}Disabled{% endif %}</td><td><a href="/build/data-sources/{{ source.id }}">Details</a></td></tr>{% endfor %}</tbody></table>{% endif %}</section>
+{% endblock %}

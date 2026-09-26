@@ -21,7 +21,7 @@ pub struct SessionContext {
     pub workspace: String,
 }
 
-fn workspace_from_cookie(headers: &HeaderMap, tenant_id: uuid::Uuid) -> String {
+pub(crate) fn workspace_from_cookie(headers: &HeaderMap, tenant_id: uuid::Uuid) -> String {
     headers
         .get(axum::http::header::COOKIE)
         .and_then(|value| value.to_str().ok())

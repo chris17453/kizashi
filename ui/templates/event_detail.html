@@ -4,12 +4,14 @@
   .event-waterfall{display:grid;gap:.55rem;margin:0 0 1.25rem}.event-waterfall-row{display:grid;grid-template-columns:minmax(9rem,1fr) minmax(10rem,2fr) minmax(7rem,.8fr);gap:.7rem;align-items:center;padding:.55rem .65rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface)}.event-waterfall-label{display:grid;gap:.15rem;min-width:0}.event-waterfall-label strong,.event-waterfall-label small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.event-waterfall-label small{color:var(--text-dim)}.event-waterfall-track{height:.7rem;overflow:hidden;border-radius:99px;background:var(--surface-raised)}.event-waterfall-fill{display:block;height:100%;min-width:5px;border-radius:inherit;background:linear-gradient(90deg,#4d82b6,#65c4aa)}.event-waterfall-fill.failure{background:linear-gradient(90deg,#b95d68,#e39a78)}.event-waterfall-time{color:var(--text-dim);font-size:.72rem;text-align:right;white-space:nowrap}.event-waterfall-legend{display:flex;gap:1rem;margin-top:.55rem;color:var(--text-dim);font-size:.72rem}.event-waterfall-legend span::before{content:'';display:inline-block;width:.55rem;height:.55rem;border-radius:2px;margin-right:.3rem;background:#65c4aa}.event-waterfall-legend .failure::before{background:#d47772}@media(max-width:700px){.event-waterfall-row{grid-template-columns:1fr;gap:.35rem}.event-waterfall-time{text-align:left}}
   .event-lineage-panel{margin:0 0 1.25rem}.event-lineage{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0}.event-lineage-stage{position:relative;display:grid;gap:.2rem;min-height:5.3rem;padding:.75rem .65rem;border:1px solid var(--border);background:var(--surface);color:var(--text);text-decoration:none}.event-lineage-stage:first-child{border-radius:8px 0 0 8px}.event-lineage-stage:last-child{border-radius:0 8px 8px 0}.event-lineage-stage:not(:last-child)::after{content:'›';position:absolute;z-index:2;right:-.65rem;top:1.7rem;width:1.25rem;height:1.25rem;border:1px solid var(--border);border-radius:50%;background:var(--surface-raised);color:var(--accent);font-size:1.15rem;line-height:1.05;text-align:center}.event-lineage-stage:hover{z-index:3;border-color:var(--accent);background:var(--surface-hover);text-decoration:none}.event-lineage-stage strong{font:700 1.3rem var(--mono,ui-monospace);color:var(--text)}.event-lineage-stage small{color:var(--text-dim);font-size:.68rem}.event-lineage-stage .event-lineage-label{font-weight:700;color:var(--text)}@media(max-width:800px){.event-lineage{grid-template-columns:1fr;gap:.4rem}.event-lineage-stage,.event-lineage-stage:first-child,.event-lineage-stage:last-child{border-radius:7px}.event-lineage-stage:not(:last-child)::after{content:'↓';right:calc(50% - .65rem);top:auto;bottom:-.85rem}}
   .event-response-preflight{display:block;margin-top:.5rem;padding:.55rem .65rem;border:1px solid var(--border-subtle);border-radius:6px;background:var(--surface-raised);color:var(--text-dim);font-size:.7rem;line-height:1.35}.event-response-preflight strong{color:var(--text)}
+  .event-model-selection-toolbar{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;margin:.55rem 0}.event-model-selection-status{color:var(--text-dim);font-size:.7rem}.event-model-selection-list{display:grid;gap:.45rem}.event-model-selection-item{display:flex;align-items:center;gap:.5rem;padding:.55rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface-raised)}.event-model-selection-item>a{display:grid;gap:.15rem;min-width:0;color:var(--text);text-decoration:none}.event-model-selection-item>a:hover{color:var(--accent)}.event-model-selection-item small{color:var(--text-dim)}
+  .event-timeline-tools{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}.event-timeline-tools input{min-width:16rem;flex:1}.event-timeline-tools select{min-width:10rem}.event-timeline-status{color:var(--text-dim);font-size:.68rem}
 </style>
 {% if let Some(e) = error %}
 <p class="error">{{ e }}</p>
 {% endif %}
 {% if let Some(ev) = event %}
-<div class="page-header"><div><div class="page-kicker">Signals / investigation</div><h1>{{ ev.event_type }}</h1><p class="page-description">{{ ev.group_key }} &middot; {{ ev.status }} &middot; occurred {{ ev.occurred_at }}</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/events">&larr; Back to events</a><a class="btn btn-secondary" href="/actions?q={{ ev.id }}">Action ledger for signal</a>{% if !linked_incidents.is_empty() %}<a class="btn" href="/incidents/{{ linked_incidents[0].id }}">Open case &rarr;</a>{% endif %}</div></div>
+<div class="page-header"><div><div class="page-kicker">Signals / investigation</div><h1>{{ ev.event_type }}</h1><p class="page-description">{{ ev.group_key }} &middot; {{ ev.status }} &middot; occurred {{ ev.occurred_at }}</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/events">&larr; Back to events</a><a class="btn btn-secondary" data-investigation-context="{{ ev.id }}" data-investigation-label="{{ ev.event_type }}" data-investigation-type="Signal" data-investigation-href="/events/{{ ev.id }}" data-investigation-route href="/actions?q={{ ev.id }}">Action ledger for signal</a>{% if !linked_incidents.is_empty() %}<a class="btn" data-investigation-context="{{ linked_incidents[0].id }}" data-investigation-label="{{ linked_incidents[0].title }}" data-investigation-type="Case" data-investigation-href="/incidents/{{ linked_incidents[0].id }}" data-investigation-route href="/incidents/{{ linked_incidents[0].id }}">Open case &rarr;</a>{% endif %}</div></div>
 {% if notice == "linked" %}<p class="success-banner">Signal linked to the selected incident and recorded in the case evidence chain.</p>{% endif %}
 {% if notice == "executed" %}<p class="success-banner">Governed action executed against the modeled entity. The invocation is recorded in the action ledger.</p>{% endif %}
 {% if notice == "rejected" %}<p class="error">The governed action was rejected. Review its preconditions and parameter contract.</p>{% endif %}
@@ -28,13 +30,13 @@
   <div class="metric-card"><span class="metric-label">Modeled handoff</span><strong>{{ modeled_object_count }}</strong><span class="metric-note">ontology object{% if modeled_object_count != 1 %}s{% endif %} matched</span></div>
 </section>
 
-<section class="panel event-lineage-panel" aria-label="Signal lineage handoff"><div class="panel-heading"><div><h2>Evidence-to-action lineage</h2><p class="muted">Follow this signal through the operating model without losing its source or response context.</p></div><span class="pill pill-muted">live handoff</span></div><div class="event-lineage"><a class="event-lineage-stage" href="/data"><span class="detail-label">Evidence</span><strong>{{ source_record_count }}</strong><span class="event-lineage-label">Source records</span><small>raw contributing context</small></a><a class="event-lineage-stage" href="/events/{{ ev.id }}"><span class="detail-label">Signal</span><strong>1</strong><span class="event-lineage-label">Event detail</span><small>{{ ev.status }} disposition</small></a>{% if let Some(incident) = linked_incidents.first() %}<a class="event-lineage-stage" href="/incidents/{{ incident.id }}"><span class="detail-label">Response</span><strong>{{ linked_case_count }}</strong><span class="event-lineage-label">Linked cases</span><small>open investigation context</small></a>{% else %}<a class="event-lineage-stage" href="#event-response"><span class="detail-label">Response</span><strong>{{ linked_case_count }}</strong><span class="event-lineage-label">Linked cases</span><small>create or attach a case</small></a>{% endif %}{% if let Some(context) = modeled_context %}<a class="event-lineage-stage" href="/ontology?object_id={{ context.id }}#object-{{ context.id }}"><span class="detail-label">Model</span><strong>{{ modeled_object_count }}</strong><span class="event-lineage-label">Modeled entities</span><small>{{ context.type_name }} context</small></a>{% else %}<a class="event-lineage-stage" href="#modeled-context"><span class="detail-label">Model</span><strong>{{ modeled_object_count }}</strong><span class="event-lineage-label">Modeled entities</span><small>awaiting ontology match</small></a>{% endif %}<a class="event-lineage-stage" href="/actions?q={{ ev.id }}"><span class="detail-label">Decision</span><strong>{{ execution_count }}</strong><span class="event-lineage-label">Governed response</span><small>audit ledger handoff</small></a></div></section>
+<section class="panel event-lineage-panel" aria-label="Signal lineage handoff"><div class="panel-heading"><div><h2>Evidence-to-action lineage</h2><p class="muted">Follow this signal through the operating model without losing its source or response context.</p></div><span class="pill pill-muted">live handoff</span></div><div class="event-lineage"><a class="event-lineage-stage" data-investigation-context="{{ ev.id }}" data-investigation-label="{{ ev.event_type }} evidence" data-investigation-type="Evidence" data-investigation-href="/data" data-investigation-route href="/data"><span class="detail-label">Evidence</span><strong>{{ source_record_count }}</strong><span class="event-lineage-label">Source records</span><small>raw contributing context</small></a><a class="event-lineage-stage" data-investigation-context="{{ ev.id }}" data-investigation-label="{{ ev.event_type }}" data-investigation-type="Signal" data-investigation-href="/events/{{ ev.id }}" data-investigation-route href="/events/{{ ev.id }}"><span class="detail-label">Signal</span><strong>1</strong><span class="event-lineage-label">Event detail</span><small>{{ ev.status }} disposition</small></a>{% if let Some(incident) = linked_incidents.first() %}<a class="event-lineage-stage" data-investigation-context="{{ incident.id }}" data-investigation-label="{{ incident.title }}" data-investigation-type="Case" data-investigation-href="/incidents/{{ incident.id }}" data-investigation-route href="/incidents/{{ incident.id }}"><span class="detail-label">Response</span><strong>{{ linked_case_count }}</strong><span class="event-lineage-label">Linked cases</span><small>open investigation context</small></a>{% else %}<a class="event-lineage-stage" data-investigation-context="{{ ev.id }}" data-investigation-label="Create case from {{ ev.event_type }}" data-investigation-type="Case" data-investigation-href="/events/{{ ev.id }}#event-response" data-investigation-route href="#event-response"><span class="detail-label">Response</span><strong>{{ linked_case_count }}</strong><span class="event-lineage-label">Linked cases</span><small>create or attach a case</small></a>{% endif %}{% if let Some(context) = modeled_context %}<a class="event-lineage-stage" data-investigation-context="{{ context.id }}" data-investigation-label="{{ context.label }}" data-investigation-type="Object" data-investigation-href="/ontology?object_id={{ context.id }}#object-{{ context.id }}" data-investigation-route href="/ontology?object_id={{ context.id }}#object-{{ context.id }}"><span class="detail-label">Model</span><strong>{{ modeled_object_count }}</strong><span class="event-lineage-label">Modeled entities</span><small>{{ context.type_name }} context</small></a>{% else %}<a class="event-lineage-stage" data-investigation-context="{{ ev.id }}" data-investigation-label="Model {{ ev.event_type }}" data-investigation-type="Object" data-investigation-href="/events/{{ ev.id }}#modeled-context" data-investigation-route href="#modeled-context"><span class="detail-label">Model</span><strong>{{ modeled_object_count }}</strong><span class="event-lineage-label">Modeled entities</span><small>awaiting ontology match</small></a>{% endif %}<a class="event-lineage-stage" data-investigation-context="{{ ev.id }}" data-investigation-label="{{ ev.event_type }} governed response" data-investigation-type="Decision" data-investigation-href="/actions?q={{ ev.id }}" data-investigation-route href="/actions?q={{ ev.id }}"><span class="detail-label">Decision</span><strong>{{ execution_count }}</strong><span class="event-lineage-label">Governed response</span><small>audit ledger handoff</small></a></div></section>
 
 {% if !linked_incidents.is_empty() %}
 <div class="linked-context">
   <div class="linked-context-label">Operational context</div>
   {% for incident in linked_incidents %}
-  <a href="/incidents/{{ incident.id }}" class="linked-context-card">
+  <a data-investigation-context="{{ incident.id }}" data-investigation-label="{{ incident.title }}" data-investigation-type="Case" data-investigation-href="/incidents/{{ incident.id }}" data-investigation-route href="/incidents/{{ incident.id }}" class="linked-context-card">
     <span class="pill {% if incident.severity == "critical" || incident.severity == "high" %}pill-down{% else %}pill-muted{% endif %}">{{ incident.severity }}</span>
     <strong>{{ incident.title }}</strong>
     <span class="muted">{{ incident.status }} · Open incident &rarr;</span>
@@ -56,7 +58,7 @@
       <button class="btn" type="submit">Create case from signal &rarr;</button><span class="event-response-preflight" data-event-case-create-preflight><strong>Case preflight:</strong> This will create a new case with this signal preserved as evidence.</span>
     </form>
     {% else %}
-    <div class="event-response-existing"><div class="detail-label">Existing investigation</div><p class="muted">This signal already has case context. Review that case before taking another lifecycle action.</p>{% for incident in linked_incidents %}<a class="btn" href="/incidents/{{ incident.id }}">Open {{ incident.title }} &rarr;</a>{% endfor %}</div>
+    <div class="event-response-existing"><div class="detail-label">Existing investigation</div><p class="muted">This signal already has case context. Review that case before taking another lifecycle action.</p>{% for incident in linked_incidents %}<a class="btn" data-investigation-context="{{ incident.id }}" data-investigation-label="{{ incident.title }}" data-investigation-type="Case" data-investigation-href="/incidents/{{ incident.id }}" data-investigation-route href="/incidents/{{ incident.id }}">Open {{ incident.title }} &rarr;</a>{% endfor %}</div>
     {% endif %}
     <form class="inline" method="post" action="/events/{{ ev.id }}/link-incident">
       <div class="detail-label">Attach to an existing case</div>
@@ -68,10 +70,10 @@
 
 <div class="investigation-context-grid">
   <section class="panel" id="modeled-context"><div class="panel-heading"><div><h2>Modeled context</h2><p class="muted">The operational object associated with this signal.</p></div></div>
-  {% if let Some(context) = modeled_context %}<a class="modeled-context-card" href="/ontology?object_id={{ context.id }}#object-{{ context.id }}"><span class="object-dot"></span><span><strong>{{ context.label }}</strong><small>{{ context.type_name }} · {{ context.status }} · Open ontology &rarr;</small></span></a>{% else %}<p class="muted">No ontology object matches entity <code>{{ ev.entity_ref }}</code>.</p>{% endif %}</section>
-  {% if related_modeled_contexts.len() > 1 %}<section class="panel"><div class="panel-heading"><div><h2>Additional modeled entities</h2><p class="muted">Other ontology objects supported by this signal’s source lineage.</p></div><span class="pill pill-muted">{{ related_modeled_contexts.len() }} total</span></div><div class="record-context-list">{% for context in related_modeled_contexts %}<a href="/ontology?object_id={{ context.id }}#object-{{ context.id }}"><strong>{{ context.label }}</strong><small>{{ context.type_name }} · {{ context.status }} · Open ontology &rarr;</small></a>{% endfor %}</div></section>{% endif %}
+  {% if let Some(context) = modeled_context %}<a class="modeled-context-card" data-investigation-context="{{ context.id }}" data-investigation-label="{{ context.label }}" data-investigation-type="Object" data-investigation-href="/ontology?object_id={{ context.id }}#object-{{ context.id }}" data-investigation-route href="/ontology?object_id={{ context.id }}#object-{{ context.id }}"><span class="object-dot"></span><span><strong>{{ context.label }}</strong><small>{{ context.type_name }} · {{ context.status }} · Open ontology &rarr;</small></span></a>{% else %}<p class="muted">No ontology object matches entity <code>{{ ev.entity_ref }}</code>.</p>{% endif %}</section>
+  {% if related_modeled_contexts.len() > 1 %}<section class="panel"><div class="panel-heading"><div><h2>Additional modeled entities</h2><p class="muted">Other ontology objects supported by this signal’s source lineage.</p></div><span class="pill pill-muted">{{ related_modeled_contexts.len() }} total</span></div><div class="event-model-selection-toolbar"><button type="button" class="btn-link" data-event-model-select-all>Select all entities</button><button type="button" class="btn btn-secondary" data-event-model-compare disabled>Compare selected</button><button type="button" class="btn" data-event-model-load disabled>Load into workbench</button><span class="event-model-selection-status" data-event-model-status>No modeled entities selected.</span></div><div class="event-model-selection-list">{% for context in related_modeled_contexts %}<label class="event-model-selection-item"><input type="checkbox" data-event-model-id="{{ context.id }}" data-event-model-type="{{ context.object_type_id }}"><a data-investigation-context="{{ context.id }}" data-investigation-label="{{ context.label }}" data-investigation-type="Object" data-investigation-href="/ontology?object_id={{ context.id }}#object-{{ context.id }}" data-investigation-route href="/ontology?object_id={{ context.id }}#object-{{ context.id }}"><strong>{{ context.label }}</strong><small>{{ context.type_name }} · {{ context.status }} · Open ontology &rarr;</small></a></label>{% endfor %}</div></section>{% endif %}
   <section class="panel"><div class="panel-heading"><div><h2>Governed response</h2><p class="muted">Actions evaluated against the modeled object.</p></div><a class="btn-link" href="/actions">Open Action Center</a></div>
-  {% if governed_actions.is_empty() %}<p class="muted">No governed action context is available for this signal.</p>{% else %}<div class="governed-action-list">{% for action in governed_actions %}<div class="governed-action-row"><span class="posture-dot {% if let Some(outcome) = action.invocation_outcome %}{% if outcome == "Completed" %}posture-good{% else %}posture-risk{% endif %}{% else if action.eligible %}posture-good{% else %}posture-risk{% endif %}"></span><strong>{{ action.name }}</strong><small class="muted">Target: {{ action.target_type_name }} · {% if let Some(outcome) = action.invocation_outcome %}{{ outcome }}{% else if action.eligible %}Eligible to run{% else %}Contract blocked{% endif %}</small>{% if let Some(invocation_id) = action.invocation_id %}<a class="btn-link" href="/actions/{{ invocation_id }}">Decision record &rarr;</a><span class="pill {% if action.review_status == "approved" %}pill-up{% else if action.review_stale %}pill-down{% else %}pill-muted{% endif %}">Review: {{ action.review_status }}{% if action.review_stale %} · overdue{% endif %}</span>{% if let Some(owner) = action.review_assignee %}<small class="muted">Owner: {{ owner }}</small>{% endif %}{% else %}<span class="muted">No invocation for this signal</span>{% endif %}</div>{% endfor %}</div>{% endif %}</section>
+  {% if governed_actions.is_empty() %}<p class="muted">No governed action context is available for this signal.</p>{% else %}<div class="governed-action-list">{% for action in governed_actions %}<div class="governed-action-row"><span class="posture-dot {% if let Some(outcome) = action.invocation_outcome %}{% if outcome == "Completed" %}posture-good{% else %}posture-risk{% endif %}{% else if action.eligible %}posture-good{% else %}posture-risk{% endif %}"></span><strong>{{ action.name }}</strong><small class="muted">Target: {{ action.target_type_name }} · {% if let Some(outcome) = action.invocation_outcome %}{{ outcome }}{% else if action.eligible %}Eligible to run{% else %}Contract blocked{% endif %}</small>{% if let Some(invocation_id) = action.invocation_id %}<a class="btn-link" data-investigation-context="{{ invocation_id }}" data-investigation-label="{{ action.name }}" data-investigation-type="Decision" data-investigation-href="/actions/{{ invocation_id }}" data-investigation-route href="/actions/{{ invocation_id }}">Decision record &rarr;</a><span class="pill {% if action.review_status == "approved" %}pill-up{% else if action.review_stale %}pill-down{% else %}pill-muted{% endif %}">Review: {{ action.review_status }}{% if action.review_stale %} · overdue{% endif %}</span>{% if let Some(owner) = action.review_assignee %}<small class="muted">Owner: {{ owner }}</small>{% endif %}{% else %}<span class="muted">No invocation for this signal</span>{% endif %}</div>{% endfor %}</div>{% endif %}</section>
 </div>
 
 {% if can_write %}
@@ -137,13 +139,14 @@
 </div>
 
 <h2 class="section-title">Timeline</h2>
+<div class="event-timeline-tools" role="search" aria-label="Filter signal timeline"><label class="sr-only" for="event-timeline-kind">Timeline source</label><select id="event-timeline-kind"><option value="">All downstream steps</option><option value="record">Source records</option><option value="normal">Normalization</option><option value="analy">Analysis</option><option value="trigger">Triggering</option><option value="action">Governed actions</option><option value="case">Case handoff</option></select><label class="sr-only" for="event-timeline-query">Search signal timeline</label><input id="event-timeline-query" type="search" placeholder="Filter step or execution detail…" autocomplete="off"><span class="event-timeline-status" id="event-timeline-status" aria-live="polite">All timeline steps</span></div>
 {% if timeline.is_empty() %}
 <div class="empty-state">
   <p>Nothing recorded yet.</p>
 </div>
 {% else %}
 <section class="panel" aria-label="Signal response waterfall"><div class="panel-heading"><div><h2>Response waterfall</h2><p class="muted">Relative time from signal occurrence to each downstream execution. Failed or non-completed steps are highlighted.</p></div><span class="pill pill-muted">{{ timeline.len() }} steps</span></div><div class="event-waterfall">{% for entry in timeline %}<div class="event-waterfall-row"><div class="event-waterfall-label"><strong>{{ entry.label }}</strong><small>{{ entry.detail }}</small></div><span class="event-waterfall-track"><span class="event-waterfall-fill{% if entry.is_failure %} failure{% endif %}" style="width:{{ entry.latency_pct }}%"></span></span><span class="event-waterfall-time">{% if let Some(latency) = entry.latency_from_event %}+{{ latency }}{% else %}signal origin{% endif %}</span></div>{% endfor %}</div><div class="event-waterfall-legend"><span>completed / recorded</span><span class="failure">failed / needs review</span></div></section>
-<table>
+<table class="event-timeline-table">
   <thead>
     <tr>
       <th scope="col">When</th>
@@ -200,16 +203,60 @@
       <td>{{ record.connector_id }}</td>
       <td>{{ record.source_type }}</td>
       <td>{{ record.ingested_at }}</td>
-      <td><a href="/data/{{ record.id }}">View record</a> &middot; <a href="/data/{{ record.id }}/journey">View journey</a></td>
+      <td><a data-investigation-context="{{ record.id }}" data-investigation-label="{{ record.id }}" data-investigation-type="Evidence" data-investigation-href="/data/{{ record.id }}" data-investigation-route href="/data/{{ record.id }}">View record</a> &middot; <a data-investigation-context="{{ record.id }}" data-investigation-label="{{ record.id }}" data-investigation-type="Evidence" data-investigation-href="/data/{{ record.id }}" data-investigation-route href="/data/{{ record.id }}/journey">View journey</a></td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 {% endif %}
 
+<script>
+  (function () {
+    var eventId = '{{ ev.id }}';
+    var actions = document.querySelector('.quick-actions');
+    if (!actions || !eventId) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-secondary';
+    button.id = 'event-360-export';
+    button.textContent = 'Export signal investigation ↓';
+    button.addEventListener('click', function () {
+      button.disabled = true;
+      button.textContent = 'Preparing export…';
+      fetch('/api/v1/events/' + encodeURIComponent(eventId) + '/360', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function (response) { if (!response.ok) throw new Error('Signal investigation unavailable (' + response.status + ')'); return response.blob(); })
+        .then(function (blob) { var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'signal-investigation-' + eventId + '.json'; document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(function () { URL.revokeObjectURL(link.href); }, 0); })
+        .catch(function (error) { window.alert(error.message); })
+        .finally(function () { button.disabled = false; button.textContent = 'Export signal investigation ↓'; });
+    });
+    actions.appendChild(button);
+  }());
+</script>
+
 {% else %}
 <p class="muted">Event not found.</p>
 {% endif %}
+<script>
+  (function () {
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('[data-event-model-id]'));
+    var selectAll = document.querySelector('[data-event-model-select-all]');
+    var compare = document.querySelector('[data-event-model-compare]');
+    var load = document.querySelector('[data-event-model-load]');
+    var status = document.querySelector('[data-event-model-status]');
+    if (!boxes.length || !compare || !load) return;
+    var ids = [], types = {};
+    try { ids = JSON.parse(localStorage.getItem('kizashi.ontology.selection') || '[]'); types = JSON.parse(localStorage.getItem('kizashi.ontology.selection-types') || '{}'); } catch (_) {}
+    boxes.forEach(function (box) { box.checked = ids.indexOf(box.dataset.eventModelId) !== -1; });
+    function selected() { return boxes.filter(function (box) { return box.checked; }); }
+    function sync() { var picked = selected(); compare.disabled = picked.length < 2; load.disabled = picked.length === 0; if (status) status.textContent = picked.length ? picked.length + ' modeled entit' + (picked.length === 1 ? 'y' : 'ies') + ' selected.' : 'No modeled entities selected.'; if (selectAll) selectAll.textContent = picked.length === boxes.length ? 'Clear entities' : 'Select all entities'; }
+    function persist() { var picked = selected(); picked.forEach(function (box) { ids = ids.filter(function (id) { return id !== box.dataset.eventModelId; }); ids.push(box.dataset.eventModelId); types[box.dataset.eventModelId] = box.dataset.eventModelType; }); try { localStorage.setItem('kizashi.ontology.selection', JSON.stringify(ids)); localStorage.setItem('kizashi.ontology.selection-types', JSON.stringify(types)); } catch (_) {} return picked.map(function (box) { return box.dataset.eventModelId; }); }
+    boxes.forEach(function (box) { box.addEventListener('change', sync); });
+    if (selectAll) selectAll.addEventListener('click', function () { var all = selected().length === boxes.length; boxes.forEach(function (box) { box.checked = !all; }); sync(); });
+    compare.addEventListener('click', function () { var picked = persist(); window.location.href = '/ontology/compare?ids=' + encodeURIComponent(picked.slice(0, 6).join(',')); });
+    load.addEventListener('click', function () { persist(); window.location.href = '/ontology'; });
+    sync();
+  }());
+</script>
 {% if can_write %}<script>
   document.querySelectorAll('[data-event-action-form]').forEach(function (form) {
     form.addEventListener('submit', function (event) {
@@ -227,7 +274,8 @@
       } catch (_) { event.preventDefault(); window.alert('Parameters must match the governed action schema.'); }
     });
   });
-</script>{% endif %}
+</script>
+{% endif %}
 {% if can_write %}<script>
   (function () {
     var createForm = document.querySelector('form[action$="/create-incident"]');
@@ -241,4 +289,29 @@
     if (link) { link.addEventListener('change', syncLink); syncLink(); }
   }());
 </script>{% endif %}
+<script>
+  (function () {
+    var kind = document.getElementById('event-timeline-kind');
+    var query = document.getElementById('event-timeline-query');
+    var status = document.getElementById('event-timeline-status');
+    var tools = document.querySelector('.event-timeline-tools');
+    if (!kind || !query) return;
+    function apply() {
+      var selected = kind.value.toLowerCase();
+      var text = query.value.trim().toLowerCase();
+      var waterfall = Array.prototype.slice.call(document.querySelectorAll('.event-waterfall-row'));
+      var table = Array.prototype.slice.call(document.querySelectorAll('.event-timeline-table tbody tr'));
+      if (!waterfall.length && !table.length) { if (tools) tools.hidden = true; return; }
+      var visible = 0;
+      function matches(row) { var value = row.textContent.toLowerCase(); return (!selected || value.indexOf(selected) !== -1) && (!text || value.indexOf(text) !== -1); }
+      waterfall.forEach(function (row) { row.hidden = !matches(row); });
+      table.forEach(function (row) { row.hidden = !matches(row); if (!row.hidden) visible += 1; });
+      var total = table.length || waterfall.length;
+      if (status) status.textContent = visible === total ? 'All timeline steps' : visible + ' of ' + total + ' steps shown';
+    }
+    kind.addEventListener('change', apply);
+    query.addEventListener('input', apply);
+    apply();
+  }());
+</script>
 {% endblock %}

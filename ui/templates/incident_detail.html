@@ -28,6 +28,7 @@
   @media (max-width:620px) { .case-response-outcomes { grid-template-columns:1fr; } }
   .case-clock{display:grid;gap:.7rem;margin:0 0 1rem}.case-clock-row{display:grid;grid-template-columns:8rem minmax(8rem,1fr) 5.5rem;gap:.65rem;align-items:center;padding:.55rem .65rem;border:1px solid var(--border-subtle);border-radius:7px;background:var(--surface);text-decoration:none;color:var(--text)}.case-clock-row:hover{border-color:var(--accent);background:var(--surface-hover)}.case-clock-label{display:grid;gap:.15rem;min-width:0}.case-clock-label strong,.case-clock-label small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.case-clock-label small{color:var(--text-dim);font-size:.68rem}.case-clock-track{height:.65rem;border-radius:99px;overflow:hidden;background:var(--surface-raised)}.case-clock-fill{display:block;height:100%;min-width:4px;border-radius:inherit;background:var(--accent)}.case-clock-fill.good{background:var(--success)}.case-clock-fill.warning{background:var(--warning)}.case-clock-fill.risk{background:var(--danger)}.case-clock-time{text-align:right;color:var(--text-dim);font:600 .72rem ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}@media(max-width:620px){.case-clock-row{grid-template-columns:1fr;gap:.35rem}.case-clock-time{text-align:left}}
   .case-action-preflight{margin:.65rem 0;padding:.6rem .7rem;border:1px solid var(--border);border-radius:7px;background:var(--surface-raised);color:var(--text-dim);font-size:.7rem}.case-action-preflight strong{display:block;color:var(--text);font-size:.74rem}.case-action-preflight.ready{border-color:color-mix(in srgb,var(--success) 55%,var(--border))}.case-action-preflight.ready strong{color:var(--success)}
+  .case-impact-selection-toolbar{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;margin:.55rem 0}.case-impact-selection-status{color:var(--text-dim);font-size:.7rem}.case-impact-select{flex:0 0 auto}.case-impact-row{display:flex;align-items:center;gap:.5rem}.case-impact-row>a{flex:1;min-width:0}
 </style>
 {% if let Some(e) = error %}
 <p class="error">{{ e }}</p>
@@ -44,8 +45,17 @@
 {% if notice == "correlated" %}
 <div class="notice success" role="status"><strong>Signal correlated into this investigation.</strong> The existing case was kept intact and the new signal was appended with an audit entry.</div>
 {% endif %}
+{% if notice == "brief_generated" %}
+<div class="notice success" role="status"><strong>Evidence brief regenerated.</strong> The case summary now reflects its current linked signals and is recorded in the case audit history.</div>
+{% endif %}
+{% if notice == "brief_failed" %}
+<div class="notice warning" role="alert"><strong>Evidence brief unavailable.</strong> The case was not changed; refresh the evidence and try again.</div>
+{% endif %}
 {% if let Some(inc) = incident %}
-<div class="page-header"><div><div class="page-kicker">Operations / investigation</div><h1>{{ inc.title }}</h1><p class="page-description">Case record with lifecycle state, linked evidence, and governed operator controls.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/incidents">&larr; Back to queue</a><a class="btn btn-secondary" href="/events?linked_incident={{ inc.id }}">Attach signals</a><a class="btn btn-secondary" href="/events">Browse events</a><a class="btn btn-secondary" href="/actions">Action ledger &rarr;</a><a class="btn btn-secondary" href="/incidents/{{ inc.id }}/export.csv">Export case evidence &darr;</a></div></div>
+<style>
+  .case-timeline-tools{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}.case-timeline-tools input{min-width:14rem;flex:1}.case-timeline-tools select{min-width:9rem}.case-timeline-status{color:var(--text-dim);font-size:.68rem}
+</style>
+<div class="page-header"><div><div class="page-kicker">Operations / investigation</div><h1>{{ inc.title }}</h1><p class="page-description">Case record with lifecycle state, linked evidence, and governed operator controls.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/incidents">&larr; Back to queue</a><a class="btn btn-secondary" data-investigation-context="{{ inc.id }}" data-investigation-label="{{ inc.title }}" data-investigation-type="Case" data-investigation-href="/incidents/{{ inc.id }}" data-investigation-route href="/events?linked_incident={{ inc.id }}">Attach signals</a><a class="btn btn-secondary" href="/events">Browse events</a><a class="btn btn-secondary" data-investigation-context="{{ inc.id }}" data-investigation-label="{{ inc.title }} response ledger" data-investigation-type="Case" data-investigation-href="/incidents/{{ inc.id }}" data-investigation-route href="/actions">Action ledger &rarr;</a><a class="btn btn-secondary" href="/incidents/{{ inc.id }}/export.csv">Export case evidence &darr;</a></div></div>
 
 <div class="linked-context">
   <div class="linked-context-label">Investigation brief</div>
@@ -54,6 +64,7 @@
     <div>
       <strong>{{ inc.title }}</strong>
       {% if !inc.summary.is_empty() %}<p>{{ inc.summary }}</p>{% else %}<p class="muted">No incident brief has been recorded yet. Use the linked evidence below to establish scope and next action.</p>{% endif %}
+      {% if can_write %}<form method="post" action="/incidents/{{ inc.id }}/brief"><button class="btn-link" type="submit">Regenerate evidence brief &rarr;</button></form>{% endif %}
     </div>
   </div>
 </div>
@@ -122,11 +133,49 @@
   <p>No events are linked to this incident.</p>
   <p>Open <a href="/events">Events</a> to select signals and attach them to this case.</p>
 </div>
+<script>
+  (function () {
+    var timeline = document.querySelector('.case-timeline');
+    var kind = document.getElementById('case-timeline-kind');
+    var query = document.getElementById('case-timeline-query');
+    var from = document.getElementById('case-timeline-from');
+    var to = document.getElementById('case-timeline-to');
+    var status = document.getElementById('case-timeline-status');
+    if (!timeline || !kind || !query || !from || !to) return;
+    function apply() {
+      var selectedKind = kind.value.toLowerCase();
+      var text = query.value.trim().toLowerCase();
+      var start = from.value;
+      var end = to.value;
+      var rows = Array.prototype.slice.call(timeline.querySelectorAll('.case-timeline-entry'));
+      var visible = 0;
+      rows.forEach(function (row) {
+        var label = (row.querySelector('.pill') || {}).textContent || '';
+        var occurred = (row.querySelector('time') || {}).textContent || '';
+        var matchesKind = !selectedKind || label.toLowerCase().indexOf(selectedKind) !== -1;
+        var matchesText = !text || row.textContent.toLowerCase().indexOf(text) !== -1;
+        var date = occurred.slice(0, 10);
+        var matchesStart = !start || (date && date >= start);
+        var matchesEnd = !end || (date && date <= end);
+        row.hidden = !(matchesKind && matchesText && matchesStart && matchesEnd);
+        if (!row.hidden) visible += 1;
+      });
+      var total = rows.length;
+      if (status) status.textContent = visible === total ? 'All timeline entries' : visible + ' of ' + total + ' entries shown';
+    }
+    kind.addEventListener('change', apply);
+    query.addEventListener('input', apply);
+    from.addEventListener('change', apply);
+    to.addEventListener('change', apply);
+    apply();
+  }());
+</script>
 {% else %}
 <table>
   <thead>
     <tr>
       <th scope="col">Event type</th>
+      <th scope="col">Correlation</th>
       <th scope="col">Status</th>
       <th scope="col">Occurred at</th>
       <th scope="col"></th>
@@ -137,9 +186,10 @@
     {% for row in linked_events %}
     <tr>
       <td><strong>{{ row.event.event_type }}</strong><br><span class="muted">{{ row.event.group_key }}</span></td>
+      <td><span class="pill pill-muted">{{ row.correlation }}</span></td>
       <td>{{ row.event.status }}</td>
       <td>{{ row.event.occurred_at }}</td>
-      <td><a href="/events/{{ row.event.id }}">View event</a></td>
+      <td><a data-investigation-context="{{ row.event.id }}" data-investigation-label="{{ row.event.event_type }}" data-investigation-type="Signal" data-investigation-href="/events/{{ row.event.id }}" data-investigation-route href="/events/{{ row.event.id }}">View event</a></td>
       {% if can_write %}
       <td>
         <form class="inline" method="post" action="/incidents/{{ inc.id }}/events/{{ row.event.id }}/unlink" style="display:inline">
@@ -155,13 +205,14 @@
 </section>
 
 <section class="panel incident-source-evidence-panel"><div class="panel-heading"><div><h2>Source evidence</h2><p class="muted">Raw records that contributed to the linked signals, with direct lineage into the evidence journey.</p></div><span class="pill pill-muted">{{ evidence_records.len() }} record{% if evidence_records.len() != 1 %}s{% endif %}</span></div>
-{% if evidence_records.is_empty() %}<div class="empty-state compact"><p>No source-record lineage is attached to the linked signals.</p><p class="muted">Open the event detail page to inspect its payload and contributing evidence.</p></div>{% else %}<div class="incident-source-record-grid">{% for record in evidence_records %}<a class="incident-source-record" href="/data/{{ record.id }}/journey"><span class="object-dot"></span><span><strong>{{ record.id }}</strong><small>{{ record.event_count }} contributing signal{% if record.event_count != 1 %}s{% endif %} · {{ record.event_types }}</small></span><span class="work-item-arrow">&rarr;</span></a>{% endfor %}</div>{% endif %}
+{% if evidence_records.is_empty() %}<div class="empty-state compact"><p>No source-record lineage is attached to the linked signals.</p><p class="muted">Open the event detail page to inspect its payload and contributing evidence.</p></div>{% else %}<div class="incident-source-record-grid">{% for record in evidence_records %}<a class="incident-source-record" data-investigation-context="{{ record.id }}" data-investigation-label="{{ record.id }}" data-investigation-type="Evidence" data-investigation-href="/data/{{ record.id }}" data-investigation-route href="/data/{{ record.id }}/journey"><span class="object-dot"></span><span><strong>{{ record.id }}</strong><small>{{ record.event_count }} contributing signal{% if record.event_count != 1 %}s{% endif %} · {{ record.event_types }}</small></span><span class="work-item-arrow">&rarr;</span></a>{% endfor %}</div>{% endif %}
 </section>
 
 <section class="panel incident-timeline-panel">
   <div class="panel-heading"><div><h2>Investigation timeline</h2><p class="muted">One chronological view of signals, decisions, lifecycle changes, and operator findings.</p></div><span class="pill pill-muted">{{ timeline.len() }} entries</span></div>
   {% if !timeline_metrics.is_empty() %}<div class="detail-label">Response clock <span class="muted">elapsed from case creation</span></div><div class="case-clock" aria-label="Incident response clock">{% for metric in timeline_metrics %}{% if let Some(href) = metric.href %}<a class="case-clock-row" href="{{ href }}"><span class="case-clock-label"><strong>{{ metric.label }}</strong><small>{{ metric.detail }}</small></span><span class="case-clock-track"><span class="case-clock-fill {{ metric.tone }}" style="width:{{ metric.width_pct }}%"></span></span><span class="case-clock-time">+{{ metric.elapsed }}</span></a>{% else %}<div class="case-clock-row"><span class="case-clock-label"><strong>{{ metric.label }}</strong><small>{{ metric.detail }}</small></span><span class="case-clock-track"><span class="case-clock-fill {{ metric.tone }}" style="width:{{ metric.width_pct }}%"></span></span><span class="case-clock-time">+{{ metric.elapsed }}</span></div>{% endif %}{% endfor %}</div>{% endif %}
   {% if timeline.is_empty() %}<div class="empty-state compact"><p>No case timeline entries are available.</p></div>{% else %}
+  <div class="case-timeline-tools" role="search" aria-label="Filter incident timeline"><label class="sr-only" for="case-timeline-kind">Timeline source</label><select id="case-timeline-kind"><option value="">All sources</option><option value="signal">Signals</option><option value="response">Governed responses</option><option value="note">Investigation notes</option><option value="case">Case lifecycle</option><option value="model">Model changes</option><option value="correlation">Correlation</option></select><label class="sr-only" for="case-timeline-query">Search incident timeline</label><input id="case-timeline-query" type="search" placeholder="Filter actor, summary, or detail…" autocomplete="off"><label class="sr-only" for="case-timeline-from">Timeline start date</label><input id="case-timeline-from" type="date" aria-label="Timeline start date"><label class="sr-only" for="case-timeline-to">Timeline end date</label><input id="case-timeline-to" type="date" aria-label="Timeline end date"><span class="case-timeline-status" id="case-timeline-status" aria-live="polite">All timeline entries</span></div>
   <ol class="case-timeline" aria-label="Chronological incident timeline">
     {% for entry in timeline %}<li class="case-timeline-entry"><span class="case-timeline-marker {% if entry.is_failure %}timeline-marker-failure{% endif %}" aria-hidden="true"></span><div class="case-timeline-content"><div class="case-timeline-meta"><span class="pill {% if entry.is_failure %}pill-down{% else %}pill-muted{% endif %}">{{ entry.kind }}</span><strong>{{ entry.actor }}</strong><time>{{ entry.at }}</time></div><p class="case-timeline-summary">{% if let Some(href) = entry.href %}<a href="{{ href }}">{{ entry.summary }}</a>{% else %}{{ entry.summary }}{% endif %}</p><small class="muted">{{ entry.detail }}</small></div></li>{% endfor %}
   </ol>
@@ -173,14 +224,14 @@
   <div class="case-synthesis-kpis"><div><strong>{{ impact_objects.len() }}</strong><span>modeled entities</span></div><div><strong>{{ modeled_event_count }}/{{ linked_events.len() }}</strong><span>signals modeled</span></div><div><strong>{{ response_completed_count }}</strong><span>completed responses</span></div><div><strong>{{ response_review_count }}</strong><span>responses to review</span></div></div>
   <div class="case-response-outcomes" aria-label="Response outcome distribution">{% for metric in response_outcome_metrics %}<a class="case-response-outcome" href="{{ metric.href }}"><div class="case-response-outcome-top"><span>{{ metric.label }}</span><strong>{{ metric.count }}</strong></div><div class="case-response-outcome-track"><div class="case-response-outcome-fill {{ metric.tone }}" style="width:{{ metric.percent }}%"></div></div><small>{{ metric.percent }}% of responses · open ledger &rarr;</small></a>{% endfor %}</div>
   <div class="case-synthesis-grid">
-    <div><div class="detail-label">Modeled impact</div>{% if impact_objects.is_empty() %}<p class="muted">No linked signal has resolved to an ontology object yet.</p>{% else %}<div class="case-impact-list">{% for object in impact_objects %}<a class="case-impact-row" href="/ontology?object_id={{ object.id }}#object-{{ object.id }}"><span class="object-dot"></span><span class="case-impact-main"><strong>{{ object.label }}</strong><small>{{ object.type_name }} · {{ object.status }} · {{ object.event_count }} signal{% if object.event_count != 1 %}s{% endif %} · {{ object.action_count }} governed action{% if object.action_count != 1 %}s{% endif %}</small></span>{% if let Some(last_action) = object.last_action %}<span class="case-impact-last"><strong>{{ last_action }}</strong>{% if let Some(last_outcome) = object.last_outcome %}{% if let Some(last_at) = object.last_action_at %}<small>{{ last_outcome }} · {{ last_at }}</small>{% endif %}{% endif %}</span>{% else %}<span class="muted">No response yet</span>{% endif %}</a>{% endfor %}</div>{% endif %}</div>
-    <div><div class="detail-label">Governed response chain</div>{% if governed_responses.is_empty() %}<p class="muted">No governed actions have targeted the modeled impact yet.</p>{% else %}<div class="case-response-list">{% for response in governed_responses %}<div class="case-response-row"><span class="posture-dot {% if response.outcome == "Completed" %}posture-good{% else %}posture-risk{% endif %}"></span><span class="case-response-main"><strong>{{ response.action_name }}</strong><small>{{ response.target_label }} · {{ response.outcome }} · {{ response.executed_at }}</small></span>{% if let Some(event_id) = response.event_id %}<a class="btn-link" href="/events/{{ event_id }}">Signal &rarr;</a>{% else if let Some(incident_id) = response.incident_id %}<span class="muted">this case</span>{% else %}<span class="muted">console</span>{% endif %}</div>{% endfor %}</div>{% endif %}</div>
+    <div><div class="detail-label">Modeled impact</div>{% if impact_objects.is_empty() %}<p class="muted">No linked signal has resolved to an ontology object yet.</p>{% else %}<div class="case-impact-selection-toolbar"><button type="button" class="btn-link" data-case-select-all>Select all impact</button><button type="button" class="btn btn-secondary" data-case-compare disabled>Compare impact</button><button type="button" class="btn" data-case-load disabled>Load into workbench</button><span class="case-impact-selection-status" data-case-selection-status>No impact entities selected.</span></div><div class="case-impact-list">{% for object in impact_objects %}<div class="case-impact-row"><input class="case-impact-select" type="checkbox" data-case-object-id="{{ object.id }}" data-case-object-type="{{ object.object_type_id }}" aria-label="Select {{ object.label }}"><a data-investigation-context="{{ object.id }}" data-investigation-label="{{ object.label }}" data-investigation-type="Object" data-investigation-href="/ontology?object_id={{ object.id }}#object-{{ object.id }}" data-investigation-route href="/ontology?object_id={{ object.id }}#object-{{ object.id }}"><span class="object-dot"></span><span class="case-impact-main"><strong>{{ object.label }}</strong><small>{{ object.type_name }} · {{ object.status }} · {{ object.event_count }} signal{% if object.event_count != 1 %}s{% endif %} · {{ object.action_count }} governed action{% if object.action_count != 1 %}s{% endif %}</small></span>{% if let Some(last_action) = object.last_action %}<span class="case-impact-last"><strong>{{ last_action }}</strong>{% if let Some(last_outcome) = object.last_outcome %}{% if let Some(last_at) = object.last_action_at %}<small>{{ last_outcome }} · {{ last_at }}</small>{% endif %}{% endif %}</span>{% else %}<span class="muted">No response yet</span>{% endif %}</a></div>{% endfor %}</div>{% endif %}</div>
+    <div><div class="detail-label">Governed response chain</div>{% if governed_responses.is_empty() %}<p class="muted">No governed actions have targeted the modeled impact yet.</p>{% else %}<div class="case-response-list">{% for response in governed_responses %}<div class="case-response-row"><span class="posture-dot {% if response.outcome == "Completed" %}posture-good{% else %}posture-risk{% endif %}"></span><span class="case-response-main"><strong>{{ response.action_name }}</strong><small>{{ response.target_label }} · {{ response.outcome }} · {{ response.executed_at }}</small></span>{% if let Some(event_id) = response.event_id %}<a class="btn-link" data-investigation-context="{{ event_id }}" data-investigation-label="{{ response.action_name }} source signal" data-investigation-type="Signal" data-investigation-href="/events/{{ event_id }}" data-investigation-route href="/events/{{ event_id }}">Signal &rarr;</a>{% else if let Some(incident_id) = response.incident_id %}<span class="muted">this case</span>{% else %}<span class="muted">console</span>{% endif %}</div>{% endfor %}</div>{% endif %}</div>
   </div>
 </section>
 
-<section class="panel incident-review-posture-panel"><div class="panel-heading"><div><h2>Response review posture</h2><p class="muted">Human review state for governed responses linked to this investigation.</p></div><a class="btn-link" href="/actions?outcome=review">Open review queue &rarr;</a></div>{% if governed_responses.is_empty() %}<p class="muted">No governed responses have been recorded for this case.</p>{% else %}<div class="case-response-list">{% for response in governed_responses %}<div class="case-response-row"><span class="posture-dot {% if response.review_stale %}posture-risk{% else if response.review_status == "approved" %}posture-good{% else %}posture-neutral{% endif %}"></span><span class="case-response-main"><strong>{{ response.action_name }}</strong><small>{{ response.target_label }} · review {{ response.review_status }}{% if response.review_stale %} · overdue{% endif %}{% if let Some(owner) = response.review_assignee %} · owner {{ owner }}{% endif %}</small></span><a class="btn-link" href="/actions/{{ response.id }}">Decision record &rarr;</a></div>{% endfor %}</div>{% endif %}</section>
+<section class="panel incident-review-posture-panel"><div class="panel-heading"><div><h2>Response review posture</h2><p class="muted">Human review state for governed responses linked to this investigation.</p></div><a class="btn-link" data-investigation-context="{{ inc.id }}" data-investigation-label="{{ inc.title }} review queue" data-investigation-type="Case" data-investigation-href="/incidents/{{ inc.id }}" data-investigation-route href="/actions?outcome=review">Open review queue &rarr;</a></div>{% if governed_responses.is_empty() %}<p class="muted">No governed responses have been recorded for this case.</p>{% else %}<div class="case-response-list">{% for response in governed_responses %}<div class="case-response-row"><span class="posture-dot {% if response.review_stale %}posture-risk{% else if response.review_status == "approved" %}posture-good{% else %}posture-neutral{% endif %}"></span><span class="case-response-main"><strong>{{ response.action_name }}</strong><small>{{ response.target_label }} · review {{ response.review_status }}{% if response.review_stale %} · overdue{% endif %}{% if let Some(owner) = response.review_assignee %} · owner {{ owner }}{% endif %}</small></span><a class="btn-link" data-investigation-context="{{ response.id }}" data-investigation-label="{{ response.action_name }}" data-investigation-type="Decision" data-investigation-href="/actions/{{ response.id }}" data-investigation-route href="/actions/{{ response.id }}">Decision record &rarr;</a></div>{% endfor %}</div>{% endif %}</section>
 
-{% if !governed_responses.is_empty() %}<div class="panel linked-decision-records"><div class="detail-label">Immutable decision records</div><div class="case-response-list">{% for response in governed_responses %}<a class="case-response-row" href="/actions/{{ response.id }}"><span class="object-dot"></span><span class="case-response-main"><strong>{{ response.action_name }}</strong><small>{{ response.outcome }} · {{ response.target_label }} · review {{ response.review_status }}</small></span><span class="context-arrow">&rarr;</span></a>{% endfor %}</div></div>{% endif %}
+{% if !governed_responses.is_empty() %}<div class="panel linked-decision-records"><div class="detail-label">Immutable decision records</div><div class="case-response-list">{% for response in governed_responses %}<a class="case-response-row" data-investigation-context="{{ response.id }}" data-investigation-label="{{ response.action_name }}" data-investigation-type="Decision" data-investigation-href="/actions/{{ response.id }}" data-investigation-route href="/actions/{{ response.id }}"><span class="object-dot"></span><span class="case-response-main"><strong>{{ response.action_name }}</strong><small>{{ response.outcome }} · {{ response.target_label }} · review {{ response.review_status }}</small></span><span class="context-arrow">&rarr;</span></a>{% endfor %}</div></div>{% endif %}
 
 {% if !impact_relationships.is_empty() %}
 <section class="panel incident-relationship-map-panel">
@@ -235,6 +286,39 @@
   }());
 </script>
 
+<script>
+  (function () {
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('[data-case-object-id]'));
+    var selectAll = document.querySelector('[data-case-select-all]');
+    var compare = document.querySelector('[data-case-compare]');
+    var load = document.querySelector('[data-case-load]');
+    var status = document.querySelector('[data-case-selection-status]');
+    if (!boxes.length || !compare || !load) return;
+    var ids = [], types = {};
+    try { ids = JSON.parse(localStorage.getItem('kizashi.ontology.selection') || '[]'); types = JSON.parse(localStorage.getItem('kizashi.ontology.selection-types') || '{}'); } catch (_) {}
+    boxes.forEach(function (box) { box.checked = ids.indexOf(box.dataset.caseObjectId) !== -1; });
+    function selected() { return boxes.filter(function (box) { return box.checked; }); }
+    function sync() {
+      var picked = selected();
+      compare.disabled = picked.length < 2;
+      load.disabled = picked.length === 0;
+      if (status) status.textContent = picked.length ? picked.length + ' impact entit' + (picked.length === 1 ? 'y' : 'ies') + ' selected.' : 'No impact entities selected.';
+      if (selectAll) selectAll.textContent = picked.length === boxes.length ? 'Clear impact' : 'Select all impact';
+    }
+    function persist() {
+      var picked = selected();
+      picked.forEach(function (box) { ids = ids.filter(function (id) { return id !== box.dataset.caseObjectId; }); ids.push(box.dataset.caseObjectId); types[box.dataset.caseObjectId] = box.dataset.caseObjectType; });
+      try { localStorage.setItem('kizashi.ontology.selection', JSON.stringify(ids)); localStorage.setItem('kizashi.ontology.selection-types', JSON.stringify(types)); } catch (_) {}
+      return picked.map(function (box) { return box.dataset.caseObjectId; });
+    }
+    boxes.forEach(function (box) { box.addEventListener('change', sync); });
+    if (selectAll) selectAll.addEventListener('click', function () { var all = selected().length === boxes.length; boxes.forEach(function (box) { box.checked = !all; }); sync(); });
+    compare.addEventListener('click', function () { var picked = persist(); window.location.href = '/ontology/compare?ids=' + encodeURIComponent(picked.slice(0, 6).join(',')); });
+    load.addEventListener('click', function () { persist(); window.location.href = '/ontology'; });
+    sync();
+  }());
+</script>
+
 <section class="panel incident-activity-panel">
   <div class="panel-heading"><div><h2>Case activity</h2><p class="muted">Immutable changes to this investigation, shown in decision order.</p></div><span class="pill pill-muted">{{ activity.len() }} change{% if activity.len() != 1 %}s{% endif %}</span></div>
   {% if activity.is_empty() %}
@@ -269,6 +353,31 @@
   </div>
   {% endif %}
 </section>
+<script>
+(function(){var t=document.querySelector('.case-timeline'),k=document.getElementById('case-timeline-kind'),q=document.getElementById('case-timeline-query'),f=document.getElementById('case-timeline-from'),o=document.getElementById('case-timeline-to'),s=document.getElementById('case-timeline-status');if(!t||!k||!q||!f||!o)return;function apply(){var kind=k.value.toLowerCase(),text=q.value.trim().toLowerCase(),from=f.value,to=o.value,rows=Array.prototype.slice.call(t.querySelectorAll('.case-timeline-entry')),visible=0;rows.forEach(function(row){var label=(row.querySelector('.pill')||{}).textContent||'',occurred=(row.querySelector('time')||{}).textContent||'',date=occurred.slice(0,10),show=(!kind||label.toLowerCase().indexOf(kind)!==-1)&&(!text||row.textContent.toLowerCase().indexOf(text)!==-1)&&(!from||(date&&date>=from))&&(!to||(date&&date<=to));row.hidden=!show;if(show)visible++;});if(s)s.textContent=visible===rows.length?'All timeline entries':visible+' of '+rows.length+' entries shown'}k.addEventListener('change',apply);q.addEventListener('input',apply);f.addEventListener('change',apply);o.addEventListener('change',apply);apply()}());
+</script>
+<script>
+  (function () {
+    var incidentId = '{{ inc.id }}';
+    var actions = document.querySelector('.quick-actions');
+    if (!actions || !incidentId) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-secondary';
+    button.id = 'incident-360-export';
+    button.textContent = 'Export case investigation ↓';
+    button.addEventListener('click', function () {
+      button.disabled = true;
+      button.textContent = 'Preparing export…';
+      fetch('/api/v1/incidents/' + encodeURIComponent(incidentId) + '/360', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function (response) { if (!response.ok) throw new Error('Case investigation unavailable (' + response.status + ')'); return response.blob(); })
+        .then(function (blob) { var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'case-investigation-' + incidentId + '.json'; document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(function () { URL.revokeObjectURL(link.href); }, 0); })
+        .catch(function (error) { window.alert(error.message); })
+        .finally(function () { button.disabled = false; button.textContent = 'Export case investigation ↓'; });
+    });
+    actions.appendChild(button);
+  }());
+</script>
 
 {% else %}
 <p class="muted">Incident not found.</p>

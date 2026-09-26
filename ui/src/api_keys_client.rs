@@ -8,7 +8,7 @@ use common::Role;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct ApiKeySummary {
     pub id: Uuid,
     pub label: String,

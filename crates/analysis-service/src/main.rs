@@ -1,7 +1,7 @@
 use analysis_service::{
-    dead_letter_router, health_router, process_batch, retry_count, should_dead_letter,
-    with_incremented_retry_count, AnalysisConfigRepository, AnalysisDeps, ConsumerHeartbeat,
-    DeadLetterState, FoundryAnalysisClient, PostgresAnalysisConfigRepository,
+    dead_letter_router, health_router, incident_brief_router, process_batch, retry_count,
+    should_dead_letter, with_incremented_retry_count, AnalysisConfigRepository, AnalysisDeps,
+    ConsumerHeartbeat, DeadLetterState, FoundryAnalysisClient, PostgresAnalysisConfigRepository,
     RabbitMqDeadLetterManager, RabbitMqEventPublisher, ANALYSIS_CONFIG_CHANGED_EXCHANGE,
     RECORD_NORMALIZED_EXCHANGE,
 };
@@ -228,11 +228,23 @@ async fn main() {
     ));
     let dead_letter_state = DeadLetterState {
         dead_letter_manager,
-        internal_secret,
+        internal_secret: internal_secret.clone(),
         consumer_heartbeat: heartbeat.clone(),
         fallback_configured,
     };
-    let app = health_router(heartbeat.clone()).merge(dead_letter_router(dead_letter_state));
+    let brief_state = analysis_service::BriefState {
+        generator: Arc::new(analysis_service::AnalysisIncidentBriefGenerator {
+            deps: deps.clone(),
+        }),
+        internal_secret,
+    };
+    let metrics = Arc::new(common::HttpMetrics::default());
+    let app = common::instrument_router(
+        health_router(heartbeat.clone())
+            .merge(dead_letter_router(dead_letter_state))
+            .merge(incident_brief_router(brief_state)),
+        metrics,
+    );
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "analysis-service healthz listening");
     tokio::spawn(async move {

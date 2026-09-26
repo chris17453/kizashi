@@ -199,6 +199,7 @@ pub(crate) async fn spawn_stub_chat_completions(
     (format!("http://{addr}/v1"), captured)
 }
 
+#[allow(clippy::type_complexity)]
 pub(crate) async fn spawn_stub_chat_completions_status(
     reply_content: String,
     status: axum::http::StatusCode,

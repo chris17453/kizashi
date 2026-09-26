@@ -10,3 +10,7 @@ pub const TRIGGER_CHANGED_EXCHANGE: &str = "trigger.changed";
 pub const MAPPING_CHANGED_EXCHANGE: &str = "mapping.changed";
 pub const ANALYSIS_CONFIG_CHANGED_EXCHANGE: &str = "analysis_config.changed";
 pub const SENSOR_CHANGED_EXCHANGE: &str = "sensor.changed";
+/// Durable pipeline-runtime notifications. Consumers must deduplicate by the execution ID and
+/// event type because the transactional outbox publisher intentionally provides at-least-once
+/// delivery.
+pub const PIPELINE_EXECUTION_EXCHANGE: &str = "pipeline.execution";

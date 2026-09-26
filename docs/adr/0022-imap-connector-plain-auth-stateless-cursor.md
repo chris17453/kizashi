@@ -15,14 +15,11 @@ an IMAP client against something more real than mocks.
 
 ## Decision
 
-1. **Auth is plain IMAP `LOGIN` (username/password) in v1.** Every IMAP-speaking mail
-   provider supports it, including self-hosted servers. XOAUTH2 (required by Gmail/Workspace
-   if password auth is disabled, and generally preferred for security) is deferred to a
-   follow-up — it needs a per-provider OAuth2 token refresh flow this crate doesn't have
-   infrastructure for yet, and building it now would mean guessing at a shape before there's a
-   real provider driving it. `connector-runtime::fetch_access_token` already handles the
-   client-credentials flow for Graph/Fabric; a user-delegated refresh-token flow for IMAP
-   XOAUTH2 is a different enough shape that it's a separate follow-up, not a small addition.
+1. **Auth supports plain IMAP `LOGIN` (username/password) and XOAUTH2.** Password LOGIN remains
+   the broad self-hosted-compatible baseline. XOAUTH2 can use a supplied access token or obtain a
+   fresh client-credentials token per isolated poll through `connector-runtime::fetch_access_token`;
+   user-delegated refresh-token flows remain provider-specific and outside this connector's
+   stateless process boundary.
 2. **The connector takes `since_date` (a plain calendar date) as an IMAP `SEARCH SINCE`
    cursor, passed in per invocation** — the same stateless-cursor design `zendesk` already
    uses for its `start_time` (ADR-0013): the connector does not persist any state itself,
@@ -63,10 +60,10 @@ an IMAP client against something more real than mocks.
   unit-tested against static byte fixtures, kept separate from `ImapConnector::poll`'s network
   I/O, matching this codebase's existing split between pure business logic (fast, exhaustive
   unit tests) and I/O boundaries (slower, real-infra integration tests).
-- Known gap, explicitly not built here: XOAUTH2 auth, UID-based incremental cursor tracking,
-  and routing this connector's outbound TCP through Egress Gateway (ADR-0021's HTTP CONNECT
-  tunnel doesn't support raw non-HTTP protocols like IMAP) — all tracked as follow-ups in
-  `docs/features.md`, not silently dropped.
+- User-delegated refresh-token rotation and routing this connector's outbound TCP through Egress
+  Gateway (ADR-0021's HTTP CONNECT tunnel doesn't support raw non-HTTP protocols like IMAP) remain
+  tracked follow-ups in `docs/features.md`; direct and client-credentials XOAUTH2 plus UID-based
+  incremental cursors are implemented.
 - A new `greenmail/standalone:2.0.1` image dependency exists for local/CI testing only — it is
   never part of the deployed platform, the same relationship the throwaway `mssql` container
   has to Fabric's tests.

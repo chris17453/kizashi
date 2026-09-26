@@ -8,6 +8,16 @@ use common::Role;
 use thiserror::Error;
 use uuid::Uuid;
 
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ServiceAccount {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub label: String,
+    pub role: Role,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub revoked_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 #[derive(Debug, Error)]
 pub enum LocalUserRepositoryError {
     #[error("storage backend error: {0}")]
@@ -98,6 +108,38 @@ pub trait LocalUserRepository: Send + Sync {
         id: Uuid,
         new_password_hash: &str,
     ) -> Result<(), LocalUserRepositoryError>;
+
+    async fn list_service_accounts(
+        &self,
+        _tenant_id: Uuid,
+    ) -> Result<Vec<ServiceAccount>, LocalUserRepositoryError> {
+        Err(LocalUserRepositoryError::Backend("service accounts unavailable".to_string()))
+    }
+
+    async fn create_service_account(
+        &self,
+        _account: ServiceAccount,
+        _token_hash: &str,
+        _actor: &str,
+    ) -> Result<(), LocalUserRepositoryError> {
+        Err(LocalUserRepositoryError::Backend("service accounts unavailable".to_string()))
+    }
+
+    async fn revoke_service_account(
+        &self,
+        _tenant_id: Uuid,
+        _id: Uuid,
+        _actor: &str,
+    ) -> Result<(), LocalUserRepositoryError> {
+        Err(LocalUserRepositoryError::Backend("service accounts unavailable".to_string()))
+    }
+
+    async fn find_service_account_by_token_hash(
+        &self,
+        _token_hash: &str,
+    ) -> Result<Option<ServiceAccount>, LocalUserRepositoryError> {
+        Err(LocalUserRepositoryError::Backend("service accounts unavailable".to_string()))
+    }
 }
 
 pub struct PostgresLocalUserRepository {
@@ -402,5 +444,138 @@ impl LocalUserRepository for PostgresLocalUserRepository {
             .await
             .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
         Ok(())
+    }
+
+    async fn list_service_accounts(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ServiceAccount>, LocalUserRepositoryError> {
+        let rows: Vec<(Uuid, Uuid, String, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
+            "SELECT id, tenant_id, label, role, created_at, revoked_at FROM service_accounts WHERE tenant_id = $1 ORDER BY created_at DESC",
+        )
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        rows.into_iter()
+            .map(|(id, tenant_id, label, role, created_at, revoked_at)| {
+                Ok(ServiceAccount {
+                    id,
+                    tenant_id,
+                    label,
+                    role: role.parse().map_err(|e: common::ParseRoleError| {
+                        LocalUserRepositoryError::Backend(e.to_string())
+                    })?,
+                    created_at,
+                    revoked_at,
+                })
+            })
+            .collect()
+    }
+
+    async fn create_service_account(
+        &self,
+        account: ServiceAccount,
+        token_hash: &str,
+        actor: &str,
+    ) -> Result<(), LocalUserRepositoryError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        sqlx::query("INSERT INTO service_accounts (id, tenant_id, label, role, token_hash, created_at, revoked_at) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+            .bind(account.id).bind(account.tenant_id).bind(&account.label).bind(account.role.to_string())
+            .bind(token_hash).bind(account.created_at).bind(account.revoked_at).execute(&mut *tx).await
+            .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        record_audit_entry(
+            &mut tx,
+            &AuditLogEntry {
+                id: Uuid::new_v4(),
+                tenant_id: account.tenant_id,
+                entity_type: "service_account".to_string(),
+                entity_id: account.id,
+                change_type: ChangeType::Created,
+                actor: actor.to_string(),
+                before: None,
+                after: serde_json::to_value(&account).unwrap_or_default(),
+                changed_at: account.created_at,
+            },
+        )
+        .await
+        .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        tx.commit().await.map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn revoke_service_account(
+        &self,
+        tenant_id: Uuid,
+        id: Uuid,
+        actor: &str,
+    ) -> Result<(), LocalUserRepositoryError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        let updated: Option<(Uuid, Uuid, String, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
+            "UPDATE service_accounts SET revoked_at = COALESCE(revoked_at, NOW()) WHERE id = $1 AND tenant_id = $2 RETURNING id, tenant_id, label, role, created_at, revoked_at",
+        ).bind(id).bind(tenant_id).fetch_optional(&mut *tx).await
+            .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        let Some((id, tenant_id, label, role, created_at, revoked_at)) = updated else {
+            return Err(LocalUserRepositoryError::NotFound(id));
+        };
+        let account = ServiceAccount {
+            id,
+            tenant_id,
+            label,
+            role: role.parse().map_err(|e: common::ParseRoleError| {
+                LocalUserRepositoryError::Backend(e.to_string())
+            })?,
+            created_at,
+            revoked_at,
+        };
+        record_audit_entry(
+            &mut tx,
+            &AuditLogEntry {
+                id: Uuid::new_v4(),
+                tenant_id,
+                entity_type: "service_account".to_string(),
+                entity_id: id,
+                change_type: ChangeType::Updated,
+                actor: actor.to_string(),
+                before: None,
+                after: serde_json::to_value(&account).unwrap_or_default(),
+                changed_at: chrono::Utc::now(),
+            },
+        )
+        .await
+        .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        tx.commit().await.map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn find_service_account_by_token_hash(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<ServiceAccount>, LocalUserRepositoryError> {
+        let row: Option<(Uuid, Uuid, String, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
+            "SELECT id, tenant_id, label, role, created_at, revoked_at FROM service_accounts WHERE token_hash = $1",
+        ).bind(token_hash).fetch_optional(&self.pool).await
+            .map_err(|e| LocalUserRepositoryError::Backend(e.to_string()))?;
+        row.map(|(id, tenant_id, label, role, created_at, revoked_at)| {
+            Ok(ServiceAccount {
+                id,
+                tenant_id,
+                label,
+                role: role.parse().map_err(|e: common::ParseRoleError| {
+                    LocalUserRepositoryError::Backend(e.to_string())
+                })?,
+                created_at,
+                revoked_at,
+            })
+        })
+        .transpose()
     }
 }

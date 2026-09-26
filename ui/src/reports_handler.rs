@@ -10,9 +10,10 @@ use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Response};
 use chrono::{DateTime, Utc};
 
-struct EventTypeCount {
-    event_type: String,
-    count: usize,
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct EventTypeCount {
+    pub(crate) event_type: String,
+    pub(crate) count: usize,
 }
 
 fn signal_trend_chart_json(events: &[crate::events_client::EventSummary]) -> String {
@@ -174,7 +175,10 @@ pub struct ReportsQuery {
     pub notice: String,
 }
 
-fn parse_date_range(from: &str, to: &str) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {
+pub(crate) fn parse_date_range(
+    from: &str,
+    to: &str,
+) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {
     let start = chrono::NaiveDate::parse_from_str(from, "%Y-%m-%d")
         .ok()
         .and_then(|date| date.and_hms_opt(0, 0, 0))
@@ -186,7 +190,7 @@ fn parse_date_range(from: &str, to: &str) -> (Option<DateTime<Utc>>, Option<Date
     (start, end)
 }
 
-async fn connector_stats_for_window(
+pub(crate) async fn connector_stats_for_window(
     state: &AppState,
     tenant_id: uuid::Uuid,
     since: Option<DateTime<Utc>>,
@@ -566,7 +570,7 @@ async fn list_saved_report_views(state: &AppState, tenant_id: uuid::Uuid) -> Vec
         .collect()
 }
 
-fn count_by_event_type(events: &[crate::EventSummary]) -> Vec<EventTypeCount> {
+pub(crate) fn count_by_event_type(events: &[crate::EventSummary]) -> Vec<EventTypeCount> {
     let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     for event in events {
         *counts.entry(event.event_type.clone()).or_insert(0) += 1;
@@ -574,7 +578,10 @@ fn count_by_event_type(events: &[crate::EventSummary]) -> Vec<EventTypeCount> {
     counts.into_iter().map(|(event_type, count)| EventTypeCount { event_type, count }).collect()
 }
 
-fn report_incident_sla_breached(incident: &common::Incident, now: chrono::DateTime<Utc>) -> bool {
+pub(crate) fn report_incident_sla_breached(
+    incident: &common::Incident,
+    now: chrono::DateTime<Utc>,
+) -> bool {
     let target = match incident.severity {
         common::IncidentSeverity::Critical => chrono::Duration::minutes(15),
         common::IncidentSeverity::High => chrono::Duration::hours(1),
@@ -1265,7 +1272,7 @@ fn pdf_text_escape(value: &str) -> String {
 /// Builds a deliberately small, dependency-free PDF using the PDF 1.4 text model. The report
 /// is a compact executive summary; the CSV remains the lossless export. Keeping this writer
 /// here avoids pretending that a renamed HTML/CSV response is a PDF artifact.
-fn build_report_pdf(lines: &[String]) -> Vec<u8> {
+pub(crate) fn build_report_pdf(lines: &[String]) -> Vec<u8> {
     let mut content = String::from("BT\n/F1 11 Tf\n50 760 Td\n");
     for (index, line) in lines.iter().take(48).enumerate() {
         if index > 0 {
@@ -1365,7 +1372,7 @@ pub async fn get_reports_export_pdf(
     (response_headers, build_report_pdf(&lines)).into_response()
 }
 
-fn csv_escape(value: &str) -> String {
+pub(crate) fn csv_escape(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))
     } else {

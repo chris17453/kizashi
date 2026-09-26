@@ -17,6 +17,14 @@ pub enum IncidentRepositoryError {
     NotFound(Uuid),
 }
 
+/// Event identity retained on an incident link so correlation can distinguish a safe partial
+/// duplicate (same event type and entity, new group key) from unrelated activity.
+#[derive(Debug, Clone, Copy)]
+pub struct EventCorrelationIdentity<'a> {
+    pub event_type: &'a str,
+    pub entity_ref: &'a str,
+}
+
 /// CRUD + Event-linking for Incident, incident-service's own Postgres schema (ADR-0111). Every
 /// create/update/link/unlink writes one audit_log row in the same transaction as the entity
 /// change, same shape as config-admin-service's repositories.
@@ -52,6 +60,47 @@ pub trait IncidentRepository: Send + Sync {
         event_id: Uuid,
         actor: &str,
     ) -> Result<(), IncidentRepositoryError>;
+    /// Links an event while retaining the normalized correlation key that produced it. The
+    /// default preserves compatibility for older callers that do not have event context.
+    async fn link_event_with_context(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        event_id: Uuid,
+        group_key: Option<&str>,
+        actor: &str,
+    ) -> Result<(), IncidentRepositoryError> {
+        let _ = group_key;
+        self.link_event(tenant_id, incident_id, event_id, actor).await
+    }
+    async fn link_event_with_identity(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        event_id: Uuid,
+        group_key: Option<&str>,
+        identity: EventCorrelationIdentity<'_>,
+        actor: &str,
+    ) -> Result<(), IncidentRepositoryError> {
+        let _ = identity;
+        self.link_event_with_context(tenant_id, incident_id, event_id, group_key, actor).await
+    }
+    /// Returns active cases carrying exactly the requested normalized correlation key.
+    /// Implementations without persisted context return no candidates.
+    async fn active_incident_ids_for_group_key(
+        &self,
+        _tenant_id: Uuid,
+        _group_key: &str,
+    ) -> Result<Vec<Uuid>, IncidentRepositoryError> {
+        Ok(Vec::new())
+    }
+    async fn active_incident_ids_for_event_identity(
+        &self,
+        _tenant_id: Uuid,
+        _identity: EventCorrelationIdentity<'_>,
+    ) -> Result<Vec<Uuid>, IncidentRepositoryError> {
+        Ok(Vec::new())
+    }
     async fn unlink_event(
         &self,
         tenant_id: Uuid,
@@ -306,6 +355,17 @@ impl IncidentRepository for PostgresIncidentRepository {
         event_id: Uuid,
         actor: &str,
     ) -> Result<(), IncidentRepositoryError> {
+        self.link_event_with_context(tenant_id, incident_id, event_id, None, actor).await
+    }
+
+    async fn link_event_with_context(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        event_id: Uuid,
+        group_key: Option<&str>,
+        actor: &str,
+    ) -> Result<(), IncidentRepositoryError> {
         let mut tx =
             self.pool.begin().await.map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
 
@@ -321,11 +381,12 @@ impl IncidentRepository for PostgresIncidentRepository {
         }
 
         sqlx::query(
-            "INSERT INTO incident_events (incident_id, event_id, linked_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+            "INSERT INTO incident_events (incident_id, event_id, linked_at, group_key) VALUES ($1, $2, $3, $4) ON CONFLICT (incident_id, event_id) DO UPDATE SET group_key = EXCLUDED.group_key",
         )
         .bind(incident_id)
         .bind(event_id)
         .bind(chrono::Utc::now())
+        .bind(group_key.unwrap_or("").trim().to_ascii_lowercase())
         .execute(&mut *tx)
         .await
         .map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
@@ -349,6 +410,100 @@ impl IncidentRepository for PostgresIncidentRepository {
 
         tx.commit().await.map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
         Ok(())
+    }
+
+    async fn link_event_with_identity(
+        &self,
+        tenant_id: Uuid,
+        incident_id: Uuid,
+        event_id: Uuid,
+        group_key: Option<&str>,
+        identity: EventCorrelationIdentity<'_>,
+        actor: &str,
+    ) -> Result<(), IncidentRepositoryError> {
+        let mut tx =
+            self.pool.begin().await.map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
+        let exists: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM incidents WHERE id = $1 AND tenant_id = $2")
+                .bind(incident_id)
+                .bind(tenant_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
+        if exists.is_none() {
+            return Err(IncidentRepositoryError::NotFound(incident_id));
+        }
+        sqlx::query(
+            "INSERT INTO incident_events (incident_id, event_id, linked_at, group_key, event_type, entity_ref) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (incident_id, event_id) DO UPDATE SET group_key = EXCLUDED.group_key, event_type = EXCLUDED.event_type, entity_ref = EXCLUDED.entity_ref",
+        )
+        .bind(incident_id)
+        .bind(event_id)
+        .bind(chrono::Utc::now())
+        .bind(group_key.unwrap_or("").trim().to_ascii_lowercase())
+        .bind(identity.event_type.trim().to_ascii_lowercase())
+        .bind(identity.entity_ref.trim())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
+        record_audit_entry(
+            &mut tx,
+            &AuditLogEntry {
+                id: Uuid::new_v4(),
+                tenant_id,
+                entity_type: "incident_event".to_string(),
+                entity_id: incident_id,
+                change_type: ChangeType::Created,
+                actor: actor.to_string(),
+                before: None,
+                after: serde_json::json!({
+                    "event_id": event_id,
+                    "group_key": group_key.unwrap_or(""),
+                    "event_type": identity.event_type,
+                    "entity_ref": identity.entity_ref,
+                    "correlation_mode": if actor == "event-partial-correlation" {
+                        "partial_duplicate"
+                    } else {
+                        "exact_group_key"
+                    },
+                }),
+                changed_at: chrono::Utc::now(),
+            },
+        )
+        .await
+        .map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
+        tx.commit().await.map_err(|e| IncidentRepositoryError::Backend(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn active_incident_ids_for_group_key(
+        &self,
+        tenant_id: Uuid,
+        group_key: &str,
+    ) -> Result<Vec<Uuid>, IncidentRepositoryError> {
+        sqlx::query_scalar(
+            "SELECT DISTINCT i.id FROM incidents i JOIN incident_events ie ON ie.incident_id = i.id WHERE i.tenant_id = $1 AND i.status <> 'resolved' AND ie.group_key = $2 ORDER BY i.id",
+        )
+        .bind(tenant_id)
+        .bind(group_key.trim().to_ascii_lowercase())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| IncidentRepositoryError::Backend(error.to_string()))
+    }
+
+    async fn active_incident_ids_for_event_identity(
+        &self,
+        tenant_id: Uuid,
+        identity: EventCorrelationIdentity<'_>,
+    ) -> Result<Vec<Uuid>, IncidentRepositoryError> {
+        sqlx::query_scalar(
+            "SELECT DISTINCT i.id FROM incidents i JOIN incident_events ie ON ie.incident_id = i.id WHERE i.tenant_id = $1 AND i.status <> 'resolved' AND ie.event_type = $2 AND ie.entity_ref = $3 ORDER BY i.id",
+        )
+        .bind(tenant_id)
+        .bind(identity.event_type.trim().to_ascii_lowercase())
+        .bind(identity.entity_ref.trim())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| IncidentRepositoryError::Backend(error.to_string()))
     }
 
     async fn unlink_event(

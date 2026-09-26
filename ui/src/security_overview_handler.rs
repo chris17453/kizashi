@@ -3,13 +3,15 @@
 mod security_overview_handler_test;
 
 use crate::audit_log_client::AuditLogClient;
+use crate::auth_client::TenantOidcProviderSummary;
 use crate::session_guard::require_session;
 use crate::AppState;
 use askama::Template;
-use axum::extract::State;
+use axum::extract::{Form, State};
 use axum::http::HeaderMap;
-use axum::response::{Html, IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Redirect, Response};
 use chrono::{Duration, Utc};
+use serde::Serialize;
 
 const RECENT_ACTIVITY_LOOKBACK_LIMIT: u32 = 200;
 
@@ -34,9 +36,14 @@ struct SecurityOverviewTemplate {
     total_users: usize,
     posture_metrics: Vec<SecurityPostureMetric>,
     activity_bars: Vec<SecurityActivityBar>,
+    mfa_policy_required: Option<bool>,
+    oidc_provider: Option<String>,
+    oidc_available_providers: Vec<String>,
+    tenant_oidc_configs: Vec<TenantOidcProviderSummary>,
 }
 
-struct SecurityPostureMetric {
+#[derive(Debug, Serialize)]
+pub(crate) struct SecurityPostureMetric {
     label: String,
     count: usize,
     total: usize,
@@ -45,7 +52,8 @@ struct SecurityPostureMetric {
     tone: String,
 }
 
-struct SecurityActivityBar {
+#[derive(Debug, Serialize)]
+pub(crate) struct SecurityActivityBar {
     date: String,
     count: usize,
     height_pct: i32,
@@ -94,28 +102,37 @@ async fn recent_activity(
     (entries.len(), bars)
 }
 
-/// GET /security — a single-pane-of-glass compliance dashboard (ADR-0047): active sessions,
-/// recent admin activity, RBAC distribution, retention policy coverage, and egress allowlist
-/// size, each linking out to its own detail page. Aggregates data every one of those pages
-/// already exposes individually -- this closes the "where do I start" gap for an auditor or new
-/// admin who doesn't yet know which of the five separate Security & Compliance pages to check
-/// first.
-pub async fn get_security_overview(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let session = match require_session(state.session_store.as_ref(), &headers).await {
-        Ok(session) => session,
-        Err(response) => return response,
-    };
-    let is_admin = session.role.at_least(common::Role::Admin);
+#[derive(Debug, Serialize)]
+pub(crate) struct SecurityOverviewSummary {
+    pub active_session_count: usize,
+    pub recent_activity_count: usize,
+    pub admin_count: usize,
+    pub operator_count: usize,
+    pub viewer_count: usize,
+    pub mfa_enrolled_count: usize,
+    pub mfa_missing_count: usize,
+    pub retention_policy_count: usize,
+    pub retention_enabled_count: usize,
+    pub egress_domain_count: usize,
+    pub total_users: usize,
+    pub posture_metrics: Vec<SecurityPostureMetric>,
+    pub activity_bars: Vec<SecurityActivityBar>,
+    pub errors: Vec<String>,
+}
 
+pub(crate) async fn security_overview_for_tenant(
+    state: &AppState,
+    tenant_id: uuid::Uuid,
+    role: common::Role,
+) -> SecurityOverviewSummary {
     let mut errors = Vec::new();
-
-    let active_session_count = state.session_store.list_for_tenant(session.tenant_id).await.len();
+    let active_session_count = state.session_store.list_for_tenant(tenant_id).await.len();
     let (recent_activity_count, activity_bars) =
-        recent_activity(&state, session.tenant_id, &mut errors).await;
+        recent_activity(state, tenant_id, &mut errors).await;
 
     let (mut admin_count, mut operator_count, mut viewer_count) = (0, 0, 0);
     let (mut mfa_enrolled_count, mut mfa_missing_count) = (0, 0);
-    match state.users_client.list_users(session.tenant_id, session.role).await {
+    match state.users_client.list_users(tenant_id, role).await {
         Ok(users) => {
             for user in users {
                 if user.mfa_enabled {
@@ -134,7 +151,7 @@ pub async fn get_security_overview(State(state): State<AppState>, headers: Heade
     }
 
     let (mut retention_policy_count, mut retention_enabled_count) = (0, 0);
-    match state.retention_policies_client.list_policies(session.tenant_id).await {
+    match state.retention_policies_client.list_policies(tenant_id).await {
         Ok(policies) => {
             retention_policy_count = policies.len();
             retention_enabled_count = policies.iter().filter(|p| p.enabled).count();
@@ -142,14 +159,13 @@ pub async fn get_security_overview(State(state): State<AppState>, headers: Heade
         Err(e) => errors.push(format!("retention policies: {e}")),
     }
 
-    let egress_domain_count =
-        match state.egress_allowlist_client.get_allowlist(session.tenant_id).await {
-            Ok(domains) => domains.len(),
-            Err(e) => {
-                errors.push(format!("egress allowlist: {e}"));
-                0
-            }
-        };
+    let egress_domain_count = match state.egress_allowlist_client.get_allowlist(tenant_id).await {
+        Ok(domains) => domains.len(),
+        Err(e) => {
+            errors.push(format!("egress allowlist: {e}"));
+            0
+        }
+    };
 
     let total_users = admin_count + operator_count + viewer_count;
     let coverage =
@@ -191,29 +207,218 @@ pub async fn get_security_overview(State(state): State<AppState>, headers: Heade
         ),
     ];
 
+    SecurityOverviewSummary {
+        active_session_count,
+        recent_activity_count,
+        admin_count,
+        operator_count,
+        viewer_count,
+        mfa_enrolled_count,
+        mfa_missing_count,
+        retention_policy_count,
+        retention_enabled_count,
+        egress_domain_count,
+        total_users,
+        posture_metrics,
+        activity_bars,
+        errors,
+    }
+}
+
+/// GET /security — a single-pane-of-glass compliance dashboard (ADR-0047): active sessions,
+/// recent admin activity, RBAC distribution, retention policy coverage, and egress allowlist
+/// size, each linking out to its own detail page. Aggregates data every one of those pages
+/// already exposes individually -- this closes the "where do I start" gap for an auditor or new
+/// admin who doesn't yet know which of the five separate Security & Compliance pages to check
+/// first.
+pub async fn get_security_overview(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    let summary = security_overview_for_tenant(&state, session.tenant_id, session.role).await;
+    let mfa_policy_required = if session.role.at_least(common::Role::Admin) {
+        state.auth_client.get_mfa_policy(session.tenant_id, session.role).await.ok()
+    } else {
+        None
+    };
+    let (oidc_provider, oidc_available_providers) = if session.role.at_least(common::Role::Admin) {
+        state
+            .auth_client
+            .get_oidc_provider_policy(session.tenant_id, session.role)
+            .await
+            .unwrap_or((None, Vec::new()))
+    } else {
+        (None, Vec::new())
+    };
+    let tenant_oidc_configs = if session.role.at_least(common::Role::Admin) {
+        state
+            .auth_client
+            .list_tenant_oidc_providers(session.tenant_id, session.role)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
     Html(
         SecurityOverviewTemplate {
             show_nav: true,
-            is_admin,
-            active_session_count,
-            recent_activity_count,
-            admin_count,
-            operator_count,
-            viewer_count,
-            mfa_enrolled_count,
-            mfa_missing_count,
-            retention_policy_count,
-            retention_enabled_count,
-            egress_domain_count,
-            errors,
+            is_admin: session.role.at_least(common::Role::Admin),
+            active_session_count: summary.active_session_count,
+            recent_activity_count: summary.recent_activity_count,
+            admin_count: summary.admin_count,
+            operator_count: summary.operator_count,
+            viewer_count: summary.viewer_count,
+            mfa_enrolled_count: summary.mfa_enrolled_count,
+            mfa_missing_count: summary.mfa_missing_count,
+            retention_policy_count: summary.retention_policy_count,
+            retention_enabled_count: summary.retention_enabled_count,
+            egress_domain_count: summary.egress_domain_count,
+            errors: summary.errors,
             current_username: session.username,
             current_role: session.role.to_string(),
-            total_users,
-            posture_metrics,
-            activity_bars,
+            total_users: summary.total_users,
+            posture_metrics: summary.posture_metrics,
+            activity_bars: summary.activity_bars,
+            mfa_policy_required,
+            oidc_provider,
+            oidc_available_providers,
+            tenant_oidc_configs,
         }
         .render()
         .unwrap(),
     )
     .into_response()
+}
+
+#[derive(serde::Deserialize)]
+pub struct MfaPolicyForm {
+    required: bool,
+}
+
+#[derive(serde::Deserialize)]
+pub struct OidcProviderPolicyForm {
+    provider: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct TenantOidcConfigForm {
+    provider: String,
+    client_id: String,
+    client_secret: String,
+    auth_url: String,
+    token_url: String,
+    userinfo_url: String,
+    redirect_url: String,
+}
+
+pub async fn post_mfa_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<MfaPolicyForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Admin) {
+        return (axum::http::StatusCode::FORBIDDEN, "admin role required").into_response();
+    }
+    match state
+        .auth_client
+        .set_mfa_policy(session.tenant_id, session.role, form.required, &session.username)
+        .await
+    {
+        Ok(_) => Redirect::to("/security?notice=mfa_policy_updated").into_response(),
+        Err(e) => (axum::http::StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+    }
+}
+
+pub async fn post_oidc_provider_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<OidcProviderPolicyForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Admin) {
+        return (axum::http::StatusCode::FORBIDDEN, "admin role required").into_response();
+    }
+    let provider = (!form.provider.trim().is_empty()).then_some(form.provider.trim());
+    match state
+        .auth_client
+        .set_oidc_provider_policy(session.tenant_id, session.role, provider, &session.username)
+        .await
+    {
+        Ok(_) => Redirect::to("/security?notice=oidc_policy_updated").into_response(),
+        Err(e) => (axum::http::StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+    }
+}
+
+pub async fn post_tenant_oidc_config(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<TenantOidcConfigForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Admin) {
+        return (axum::http::StatusCode::FORBIDDEN, "admin role required").into_response();
+    }
+    match state
+        .auth_client
+        .set_tenant_oidc_provider(
+            session.tenant_id,
+            session.role,
+            &form.provider,
+            &form.client_id,
+            &form.client_secret,
+            &form.auth_url,
+            &form.token_url,
+            &form.userinfo_url,
+            &form.redirect_url,
+            &session.username,
+        )
+        .await
+    {
+        Ok(_) => Redirect::to("/security?notice=oidc_config_updated").into_response(),
+        Err(e) => (axum::http::StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct DeleteTenantOidcConfigForm {
+    provider: String,
+}
+
+pub async fn post_delete_tenant_oidc_config(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<DeleteTenantOidcConfigForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Admin) {
+        return (axum::http::StatusCode::FORBIDDEN, "admin role required").into_response();
+    }
+    match state
+        .auth_client
+        .delete_tenant_oidc_provider(
+            session.tenant_id,
+            session.role,
+            &form.provider,
+            &session.username,
+        )
+        .await
+    {
+        Ok(_) => Redirect::to("/security?notice=oidc_config_deleted").into_response(),
+        Err(e) => (axum::http::StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+    }
 }

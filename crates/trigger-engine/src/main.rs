@@ -128,9 +128,13 @@ async fn main() {
         )),
         internal_secret: internal_secret.clone(),
     };
-    let app = health_router()
-        .merge(api_router(api_state, internal_secret))
-        .merge(dead_letter_router(dead_letter_state));
+    let metrics = Arc::new(common::HttpMetrics::default());
+    let app = common::instrument_router(
+        health_router()
+            .merge(api_router(api_state, internal_secret))
+            .merge(dead_letter_router(dead_letter_state)),
+        metrics,
+    );
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "trigger-engine API listening");
     tokio::spawn(async move {

@@ -19,6 +19,11 @@ spec:
         {{- include "kizashi.selectorLabels" $root | nindent 8 }}
         app.kubernetes.io/component: {{ $name }}
     spec:
+      {{- if eq $name "agent-scheduler" }}
+      serviceAccountName: {{ default (printf "%s-agent-scheduler" (include "kizashi.fullname" $root)) $root.Values.agentSchedulerRbac.serviceAccountName | quote }}
+      {{- else if $svc.serviceAccountName }}
+      serviceAccountName: {{ tpl (toString $svc.serviceAccountName) $root | quote }}
+      {{- end }}
       {{- if $svc.runAsRoot }}
       securityContext:
         runAsUser: 0
@@ -77,12 +82,8 @@ spec:
           {{- end }}
       {{- if $svc.dockerSocket }}
       volumes:
-        # ADR-0020's shell-to-`docker run` pattern (see the comment on this entry in
-        # values.yaml). hostPath-mounting the node's Docker socket is a real, deliberate
-        # security/portability concession carried over from docker-compose.yml to preserve
-        # existing agent-scheduler behavior in this v1 chart — it will not work on
-        # containerd-only nodes (no dockerd to talk to) and grants the pod effective node-root.
-        # See README.md "Known limitations".
+        # Docker-socket access is retained only for services explicitly configured with
+        # dockerSocket: true (the Kubernetes agent-scheduler path leaves it disabled).
         - name: docker-sock
           hostPath:
             path: /var/run/docker.sock

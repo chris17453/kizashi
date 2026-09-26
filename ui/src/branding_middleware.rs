@@ -22,7 +22,21 @@ use axum::middleware::Next;
 use axum::response::Response;
 
 const DEFAULT_BRAND_SPAN: &str = r#"<span class="brand-name">Kizashi</span>"#;
-const ACCENT_VAR_PREFIX: &str = "--accent: #22d3ee;";
+const DEFAULT_BRAND_MARK: &str = r#"<span class="brand-mark">&#9670;</span>"#;
+const DEFAULT_DOCUMENT_TITLE: &str = "<title>Kizashi Console</title>";
+const DARK_ACCENT_VAR_PREFIX: &str = "--accent: #5eead4;";
+const LIGHT_ACCENT_VAR_PREFIX: &str = "--accent: #087f78;";
+
+fn escape_html_attribute(value: &str) -> String {
+    value.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+fn safe_logo_url(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    (lower.starts_with("https://") || lower.starts_with("http://"))
+        .then(|| escape_html_attribute(trimmed))
+}
 
 fn apply_branding_to_html(html: &str, branding: &Branding) -> String {
     let mut out = html.to_string();
@@ -30,11 +44,21 @@ fn apply_branding_to_html(html: &str, branding: &Branding) -> String {
         let escaped = name.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
         out = out
             .replace(DEFAULT_BRAND_SPAN, &format!(r#"<span class="brand-name">{escaped}</span>"#));
+        out = out.replace(DEFAULT_DOCUMENT_TITLE, &format!("<title>{escaped} Console</title>"));
+    }
+    if let Some(logo_url) = branding.logo_url.as_deref().and_then(safe_logo_url) {
+        out = out.replace(
+            DEFAULT_BRAND_MARK,
+            &format!(r#"<img class="brand-mark brand-logo" src="{logo_url}" alt="">"#),
+        );
     }
     if let Some(color) = &branding.accent_color {
         // `accent_color` is already validated as a strict hex color server-side (ADR-0041)
         // before it's ever stored, so no further escaping is needed injecting it into CSS here.
-        out = out.replace(ACCENT_VAR_PREFIX, &format!("--accent: {color};"));
+        let replacement = format!("--accent: {color};");
+        out = out
+            .replace(DARK_ACCENT_VAR_PREFIX, &replacement)
+            .replace(LIGHT_ACCENT_VAR_PREFIX, &replacement);
     }
     out
 }
@@ -71,7 +95,10 @@ pub async fn apply_branding(
     let Ok(branding) = state.branding_client.get_branding_by_id(tenant_id).await else {
         return response;
     };
-    if branding.product_name.is_none() && branding.accent_color.is_none() {
+    if branding.product_name.is_none()
+        && branding.logo_url.is_none()
+        && branding.accent_color.is_none()
+    {
         return response;
     }
 

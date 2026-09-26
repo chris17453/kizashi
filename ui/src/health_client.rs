@@ -5,16 +5,25 @@ pub(crate) mod health_client_test;
 use async_trait::async_trait;
 use thiserror::Error;
 
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq)]
 pub struct ServiceHealthSummary {
     pub name: String,
     pub status: String,
 }
 
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq)]
 pub struct PlatformHealthSummary {
     pub status: String,
     pub services: Vec<ServiceHealthSummary>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq)]
+pub struct ServiceMetricsSummary {
+    pub name: String,
+    pub requests: u64,
+    pub errors: u64,
+    pub latency_seconds_sum: f64,
+    pub latency_seconds_count: u64,
 }
 
 #[derive(Debug, Error)]
@@ -29,6 +38,10 @@ pub enum HealthClientError {
 #[async_trait]
 pub trait HealthClient: Send + Sync {
     async fn platform_health(&self) -> Result<PlatformHealthSummary, HealthClientError>;
+
+    async fn service_metrics(&self) -> Result<Vec<ServiceMetricsSummary>, HealthClientError> {
+        Ok(Vec::new())
+    }
 }
 
 pub struct HttpHealthClient {
@@ -55,5 +68,16 @@ impl HealthClient for HttpHealthClient {
         // Observability's /v1/health intentionally returns 503 when any service is down
         // (ADR-0012) — that's a successful, meaningful response for this client, not an error.
         response.json().await.map_err(|e| HealthClientError::Unreachable(e.to_string()))
+    }
+
+    async fn service_metrics(&self) -> Result<Vec<ServiceMetricsSummary>, HealthClientError> {
+        self.client
+            .get(format!("{}/v1/service-metrics", self.observability_url))
+            .send()
+            .await
+            .map_err(|e| HealthClientError::Unreachable(e.to_string()))?
+            .json()
+            .await
+            .map_err(|e| HealthClientError::Unreachable(e.to_string()))
     }
 }

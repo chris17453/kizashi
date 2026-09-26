@@ -1,4 +1,5 @@
 use super::*;
+use async_imap::Authenticator;
 
 fn sample_connector() -> ImapConnector {
     ImapConnector::new(
@@ -52,6 +53,18 @@ fn search_query_uses_uid_range_when_since_uid_is_set() {
 fn search_query_falls_back_to_since_date_when_since_uid_is_absent() {
     let c = sample_connector();
     assert_eq!(c.search_query(), "SINCE 01-Jan-2024");
+}
+
+#[test]
+fn xoauth2_authenticator_builds_the_rfc_7628_initial_response() {
+    let mut authenticator = Xoauth2Authenticator {
+        username: "user@example.com".to_string(),
+        access_token: "access-token".to_string(),
+    };
+    assert_eq!(
+        authenticator.process(&[]),
+        "user=user@example.com\x01auth=Bearer access-token\x01\x01"
+    );
 }
 
 #[test]

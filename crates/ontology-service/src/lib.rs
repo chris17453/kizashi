@@ -1,6 +1,7 @@
 pub mod api;
 mod in_memory_repository;
 mod postgres_repository;
+pub mod property_contract;
 mod repository;
 
 mod health;

@@ -28,6 +28,11 @@
 <form class="login" method="get" action="/login/sso">
   <label for="sso_tenant_name">Workspace</label>
   <input type="text" id="sso_tenant_name" name="tenant_name" value="{{ tenant_name }}" placeholder="acme" autocapitalize="off" autocomplete="organization" required>
+  <label for="sso_provider">Identity provider</label>
+  <select id="sso_provider" name="provider">
+    <option value="entra">Microsoft Entra ID</option>
+    <option value="generic">Generic OIDC provider</option>
+  </select>
   <button type="submit" class="btn-secondary">Sign in with SSO</button>
 </form>
 {% endblock %}

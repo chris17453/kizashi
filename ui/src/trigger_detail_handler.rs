@@ -1,3 +1,7 @@
+#[path = "trigger_detail_handler_test.rs"]
+#[cfg(test)]
+mod trigger_detail_handler_test;
+
 use crate::session_guard::require_session;
 use crate::AppState;
 use askama::Template;
@@ -22,6 +26,8 @@ pub struct EditTriggerForm {
     pub window_seconds: i64,
     pub condition: String,
     pub actions: String,
+    #[serde(default)]
+    pub action_template_id: Option<Uuid>,
 }
 
 struct TriggerActionView {
@@ -42,6 +48,13 @@ struct TriggerActivityBar {
     href: String,
 }
 
+#[derive(serde::Serialize)]
+struct ActionTemplateOption {
+    id: Uuid,
+    name: String,
+    action_type: String,
+}
+
 #[derive(Template)]
 #[template(path = "trigger_detail.html")]
 struct TriggerDetailTemplate {
@@ -58,6 +71,7 @@ struct TriggerDetailTemplate {
     test_would_fire: Option<bool>,
     test_record_count: Option<usize>,
     activity: Vec<TriggerActivityBar>,
+    action_templates_json: String,
     notice: String,
     error: Option<String>,
 }
@@ -69,6 +83,8 @@ fn action_name(action: ActionType) -> &'static str {
         ActionType::TeamsAlert => "Microsoft Teams alert",
         ActionType::CreateTicket => "Create ticket",
         ActionType::Custom => "Custom provider",
+        ActionType::GeneratePdf => "Generate PDF artifact",
+        ActionType::GenerateXlsx => "Generate XLSX artifact",
     }
 }
 
@@ -112,6 +128,7 @@ fn error_template(is_admin: bool, can_write: bool, error: String) -> Response {
             test_would_fire: None,
             test_record_count: None,
             activity: vec![],
+            action_templates_json: "[]".to_string(),
             notice: String::new(),
             error: Some(error),
         }
@@ -119,6 +136,36 @@ fn error_template(is_admin: bool, can_write: bool, error: String) -> Response {
         .unwrap(),
     )
     .into_response()
+}
+
+async fn load_action_template_options(tenant_id: Uuid) -> Vec<ActionTemplateOption> {
+    let Some(client) = crate::action_templates_client::global() else {
+        return Vec::new();
+    };
+    client
+        .list(tenant_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|template| ActionTemplateOption {
+            id: template.id,
+            name: template.name,
+            action_type: serde_json::to_value(template.action_type)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_string))
+                .unwrap_or_else(|| "custom".to_string()),
+        })
+        .collect()
+}
+
+fn action_templates_json(options: &[ActionTemplateOption]) -> String {
+    // The JSON is placed in an application/json script element. Escape HTML-significant
+    // characters so a tenant-controlled template name can never terminate that element.
+    serde_json::to_string(options)
+        .unwrap_or_else(|_| "[]".to_string())
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
 }
 
 pub async fn get_trigger_detail(
@@ -159,6 +206,7 @@ pub async fn get_trigger_detail(
         .collect();
     let condition = Some(condition_view(&trigger.condition));
     let activity = trigger_activity(&state, &session.bearer_token, &trigger).await;
+    let action_templates = load_action_template_options(session.tenant_id).await;
     Html(
         TriggerDetailTemplate {
             show_nav: true,
@@ -183,6 +231,7 @@ pub async fn get_trigger_detail(
             test_would_fire: test.as_ref().map(|result| result.would_fire),
             test_record_count: test.map(|result| result.contributing_record_count),
             activity,
+            action_templates_json: action_templates_json(&action_templates),
             notice: query.notice,
             trigger: Some(trigger),
             error: None,
@@ -256,10 +305,26 @@ pub async fn post_trigger_edit(
                 .into_response()
         }
     };
-    let actions = match serde_json::from_str::<Vec<ActionRef>>(&form.actions) {
-        Ok(value) => value,
-        Err(_) => {
-            return Redirect::to(&format!("/triggers/{id}?notice=invalid-actions")).into_response()
+    let actions = if let Some(template_id) = form.action_template_id {
+        let Some(client) = crate::action_templates_client::global() else {
+            return Redirect::to(&format!("/triggers/{id}?notice=edit-failed")).into_response();
+        };
+        match client.get(session.tenant_id, template_id).await {
+            Ok(Some(template)) => {
+                vec![ActionRef { action_type: template.action_type, config: template.config }]
+            }
+            Ok(None) | Err(_) => {
+                return Redirect::to(&format!("/triggers/{id}?notice=invalid-actions"))
+                    .into_response()
+            }
+        }
+    } else {
+        match serde_json::from_str::<Vec<ActionRef>>(&form.actions) {
+            Ok(value) => value,
+            Err(_) => {
+                return Redirect::to(&format!("/triggers/{id}?notice=invalid-actions"))
+                    .into_response()
+            }
         }
     };
     if form.name.trim().is_empty()
