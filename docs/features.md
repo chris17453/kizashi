@@ -3606,7 +3606,7 @@ architectural decision.
   `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
   `cargo test --workspace --all-features` against real Postgres/RabbitMQ/ClickHouse/MinIO,
   `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0043-tenant-isolation-audit-and-cookie-hardening.md
 
 ## [2026-07-20] fix/0009-internal-secret-header-trust-gap — Close the X-Role/X-Tenant-Id/X-Username unauthenticated trust gap
@@ -3636,7 +3636,7 @@ architectural decision.
   Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures), `cargo clippy
   --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all --check`, `cargo deny
   check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0044-internal-service-secret-for-header-trusted-endpoints.md
 
 ## [2026-07-20] feature/0055-global-audit-log-page — Global, browsable audit log page
@@ -3661,7 +3661,7 @@ architectural decision.
   against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures),
   `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all
   --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0045-global-audit-log-page.md
 
 ## [2026-07-20] feature/0056-active-sessions-management — Active sessions management page
@@ -3683,7 +3683,7 @@ architectural decision.
   failures), `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt
   --all --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories,
   unchanged).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0046-active-sessions-management-page.md
 
 ## [2026-07-20] feature/0057-security-overview-dashboard — Security overview dashboard and nav grouping
@@ -3703,7 +3703,7 @@ architectural decision.
   Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures), `cargo clippy
   --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all --check`, `cargo deny
   check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0047-security-overview-dashboard-and-nav-grouping.md
 
 ## [2026-07-20] fix/0010-disabled-button-visual-state — Disabled buttons now look disabled
@@ -3720,7 +3720,7 @@ architectural decision.
   behavioral test coverage needed/added); `cargo clippy --workspace --all-targets --all-features
   -- -D warnings`, `cargo fmt --all --check`, `cargo build --workspace` all green. Live-verified
   via headless-Chrome screenshot of the rendered `/security/sessions` page before and after.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-20] feature/0058-permissions-reference-and-csv-export — Permissions reference, audit CSV export, and an API key redaction fix
@@ -3744,7 +3744,7 @@ architectural decision.
   against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (110 test binaries, 0 failures),
   `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all
   --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0048-permissions-reference-page.md, docs/adr/0049-audit-log-csv-export.md,
   docs/adr/0050-analysis-config-api-key-redaction.md
 
@@ -3772,7 +3772,7 @@ architectural decision.
   failures), `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt
   --all --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories,
   unchanged -- no new advisories from the new dependency).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0051-totp-multi-factor-authentication.md
 
 ## [2026-07-20] feature/0060-password-policy-enforcement — Password policy enforcement
@@ -3793,7 +3793,7 @@ architectural decision.
   against real Postgres/RabbitMQ/ClickHouse/MinIO/greenmail (111 test binaries, 0 failures),
   `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all
   --check`, `cargo deny check`, `cargo audit` (3 pre-existing allow-listed advisories, unchanged).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0052-password-policy-enforcement.md
 
 ## [2026-07-20] feature/0061-login-attempt-anomaly-alerting — Login-attempt anomaly alerting
@@ -3823,7 +3823,7 @@ architectural decision.
   external test fixtures (`SMTP_TEST_HOST`, `FABRIC_TEST_HOST`, `IMAP_TEST_HOST`) not present in
   this local environment — a pre-existing local-env gap unconnected to this change; the two
   crates this feature actually touches were fully verified.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0053-login-attempt-anomaly-alerting.md
 
 ## [2026-07-20] feature/0062-data-subject-rights-export-and-delete — Data subject rights (export/delete)
@@ -3853,7 +3853,7 @@ architectural decision.
   and `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` both clean. `cargo
   fmt --all --check` clean. `cargo deny check` and `cargo audit` — same pre-existing allow-listed
   warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0054-data-subject-rights-export-and-delete.md
 
 ## [2026-07-20] feature/0063-backup-service-and-dr-visibility — Backup service and DR visibility
@@ -3884,7 +3884,7 @@ architectural decision.
   --all-targets --all-features -- -D warnings` and `cargo clippy -p kizashi-ui --all-targets
   --all-features -- -D warnings` both clean. `cargo fmt --all --check` clean. `cargo deny check`
   and `cargo audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0055-backup-service-and-dr-visibility.md
 
 ## [2026-07-20] fix/0011-pg-dump-version-mismatch — Fix pg_dump/server major-version mismatch in backup-service
@@ -3907,7 +3907,7 @@ architectural decision.
   verification that matters here is the live one performed and recorded above). `cargo build
   --workspace`, `cargo clippy -p backup-service --all-targets --all-features -- -D warnings`,
   `cargo fmt --all --check` all still clean (Dockerfile-only change, no Rust source touched).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a (implementation detail of ADR-0055, not a new architectural decision)
 
 ## [2026-07-20] feature/0064-compliance-report-generation — Compliance report generation
@@ -3933,7 +3933,7 @@ architectural decision.
   warnings` and `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` both
   clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
   allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0056-compliance-report-generation.md
 
 ## [2026-07-20] feature/0065-self-service-password-change — Self-service password change
@@ -3957,7 +3957,7 @@ architectural decision.
   -D warnings` and `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` both
   clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
   allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0057-self-service-password-change.md
 
 ## [2026-07-20] feature/0066-analysis-config-api-key-encryption — Analysis config API key encryption at rest
@@ -3982,7 +3982,7 @@ architectural decision.
   `cargo build --workspace` clean. `cargo clippy -p config-admin-service --all-targets
   --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. `cargo deny check`/
   `cargo audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0058-analysis-config-api-key-encryption-at-rest.md
 
 ## [2026-07-20] feature/0067-nav-wide-tenant-branding — Nav-wide tenant branding
@@ -4003,7 +4003,7 @@ architectural decision.
   build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
   warnings` clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same
   pre-existing allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0059-nav-wide-tenant-branding.md
 
 ## [2026-07-20] feature/0068-audit-log-csv-export-pagination — Audit log CSV export pagination
@@ -4021,7 +4021,7 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. `cargo
   deny check`/`cargo audit` — same pre-existing allow-listed warnings as prior entries, no new
   issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0060-audit-log-csv-export-pagination.md
 
 ## [2026-07-20] feature/0069-destructive-action-confirmation — Destructive action confirmation
@@ -4041,7 +4041,7 @@ architectural decision.
   `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features --
   -D warnings` clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same
   pre-existing allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0061-destructive-action-confirmation.md
 
 ## [2026-07-20] feature/0070-users-page-search — Users page search
@@ -4060,7 +4060,7 @@ architectural decision.
   clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
   --check` clean. `cargo deny check`/`cargo audit` — same pre-existing allow-listed warnings as
   prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0062-users-page-search.md
 
 ## [2026-07-20] chore/0004-docker-build-cache-mounts — Add BuildKit cache mounts to the shared Dockerfile
@@ -4081,7 +4081,7 @@ architectural decision.
   recompiling, all dependencies served from cache. Repeated with a different binary
   (`auth-service`, a different dependency mix) touched and rebuilt — **53 seconds**, confirming
   the cache is genuinely shared across different `BIN` builds, not a fluke of one image.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a (build-tooling fix, not an architectural decision)
 
 ## [2026-07-20] feature/0071-api-keys-page-search — API Keys page search
@@ -4097,7 +4097,7 @@ architectural decision.
   `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt
   --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing allow-listed
   warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
 
 ## [2026-07-20] feature/0072-sessions-page-search — Active Sessions page search
@@ -4112,7 +4112,7 @@ architectural decision.
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
   allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
 
 ## [2026-07-20] feature/0073-login-attempts-pagination-and-search — Login attempts pagination and search
@@ -4133,7 +4133,7 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. `cargo
   deny check`/`cargo audit` — same pre-existing allow-listed warnings as prior entries, no new
   issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0063-login-attempts-pagination-and-search.md
 
 ## [2026-07-20] feature/0074-normalization-mappings-search — Field Mappings page search
@@ -4151,7 +4151,7 @@ architectural decision.
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean. `cargo deny check`/`cargo audit` — same pre-existing
   allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0062-users-page-search.md (same pattern, no new decision to record)
 
 ## [2026-07-20] feature/0075-users-page-sortable-columns — Users page sortable columns
@@ -4168,7 +4168,7 @@ architectural decision.
   -p kizashi-ui --all-targets --all-features -- -D warnings` clean (one `unnecessary_sort_by`
   finding fixed with `sort_by_key`). `cargo fmt --all --check` clean. `cargo deny check`/`cargo
   audit` — same pre-existing allow-listed warnings as prior entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0064-users-page-sortable-columns.md
 
 ## [2026-07-20] feature/0076-api-keys-bulk-revoke — API Keys bulk revoke
@@ -4186,7 +4186,7 @@ architectural decision.
   kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check`
   clean. `cargo deny check`/`cargo audit` — same pre-existing allow-listed warnings as prior
   entries, no new issues.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0065-api-keys-bulk-revoke.md
 
 ## [2026-07-20] fix/0012-disable-toggle-confirm-danger — Sensors/Retention Policies disable button uses confirm-danger styling
@@ -4202,7 +4202,7 @@ architectural decision.
   toggle tests unaffected, no test asserted on the button's CSS class so none needed updating).
   `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
   warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0061-destructive-action-confirmation.md (same pattern, no new decision to record)
 
 ## [2026-07-20] feature/0077-triggers-page-search — Triggers page search
@@ -4218,7 +4218,7 @@ architectural decision.
   match, "no triggers on this page match" empty state for an unmatched query). `cargo build
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0066-triggers-page-search.md
 
 ## [2026-07-20] fix/0013-disabled-button-accessible-labels — Accessible labels on disabled self-action buttons
@@ -4234,7 +4234,7 @@ architectural decision.
   current user's disabled Remove button, aria-label present on the caller's disabled Revoke
   button). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets
   --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0067-disabled-button-accessible-labels.md
 
 ## [2026-07-20] feature/0078-sessions-page-sortable-columns — Active Sessions page sortable columns
@@ -4250,7 +4250,7 @@ architectural decision.
   sort, default-unset-sort newest-first ordering). `cargo build --workspace` clean. `cargo
   clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
   --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0068-sessions-page-sortable-columns.md
 
 ## [2026-07-20] docs/0003-normalization-mappings-pagination-evaluated-and-skipped — Normalization Mappings pagination evaluated and skipped
@@ -4266,7 +4266,7 @@ architectural decision.
   matter" reasoning already used to skip Retention Policies pagination/search. Recording this
   explicitly so the item isn't silently dropped or re-flagged as an oversight in a future audit.
 - **Tests:** N/A — no code change, decision-only.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** none — not an architectural decision, a scope call recorded here per CLAUDE.md's
   "no silent omission" principle.
 
@@ -4284,7 +4284,7 @@ architectural decision.
   match, "no audit activity on this page matches" empty state for an unmatched query; 1 existing
   test updated for the new link shape). `cargo build --workspace` clean. `cargo clippy -p
   kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0069-audit-log-search.md
 
 ## [2026-07-20] feature/0080-triggers-page-sortable-columns — Triggers page sortable columns
@@ -4301,7 +4301,7 @@ architectural decision.
 - **Tests:** `cargo test -p kizashi-ui --lib` — 410 passed (2 new: descending name sort, enabled-
   status grouping). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets
   --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0070-triggers-page-sortable-columns.md
 
 ## [2026-07-20] feature/0081-session-idle-timeout — Console UI session idle timeout
@@ -4319,7 +4319,7 @@ architectural decision.
   session within the window still works, activity slides the timeout forward, expired sessions
   are pruned from `list_for_tenant`). `cargo build --workspace` clean. `cargo clippy -p
   kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0071-session-idle-timeout.md
 
 ## [2026-07-20] feature/0082-events-page-search-and-sort — Events page search and sortable columns
@@ -4337,7 +4337,7 @@ architectural decision.
   match, "no events on this page match" empty state, ascending event_type sort). `cargo build
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0072-events-page-search-and-sort.md
 
 ## [2026-07-20] fix/0014-table-header-scope-attributes — Table header scope="col" attributes sitewide
@@ -4354,7 +4354,7 @@ architectural decision.
   one new test per template for a single sitewide convention). `cargo build --workspace` clean.
   `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt
   --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0073-table-header-scope-attributes.md
 
 ## [2026-07-20] fix/0015-pipeline-map-severity-text-label — Pipeline Map edge severity gets a visible text label
@@ -4369,7 +4369,7 @@ architectural decision.
 - **Tests:** `cargo test -p kizashi-ui --lib` — 418 passed (1 new: `severity_label` maps every
   severity to its visible word). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0074-pipeline-map-severity-text-label.md
 
 ## [2026-07-20] fix/0016-inline-edit-input-accessible-names — Accessible names on per-row inline-edit inputs
@@ -4384,7 +4384,7 @@ architectural decision.
   1 existing test extended with the role-select aria-label assertion). `cargo build
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0075-inline-edit-input-accessible-names.md
 
 ## [2026-07-20] feature/0083-backups-pagination-and-cursor-urlencoding-fix — Backups page pagination, and a cursor URL-encoding bug fix
@@ -4404,7 +4404,7 @@ architectural decision.
   rendered "Load older" link contains no raw `+`, proving the encoding fix, not just its
   presence. `cargo build --workspace` clean. `cargo clippy -p kizashi-ui -p backup-service
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0076-backups-pagination-and-cursor-urlencoding-fix.md
 
 ## [2026-07-20] fix/0017-local-test-database-isolation — Local test runs use a separate database from the live stack
@@ -4424,7 +4424,7 @@ architectural decision.
   stayed at its real value (1) throughout, while `kizashi_test` picked up the 9 rows those tests
   created. `cargo build --workspace` clean (no Rust source changed, only `scripts/bootstrap.sh`
   and `.env.example`).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0077-local-test-database-isolation.md
 
 ## [2026-07-20] fix/0018-permissions-reference-stale-rows — Permissions Reference page had drifted stale
@@ -4441,7 +4441,7 @@ architectural decision.
   test extended to assert all 4 new rows render). `cargo build --workspace` clean. `cargo
   clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
   --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0078-permissions-reference-stale-rows.md
 
 ## [2026-07-20] fix/0019-search-term-url-encoding-fix — Fix unencoded search-term URL-encoding in sort/pagination links
@@ -4458,7 +4458,7 @@ architectural decision.
   containing `&` in the search term is actually percent-encoded, not just present). `cargo
   build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
   warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0079-search-term-url-encoding-fix.md
 
 ## [2026-07-20] feature/0084-sensors-page-search-and-sort — Sensors page search and sortable columns
@@ -4474,7 +4474,7 @@ architectural decision.
   "no sensors on this page match" empty state, descending name sort). `cargo build --workspace`
   clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo
   fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0080-sensors-page-search-and-sort.md
 
 ## [2026-07-20] fix/0020-overview-dashboard-surfaces-backend-errors — Overview dashboard surfaces backend errors instead of silently showing zero
@@ -4492,7 +4492,7 @@ architectural decision.
   failure renders visibly with labeled error text, not silently as zero). `cargo build
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0081-overview-dashboard-surfaces-backend-errors.md
 
 ## [2026-07-20] feature/0085-data-viewer-date-range-and-normalization-filters — Data Viewer date-range and normalization-status filters
@@ -4510,7 +4510,7 @@ architectural decision.
   `normalized` as query params, and the handler prefilling both from the query string). `cargo
   build --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D
   warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0082-data-viewer-date-range-and-normalization-filters.md
 
 ## [2026-07-20] fix/0021-auth-service-error-message-leak-fix — Auth Service stops leaking raw backend errors on user create/update failures
@@ -4527,7 +4527,7 @@ architectural decision.
   error string never appears in the response body). `cargo build --workspace` clean. `cargo
   clippy -p auth-service --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
   --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0083-auth-service-error-message-leak-fix.md
 
 ## [2026-07-20] feature/0086-events-page-links-to-record-journey — Events page links directly to each event's contributing record journey
@@ -4545,7 +4545,7 @@ architectural decision.
   record numbered links, empty-record-ids dash, and the HTTP client deserializing `record_ids`
   from the wire response). `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0084-events-page-links-to-record-journey.md
 
 ## [2026-07-20] feature/0087-data-viewer-csv-export — Data Viewer CSV export of the current filtered search
@@ -4565,7 +4565,7 @@ architectural decision.
   confirmed the Events page's real events (25 of them) each render a working "View journey" link
   that loads real analysis results. `cargo build --workspace` clean. `cargo clippy -p kizashi-ui
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0085-data-viewer-csv-export.md
 
 ## [2026-07-20] feature/0088-events-page-date-range-filtering — Events page date-range filtering
@@ -4582,7 +4582,7 @@ architectural decision.
   `since`/`until` as query params against a real stub server). `cargo build --workspace` clean.
   `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo fmt --all
   --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0086-events-page-date-range-filtering.md
 
 ## [2026-07-20] chore/0005-action-executor-rabbitmq-integration-test — Action Executor live-RabbitMQ integration test
@@ -4601,7 +4601,7 @@ architectural decision.
   `smtp_action_dispatcher_integration_test.rs` failure is unrelated (requires `SMTP_TEST_HOST`,
   not set in this environment). `cargo build --workspace` clean. `cargo clippy -p action-executor
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0087-action-executor-rabbitmq-integration-test.md
 
 ## [2026-07-20] chore/0006-full-pipeline-e2e-test — Full-pipeline e2e test
@@ -4620,7 +4620,7 @@ architectural decision.
   (SMTP/Fabric-SQL/IMAP live servers not present in this sandbox), unrelated to this change.
   `cargo build --workspace`, `cargo clippy --workspace --all-targets --all-features -- -D
   warnings`, `cargo fmt --all --check` — all clean.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0088-full-pipeline-e2e-test.md
 
 ## [2026-07-20] feature/0089-kubernetes-helm-chart — Kubernetes Helm chart
@@ -4639,7 +4639,7 @@ architectural decision.
   43 objects render cleanly (18 Deployments, 16 Services, 7 CronJobs, 1 ConfigMap, 1 Secret).
   `kubeconform` against the Kubernetes 1.29 schema — 43 valid, 0 invalid, 0 errors. All three
   re-verified independently after the drafting agent's own run.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0089-kubernetes-helm-chart.md
 
 ## [2026-07-20] feature/0090-nav-hides-admin-only-links-per-role — Console UI nav hides admin-only links per role
@@ -4660,7 +4660,7 @@ architectural decision.
   existing tests re-verified passing after the `is_admin` field addition. `cargo build
   --workspace` clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings`
   clean. `cargo fmt --all --check` clean. No file in the diff exceeds 500 lines.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0090-nav-hides-admin-only-links-per-role.md
 
 ## [2026-07-20] feature/0091-api-keys-and-mappings-sortable-headers — Sortable headers for API Keys and Field Mappings
@@ -4677,7 +4677,7 @@ architectural decision.
   --check` clean. `api_keys_handler_test.rs` split into GET/mutation files (same as ADR-0090) to
   stay under the 500-line limit. Live-verified against the real `watkinslabs` tenant: both pages
   render working sort-header links reflecting the query string.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0091-api-keys-and-mappings-sortable-headers.md
 
 ## [2026-07-20] feature/0092-branding-and-analysis-config-audit-history-links — Audit-history links on Branding and AI Analysis pages
@@ -4693,7 +4693,7 @@ architectural decision.
   --all-targets --all-features -- -D warnings` clean. `cargo fmt --all --check` clean. No file
   exceeds 500 lines. Live-verified against the real `watkinslabs` tenant: both links render with
   the real tenant id and both resolve to a working audit-log page (200 OK).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0092-branding-and-analysis-config-audit-history-links.md
 
 ## [2026-07-20] feature/0093-confirm-destructive-actions — Confirmation prompt on destructive actions
@@ -4712,7 +4712,7 @@ architectural decision.
   clean. `cargo clippy -p kizashi-ui --all-targets --all-features -- -D warnings` clean. `cargo
   fmt --all --check` clean. No file exceeds 500 lines. Live-verified against the real
   `watkinslabs` tenant: Users/API Keys/Sensors pages all render the confirmation attribute.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0093-confirm-destructive-actions.md
 
 ## [2026-07-20] feature/0094-api-key-audit-history-link — API Key per-key audit history link
@@ -4737,7 +4737,7 @@ architectural decision.
   warnings` clean. `cargo fmt --all --check` clean. Live-verified against the real `watkinslabs`
   tenant: the per-key History link renders with the real key id and resolves to a working
   audit-log page (200 OK).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0094-api-key-audit-history-link.md
 
 ## [2026-07-20] feature/0095-sensors-bulk-delete-and-sessions-confirm — Sensors bulk-delete and Sessions revoke confirmation
@@ -4757,7 +4757,7 @@ architectural decision.
   `_mutations_test.rs`/`_pagination_test.rs`) to stay under 500 lines. Live-verified against the
   real `watkinslabs` tenant: Sensors renders the bulk-delete UI, Sessions renders the
   confirmation attribute.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0095-sensors-bulk-delete-and-sessions-confirm.md
 
 ## [2026-07-20] feature/0096-users-and-retention-policies-bulk-delete — Users and Retention Policies bulk-delete
@@ -4774,7 +4774,7 @@ architectural decision.
   clean. `cargo fmt --all --check` clean. No file exceeds 500 lines (split
   `retention_policies_handler_mutations_test.rs` a second time). Live-verified against the real
   `watkinslabs` tenant: Users renders the bulk-delete UI.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** docs/adr/0096-users-and-retention-policies-bulk-delete.md
 
 ## [2026-07-20] feature/0097-egress-allowlist-audit-log — Egress Allowlist audit log
@@ -5275,7 +5275,7 @@ architectural decision.
 - **Branch:** feature/0114-ontology-layer
 - **Summary:** Introduces a Palantir Foundry-style Ontology layer on top of `normalized_payload`. Includes `object_type`, `object`, `link_type`, `link`, `action_type`, and `action_invocation` tables. Added an ontology mapping engine to process normalized messages into objects. Integrated `action_invocation` audit logging into `action-executor` and extended Query Gateway to proxy `/api/ontology` routes.
 - **Tests:** Ran `cargo check` and updated `process_event_test.rs` to verify action-executor audit logging extension builds and passes. Included an end-to-end mapping example for Zendesk in `examples/zendesk_ontology.rs`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0115-console-operational-surfaces — Work focus queues and health backlog visibility
@@ -5283,7 +5283,7 @@ architectural decision.
 - **Branch:** feature/0115-console-operational-surfaces
 - **Summary:** Extends the operator console with shareable My Work focus queues (`assigned`, `unassigned`, and `review`) and promotes live pipeline queue pressure into Platform Health. Health now shows classified queue cards beside service availability, with direct links back to the Pipeline Map; the existing seeded telemetry remains the source of truth.
 - **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 548 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified operator login, `/work?focus=assigned|unassigned|review`, and `/health` queue-pressure cards against the rebuilt local stack.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0116-ontology-object-sets — Multi-object governed execution from Ontology
@@ -5291,7 +5291,7 @@ architectural decision.
 - **Branch:** feature/0116-ontology-object-sets
 - **Summary:** The Ontology object view now supports selecting the visible object set and passing that set into the existing governed action workbench. Each action intersects the selected IDs with its eligible targets before submission; the server continues to parse the multi-target field through the audited `InvokeActionRequest` path, preserving single-object execution as a fallback.
 - **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 548 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified the rebuilt Ontology page with 10 object selectors, 3 selection controls, and 4 multi-target fields rendered for the seeded operator workspace.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0117-ontology-saved-views — Shareable Ontology object views
@@ -5299,7 +5299,7 @@ architectural decision.
 - **Branch:** feature/0117-ontology-saved-views
 - **Summary:** Adds durable, tenant-scoped Ontology views backed by the existing saved-search persistence. Operators can save the current type/search scope, reopen it through a shareable URL, and remove it without affecting saved views on Data, Events, Incidents, Actions, or Reports; an explicit `surface=ontology` discriminator keeps each surface's filter contract isolated.
 - **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 549 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified operator save redirect, saved-view rendering, shareable `/ontology?q=Contoso` link, and delete redirect against the rebuilt local stack.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0118-console-attention-summary — Live workspace attention indicator
@@ -5307,7 +5307,7 @@ architectural decision.
 - **Branch:** feature/0118-console-attention-summary
 - **Summary:** Adds an authenticated `/work/summary` endpoint that combines active/critical/unassigned cases, non-completed governed actions, and critical pipeline queues into one shell-safe summary. Every console page now shows a live Attention indicator linking directly to My Work, so operators discover urgent work without first navigating to a specific surface.
 - **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 550 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified `/work/summary` returned seeded counts (`open_incidents=3`, `critical_incidents=1`, `unassigned_incidents=1`, `review_actions=6`) and the Attention link/script rendered on Overview, Ontology, Incidents, and Reports.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0119-attention-routing — Actionable shell attention popover
@@ -5315,7 +5315,7 @@ architectural decision.
 - **Branch:** feature/0119-attention-routing
 - **Summary:** Extends the global Attention indicator into a compact triage popover. Live counts now route directly to critical cases, unassigned work, governed action review, and critical pipeline queues; the popover is keyboard-dismissible and closes when focus leaves the control.
 - **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 550 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified `/work/summary`, the popover markup, all category links, and `aria-expanded` state on Overview.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0120-overview-signal-trend — Executive signal volume trend
@@ -5323,7 +5323,7 @@ architectural decision.
 - **Branch:** feature/0120-overview-signal-trend
 - **Summary:** Overview now includes a server-rendered 30-day event-volume trend sourced from Query Gateway's daily aggregation. Each bar is accessible with a date/count title and drills directly into the Events explorer for that day, giving executive operators temporal context instead of only point-in-time totals.
 - **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 551 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified Overview rendered without trend errors with a populated trend panel and date-scoped Events drill-through link.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0121-configurable-overview — Per-user draggable Overview dashboard
@@ -5331,7 +5331,7 @@ architectural decision.
 - **Branch:** feature/0121-configurable-overview
 - **Summary:** Closes the configurable-dashboard gap in the console spec. Overview widgets can now be reordered in a drag mode, with the arrangement persisted in browser storage under the authenticated tenant/user key and a visible reset control; the widgets themselves remain server-rendered from live platform data.
 - **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 551 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified Overview rendered the customization/reset controls, seven dashboard widgets, a tenant/user-scoped storage key, and the live signal trend.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0122-console-light-theme — Persistent light/dark shell theme
@@ -5339,7 +5339,7 @@ architectural decision.
 - **Branch:** feature/0122-console-light-theme
 - **Summary:** Implements the Console UI spec's full light-mode requirement. The shared shell now offers a no-reload Light/Dark toggle, applies the stored choice before first paint, persists it per browser, and overrides the complete surface/text/status palette while preserving tenant accent theming and the existing dark default.
 - **Tests:** `cargo test -p dashboard-api --lib --quiet` — 29 passed; `cargo test -p query-gateway --lib --quiet` — 14 passed; `cargo test -p kizashi-ui --quiet` — 551 passed; `cargo check -p dashboard-api -p query-gateway -p kizashi-ui`; `git diff --check`. Live-verified the authenticated shell rendered the theme button, pre-paint storage read, toggle persistence write, and light palette variables.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0123-event-type-catalog — Live event contract catalog
@@ -5347,7 +5347,7 @@ architectural decision.
 - **Branch:** feature/0123-event-type-catalog
 - **Summary:** Adds an authenticated Event Types workspace that groups the live signal stream into observed contracts, shows volume and recency, infers payload field paths/types from real event samples, and identifies the governed triggers consuming each type. Every card links back to the relevant event evidence and rule surface; empty/unconsumed contracts are called out for operator follow-up.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 552 passed; `cargo check -p kizashi-ui`. Live-verified `/event-types` returned HTTP 200 with 102809 bytes, 11 seeded event-type cards, observed contracts, and sample links against the rebuilt local stack.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0124-versioned-event-contract-governance — Auditable event schema registry
@@ -5355,7 +5355,7 @@ architectural decision.
 - **Branch:** feature/0124-versioned-event-contract-governance
 - **Summary:** Adds a tenant-scoped Config/Admin event-contract registry with immutable schema versions, same-transaction config audit entries, operator RBAC, and Console UI create/publish-version forms. Event Types now distinguishes observed-only signals from explicitly governed contracts and exposes the current schema plus version history beside live evidence.
 - **Tests:** `cargo test -p config-admin-service --lib --quiet` — 127 passed; `cargo test -p kizashi-ui --lib --quiet` — 552 passed; `cargo check -p config-admin-service -p kizashi-ui`; `git diff --check`. Live-verified UI publication of `demo.contract` v1 and v2, HTTP 303 redirects, catalog HTTP 200, and rendered `Governed v2`/version history after the migration-backed rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0125-console-archive-reimport — Tenant-safe lifecycle replay
@@ -5363,7 +5363,7 @@ architectural decision.
 - **Branch:** feature/0125-console-archive-reimport
 - **Summary:** Extends the Data Retention Console with an explicit archive reimport workflow backed by retention-service's replay endpoint. Operators can submit an archive batch for replay through the full pipeline; the Console validates the archive namespace against the signed-in tenant and rejects traversal/cross-tenant keys before any backend call, then reports the number of records reimported.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 552 passed; `cargo check -p kizashi-ui`; `git diff --check`. Live-verified the retention page rendered the replay controls and a cross-tenant archive key redirected with `notice=invalid-archive` without reaching retention-service.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0126-compliance-hold-governance — Auditable retention holds
@@ -5371,7 +5371,7 @@ architectural decision.
 - **Branch:** feature/0126-compliance-hold-governance
 - **Summary:** Replaces the previously descriptive compliance-hold promise with a real tenant-scoped hold registry. Operators can place and release holds by data class in the Data Retention console; holds are immutable-audit-backed and the retention sweep checks active holds before archiving or deleting aged records.
 - **Tests:** `cargo test -p retention-service --lib --quiet` — 68 passed, including active-hold sweep protection; `cargo test -p kizashi-ui --lib --quiet` — 552 passed; `cargo check -p retention-service -p kizashi-ui`; `git diff --check`. Live-verified Postgres-backed hold create/release, rendered Active/Released states, audit rows for both mutations, and healthy platform services.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0127-report-schedule-control-plane — Persistent recurring reports
@@ -5379,7 +5379,7 @@ architectural decision.
 - **Branch:** feature/0127-report-schedule-control-plane
 - **Summary:** Adds a dedicated Report Schedules workspace backed by the tenant-scoped saved-query store. Operators can define daily/weekly/monthly report windows and recipients, pause/resume or remove schedules, and open the exact CSV artifact behind a schedule; Reports and the global navigation now link directly to the control plane.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 553 passed; `cargo check -p kizashi-ui`; `git diff --check`. Live-verified schedule create, enabled rendering, pause/resume persistence, CSV export (`text/csv`, HTTP 200), delete, and empty-state recovery against the rebuilt local stack.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0128-auditable-report-runs — Generated report run ledger
@@ -5387,7 +5387,7 @@ architectural decision.
 - **Branch:** feature/0128-auditable-report-runs
 - **Summary:** Makes report generation observable and verifiable instead of leaving schedules as definitions only. Config/Admin now persists tenant-scoped report runs with running/generated/failed states, timestamps, errors, and CSV artifact URLs; Report Schedules adds an operator-only Run now action and a complete run-history table.
 - **Tests:** `cargo test -p config-admin-service --lib --quiet` — 128 passed; `cargo test -p kizashi-ui --lib --quiet` — 553 passed; `cargo check` completed during the local-stack rebuild; `git diff --check`. Live-verified a seeded schedule run redirect, generated run history row, artifact link, and CSV download (`text/csv`, HTTP 200, 3769 bytes).
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0129-server-persisted-dashboards — User-scoped dashboard layouts
@@ -5395,7 +5395,7 @@ architectural decision.
 - **Branch:** feature/0129-server-persisted-dashboards
 - **Summary:** Upgrades Overview customization from browser-only localStorage to an authenticated, tenant-scoped saved layout. Drag/reorder remains immediate in the browser, while every completed arrangement is persisted for the signed-in user and restored on a new browser/session; reset removes the server copy and restores the canonical widget order. The server validates the complete known widget set before saving.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `cargo check` completed during the rebuilt local-stack compile; `git diff --check`. Live-verified authenticated save (`HTTP 204`), Config/Admin persistence of `dashboard_layout` for `demo`, cross-request restoration of the six-widget order, and reset (`HTTP 303`) back to the canonical layout.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0130-report-run-retry — Operational report recovery
@@ -5403,7 +5403,7 @@ architectural decision.
 - **Branch:** feature/0130-report-run-retry
 - **Summary:** Failed report generations in Run history now expose a direct operator Retry action linked to the originating schedule, keeping recovery inside the same governed workflow and preserving each attempt as its own ledger row.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `git diff --check`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0131-recurring-report-executor — Live due-schedule execution
@@ -5411,7 +5411,7 @@ architectural decision.
 - **Branch:** feature/0131-recurring-report-executor
 - **Summary:** Adds a dedicated `report-scheduler` service that reads enabled tenant-scoped report schedules, evaluates daily/weekly/monthly cadence from durable run history, mints a service-scoped Query Gateway token per tenant, verifies the report data path, and persists generated/failed runs with artifacts and completion timestamps. It runs in the local launcher and Docker Compose, exposes health to Platform Health, and keeps the existing Console history as the operator surface.
 - **Tests:** `cargo test -p report-scheduler --quiet` — 2 passed; `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `cargo check -p report-scheduler -p kizashi-ui`; `git diff --check`. Live-verified service health on `8098`, creation of a new daily schedule, automatic execution after the 10-second local interval, persisted `generated` run, scheduler log completion, and the run appearing in `/reports/schedules`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0132-smtp-report-delivery — Scheduled CSV email delivery
@@ -5419,7 +5419,7 @@ architectural decision.
 - **Branch:** feature/0132-smtp-report-delivery
 - **Summary:** Extends the recurring report executor with optional SMTP delivery. The scheduler now fetches the tenant-scoped report data, renders the CSV attachment, sends it to the configured schedule recipient, and persists `delivered` or `delivery_failed` separately from `generated`; the Console exposes both states and offers retry for delivery failures. SMTP remains opt-in so local development continues to generate auditable Console artifacts without a mail server.
 - **Tests:** `cargo test -p report-scheduler --quiet` — 3 passed; `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `cargo check -p report-scheduler -p kizashi-ui`; `git diff --check`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0133-real-pdf-report-artifacts — PDF executive summaries
@@ -5427,7 +5427,7 @@ architectural decision.
 - **Branch:** feature/0133-real-pdf-report-artifacts
 - **Summary:** Closes the scheduled PDF gap with a real authenticated PDF 1.4 report artifact, not a renamed CSV or printable HTML response. Reports now offer PDF export, schedules can select CSV or PDF, scheduled PDF runs persist `format=pdf`, and optional SMTP delivery attaches the matching PDF bytes; run history exposes the selected format and artifact.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `cargo test -p report-scheduler --quiet` — 3 passed; `cargo check -p report-scheduler -p kizashi-ui`; `git diff --check`. Live-verified authenticated PDF download (`application/pdf`, one-page PDF recognized by `file`), a new PDF schedule, persisted `format=pdf`, scheduler completion, and Platform Health `report-scheduler=up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0134-workspace-context-switching — Explicit tenant context
@@ -5435,7 +5435,7 @@ architectural decision.
 - **Branch:** feature/0134-workspace-context-switching
 - **Summary:** Makes tenant scope visible in the Console shell and adds a safe workspace-switch workflow. Login and SSO persist the selected workspace label for shell context, `/session/context` exposes it to the live identity chip, and switching first revokes the current UI session and clears workspace/session cookies before returning to workspace login.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 554 passed; `cargo check -p kizashi-ui`; `git diff --check`. Live-verified `acme` login context, workspace chip wiring, switch redirect (`303 /login`), and post-switch context rejection (`401`); Platform Health remained up.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0135-event-contract-source-mapping — Governed source-to-event mappings
@@ -5443,7 +5443,7 @@ architectural decision.
 - **Branch:** feature/0135-event-contract-source-mapping
 - **Summary:** Completes Event Type governance with an explicit source-field mapping editor. Contract publication and versioning now validate and persist an `x-kizashi-source-mapping` extension in the governed schema, and each Event Type card renders the mapping alongside observed fields, schema versions, and consuming triggers.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 555 passed; `cargo check -p kizashi-ui`; `git diff --check`. Live-verified publishing `demo.mapping.contract` with `score → $.analysis.score` and `entity_ref → $.customer.id`, then confirmed both the contract and mapping rendered from Config/Admin-backed Event Types.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0136-ontology-action-feedback — Governed action execution feedback
@@ -5451,7 +5451,7 @@ architectural decision.
 - **Branch:** feature/0136-ontology-action-feedback
 - **Summary:** Completes the ontology action workbench loop by preserving the result of a default-surface action redirect. Successful, rejected, and invalid-parameter outcomes now render explicit operator feedback, while the successful path remains backed by the existing immutable action invocation ledger.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 555 passed; `git diff --check`. Live-verified a governed `Escalate support ticket` invocation with a typed `reason`, `303 /ontology?notice=executed`, rendered success feedback, action ledger activity, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0137-audit-evidence-expansion — Inline immutable change evidence
@@ -5459,7 +5459,7 @@ architectural decision.
 - **Branch:** feature/0137-audit-evidence-expansion
 - **Summary:** Upgrades the global Audit Log from an activity index into an investigation surface. Each merged entry now exposes its immutable entry/entity IDs and expandable before/after JSON evidence inline, preserving the existing tenant-scoped merge, cursor pagination, and CSV export.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 555 passed; `git diff --check`. Live-verified `/audit-log` HTTP 200 with 50 evidence rows, 50 Before/After panels, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0138-global-search-audit-routing — Searchable governed changes
@@ -5467,7 +5467,7 @@ architectural decision.
 - **Branch:** feature/0138-global-search-audit-routing
 - **Summary:** Extends global search across the full operating model to include tenant-scoped audit entries. Search now matches entry/entity IDs, change metadata, actors, and after-payload values; results route to the filtered Audit Log where the inline immutable evidence panel can be expanded.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 555 passed; `git diff --check`. Live-verified `/search?q=created` with 22 audit hits, routed an entity ID to `/audit-log?q=…`, rendered filtered evidence, and confirmed Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0139-overview-signal-windows — Executive signal-window control
@@ -5475,7 +5475,7 @@ architectural decision.
 - **Branch:** feature/0139-overview-signal-windows
 - **Summary:** Makes Overview’s executive signal picture time-scoped instead of permanently fixed to an implicit 30-day window. Date controls now drive the event KPI, recent activity query, daily trend, displayed window label, and event-explorer drilldown links; invalid or reversed ranges normalize safely.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/overview?from=2026-07-01&to=2026-07-07` HTTP 200, rendered window label and controls, matching event-explorer link, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0140-overview-kpi-drilldowns — Navigable executive KPIs
@@ -5483,7 +5483,7 @@ architectural decision.
 - **Branch:** feature/0140-overview-kpi-drilldowns
 - **Summary:** Turns Overview’s seven executive KPI tiles into direct scoped drilldowns: sensors, records, events, incidents, platform health, ontology, and governed actions. The Events tile preserves the currently selected signal window so the landing dashboard and explorer stay aligned.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified seven KPI links on the rebuilt Overview, custom-window event routing, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0141-case-action-parameter-forms — Typed incident response controls
@@ -5491,7 +5491,7 @@ architectural decision.
 - **Branch:** feature/0141-case-action-parameter-forms
 - **Summary:** Brings the Incident case response workbench up to parity with Event and Ontology action surfaces. Governed actions now derive typed string/number/boolean/array/object fields from their parameter contract and serialize them into the existing audited invocation request without requiring operators to hand-edit raw JSON.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified seeded incident `00000000-0000-0000-0000-000000000060` with 4 typed case-action forms and 4 rendered parameter fields; Platform Health remained `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0142-incident-action-outcome-feedback — Visible case response results
@@ -5499,7 +5499,7 @@ architectural decision.
 - **Branch:** feature/0142-incident-action-outcome-feedback
 - **Summary:** Completes the Incident response workbench loop by preserving governed action outcomes on the case route. Executed, rejected, and invalid-parameter redirects now render distinct inline operator feedback while the case timeline and immutable action ledger remain the source of response history.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified a typed case action returned `303 /incidents/00000000-0000-0000-0000-000000000060?notice=executed`, rendered the success banner, preserved 4 typed action forms, and confirmed Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0143-ontology-mapping-authoring — Structured object derivation rules
@@ -5507,7 +5507,7 @@ architectural decision.
 - **Branch:** feature/0143-ontology-mapping-authoring
 - **Summary:** Replaces the object-type mapping-rule-only JSON workflow with a guided authoring surface. Operators can add source rules, choose the normalized source type, declare the identity property, and build target-property/source-path mappings; the advanced JSON editor remains available for richer contracts.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/ontology` HTTP 200 with 6 mapping editors, 6 add-rule controls, 5 advanced mapping fallbacks, 15 seeded object cards, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0144-normalization-mapping-authoring — Structured pipeline field mappings
@@ -5515,7 +5515,7 @@ architectural decision.
 - **Branch:** feature/0144-normalization-mapping-authoring
 - **Summary:** Upgrades the Field Mappings control plane from line-oriented text entry to structured normalized-field and raw-payload-path rows. Existing mappings load into editable rows, duplicate targets are rejected client-side, and the original advanced text format remains available for compatibility.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/normalization-mappings` HTTP 200 with 3 mapping-builder forms, 3 add-field controls, 2 advanced text fallbacks, seeded mapping lines, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 
@@ -5524,7 +5524,7 @@ architectural decision.
 - **Branch:** feature/0145-normalization-mapping-preview
 - **Summary:** Adds an in-form preview loop to Field Mappings. Operators can paste representative raw JSON and inspect the normalized payload produced by the current structured rows, including nested JSONPath-lite resolution and explicit nulls for missing paths, before saving a mapping version.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/normalization-mappings` HTTP 200 with 3 preview controls, 3 sample payload editors, 3 preview outputs, advanced mapping fallback, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0146-ontology-action-contract-authoring — Structured safety contracts
@@ -5532,7 +5532,7 @@ architectural decision.
 - **Branch:** feature/0146-ontology-action-contract-authoring
 - **Summary:** Brings Ontology action authoring into the same guided workflow as action parameters. Preconditions now edit as property/value checks, effects edit as property changes with literal or `$parameter` bindings, and advanced JSON remains available for complex contracts; submit synchronization preserves the existing governed API payloads.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/ontology` HTTP 200 with 4 action authoring forms, 5 precondition payloads, 5 effect payloads, 15 seeded objects, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0147-ontology-mutation-feedback — Auditable authoring outcomes
@@ -5540,7 +5540,7 @@ architectural decision.
 - **Branch:** feature/0147-ontology-mutation-feedback
 - **Summary:** Completes the Ontology authoring feedback loop. Object, object-type, relationship type/instance, and governed action CRUD redirects now preserve explicit success notices, so operators can distinguish a committed model change from a silent return to the page; backend failures remain surfaced as HTTP errors.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/ontology?notice=action_created` HTTP 200 with the rendered action success notice, 15 seeded objects, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0148-event-contract-authoring — Typed event schema publication
@@ -5548,7 +5548,7 @@ architectural decision.
 - **Branch:** feature/0148-event-contract-authoring
 - **Summary:** Upgrades Event Type Governance from raw JSON-only publication to a typed field editor. Operators can add event fields, choose string/number/integer/boolean/array/object types, mark required fields, and synchronize the result into the existing JSON Schema/versioning API while retaining advanced JSON editing.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/event-types` HTTP 200 with 4 schema payloads, 5 version forms, typed schema editor script, 2 advanced JSON toggles, 15 observed event cards, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0149-event-source-mapping-authoring — Structured contract provenance
@@ -5556,7 +5556,7 @@ architectural decision.
 - **Branch:** feature/0149-event-source-mapping-authoring
 - **Summary:** Completes the Event Type authoring workflow with structured event-field-to-source-path mapping rows for initial publication and versioning. Operators can add and validate unique mappings while retaining the raw JSON escape hatch used by the existing governed schema extension.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/event-types` HTTP 200 with 4 source-mapping payloads, 4 advanced JSON toggles, 15 observed event cards, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0150-audit-log-scoped-filters — Reviewer evidence routing
@@ -5564,7 +5564,7 @@ architectural decision.
 - **Branch:** feature/0150-audit-log-scoped-filters
 - **Summary:** Adds audit-source and change-category filters to the merged Audit Log. Reviewers can narrow mixed configuration, access, incident, retention, and ontology evidence without losing the existing free-text search, inline before/after evidence, or cursor pagination context.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live-verified `/audit-log?service=ontology-service&change_type=invoked` HTTP 200 with filter controls, evidence panels, and Platform Health `up`.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0151-data-record-compare — Side-by-side evidence review
@@ -5572,7 +5572,7 @@ architectural decision.
 - **Branch:** feature/0151-data-record-compare
 - **Summary:** Adds bounded comparison to Data Explorer. Investigators can select up to four source records from the current result page and review their raw and normalized payloads side by side, with direct links back to each record's downstream journey and modeling context.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 556 passed; `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0152-data-selected-reprocess — Targeted evidence recovery
@@ -5580,7 +5580,7 @@ architectural decision.
 - **Branch:** feature/0152-data-selected-reprocess
 - **Summary:** Extends Data Explorer selection into targeted recovery. Operators can reprocess up to 25 explicitly selected records from the current evidence window, while preserving the ingestion service's tenant boundary and per-record normalized no-op behavior.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 557 passed; `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0153-ontology-property-filters — Object set investigation
@@ -5588,7 +5588,7 @@ architectural decision.
 - **Branch:** feature/0153-ontology-property-filters
 - **Summary:** Adds property-aware ontology object filtering alongside free-text search and type scoping. Investigators can narrow an object set by property name and value, preserve the filter through pagination and type navigation, and save/reopen the complete view.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 558 expected after the focused regression; `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0154-ontology-object-set-export — Governed object-set handoff
@@ -5596,7 +5596,7 @@ architectural decision.
 - **Branch:** feature/0154-ontology-object-set-export
 - **Summary:** Adds CSV export for the complete active Ontology object set. Exports honor type, free-text, property, and value filters, include object type/provenance fields, and are scoped to the authenticated workspace.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 559 passed; `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0155-sensor-detail-controls — Connector lifecycle workspace
@@ -5604,7 +5604,7 @@ architectural decision.
 - **Branch:** feature/0155-sensor-detail-controls
 - **Summary:** Completes connector detail operations with operator-gated editing of opaque connector configuration and enabled state. Updates use Config Admin's existing audited sensor mutation path; connector identity/type remain immutable.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 560 passed; `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0156-event-contract-version-diff — Contract review context
@@ -5612,7 +5612,7 @@ architectural decision.
 - **Branch:** feature/0156-event-contract-version-diff
 - **Summary:** Adds readable Event Type version review. Immutable contract versions now show added, removed, and changed fields plus source-mapping changes, with expandable published JSON for exact reviewer evidence before the next version is published.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 561 expected after the focused regression; `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0157-action-ledger-export — Governed decision handoff
@@ -5620,7 +5620,7 @@ architectural decision.
 - **Branch:** feature/0157-action-ledger-export
 - **Summary:** Adds complete filtered CSV export for the Action Ledger, including immutable invocation IDs, action/outcome, resolved target labels, parameters, audit context, and execution timestamps.
 - **Tests:** `cargo test -p kizashi-ui --lib --quiet` — 562 expected after the focused regression; `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0158-events-live-refresh — Incident command awareness
@@ -5628,7 +5628,7 @@ architectural decision.
 - **Branch:** feature/0158-events-live-refresh
 - **Summary:** Adds a bounded live-refresh mode to the Events signal explorer. Operators can refresh immediately or enable a 30-second refresh loop that preserves the current filtered URL and can be paused locally at any time.
 - **Tests:** `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0159-incident-view-scope-preservation — Case navigation integrity
@@ -5636,7 +5636,7 @@ architectural decision.
 - **Branch:** feature/0159-incident-view-scope-preservation
 - **Summary:** Preserves status, severity, owner, text search, sorting, and direction when switching the Incident Queue between Table and Board views. Saved board views continue to round-trip the same scope.
 - **Tests:** pending after implementation; `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0160-user-mfa-posture — Membership security visibility
@@ -5644,7 +5644,7 @@ architectural decision.
 - **Branch:** feature/0160-user-mfa-posture
 - **Summary:** Adds MFA enrollment posture to the administrator Users table, making identity risk visible alongside username and role without exposing secrets or changing authentication enforcement.
 - **Tests:** pending after implementation; `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 
 ## [2026-07-23] feature/0161-user-mfa-filter — Security review workflow
@@ -5652,7 +5652,7 @@ architectural decision.
 - **Branch:** feature/0161-user-mfa-filter
 - **Summary:** Adds an MFA posture filter to workspace Users. Administrators can isolate enrolled or not-enrolled accounts while preserving username search and role sorting, turning security posture visibility into an actionable review workflow.
 - **Tests:** pending after implementation; `git diff --check`. Live verification follows the UI rebuild.
-- **PR:** pending
+- **PR:** #147
 - **ADR:** n/a
 ### feature/0162-user-bulk-role-assignment
 
@@ -8352,3 +8352,23 @@ rendered KPI links; live verification of `/incidents?status=active&view=board` c
 ### feature/0452-chart-investigation-tooltips
 - Added a shared hover and keyboard tooltip layer to the dependency-free SVG chart renderer.
 - Report and Overview charts now expose exact label/value readouts while retaining direct drill-through links and server-rendered fallback content.
+
+## [2026-09-26] feature/0115-yocho-core — Yochō core signal types, stage traits and `signal.emitted` contract
+- **Type:** feature
+- **Branch:** feature/0115-yocho-core
+- **Summary:** Adds the `crates/yocho-core` library (Yochō Phase 0 item P0-1): `SignalId`
+  (ULID), `EntityRef` (source identity, not customer, per ADR-0208), `SignalValue`
+  (gauge/counter/categorical/score), `Signal` with `Provenance` (source item ids, model version,
+  opaque base64 ciphertext — core never sees keys) and `Contribution` lineage, a deterministic
+  SHA-256 `idempotency_key` for the ReplacingMergeTree dedup of ADR-0205 §4, never-panicking
+  `Signal::validate` (non-finite values, blank/overlong identifiers, dims limits), the object-safe
+  async `Extractor`/`Detector`/`Scorer` traits, and the `signal.emitted` exchange constant.
+- **Tests:** `cargo test -p yocho-core` — 39 unit tests passed, 0 failed (sibling `_test.rs` files,
+  incl. proptest `validate_never_panics_and_accepts_only_finite_bounded_signals` and an
+  idempotency-key golden value cross-checked against an independent Python derivation) + 5
+  contract tests in `tests/signal_emitted_contract_test.rs` passed, pinning the JSON shape.
+  `cargo clippy -p yocho-core --all-targets -- -D warnings` clean; `cargo fmt --all --check` clean;
+  `cargo llvm-cov -p yocho-core` 100.00% line coverage. Workspace-wide clippy fails on pre-existing
+  lints in crates this change does not touch (see PR).
+- **PR:** #147
+- **ADR:** ADR-0200, ADR-0205, ADR-0208 (in PR #146)
