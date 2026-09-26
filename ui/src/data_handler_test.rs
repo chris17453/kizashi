@@ -25,6 +25,15 @@ fn data_batch_selection_exposes_a_preflight_scope() {
     assert!(template.contains("Batch actions affect the selected record IDs only."));
 }
 
+#[test]
+fn data_explorer_exposes_persistent_investigation_focus_routes() {
+    let template = include_str!("../templates/data.html");
+    let detail = include_str!("../templates/data_detail.html");
+    assert!(template.contains("data-investigation-context=\"{{ record.id }}\""));
+    assert!(template.contains("data-investigation-type=\"Evidence\""));
+    assert!(detail.contains("data-investigation-route"));
+}
+
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/data", get(get_data))

@@ -69,6 +69,8 @@ pub enum ActionType {
     TeamsAlert,
     CreateTicket,
     Custom,
+    GeneratePdf,
+    GenerateXlsx,
 }
 
 impl TriggerDefinition {

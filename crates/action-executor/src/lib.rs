@@ -3,6 +3,7 @@
 //! writes an append-only ActionExecution audit row per action.
 
 mod action_dispatcher;
+mod artifact_action_dispatcher;
 mod dead_letter;
 mod dead_letter_handlers;
 mod execution_handlers;
@@ -17,6 +18,7 @@ mod teams_alert_action_dispatcher;
 mod trigger_client;
 
 pub use action_dispatcher::{ActionDispatcher, DispatchError, HttpActionDispatcher};
+pub use artifact_action_dispatcher::ArtifactActionDispatcher;
 pub use common::EVENT_CREATED_EXCHANGE;
 pub use dead_letter::{DeadLetterError, DeadLetterManager, RabbitMqDeadLetterManager};
 pub use dead_letter_handlers::{

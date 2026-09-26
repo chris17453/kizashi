@@ -15,7 +15,7 @@ pub enum MfaClientError {
     Rejected(u16),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct MfaEnrollment {
     pub secret_base32: String,
     pub provisioning_uri: String,

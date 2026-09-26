@@ -31,6 +31,11 @@ pub trait SavedSearchQueryRepository: Send + Sync {
         tenant_id: Uuid,
     ) -> Result<Vec<SavedSearchQuery>, SavedSearchQueryRepositoryError>;
 
+    async fn update(
+        &self,
+        query: SavedSearchQuery,
+    ) -> Result<SavedSearchQuery, SavedSearchQueryRepositoryError>;
+
     async fn delete(
         &self,
         tenant_id: Uuid,
@@ -86,6 +91,26 @@ impl SavedSearchQueryRepository for PostgresSavedSearchQueryRepository {
         .await
         .map_err(|e| SavedSearchQueryRepositoryError::Backend(e.to_string()))?;
         Ok(rows.into_iter().map(row_to_query).collect())
+    }
+
+    async fn update(
+        &self,
+        query: SavedSearchQuery,
+    ) -> Result<SavedSearchQuery, SavedSearchQueryRepositoryError> {
+        let result = sqlx::query(
+            "UPDATE saved_search_queries SET name = $1, filter = $2 WHERE id = $3 AND tenant_id = $4",
+        )
+        .bind(&query.name)
+        .bind(&query.filter)
+        .bind(query.id)
+        .bind(query.tenant_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| SavedSearchQueryRepositoryError::Backend(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            return Err(SavedSearchQueryRepositoryError::NotFound(query.id));
+        }
+        Ok(query)
     }
 
     async fn delete(

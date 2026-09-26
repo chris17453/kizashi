@@ -23,6 +23,7 @@ members = [
   "crates/ingestion-gateway",
   "crates/ingestion-service",
   "crates/normalization-service",
+  "crates/pipeline-runtime",
     "crates/ontology-service",
   "crates/observability",
   "crates/query-gateway",
@@ -59,9 +60,9 @@ proptest = { version = "1" }
 futures-util = { version = "0.3" }
 sha2 = { version = "0.10" }
 argon2 = { version = "0.5" }
-oauth2 = { version = "4", default-features = false, features = ["reqwest"] }
-aws-sdk-s3 = { version = "1" }
-aws-config = { version = "1" }
+oauth2 = { version = "4", default-features = false }
+aws-sdk-s3 = { version = "1", default-features = false, features = ["rt-tokio", "behavior-version-latest", "default-https-client"] }
+aws-config = { version = "1", default-features = false, features = ["rt-tokio", "behavior-version-latest", "default-https-client", "credentials-process", "sso"] }
 flate2 = { version = "1" }
 tiberius = { version = "0.12", default-features = false, features = ["rustls", "tds73", "chrono"] }
 tokio-util = { version = "0.7", features = ["compat"] }

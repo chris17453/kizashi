@@ -48,6 +48,30 @@ async fn get_sso_login_redirects_to_the_idp_and_sets_a_flow_cookie() {
 }
 
 #[tokio::test]
+async fn get_sso_login_forwards_the_selected_generic_provider() {
+    let oidc_client = Arc::new(InMemoryOidcClient::default());
+    *oidc_client.authorize_result.lock().unwrap() = Some(OidcAuthorization {
+        authorization_url: "https://generic.example.com/authorize".to_string(),
+        csrf_token: "csrf-generic".to_string(),
+        code_verifier: "verifier-generic".to_string(),
+    });
+    let state = AppState { oidc_client: oidc_client.clone(), ..default_state() };
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/login/sso?tenant_name=acme&provider=generic")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(oidc_client.authorize_calls.lock().unwrap().as_slice(), &["generic"]);
+}
+
+#[tokio::test]
 async fn get_sso_login_shows_an_error_when_sso_is_not_configured() {
     let state = AppState { oidc_client: Arc::new(FailingOidcClient), ..default_state() };
 

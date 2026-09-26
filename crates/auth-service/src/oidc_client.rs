@@ -3,8 +3,8 @@
 pub(crate) mod oidc_client_test;
 
 use async_trait::async_trait;
+use common::execute_oauth2_request;
 use oauth2::basic::BasicClient;
-use oauth2::reqwest::async_http_client;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
     PkceCodeVerifier, RedirectUrl, Scope, TokenResponse, TokenUrl,
@@ -107,7 +107,7 @@ impl OidcClient for StandardOidcClient {
             .inner
             .exchange_code(AuthorizationCode::new(code.to_string()))
             .set_pkce_verifier(PkceCodeVerifier::new(code_verifier.to_string()))
-            .request_async(async_http_client)
+            .request_async(|request| execute_oauth2_request(&self.http_client, request))
             .await
             .map_err(|e| OidcError::Exchange(e.to_string()))?;
         Ok(result.access_token().secret().clone())

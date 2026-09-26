@@ -306,6 +306,8 @@ pub async fn update_incident(
 #[derive(serde::Deserialize)]
 pub struct LinkEventRequest {
     event_id: Uuid,
+    #[serde(default)]
+    group_key: Option<String>,
 }
 
 pub async fn link_event(
@@ -328,7 +330,13 @@ pub async fn link_event(
 
     match state
         .incident_repository
-        .link_event(tenant_id, incident_id, request.event_id, &actor)
+        .link_event_with_context(
+            tenant_id,
+            incident_id,
+            request.event_id,
+            request.group_key.as_deref(),
+            &actor,
+        )
         .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),

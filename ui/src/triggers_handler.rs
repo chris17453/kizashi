@@ -155,6 +155,33 @@ struct TriggersTemplate {
     notice: String,
     posture_metrics: Vec<TriggerPostureMetric>,
     trigger_coverage: Vec<TriggerCoverageRow>,
+    action_templates: Vec<ActionTemplateOption>,
+}
+
+struct ActionTemplateOption {
+    id: Uuid,
+    name: String,
+    action_type: String,
+}
+
+async fn load_action_template_options(tenant_id: Uuid) -> Vec<ActionTemplateOption> {
+    let Some(client) = crate::action_templates_client::global() else {
+        return Vec::new();
+    };
+    client
+        .list(tenant_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|template| ActionTemplateOption {
+            id: template.id,
+            name: template.name,
+            action_type: serde_json::to_value(template.action_type)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_string))
+                .unwrap_or_else(|| "custom".to_string()),
+        })
+        .collect()
 }
 
 pub async fn get_triggers(
@@ -168,6 +195,7 @@ pub async fn get_triggers(
     };
     let is_admin = session.role.at_least(common::Role::Admin);
     let can_write = session.role.at_least(common::Role::Operator);
+    let action_templates = load_action_template_options(session.tenant_id).await;
 
     let test_result = match (query.test_trigger_id, &query.test_group_key) {
         (Some(trigger_id), Some(group_key)) if !group_key.is_empty() => state
@@ -212,6 +240,7 @@ pub async fn get_triggers(
                     notice: query.notice,
                     posture_metrics,
                     trigger_coverage,
+                    action_templates,
                 }
                 .render()
                 .unwrap(),
@@ -235,6 +264,7 @@ pub async fn get_triggers(
                 notice: query.notice,
                 posture_metrics: vec![],
                 trigger_coverage: vec![],
+                action_templates: vec![],
             }
             .render()
             .unwrap(),
@@ -265,6 +295,8 @@ pub struct PostTriggerForm {
     action_type: Option<String>,
     #[serde(default)]
     action_config: String,
+    #[serde(default)]
+    action_template_id: Option<Uuid>,
     // ADR-0027: a correlated trigger's legs — event/chat was just the illustrative example in
     // the ADR, this is generic to any event types. Up to 6 (event_type, min_count) pairs — a
     // form can't submit a truly variable-length list without JS, so this is a fixed number of
@@ -311,6 +343,8 @@ fn build_action_refs(form: &PostTriggerForm) -> Result<Vec<common::ActionRef>, &
         "teams_alert" => common::ActionType::TeamsAlert,
         "create_ticket" => common::ActionType::CreateTicket,
         "custom" => common::ActionType::Custom,
+        "generate_pdf" => common::ActionType::GeneratePdf,
+        "generate_xlsx" => common::ActionType::GenerateXlsx,
         _ => return Err("choose a supported action provider"),
     };
     let mut config = if form.action_config.trim().is_empty() {
@@ -326,6 +360,45 @@ fn build_action_refs(form: &PostTriggerForm) -> Result<Vec<common::ActionRef>, &
         config["url"] = serde_json::Value::String(url.trim().to_string());
     }
     Ok(vec![common::ActionRef { action_type, config }])
+}
+
+fn action_refs_from_template(template: common::ActionTemplate) -> Vec<common::ActionRef> {
+    vec![common::ActionRef { action_type: template.action_type, config: template.config }]
+}
+
+async fn render_trigger_error(
+    state: &AppState,
+    session: &crate::Session,
+    message: &str,
+) -> Response {
+    let result = state
+        .triggers_client
+        .list_triggers(session.tenant_id, DEFAULT_PAGE_SIZE, 0)
+        .await
+        .unwrap_or(crate::TriggersPage { triggers: vec![], has_more: false });
+    Html(
+        TriggersTemplate {
+            show_nav: true,
+            is_admin: session.role.at_least(common::Role::Admin),
+            triggers: result.triggers.clone(),
+            page: 0,
+            has_more: result.has_more,
+            can_write: session.role.at_least(common::Role::Operator),
+            error: None,
+            form_error: Some(message.to_string()),
+            test_result: None,
+            q: String::new(),
+            sort: String::new(),
+            dir: String::new(),
+            notice: String::new(),
+            posture_metrics: trigger_posture_metrics(&result.triggers),
+            trigger_coverage: trigger_coverage(&result.triggers),
+            action_templates: load_action_template_options(session.tenant_id).await,
+        }
+        .render()
+        .unwrap(),
+    )
+    .into_response()
 }
 
 fn build_correlated_conditions(
@@ -435,6 +508,7 @@ pub async fn post_trigger(
                     notice: String::new(),
                     posture_metrics: trigger_posture_metrics(&result.triggers),
                     trigger_coverage: trigger_coverage(&result.triggers),
+                    action_templates: load_action_template_options(session.tenant_id).await,
                 }
                 .render()
                 .unwrap(),
@@ -443,36 +517,28 @@ pub async fn post_trigger(
         }
     };
 
-    let actions = match build_action_refs(&form) {
+    let action_result = match form.action_template_id {
+        Some(template_id) => {
+            let Some(client) = crate::action_templates_client::global() else {
+                return render_trigger_error(
+                    &state,
+                    &session,
+                    "action template service unavailable",
+                )
+                .await;
+            };
+            match client.get(session.tenant_id, template_id).await {
+                Ok(Some(template)) => Ok(action_refs_from_template(template)),
+                Ok(None) => Err("selected action template was not found".to_string()),
+                Err(error) => Err(error.to_string()),
+            }
+        }
+        None => build_action_refs(&form).map_err(str::to_string),
+    };
+    let actions = match action_result {
         Ok(actions) => actions,
         Err(msg) => {
-            let result = state
-                .triggers_client
-                .list_triggers(session.tenant_id, DEFAULT_PAGE_SIZE, 0)
-                .await
-                .unwrap_or(crate::TriggersPage { triggers: vec![], has_more: false });
-            return Html(
-                TriggersTemplate {
-                    show_nav: true,
-                    is_admin,
-                    triggers: result.triggers.clone(),
-                    page: 0,
-                    has_more: result.has_more,
-                    can_write,
-                    error: None,
-                    form_error: Some(msg.to_string()),
-                    test_result: None,
-                    q: String::new(),
-                    sort: String::new(),
-                    dir: String::new(),
-                    notice: String::new(),
-                    posture_metrics: trigger_posture_metrics(&result.triggers),
-                    trigger_coverage: trigger_coverage(&result.triggers),
-                }
-                .render()
-                .unwrap(),
-            )
-            .into_response();
+            return render_trigger_error(&state, &session, &msg).await;
         }
     };
 
@@ -520,6 +586,7 @@ pub async fn post_trigger(
                     notice: String::new(),
                     posture_metrics: trigger_posture_metrics(&result.triggers),
                     trigger_coverage: trigger_coverage(&result.triggers),
+                    action_templates: load_action_template_options(session.tenant_id).await,
                 }
                 .render()
                 .unwrap(),

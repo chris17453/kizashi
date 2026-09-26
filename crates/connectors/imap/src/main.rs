@@ -18,7 +18,42 @@ async fn main() {
         .parse()
         .expect("IMAP_PORT must be a port number");
     let username = std::env::var("IMAP_USERNAME").expect("IMAP_USERNAME must be set");
-    let password = std::env::var("IMAP_PASSWORD").expect("IMAP_PASSWORD must be set");
+    let access_token =
+        match std::env::var("IMAP_ACCESS_TOKEN").ok().filter(|v| !v.trim().is_empty()) {
+            Some(token) => Some(token),
+            None => {
+                let token_url = std::env::var("IMAP_OAUTH_TOKEN_URL").ok();
+                let client_id = std::env::var("IMAP_OAUTH_CLIENT_ID").ok();
+                let client_secret = std::env::var("IMAP_OAUTH_CLIENT_SECRET").ok();
+                match (token_url, client_id, client_secret) {
+                    (Some(token_url), Some(client_id), Some(client_secret))
+                        if !token_url.is_empty()
+                            && !client_id.is_empty()
+                            && !client_secret.is_empty() =>
+                    {
+                        let scope = std::env::var("IMAP_OAUTH_SCOPE").unwrap_or_else(|_| {
+                            "https://outlook.office365.com/.default".to_string()
+                        });
+                        Some(
+                            connector_runtime::fetch_access_token(
+                                &token_url,
+                                &client_id,
+                                &client_secret,
+                                &scope,
+                                reqwest::Client::new(),
+                            )
+                            .await
+                            .expect("IMAP OAuth client-credentials token request failed"),
+                        )
+                    }
+                    _ => None,
+                }
+            }
+        };
+    let password = std::env::var("IMAP_PASSWORD").unwrap_or_default();
+    if access_token.is_none() && password.is_empty() {
+        panic!("IMAP_PASSWORD or IMAP_ACCESS_TOKEN must be set");
+    }
     let mailbox = std::env::var("IMAP_MAILBOX").unwrap_or_else(|_| "INBOX".to_string());
     let since_date: chrono::NaiveDate = std::env::var("IMAP_SINCE_DATE")
         .expect("IMAP_SINCE_DATE must be set (YYYY-MM-DD)")
@@ -57,6 +92,7 @@ async fn main() {
         since_date,
         use_tls,
     )
+    .with_access_token(access_token)
     .with_since_uid(since_uid)
     .with_max_records_per_poll(max_records_per_poll);
     let ingestion_client =

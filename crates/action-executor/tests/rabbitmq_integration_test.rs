@@ -106,6 +106,10 @@ async fn spawn_stub_webhook_target() -> String {
 
 #[tokio::test]
 async fn a_real_event_created_message_results_in_a_dispatched_action_and_an_execution_row() {
+    if std::env::var("DATABASE_URL").is_err() || std::env::var("RABBITMQ_URL").is_err() {
+        eprintln!("skipping RabbitMQ/PostgreSQL integration test: DATABASE_URL and RABBITMQ_URL are required");
+        return;
+    }
     let pool = test_pool().await;
     let publish_channel = test_channel().await;
     let consume_channel = test_channel().await;

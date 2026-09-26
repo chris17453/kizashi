@@ -91,6 +91,7 @@ fn require_admin(headers: &HeaderMap) -> Option<Response> {
 /// session (ADR-0016's still-open limitation, see `audit_log.rs`), since it only needs to count
 /// admins tenant-wide, not identify "self". Returns `true` when `target_id` is currently the
 /// tenant's only `Admin`.
+#[allow(clippy::result_large_err)]
 async fn is_sole_admin(
     state: &AuthState,
     tenant_id: Uuid,

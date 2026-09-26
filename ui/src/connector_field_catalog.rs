@@ -34,6 +34,7 @@ pub const CONNECTOR_TYPES: &[(&str, &str)] = &[
     ("sql", "SQL"),
     ("fabric", "Fabric"),
     ("generic", "Generic"),
+    ("imap", "IMAP"),
 ];
 
 /// `(connector_type, display_name, category, short_description)` — the marketplace-style
@@ -53,6 +54,7 @@ pub const CONNECTOR_CATALOG: &[(&str, &str, &str, &str)] = &[
     ("sql", "SQL", "Database", "Poll rows from a SQL database via a configurable query"),
     ("fabric", "Fabric", "Database & Analytics", "Poll a Microsoft Fabric SQL analytics endpoint"),
     ("generic", "Generic", "Custom / Other", "Poll any HTTP JSON source with a bearer token"),
+    ("imap", "IMAP", "Communication", "Poll an IMAP mailbox with password or XOAUTH2 auth"),
 ];
 
 pub fn display_name(connector_type: &str) -> Option<&'static str> {
@@ -86,6 +88,22 @@ pub fn fields_for(connector_type: &str) -> Vec<ConnectorField> {
             field("ENTRA_CLIENT_SECRET", "Entra Client Secret", true, false),
             field("GRAPH_TEAMS_TEAM_ID", "Team ID", false, false),
             field("GRAPH_TEAMS_CHANNEL_ID", "Channel ID", false, false),
+        ],
+        "imap" => vec![
+            field("IMAP_HOST", "IMAP Host", false, false),
+            field("IMAP_PORT", "IMAP Port", false, true),
+            field("IMAP_USERNAME", "Mailbox Username", false, false),
+            field("IMAP_PASSWORD", "Mailbox Password", true, true),
+            field("IMAP_ACCESS_TOKEN", "XOAUTH2 Access Token", true, true),
+            field("IMAP_OAUTH_TOKEN_URL", "OAuth Token URL", false, true),
+            field("IMAP_OAUTH_CLIENT_ID", "OAuth Client ID", false, true),
+            field("IMAP_OAUTH_CLIENT_SECRET", "OAuth Client Secret", true, true),
+            field("IMAP_OAUTH_SCOPE", "OAuth Scope", false, true),
+            field("IMAP_MAILBOX", "Mailbox", false, true),
+            field("IMAP_SINCE_DATE", "Initial Since Date", false, false),
+            field("IMAP_SINCE_UID", "Since UID", false, true),
+            field("IMAP_MAX_RECORDS_PER_POLL", "Max Records Per Poll", false, true),
+            field("IMAP_USE_TLS", "Use TLS", false, true),
         ],
         "fabric" => vec![
             field("ENTRA_TENANT_ID", "Entra Tenant ID", false, false),

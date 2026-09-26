@@ -22,6 +22,13 @@ pub enum DedupOutcome {
     Duplicate,
 }
 
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
+pub struct DedupSummary {
+    pub fingerprint_count: i64,
+    pub active_duplicate_count: i64,
+    pub suppressed_count: i64,
+}
+
 /// Tracks exact-duplicate fingerprints per tenant (ADR-0112) — not audit-logged like operator
 /// config entities, since this is high-churn pipeline state, not something an operator
 /// authored.
@@ -38,6 +45,8 @@ pub trait FingerprintRepository: Send + Sync {
         record_id: Uuid,
         window_seconds: Option<i64>,
     ) -> Result<DedupOutcome, FingerprintRepositoryError>;
+
+    async fn summary(&self, tenant_id: Uuid) -> Result<DedupSummary, FingerprintRepositoryError>;
 }
 
 pub struct PostgresFingerprintRepository {
@@ -107,7 +116,8 @@ impl FingerprintRepository for PostgresFingerprintRepository {
                     sqlx::query(
                         r#"
                         UPDATE record_fingerprints
-                        SET last_seen_record_id = $3, occurrence_count = occurrence_count + 1, last_seen_at = $4
+                        SET last_seen_record_id = $3, occurrence_count = occurrence_count + 1,
+                            suppressed_count = suppressed_count + 1, last_seen_at = $4
                         WHERE tenant_id = $1 AND fingerprint = $2
                         "#,
                     )
@@ -142,5 +152,20 @@ impl FingerprintRepository for PostgresFingerprintRepository {
 
         tx.commit().await.map_err(|e| FingerprintRepositoryError::Backend(e.to_string()))?;
         Ok(outcome)
+    }
+
+    async fn summary(&self, tenant_id: Uuid) -> Result<DedupSummary, FingerprintRepositoryError> {
+        sqlx::query_as::<_, (i64, i64, i64)>(
+            "SELECT COUNT(*)::BIGINT, COUNT(*) FILTER (WHERE occurrence_count > 1)::BIGINT, COALESCE(SUM(suppressed_count), 0)::BIGINT FROM record_fingerprints WHERE tenant_id = $1",
+        )
+        .bind(tenant_id)
+        .fetch_one(&self.pool)
+        .await
+        .map(|(fingerprint_count, active_duplicate_count, suppressed_count)| DedupSummary {
+            fingerprint_count,
+            active_duplicate_count,
+            suppressed_count,
+        })
+        .map_err(|e| FingerprintRepositoryError::Backend(e.to_string()))
     }
 }

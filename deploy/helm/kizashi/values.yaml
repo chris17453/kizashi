@@ -77,15 +77,16 @@ sharedEnv:
   SESSION_IDLE_TIMEOUT_MINUTES: "30"
   RETENTION_SWEEP_INTERVAL_SECONDS: "3600"
   BACKUP_INTERVAL_SECONDS: "86400"
-  # ADR-0020's docker-socket-shelling pattern (see agent-scheduler below) doesn't translate
-  # cleanly to Kubernetes — DOCKER_IMAGE_PREFIX/DOCKER_NETWORK are carried over verbatim from
-  # docker-compose for now as a known limitation, not a working k8s-native scheduling path.
-  # See README.md "Known limitations" before enabling agent-scheduler in a real cluster.
+  # Kept for DockerInvoker compatibility; the Kubernetes-native scheduler uses image prefix only.
   DOCKER_IMAGE_PREFIX: "kizashi"
   DOCKER_NETWORK: "kizashi_default"
   # Public (browser-facing) URL for the ingestion gateway — must be overridden to a real
   # Ingress/LoadBalancer hostname; localhost is only correct for port-forwarded local testing.
   INGESTION_GATEWAY_PUBLIC_URL: "http://localhost:8081"
+
+agentSchedulerRbac:
+  create: true
+  serviceAccountName: ""
 
 # -- One entry per long-running, HTTP-serving application service from docker-compose.yml.
 # `bin` is the exact --build-arg BIN value the root Dockerfile builds; the image repository is
@@ -141,22 +142,22 @@ services:
     env:
       BIND_ADDR: "0.0.0.0:8080"
       TRIGGER_ENGINE_URL: 'http://{{ include "kizashi.fullname" $ }}-trigger-engine:8080'
+      ONTOLOGY_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-ontology-service:8080'
 
-  # ADR-0020: shells out to `docker run` against the host's Docker socket. Mounting
-  # /var/run/docker.sock into a pod is a real security/portability concession (breaks on
-  # managed clusters without a Docker-based container runtime, e.g. containerd-only nodes;
-  # grants effective node-root). Carried over as-is to mirror docker-compose's shape per this
-  # task's scope — see README.md "Known limitations" for the recommended follow-up (a
-  # Kubernetes Jobs-API-native invoker instead of shelling to `docker run`).
+  # ADR-0020: use the Kubernetes Jobs API in the chart. Docker Compose continues to use the
+  # DockerInvoker path; the deployment selects the Kubernetes-native invoker explicitly.
   agent-scheduler:
     bin: agent-scheduler
     port: 8080
     replicas: 1
-    runAsRoot: true
-    dockerSocket: true
+    # The chart-level agentSchedulerRbac.serviceAccountName controls this pod and its RoleBinding.
+    serviceAccountName: ''
+    runAsRoot: false
+    dockerSocket: false
     env:
       BIND_ADDR: "0.0.0.0:8080"
       INGESTION_GATEWAY_URL: 'http://{{ include "kizashi.fullname" $ }}-ingestion-gateway:8080'
+      SCHEDULER_INVOKER: kubernetes
 
   dashboard-api:
     bin: dashboard-api
@@ -202,6 +203,30 @@ services:
     env:
       BIND_ADDR: "0.0.0.0:8080"
       DASHBOARD_API_URL: 'http://{{ include "kizashi.fullname" $ }}-dashboard-api:8080'
+      ONTOLOGY_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-ontology-service:8080'
+
+  incident-service:
+    bin: incident-service
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+
+  ontology-service:
+    bin: ontology-service
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+
+  report-scheduler:
+    bin: report-scheduler
+    port: 8080
+    replicas: 1
+    env:
+      BIND_ADDR: "0.0.0.0:8080"
+      QUERY_GATEWAY_URL: 'http://{{ include "kizashi.fullname" $ }}-query-gateway:8080'
+      REPORT_ARTIFACT_BASE_URL: "http://{{ include \"kizashi.fullname\" $ }}-kizashi-ui:8080"
 
   retention-service:
     bin: retention-service
@@ -243,6 +268,9 @@ services:
         action-executor=http://{{ include "kizashi.fullname" $ }}-action-executor:8080,
         auth-service=http://{{ include "kizashi.fullname" $ }}-auth-service:8080,
         config-admin-service=http://{{ include "kizashi.fullname" $ }}-config-admin-service:8080,
+        incident-service=http://{{ include "kizashi.fullname" $ }}-incident-service:8080,
+        ontology-service=http://{{ include "kizashi.fullname" $ }}-ontology-service:8080,
+        report-scheduler=http://{{ include "kizashi.fullname" $ }}-report-scheduler:8080,
         retention-service=http://{{ include "kizashi.fullname" $ }}-retention-service:8080
 
   kizashi-ui:
@@ -262,6 +290,8 @@ services:
       BACKUP_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-backup-service:8080'
       EGRESS_GATEWAY_URL: 'http://{{ include "kizashi.fullname" $ }}-egress-gateway:8080'
       TRIGGER_ENGINE_URL: 'http://{{ include "kizashi.fullname" $ }}-trigger-engine:8080'
+      INCIDENT_SERVICE_URL: 'http://{{ include "kizashi.fullname" $ }}-incident-service:8080'
+      PIPELINE_RUNTIME_URL: 'http://{{ include "kizashi.fullname" $ }}-pipeline-runtime:8080'
 
 # -- The two "sweep/backup on an interval" sidecars docker-compose.yml runs as
 # `image: alpine:3.20` + a `while true; do curl ...; sleep N; done` loop (see the ADR-0011

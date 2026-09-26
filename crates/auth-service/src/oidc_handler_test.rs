@@ -1,6 +1,7 @@
 use super::*;
 use crate::local_user_repository::local_user_repository_test::InMemoryLocalUserRepository;
 use crate::oidc_client::oidc_client_test::{FailingOidcClient, InMemoryOidcClient};
+use crate::oidc_client::OidcProviderConfig;
 use crate::session_client::session_client_test::{FailingSessionClient, InMemorySessionClient};
 use crate::tenant_repository::tenant_repository_test::InMemoryTenantRepository;
 use axum::body::Body;
@@ -22,11 +23,25 @@ fn state_with_provider(
     client: Arc<dyn OidcClient>,
     session_client: Arc<dyn crate::session_client::SessionClient>,
 ) -> AuthState {
+    state_with_provider_policy(provider, client, session_client, None)
+}
+
+fn state_with_provider_policy(
+    provider: &str,
+    client: Arc<dyn OidcClient>,
+    session_client: Arc<dyn crate::session_client::SessionClient>,
+    pin: Option<&str>,
+) -> AuthState {
     let mut oidc_clients: OidcClients = std::collections::HashMap::new();
     oidc_clients.insert(provider.to_string(), client);
+    let tenant_id = Uuid::new_v4();
+    let tenant_repository = Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id));
+    if let Some(pin) = pin {
+        tenant_repository.oidc_provider.lock().unwrap().insert(tenant_id, pin.to_string());
+    }
     AuthState {
         local_user_repository: Arc::new(InMemoryLocalUserRepository::default()),
-        tenant_repository: Arc::new(InMemoryTenantRepository::with_tenant("acme", Uuid::new_v4())),
+        tenant_repository,
         tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
         session_client,
         oidc_clients,
@@ -85,6 +100,47 @@ async fn authorize_returns_404_for_an_unknown_provider() {
 }
 
 #[tokio::test]
+async fn authorize_uses_a_tenant_managed_provider_before_global_clients() {
+    let tenant_id = Uuid::new_v4();
+    let tenant_repository = Arc::new(InMemoryTenantRepository::with_tenant("acme", tenant_id));
+    tenant_repository.oidc_configs.lock().unwrap().insert(
+        (tenant_id, "customer-idp".to_string()),
+        OidcProviderConfig {
+            client_id: "tenant-client".to_string(),
+            client_secret: "tenant-secret".to_string(),
+            auth_url: "https://tenant.example.test/authorize".to_string(),
+            token_url: "https://tenant.example.test/token".to_string(),
+            userinfo_url: "https://tenant.example.test/userinfo".to_string(),
+            redirect_url: "http://localhost/callback".to_string(),
+        },
+    );
+    let state = AuthState {
+        local_user_repository: Arc::new(InMemoryLocalUserRepository::default()),
+        tenant_repository,
+        tenant_branding_repository: Arc::new(crate::tenant_branding_repository::tenant_branding_repository_test::InMemoryTenantBrandingRepository::default()),
+        session_client: Arc::new(InMemorySessionClient::default()),
+        oidc_clients: std::collections::HashMap::new(),
+        audit_log_reader: Arc::new(crate::audit_log::audit_log_test::InMemoryAuditLogReader::default()),
+        mfa_challenge_repository: Arc::new(crate::mfa_repository::mfa_repository_test::InMemoryMfaChallengeRepository::default()),
+        login_attempt_repository: Arc::new(crate::login_attempt_repository::login_attempt_repository_test::InMemoryLoginAttemptRepository::default()),
+        session_audit_writer: Arc::new(crate::session_audit_writer::session_audit_writer_test::InMemorySessionAuditWriter::default()),
+    };
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/auth/oidc/customer-idp/authorize?tenant_name=acme")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let parsed: AuthorizeResponse = serde_json::from_slice(&body).unwrap();
+    assert!(parsed.authorization_url.starts_with("https://tenant.example.test/authorize"));
+}
+
+#[tokio::test]
 async fn authorize_returns_500_when_the_client_fails_to_build_the_request() {
     let state = state_with_provider(
         "entra",
@@ -100,6 +156,28 @@ async fn authorize_returns_500_when_the_client_fails_to_build_the_request() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn authorize_rejects_a_provider_that_is_not_pinned_for_the_workspace() {
+    let state = state_with_provider_policy(
+        "generic",
+        Arc::new(InMemoryOidcClient::default()),
+        Arc::new(InMemorySessionClient::default()),
+        Some("entra"),
+    );
+
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/auth/oidc/generic/authorize?tenant_name=acme")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]

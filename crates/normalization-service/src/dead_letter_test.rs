@@ -12,6 +12,13 @@ impl DeadLetterManager for InMemoryDeadLetterManager {
         Ok(self.queue.lock().unwrap().len() as u32)
     }
 
+    async fn peek_oldest(&self) -> Result<Option<DeadLetterPreview>, DeadLetterError> {
+        Ok(self.queue.lock().unwrap().first().map(|body| DeadLetterPreview {
+            size: body.len(),
+            body: String::from_utf8_lossy(body).to_string(),
+        }))
+    }
+
     async fn replay_oldest(&self) -> Result<bool, DeadLetterError> {
         let mut queue = self.queue.lock().unwrap();
         if queue.is_empty() {
@@ -27,6 +34,10 @@ pub struct FailingDeadLetterManager;
 #[async_trait]
 impl DeadLetterManager for FailingDeadLetterManager {
     async fn count(&self) -> Result<u32, DeadLetterError> {
+        Err(DeadLetterError::Backend("simulated failure".to_string()))
+    }
+
+    async fn peek_oldest(&self) -> Result<Option<DeadLetterPreview>, DeadLetterError> {
         Err(DeadLetterError::Backend("simulated failure".to_string()))
     }
 

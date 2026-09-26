@@ -1,0 +1,5 @@
+{% extends "layout.html" %}{% block content %}
+<div class="page-header"><div><div class="page-kicker">Build Studio</div><h1>Pipelines</h1><p class="page-description">Versioned, declarative flows for projections and governed commands.</p></div>{% if can_manage %}<a class="btn btn-primary" href="/build/pipelines/new">New Pipeline</a>{% endif %}</div>
+{% if let Some(message) = error %}<p class="error">{{ message }}</p>{% endif %}
+<section class="panel"><div class="panel-heading"><h2>Configured pipelines</h2><span class="pill pill-muted">{{ pipelines.len() }}</span></div>{% if pipelines.is_empty() %}<p class="muted">No Pipelines configured.</p>{% else %}<table><thead><tr><th>Name</th><th>Mode</th><th>State</th><th></th></tr></thead><tbody>{% for pipeline in pipelines %}<tr><td><a href="/build/pipelines/{{ pipeline.id }}">{{ pipeline.name }}</a></td><td>{{ pipeline.mode }}</td><td>{% if pipeline.enabled %}Enabled{% else %}Disabled{% endif %}</td><td><a href="/build/pipelines/{{ pipeline.id }}">Details</a></td></tr>{% endfor %}</tbody></table>{% endif %}</section>
+{% endblock %}

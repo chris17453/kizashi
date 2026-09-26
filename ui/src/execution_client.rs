@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct ActionExecutionSummary {
     pub id: Uuid,
     pub trigger_id: Uuid,
@@ -23,6 +23,13 @@ pub struct DeadLetterQueueSummary {
     pub service: String,
     pub count: Option<u32>,
     pub has_messages: bool,
+    pub preview: Option<DeadLetterPreview>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DeadLetterPreview {
+    pub size: usize,
+    pub body: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -72,6 +79,13 @@ pub trait ExecutionClient: Send + Sync {
 
     async fn replay_dead_letter_queue(&self, _service: &str) -> Result<bool, ExecutionClientError> {
         Ok(false)
+    }
+
+    async fn dead_letter_preview(
+        &self,
+        _service: &str,
+    ) -> Result<Option<DeadLetterPreview>, ExecutionClientError> {
+        Ok(None)
     }
 
     /// Reads non-secret analysis-provider posture when the analysis service exposes it.
@@ -179,6 +193,10 @@ impl ExecutionClient for HttpExecutionClient {
         struct CountResponse {
             count: u32,
         }
+        #[derive(serde::Deserialize)]
+        struct PreviewResponse {
+            preview: Option<DeadLetterPreview>,
+        }
         let mut queues = Vec::with_capacity(self.dead_letter_services.len());
         for (service, url) in &self.dead_letter_services {
             let count = match self.client.get(format!("{url}/v1/dead-letter")).send().await {
@@ -188,7 +206,22 @@ impl ExecutionClient for HttpExecutionClient {
                 _ => None,
             };
             let has_messages = count.is_some_and(|count| count > 0);
-            queues.push(DeadLetterQueueSummary { service: service.clone(), count, has_messages });
+            let preview = if has_messages {
+                match self.client.get(format!("{url}/v1/dead-letter/peek")).send().await {
+                    Ok(response) if response.status().is_success() => {
+                        response.json::<PreviewResponse>().await.ok().and_then(|body| body.preview)
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            queues.push(DeadLetterQueueSummary {
+                service: service.clone(),
+                count,
+                has_messages,
+                preview,
+            });
         }
         Ok(queues)
     }
@@ -216,6 +249,34 @@ impl ExecutionClient for HttpExecutionClient {
             .await
             .map_err(|e| ExecutionClientError::Unreachable(e.to_string()))
             .map(|body: ReplayResponse| body.replayed)
+    }
+
+    async fn dead_letter_preview(
+        &self,
+        service: &str,
+    ) -> Result<Option<DeadLetterPreview>, ExecutionClientError> {
+        #[derive(serde::Deserialize)]
+        struct PreviewResponse {
+            preview: Option<DeadLetterPreview>,
+        }
+        let Some((_, url)) = self.dead_letter_services.iter().find(|(name, _)| name == service)
+        else {
+            return Err(ExecutionClientError::Rejected(404));
+        };
+        let response = self
+            .client
+            .get(format!("{url}/v1/dead-letter/peek"))
+            .send()
+            .await
+            .map_err(|e| ExecutionClientError::Unreachable(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(ExecutionClientError::Rejected(response.status().as_u16()));
+        }
+        response
+            .json::<PreviewResponse>()
+            .await
+            .map_err(|e| ExecutionClientError::Unreachable(e.to_string()))
+            .map(|body| body.preview)
     }
 
     async fn analysis_resilience(

@@ -115,6 +115,33 @@ async fn renders_all_five_pipeline_stages_with_their_health_status() {
     assert!(body.contains("href=\"/actions?outcome=review\""));
     assert!(body.contains("Pressure distribution"));
     assert!(body.contains("Queued total"));
+    assert!(body.contains("Live topology graph"));
+    assert!(body.contains("/api/v1/pipeline"));
+    assert!(body.contains("var model = data.graph || data"));
+}
+
+#[tokio::test]
+async fn renders_connector_signal_and_response_boundaries() {
+    let (state, session_id) = state_with_session().await;
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .uri("/pipeline")
+                .header("cookie", format!("kizashi_session={session_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(body.contains("Connector intake"));
+    assert!(body.contains("No registered sources"));
+    assert!(body.contains("Signal aggregation"));
+    assert!(body.contains("Governed response"));
+    assert!(body.contains("/sensors"));
+    assert!(body.contains("/events"));
+    assert!(body.contains("/actions"));
 }
 
 #[tokio::test]

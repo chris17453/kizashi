@@ -1,6 +1,6 @@
 use agent_scheduler::{
-    health_router, DockerInvoker, Invoker, PostgresSensorRepository, SensorRepository,
-    SENSOR_CHANGED_EXCHANGE,
+    health_router, DockerInvoker, Invoker, KubernetesJobInvoker, PostgresSensorRepository,
+    SensorRepository, SENSOR_CHANGED_EXCHANGE,
 };
 use common::SensorChangeEvent;
 use futures_util::StreamExt;
@@ -71,12 +71,27 @@ async fn main() {
 
     let sensor_repository: Arc<dyn SensorRepository> =
         Arc::new(PostgresSensorRepository::new(pool));
-    let invoker: Arc<dyn Invoker> = Arc::new(DockerInvoker::new(
-        docker_image_prefix,
-        docker_network,
-        ingestion_gateway_url,
-        ingestion_gateway_api_key,
-    ));
+    let invoker: Arc<dyn Invoker> = match std::env::var("SCHEDULER_INVOKER")
+        .unwrap_or_else(|_| "docker".to_string())
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "kubernetes" | "k8s" => Arc::new(
+            KubernetesJobInvoker::from_env(
+                docker_image_prefix,
+                ingestion_gateway_url,
+                ingestion_gateway_api_key,
+            )
+            .expect("failed to configure Kubernetes Job invoker"),
+        ),
+        "docker" => Arc::new(DockerInvoker::new(
+            docker_image_prefix,
+            docker_network,
+            ingestion_gateway_url,
+            ingestion_gateway_api_key,
+        )),
+        other => panic!("SCHEDULER_INVOKER must be docker or kubernetes, got {other}"),
+    };
 
     let connection =
         lapin::Connection::connect(&rabbitmq_url, lapin::ConnectionProperties::default())
@@ -207,5 +222,8 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "agent-scheduler listening");
-    axum::serve(listener, health_router()).await.expect("server error");
+    let metrics = std::sync::Arc::new(common::HttpMetrics::default());
+    axum::serve(listener, common::instrument_router(health_router(), metrics))
+        .await
+        .expect("server error");
 }

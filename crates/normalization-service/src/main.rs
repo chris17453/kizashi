@@ -5,9 +5,9 @@ use lapin::options::{
 };
 use lapin::types::FieldTable;
 use normalization_service::{
-    dead_letter_router, health_router, process_normalization, retry_count, should_dead_letter,
-    source_type_key, with_incremented_retry_count, DeadLetterState, HttpRecordClient,
-    NormalizationDeps, PostgresFingerprintRepository, PostgresMappingRepository,
+    dead_letter_router, dedup_router, health_router, process_normalization, retry_count,
+    should_dead_letter, source_type_key, with_incremented_retry_count, DeadLetterState,
+    HttpRecordClient, NormalizationDeps, PostgresFingerprintRepository, PostgresMappingRepository,
     RabbitMqDeadLetterManager, RabbitMqEventPublisher, MAPPING_CHANGED_EXCHANGE,
     RECORD_INGESTED_EXCHANGE,
 };
@@ -117,15 +117,25 @@ async fn main() {
         .await
         .expect("failed to bind queue");
 
+    let fingerprint_repository = deps.fingerprint_repository.clone();
     let dead_letter_state = DeadLetterState {
         dead_letter_manager: Arc::new(RabbitMqDeadLetterManager::new(
             dead_letter_channel,
             DEAD_LETTER_QUEUE_NAME.to_string(),
             QUEUE_NAME.to_string(),
         )),
-        internal_secret,
+        internal_secret: internal_secret.clone(),
     };
-    let app = health_router().merge(dead_letter_router(dead_letter_state));
+    let metrics = Arc::new(common::HttpMetrics::default());
+    let app = common::instrument_router(
+        health_router().merge(dead_letter_router(dead_letter_state)).merge(dedup_router(
+            normalization_service::DedupState {
+                fingerprint_repository,
+                internal_secret: internal_secret.clone(),
+            },
+        )),
+        metrics,
+    );
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "normalization-service healthz listening");
     tokio::spawn(async move {

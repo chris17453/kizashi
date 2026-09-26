@@ -41,6 +41,24 @@ fn rejects_an_unknown_action_provider() {
     assert!(build_action_refs(&form).is_err());
 }
 
+#[test]
+fn template_action_snapshot_keeps_provider_and_config() {
+    let template = common::ActionTemplate {
+        id: Uuid::new_v4(),
+        tenant_id: Uuid::new_v4(),
+        name: "Notify".into(),
+        description: String::new(),
+        action_type: common::ActionType::Webhook,
+        config: serde_json::json!({"url":"https://example.test"}),
+        version: 1,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+    let actions = action_refs_from_template(template);
+    assert_eq!(actions[0].action_type, common::ActionType::Webhook);
+    assert_eq!(actions[0].config["url"], "https://example.test");
+}
+
 fn router(state: AppState) -> Router {
     Router::new().route("/triggers", get(get_triggers).post(post_trigger)).with_state(state)
 }

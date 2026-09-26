@@ -48,15 +48,17 @@ services:
       timeout: 5s
       retries: 10
 
+  # S3-compatible object store (ADR-0011 archival, backup-service). MinIO stopped publishing
+  # pullable images in 2025, so this runs RustFS (Apache-2.0, S3- and MinIO-API-compatible,
+  # including /minio/health/live) under the same service name so every `http://minio:9000`
+  # endpoint, script and Helm default keeps working unchanged. See ADR-0209.
   minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9101"
+    image: rustfs/rustfs:1.0.0
     environment:
-      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-kizashi}
-      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env, see .env.example}
+      RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:-kizashi}
+      RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env, see .env.example}
     ports:
       - "${MINIO_PORT:-9100}:9000"
-      - "${MINIO_CONSOLE_PORT:-9101}:9101"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -170,6 +172,7 @@ services:
       # for every scheduled connector, not a per-Agent key lookup. Set this to a real key
       # created via the Console UI's API Keys page before enabling any scheduled Agent.
       INGESTION_GATEWAY_API_KEY: "${AGENT_SCHEDULER_INGESTION_GATEWAY_API_KEY:-}"
+      SCHEDULER_INVOKER: "${SCHEDULER_INVOKER:-docker}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -215,14 +218,29 @@ services:
       rabbitmq: { condition: service_healthy }
     healthcheck: *healthz
 
+  pipeline-runtime:
+    build: { context: ., args: { BIN: pipeline-runtime } }
+    environment:
+      BIND_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
+      INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
+    ports: ["8098:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck: *healthz
+
   incident-service:
     build: { context: ., args: { BIN: incident-service } }
     environment:
       BIND_ADDR: "0.0.0.0:8080"
       DATABASE_URL: postgres://kizashi:kizashi@postgres:5432/kizashi
+      RABBITMQ_URL: amqp://kizashi:kizashi@rabbitmq:5672/%2f
     ports: ["8096:8080"]
     depends_on:
       postgres: { condition: service_healthy }
+      trigger-engine: { condition: service_healthy }
     healthcheck: *healthz
 
   ingestion-gateway:
@@ -265,7 +283,7 @@ services:
       REPORT_SMTP_USERNAME: "${REPORT_SMTP_USERNAME:-}"
       REPORT_SMTP_PASSWORD: "${REPORT_SMTP_PASSWORD:-}"
       REPORT_FROM_EMAIL: "${REPORT_FROM_EMAIL:-}"
-    ports: ["8098:8080"]
+    ports: ["8099:8080"]
     depends_on:
       query-gateway: { condition: service_healthy }
       config-admin-service: { condition: service_healthy }
@@ -378,6 +396,14 @@ services:
       ENTRA_CLIENT_ID: "${ENTRA_CLIENT_ID:-}"
       ENTRA_CLIENT_SECRET: "${ENTRA_CLIENT_SECRET:-}"
       ENTRA_REDIRECT_URL: "${ENTRA_REDIRECT_URL:-}"
+      GENERIC_OAUTH_ISSUER_URL: "${GENERIC_OAUTH_ISSUER_URL:-}"
+      GENERIC_OAUTH_CLIENT_ID: "${GENERIC_OAUTH_CLIENT_ID:-}"
+      GENERIC_OAUTH_CLIENT_SECRET: "${GENERIC_OAUTH_CLIENT_SECRET:-}"
+      GENERIC_OAUTH_AUTH_URL: "${GENERIC_OAUTH_AUTH_URL:-}"
+      GENERIC_OAUTH_TOKEN_URL: "${GENERIC_OAUTH_TOKEN_URL:-}"
+      GENERIC_OAUTH_USERINFO_URL: "${GENERIC_OAUTH_USERINFO_URL:-}"
+      GENERIC_OAUTH_REDIRECT_URL: "${GENERIC_OAUTH_REDIRECT_URL:-}"
+      OIDC_CREDENTIALS_ENCRYPTION_KEY: "${OIDC_CREDENTIALS_ENCRYPTION_KEY:-}"
     ports: ["8089:8080"]
     depends_on:
       query-gateway: { condition: service_healthy }
@@ -413,6 +439,7 @@ services:
       EGRESS_GATEWAY_URL: http://egress-gateway:8080
       TRIGGER_ENGINE_URL: http://trigger-engine:8080
       INCIDENT_SERVICE_URL: http://incident-service:8080
+      PIPELINE_RUNTIME_URL: http://pipeline-runtime:8080
       INTERNAL_API_SECRET: "${INTERNAL_API_SECRET:-change-me-in-production}"
       # Local/dev runs over plain HTTP, so this defaults to false (a Secure cookie a browser
       # won't send over plain HTTP would silently break every login). Set to "true" behind a

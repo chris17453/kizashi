@@ -3,7 +3,9 @@
 pub(crate) mod dead_letter_test;
 
 use async_trait::async_trait;
-use lapin::options::{BasicAckOptions, BasicGetOptions, BasicPublishOptions, QueueDeclareOptions};
+use lapin::options::{
+    BasicAckOptions, BasicGetOptions, BasicNackOptions, BasicPublishOptions, QueueDeclareOptions,
+};
 use lapin::types::FieldTable;
 use thiserror::Error;
 
@@ -11,6 +13,12 @@ use thiserror::Error;
 pub enum DeadLetterError {
     #[error("rabbitmq backend error: {0}")]
     Backend(String),
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DeadLetterPreview {
+    pub size: usize,
+    pub body: String,
 }
 
 /// Operator-facing visibility/recovery for `retry.rs`'s dead-letter queue -- previously a
@@ -22,6 +30,7 @@ pub enum DeadLetterError {
 #[async_trait]
 pub trait DeadLetterManager: Send + Sync {
     async fn count(&self) -> Result<u32, DeadLetterError>;
+    async fn peek_oldest(&self) -> Result<Option<DeadLetterPreview>, DeadLetterError>;
     async fn replay_oldest(&self) -> Result<bool, DeadLetterError>;
 }
 
@@ -50,6 +59,27 @@ impl DeadLetterManager for RabbitMqDeadLetterManager {
             .await
             .map_err(|e| DeadLetterError::Backend(e.to_string()))?;
         Ok(queue.message_count())
+    }
+
+    async fn peek_oldest(&self) -> Result<Option<DeadLetterPreview>, DeadLetterError> {
+        let Some(message) = self
+            .channel
+            .basic_get(&self.dead_letter_queue, BasicGetOptions::default())
+            .await
+            .map_err(|e| DeadLetterError::Backend(e.to_string()))?
+        else {
+            return Ok(None);
+        };
+        let preview = DeadLetterPreview {
+            size: message.delivery.data.len(),
+            body: String::from_utf8_lossy(&message.delivery.data).chars().take(4096).collect(),
+        };
+        message
+            .delivery
+            .nack(BasicNackOptions { requeue: true, ..Default::default() })
+            .await
+            .map_err(|e| DeadLetterError::Backend(e.to_string()))?;
+        Ok(Some(preview))
     }
 
     async fn replay_oldest(&self) -> Result<bool, DeadLetterError> {

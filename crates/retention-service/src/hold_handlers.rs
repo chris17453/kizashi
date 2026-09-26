@@ -19,6 +19,7 @@ pub struct CreateHoldRequest {
     pub reason: String,
 }
 
+#[allow(clippy::result_large_err)]
 fn hold_repo(
     state: &AppState,
 ) -> Result<&std::sync::Arc<dyn crate::compliance_hold::ComplianceHoldRepository>, Response> {

@@ -42,6 +42,22 @@ impl SavedSearchQueriesClient for InMemorySavedSearchQueriesClient {
         self.queries.lock().unwrap().retain(|q| !(q.id == id && q.tenant_id == tenant_id));
         Ok(())
     }
+
+    async fn update(
+        &self,
+        tenant_id: Uuid,
+        query: SavedSearchQuery,
+    ) -> Result<SavedSearchQuery, SavedSearchQueriesClientError> {
+        let mut queries = self.queries.lock().unwrap();
+        let Some(existing) = queries
+            .iter_mut()
+            .find(|existing| existing.id == query.id && existing.tenant_id == tenant_id)
+        else {
+            return Err(SavedSearchQueriesClientError::Rejected(404));
+        };
+        *existing = query.clone();
+        Ok(query)
+    }
 }
 
 pub struct FailingSavedSearchQueriesClient;
@@ -71,6 +87,14 @@ impl SavedSearchQueriesClient for FailingSavedSearchQueriesClient {
     ) -> Result<(), SavedSearchQueriesClientError> {
         Err(SavedSearchQueriesClientError::Unreachable("simulated failure".to_string()))
     }
+
+    async fn update(
+        &self,
+        _tenant_id: Uuid,
+        _query: SavedSearchQuery,
+    ) -> Result<SavedSearchQuery, SavedSearchQueriesClientError> {
+        Err(SavedSearchQueriesClientError::Unreachable("simulated failure".to_string()))
+    }
 }
 
 async fn spawn_stub_server() -> String {
@@ -94,9 +118,17 @@ async fn spawn_stub_server() -> String {
     async fn delete_handler() -> axum::http::StatusCode {
         axum::http::StatusCode::NO_CONTENT
     }
+    async fn update_handler(
+        JsonExtractor(query): JsonExtractor<SavedSearchQuery>,
+    ) -> axum::response::Response {
+        Json(query).into_response()
+    }
     let app = Router::new()
         .route("/v1/saved-search-queries", get(list_handler).post(create_handler))
-        .route("/v1/saved-search-queries/:id", axum::routing::delete(delete_handler));
+        .route(
+            "/v1/saved-search-queries/:id",
+            axum::routing::put(update_handler).delete(delete_handler),
+        );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -126,6 +158,20 @@ async fn http_client_creates_a_saved_query_against_a_real_server() {
 
     assert_eq!(query.tenant_id, tenant_id);
     assert_eq!(query.name, "my search");
+}
+
+#[tokio::test]
+async fn http_client_updates_a_saved_query_against_a_real_server() {
+    let url = spawn_stub_server().await;
+    let client = HttpSavedSearchQueriesClient::new(reqwest::Client::new(), url);
+    let query = SavedSearchQuery {
+        id: Uuid::new_v4(),
+        tenant_id: Uuid::new_v4(),
+        name: "updated search".to_string(),
+        filter: serde_json::json!({"q":"changed"}),
+    };
+    let updated = client.update(query.tenant_id, query.clone()).await.unwrap();
+    assert_eq!(updated, query);
 }
 
 #[tokio::test]

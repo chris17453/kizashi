@@ -38,10 +38,10 @@ two capabilities in v1:
    single ordered view of the ingest → normalize → analyze → act chain, so a growing backlog at
    any one stage is visible without opening the RabbitMQ management UI directly.
 
-Per-service `/metrics` request/latency instrumentation is explicitly deferred, tracked as
-follow-up work against each service individually (not a gap silently left here) — it needs a
-real decision on what to measure and a shared `common` instrumentation helper, which is its own
-scoped piece of work.
+Per-service `/metrics` request/latency instrumentation was initially deferred, but is now closed
+by the shared `common::http_metrics` middleware and deployment-wide rollout. Observability keeps
+the original health contract and additionally exposes `/v1/service-metrics`, while the Console
+Health view renders request count, server errors, and average latency for instrumented services.
 
 ## Consequences
 
@@ -50,8 +50,9 @@ scoped piece of work.
   infrastructure dependency beyond an HTTP client, and both are genuinely useful to an operator
   today rather than placeholder scaffolding.
 - Harder: `/v1/backlog` reports queue depth, not consumer processing latency — a queue can be
-  momentarily deep because a burst just arrived, not because a consumer is stuck; distinguishing
-  those needs latency instrumentation, which is exactly the deferred `/metrics` work. Until a
+  momentarily deep because a burst just arrived, not because a consumer is stuck; the new
+  request metrics provide service-level latency evidence but do not replace queue-level lag.
+  Until a
   service is added to `SERVICE_REGISTRY`, health aggregation won't know about it — this is
   operator configuration, not automatic service discovery, consistent with this platform's
   current deployment model (spec §10, docker-compose/Container Apps, no service mesh assumed).

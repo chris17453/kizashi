@@ -27,7 +27,7 @@
   .audit-timeline-legend .incident::before { background:#d26170; } .audit-timeline-legend .ontology::before { background:#42a77e; }
   @media(max-width:760px){.audit-posture{grid-template-columns:1fr}.audit-posture-row{grid-template-columns:7rem 1fr auto}}
 </style>
-<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / evidence</div><h1>Audit Log</h1><p class="page-description">Immutable workspace activity across configuration, access, retention, governed actions, incidents, and outbound controls.</p></div><div class="quick-actions"><a class="btn btn-secondary" href="/security/compliance-report">Compliance snapshot</a><a class="btn btn-secondary" href="/audit-log/export.csv?q={{ q|urlencode }}&service={{ service|urlencode }}&change_type={{ change_type|urlencode }}&date={{ date|urlencode }}">Export filtered CSV &rarr;</a></div></div>
+<div class="page-header"><div><div class="page-kicker">Security &amp; compliance / evidence</div><h1>Audit Log</h1><p class="page-description">Immutable workspace activity across configuration, access, retention, governed actions, incidents, and outbound controls.</p></div><div class="quick-actions"><span class="console-live" data-audit-live-status>Live refresh paused</span><button class="btn btn-secondary" type="button" data-audit-refresh>Refresh now</button><button class="btn btn-secondary" type="button" data-audit-toggle-live>Enable live mode</button><a class="btn btn-secondary" href="/security/compliance-report">Compliance snapshot</a><a class="btn btn-secondary" href="/audit-log/export.csv?q={{ q|urlencode }}&service={{ service|urlencode }}&change_type={{ change_type|urlencode }}&date={{ date|urlencode }}">Export filtered CSV &rarr;</a></div></div>
 <p class="muted">Every admin/config change across this workspace — sensors, triggers, field
 mappings, AI analysis config, retention policies, users, branding, incident changes, and governed
 actions — most recent first. Each
@@ -38,15 +38,12 @@ full before/after diff.</p>
 
 <p><a href="/audit-log/export.csv?q={{ q|urlencode }}&service={{ service|urlencode }}&change_type={{ change_type|urlencode }}&date={{ date|urlencode }}" class="btn-link">Download filtered CSV &#8595;</a>{% if !date.is_empty() %} <span class="pill pill-muted">Day: {{ date }}</span> <a href="/audit-log?q={{ q|urlencode }}&service={{ service|urlencode }}&change_type={{ change_type|urlencode }}" class="btn-link">Clear day</a>{% endif %}</p>
 
-<form class="inline audit-filter-form" method="get" action="/audit-log" style="margin-bottom:1rem;">
-  <label for="q">Search</label>
-  <input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by actor, entity, or change&hellip;">
-  <label for="audit-service">Source</label>
-  <select id="audit-service" name="service"><option value="">All services</option><option value="config-admin-service"{% if service == "config-admin-service" %} selected{% endif %}>Config/Admin</option><option value="retention-service"{% if service == "retention-service" %} selected{% endif %}>Retention</option><option value="auth-service"{% if service == "auth-service" %} selected{% endif %}>Auth</option><option value="incident-service"{% if service == "incident-service" %} selected{% endif %}>Incidents</option><option value="ontology-service"{% if service == "ontology-service" %} selected{% endif %}>Ontology</option></select>
-  <label for="audit-change">Change</label><input type="text" id="audit-change" name="change_type" value="{{ change_type }}" placeholder="created, updated...">
-  <label for="audit-date">Day</label><input type="date" id="audit-date" name="date" value="{{ date }}">
-  <button type="submit">Filter</button>
-  {% if !q.is_empty() || !service.is_empty() || !change_type.is_empty() || !date.is_empty() %}<a href="/audit-log" class="btn-link">Clear</a>{% endif %}
+<form class="query-bar audit-filter-form" method="get" action="/audit-log">
+  <div class="query-field query-field--wide"><label for="q">Search</label><input type="text" id="q" name="q" value="{{ q }}" placeholder="Filter by actor, entity, or change&hellip;"></div>
+  <div class="query-field"><label for="audit-service">Source</label><select id="audit-service" name="service"><option value="">All services</option><option value="config-admin-service"{% if service == "config-admin-service" %} selected{% endif %}>Config/Admin</option><option value="retention-service"{% if service == "retention-service" %} selected{% endif %}>Retention</option><option value="auth-service"{% if service == "auth-service" %} selected{% endif %}>Auth</option><option value="incident-service"{% if service == "incident-service" %} selected{% endif %}>Incidents</option><option value="ontology-service"{% if service == "ontology-service" %} selected{% endif %}>Ontology</option></select></div>
+  <div class="query-field"><label for="audit-change">Change</label><input type="text" id="audit-change" name="change_type" value="{{ change_type }}" placeholder="created, updated..."></div>
+  <div class="query-field"><label for="audit-date">Day</label><input type="date" id="audit-date" name="date" value="{{ date }}"></div>
+  <div class="query-actions"><button type="submit">Filter</button>{% if !q.is_empty() || !service.is_empty() || !change_type.is_empty() || !date.is_empty() %}<a href="/audit-log" class="btn-link">Clear</a>{% endif %}</div>
 </form>
 
 {% if !entries.is_empty() %}
@@ -101,4 +98,42 @@ full before/after diff.</p>
 </p>
 {% endif %}
 {% endif %}
+<script>
+  (() => {
+    const key = 'kizashi.audit.live-refresh';
+    const status = document.querySelector('[data-audit-live-status]');
+    const toggle = document.querySelector('[data-audit-toggle-live]');
+    const refresh = document.querySelector('[data-audit-refresh]');
+    let enabled = false;
+    let newest = null;
+    try { enabled = localStorage.getItem(key) === '1'; } catch (_) {}
+    function setState(next) {
+      enabled = next;
+      try { localStorage.setItem(key, enabled ? '1' : '0'); } catch (_) {}
+      if (status && !status.dataset.alert) status.textContent = enabled ? 'Live · watches every 30s' : 'Live refresh paused';
+      if (toggle) { toggle.textContent = enabled ? 'Pause live mode' : 'Enable live mode'; toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false'); }
+    }
+    async function poll() {
+      if (!enabled) return;
+      try {
+        const params = new URLSearchParams(window.location.search);
+        params.delete('before');
+        params.set('limit', '1');
+        const response = await fetch('/api/v1/audit-log?' + params.toString(), { credentials: 'same-origin', cache: 'no-store', headers: { 'Accept': 'application/json' } });
+        if (!response.ok) throw new Error('audit poll failed');
+        const payload = await response.json();
+        const current = payload.entries && payload.entries[0] ? payload.entries[0].changed_at : null;
+        if (newest && current && current > newest) {
+          if (status) { status.textContent = 'New audit activity detected · refresh to inspect'; status.dataset.alert = 'true'; }
+        } else if (current) newest = current;
+      } catch (_) {
+        if (status) status.textContent = 'Live audit check unavailable';
+      }
+    }
+    if (refresh) refresh.addEventListener('click', () => window.location.reload());
+    if (toggle) toggle.addEventListener('click', () => { setState(!enabled); if (enabled) poll(); });
+    setState(enabled);
+    if (enabled) { poll(); window.setInterval(poll, 30000); }
+  })();
+</script>
 {% endblock %}

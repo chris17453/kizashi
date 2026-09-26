@@ -134,6 +134,7 @@ struct IncidentLink {
 
 struct ModeledContext {
     id: Uuid,
+    object_type_id: Uuid,
     type_name: String,
     label: String,
     status: String,
@@ -406,6 +407,7 @@ pub async fn get_event_detail(
             .iter()
             .map(|object| ModeledContext {
                 id: object.id,
+                object_type_id: object.object_type_id,
                 type_name: type_names
                     .get(&object.object_type_id)
                     .cloned()
@@ -428,6 +430,7 @@ pub async fn get_event_detail(
             .collect::<Vec<_>>();
         let modeled_context = related_modeled_contexts.first().map(|context| ModeledContext {
             id: context.id,
+            object_type_id: context.object_type_id,
             type_name: context.type_name.clone(),
             label: context.label.clone(),
             status: context.status.clone(),

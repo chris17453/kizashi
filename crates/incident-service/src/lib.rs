@@ -1,4 +1,5 @@
 mod audit_log;
+mod correlation_consumer;
 mod handlers;
 mod health;
 mod incident_repository;
@@ -8,6 +9,9 @@ use axum::Router;
 
 pub use audit_log::{
     AuditLogEntry, AuditLogError, AuditLogReader, ChangeType, PostgresAuditLogReader,
+};
+pub use correlation_consumer::{
+    correlate_event, run as run_correlation_consumer, CorrelationOutcome,
 };
 pub use handlers::{
     add_incident_note, create_incident, get_incident, link_event, list_audit_log,

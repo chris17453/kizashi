@@ -21,6 +21,7 @@ chrono = { workspace = true }
 sqlx = { workspace = true }
 lapin = { workspace = true }
 futures-util = { workspace = true }
+reqwest = { workspace = true }
 
 [dev-dependencies]
 reqwest = { workspace = true }

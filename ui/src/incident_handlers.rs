@@ -906,8 +906,9 @@ pub async fn post_incident(
     }
 }
 
-struct LinkedEventRow {
-    event: EventDetail,
+pub(crate) struct LinkedEventRow {
+    pub(crate) event: EventDetail,
+    pub(crate) correlation: String,
 }
 
 struct IncidentEvidenceRecordView {
@@ -918,6 +919,7 @@ struct IncidentEvidenceRecordView {
 
 struct ImpactObjectView {
     id: Uuid,
+    object_type_id: Uuid,
     type_name: String,
     label: String,
     status: String,
@@ -1217,6 +1219,8 @@ struct IncidentActivityRow {
     actor: String,
     changed_at: chrono::DateTime<chrono::Utc>,
     summary: String,
+    event_id: Option<Uuid>,
+    correlation_mode: Option<String>,
 }
 
 struct IncidentTimelineEntry {
@@ -1277,14 +1281,109 @@ fn audit_value_summary(entry: &AuditLogEntry) -> String {
     }
 }
 
+/// Produces a bounded, deterministic case brief from the evidence already attached to the
+/// incident. This is deliberately evidence-backed rather than an untracked model response: the
+/// result can be regenerated at any time and the normal incident update path records the exact
+/// before/after summary in the immutable audit log.
+pub(crate) fn evidence_brief(incident: &Incident, events: &[LinkedEventRow]) -> String {
+    let mut event_types = std::collections::BTreeMap::<String, usize>::new();
+    let mut statuses = std::collections::BTreeMap::<String, usize>::new();
+    let mut groups = std::collections::BTreeSet::<String>::new();
+    let mut first_seen: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut last_seen: Option<chrono::DateTime<chrono::Utc>> = None;
+    for row in events {
+        *event_types.entry(row.event.event_type.clone()).or_default() += 1;
+        *statuses.entry(row.event.status.clone()).or_default() += 1;
+        if !row.event.group_key.trim().is_empty() {
+            groups.insert(row.event.group_key.clone());
+        }
+        first_seen =
+            Some(first_seen.map_or(row.event.occurred_at, |at| at.min(row.event.occurred_at)));
+        last_seen =
+            Some(last_seen.map_or(row.event.occurred_at, |at| at.max(row.event.occurred_at)));
+    }
+    let format_counts = |counts: &std::collections::BTreeMap<String, usize>| {
+        counts
+            .iter()
+            .map(|(label, count)| format!("{label} ({count})"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let signal_window = match (first_seen, last_seen) {
+        (Some(first), Some(last)) if first == last => format!("at {}", first.to_rfc3339()),
+        (Some(first), Some(last)) => {
+            format!("from {} to {}", first.to_rfc3339(), last.to_rfc3339())
+        }
+        _ => "with no linked signal timestamps".to_string(),
+    };
+    let group_summary = if groups.is_empty() {
+        "no non-empty group keys".to_string()
+    } else {
+        groups.into_iter().take(8).collect::<Vec<_>>().join(", ")
+    };
+    let event_type_summary =
+        if event_types.is_empty() { "none".to_string() } else { format_counts(&event_types) };
+    let status_summary =
+        if statuses.is_empty() { "none".to_string() } else { format_counts(&statuses) };
+    format!(
+        "{} is a {} {} case owned by {} with {} linked signal{} {}. Signal types: {}. Signal states: {}. Group keys: {}.",
+        incident.title,
+        incident.severity,
+        incident.status,
+        incident.assigned_to.as_deref().unwrap_or("unassigned"),
+        events.len(),
+        if events.len() == 1 { "" } else { "s" },
+        signal_window,
+        event_type_summary,
+        status_summary,
+        group_summary,
+    )
+}
+
+pub(crate) fn evidence_brief_payload(
+    incident: &Incident,
+    events: &[LinkedEventRow],
+) -> serde_json::Value {
+    serde_json::json!({
+        "incident": {
+            "title": incident.title,
+            "severity": incident.severity.to_string(),
+            "status": incident.status.to_string(),
+            "assigned_to": incident.assigned_to,
+        },
+        "events": events.iter().map(|row| serde_json::json!({
+            "id": row.event.id,
+            "event_type": row.event.event_type,
+            "group_key": row.event.group_key,
+            "status": row.event.status,
+            "occurred_at": row.event.occurred_at,
+            "source_connector_ids": row.event.source_connector_ids,
+            "entity_ref": row.event.entity_ref,
+            "record_ids": row.event.record_ids,
+            "payload": row.event.payload,
+        })).collect::<Vec<_>>(),
+    })
+}
+
 fn activity_rows(entries: Vec<AuditLogEntry>) -> Vec<IncidentActivityRow> {
     let mut rows = entries
         .into_iter()
-        .map(|entry| IncidentActivityRow {
-            change_type: entry.change_type.clone(),
-            actor: entry.actor.clone(),
-            changed_at: entry.changed_at,
-            summary: audit_value_summary(&entry),
+        .map(|entry| {
+            let after = entry.after.as_object();
+            IncidentActivityRow {
+                change_type: entry.change_type.clone(),
+                actor: entry.actor.clone(),
+                changed_at: entry.changed_at,
+                summary: audit_value_summary(&entry),
+                event_id: after
+                    .and_then(|value| value.get("event_id"))
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(|value| Uuid::parse_str(value).ok()),
+                correlation_mode: after
+                    .and_then(|value| value.get("correlation_mode"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+            }
         })
         .collect::<Vec<_>>();
     rows.sort_by_key(|row| std::cmp::Reverse(row.changed_at));
@@ -1373,7 +1472,7 @@ pub async fn get_incident_detail(
         if let Ok(Some(event)) =
             state.events_client.get_event(&session.bearer_token, *event_id).await
         {
-            linked_events.push(LinkedEventRow { event });
+            linked_events.push(LinkedEventRow { event, correlation: "Manual link".to_string() });
         }
     }
     let mut record_context = std::collections::HashMap::<Uuid, Vec<String>>::new();
@@ -1517,6 +1616,7 @@ pub async fn get_incident_detail(
                     .collect::<Vec<_>>();
                 Some(ImpactObjectView {
                     id,
+                    object_type_id: object.object_type_id,
                     type_name: type_names
                         .get(&object.object_type_id)
                         .cloned()
@@ -1634,6 +1734,19 @@ pub async fn get_incident_detail(
         .await
         .map(activity_rows)
         .unwrap_or_default();
+    let correlation_modes = activity
+        .iter()
+        .filter_map(|row| {
+            row.event_id.map(|id| (id, row.correlation_mode.as_deref().unwrap_or("manual")))
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    for row in &mut linked_events {
+        row.correlation = match correlation_modes.get(&row.event.id).copied() {
+            Some("partial_duplicate") => "Partial duplicate".to_string(),
+            Some("exact_group_key") => "Exact group key".to_string(),
+            _ => "Manual link".to_string(),
+        };
+    }
 
     let mut timeline = Vec::new();
     timeline.push(IncidentTimelineEntry {
@@ -2072,6 +2185,50 @@ pub async fn post_update_incident(
     Redirect::to(&format!("/incidents/{id}")).into_response()
 }
 
+/// POST /incidents/:id/brief — regenerates the operator-visible case brief from the current
+/// linked evidence and persists it through Incident Service's audited update contract.
+pub async fn post_generate_incident_brief(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Operator) {
+        return axum::http::StatusCode::FORBIDDEN.into_response();
+    }
+    let detail = match state.incidents_client.get_incident(session.tenant_id, id).await {
+        Ok(Some(detail)) => detail,
+        Ok(None) | Err(_) => {
+            return Redirect::to(&format!("/incidents/{id}?notice=brief_failed")).into_response()
+        }
+    };
+    let mut events = Vec::new();
+    for event_id in &detail.event_ids {
+        if let Ok(Some(event)) =
+            state.events_client.get_event(&session.bearer_token, *event_id).await
+        {
+            events.push(LinkedEventRow { event, correlation: "Manual link".to_string() });
+        }
+    }
+    let mut incident = detail.incident;
+    let deterministic_brief = evidence_brief(&incident, &events);
+    let evidence = evidence_brief_payload(&incident, &events);
+    incident.summary = match crate::incident_brief_client::global() {
+        Some(client) => {
+            client.generate(session.tenant_id, evidence).await.unwrap_or(deterministic_brief)
+        }
+        None => deterministic_brief,
+    };
+    incident.updated_at = chrono::Utc::now();
+    match state.incidents_client.update_incident(session.role, &session.username, incident).await {
+        Ok(_) => Redirect::to(&format!("/incidents/{id}?notice=brief_generated")).into_response(),
+        Err(_) => Redirect::to(&format!("/incidents/{id}?notice=brief_failed")).into_response(),
+    }
+}
+
 /// POST /incidents/:id/claim — assigns an active unowned case to the current operator. It
 /// re-reads and updates the complete Incident through the normal audited service path, so a
 /// claim is visible in the case history and cannot silently overwrite the title or severity.
@@ -2374,18 +2531,7 @@ pub async fn post_create_incident_from_events(
     {
         let mut linked_count = 0usize;
         for event_id in &unlinked_event_ids {
-            if state
-                .incidents_client
-                .link_event(
-                    session.role,
-                    &session.username,
-                    session.tenant_id,
-                    incident_id,
-                    *event_id,
-                )
-                .await
-                .is_ok()
-            {
+            if link_event_with_context(&state, &session, incident_id, *event_id).await.is_ok() {
                 linked_count += 1;
             }
         }
@@ -2414,15 +2560,27 @@ pub async fn post_create_incident_from_events(
 
     match state
         .incidents_client
-        .create_incident(session.role, &session.username, incident, unlinked_event_ids)
+        .create_incident(session.role, &session.username, incident, unlinked_event_ids.clone())
         .await
     {
-        Ok(detail) if skipped_count > 0 => Redirect::to(&format!(
-            "/events?notice=skipped_linked&created_incident={}&skipped_count={skipped_count}",
-            detail.incident.id
-        ))
-        .into_response(),
-        Ok(detail) => Redirect::to(&format!("/incidents/{}", detail.incident.id)).into_response(),
+        Ok(detail) if skipped_count > 0 => {
+            for event_id in &unlinked_event_ids {
+                let _ =
+                    link_event_with_context(&state, &session, detail.incident.id, *event_id).await;
+            }
+            Redirect::to(&format!(
+                "/events?notice=skipped_linked&created_incident={}&skipped_count={skipped_count}",
+                detail.incident.id
+            ))
+            .into_response()
+        }
+        Ok(detail) => {
+            for event_id in &unlinked_event_ids {
+                let _ =
+                    link_event_with_context(&state, &session, detail.incident.id, *event_id).await;
+            }
+            Redirect::to(&format!("/incidents/{}", detail.incident.id)).into_response()
+        }
         Err(_) => Redirect::to("/events").into_response(),
     }
 }
@@ -2457,11 +2615,7 @@ pub async fn post_link_events_to_incident(
     let mut linked_count = 0usize;
     let mut failed_count = 0usize;
     for event_id in event_ids {
-        match state
-            .incidents_client
-            .link_event(session.role, &session.username, session.tenant_id, incident_id, event_id)
-            .await
-        {
+        match link_event_with_context(&state, &session, incident_id, event_id).await {
             Ok(()) => linked_count += 1,
             Err(_) => failed_count += 1,
         }
@@ -2483,6 +2637,33 @@ fn event_correlation_keys(event: &EventDetail) -> Vec<String> {
         .filter(|value| !value.is_empty())
         .map(str::to_ascii_lowercase)
         .collect()
+}
+
+async fn link_event_with_context(
+    state: &AppState,
+    session: &crate::Session,
+    incident_id: Uuid,
+    event_id: Uuid,
+) -> Result<(), crate::IncidentsClientError> {
+    if let Ok(Some(event)) = state.events_client.get_event(&session.bearer_token, event_id).await {
+        if !event.group_key.trim().is_empty() {
+            return state
+                .incidents_client
+                .link_event_with_context(
+                    session.role,
+                    &session.username,
+                    session.tenant_id,
+                    incident_id,
+                    event_id,
+                    event.group_key.trim(),
+                )
+                .await;
+        }
+    }
+    state
+        .incidents_client
+        .link_event(session.role, &session.username, session.tenant_id, incident_id, event_id)
+        .await
 }
 
 async fn find_correlated_incident(
@@ -2544,16 +2725,12 @@ pub async fn post_create_incident_from_event(
     if let Some(incident_id) =
         find_correlated_incident(&state, &session.bearer_token, &existing, &[event_id]).await
     {
-        let notice = if state
-            .incidents_client
-            .link_event(session.role, &session.username, session.tenant_id, incident_id, event_id)
-            .await
-            .is_ok()
-        {
-            "correlated"
-        } else {
-            "failed"
-        };
+        let notice =
+            if link_event_with_context(&state, &session, incident_id, event_id).await.is_ok() {
+                "correlated"
+            } else {
+                "failed"
+            };
         return Redirect::to(&format!(
             "/incidents/{incident_id}?notice={notice}&correlated_event={event_id}"
         ))
@@ -2583,7 +2760,10 @@ pub async fn post_create_incident_from_event(
         .create_incident(session.role, &session.username, incident, vec![event_id])
         .await
     {
-        Ok(detail) => Redirect::to(&format!("/incidents/{}", detail.incident.id)).into_response(),
+        Ok(detail) => {
+            let _ = link_event_with_context(&state, &session, detail.incident.id, event_id).await;
+            Redirect::to(&format!("/incidents/{}", detail.incident.id)).into_response()
+        }
         Err(_) => Redirect::to(&format!("/events/{event_id}?notice=failed")).into_response(),
     }
 }
@@ -2607,11 +2787,7 @@ pub async fn post_link_event_to_incident(
     if !session.role.at_least(common::Role::Operator) {
         return axum::http::StatusCode::FORBIDDEN.into_response();
     }
-    let notice = match state
-        .incidents_client
-        .link_event(session.role, &session.username, session.tenant_id, form.incident_id, event_id)
-        .await
-    {
+    let notice = match link_event_with_context(&state, &session, form.incident_id, event_id).await {
         Ok(()) => "linked",
         Err(_) => "failed",
     };

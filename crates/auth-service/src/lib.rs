@@ -17,12 +17,16 @@ mod login_attempt_handler;
 mod login_attempt_repository;
 mod mfa;
 mod mfa_handler;
+mod mfa_policy_handler;
 mod mfa_repository;
 mod oidc_client;
+mod oidc_credentials_handler;
 mod oidc_handler;
+mod oidc_policy_handler;
 mod password;
 mod password_change_handler;
 mod password_policy;
+mod service_account_handler;
 mod session_audit_writer;
 mod session_client;
 mod tenant_branding_repository;
@@ -37,10 +41,12 @@ pub use data_subject_handler::get_data_subject_export;
 pub use health::build_router as health_router;
 pub use internal_secret::require_internal_secret;
 pub use local_login_handler::{
-    local_login, AuthState, LocalLoginRequest, LoginResponse, MfaRequiredResponse,
+    local_login, AuthState, LocalLoginRequest, LoginResponse, MfaEnrollmentRequiredResponse,
+    MfaRequiredResponse,
 };
 pub use local_user_repository::{
     LocalUser, LocalUserRepository, LocalUserRepositoryError, PostgresLocalUserRepository,
+    ServiceAccount,
 };
 pub use login_attempt_handler::{get_login_attempts, LoginAttemptQuery};
 pub use login_attempt_repository::{
@@ -51,16 +57,32 @@ pub use mfa_handler::{
     get_mfa_status, post_mfa_challenge, post_mfa_disable, post_mfa_enroll, post_mfa_verify,
     MfaChallengeRequest, MfaCodeRequest, MfaDisableRequest, MfaEnrollResponse, MfaStatusResponse,
 };
+pub use mfa_policy_handler::{
+    get_mfa_policy, put_mfa_policy, MfaPolicyResponse, UpdateMfaPolicyRequest,
+};
 pub use mfa_repository::{
     MfaChallengeRepository, MfaRepositoryError, PostgresMfaChallengeRepository,
 };
 pub use oidc_client::{
     OidcClient, OidcError, OidcProviderConfig, OidcUserInfo, StandardOidcClient,
 };
+pub use oidc_credentials_handler::{
+    delete_tenant_oidc_config, get_tenant_oidc_configs, put_tenant_oidc_config,
+    TenantOidcConfigRequest,
+};
 pub use oidc_handler::{authorize, callback, AuthorizeResponse, OidcCallbackRequest, OidcClients};
+pub use oidc_policy_handler::{
+    get_oidc_provider_policy, put_oidc_provider_policy, OidcProviderPolicyResponse,
+    UpdateOidcProviderPolicyRequest,
+};
 pub use password::{hash_password, verify_password, PasswordError};
 pub use password_change_handler::{post_change_password, ChangePasswordRequest};
 pub use password_policy::{validate_password_strength, PasswordPolicyError};
+pub use service_account_handler::{
+    create_service_account, introspect_service_account, list_service_accounts,
+    revoke_service_account, CreateServiceAccountRequest, CreatedServiceAccountResponse,
+    ServiceAccountPrincipal,
+};
 pub use session_audit_writer::{
     PostgresSessionAuditWriter, SessionAuditWriter, SessionAuditWriterError,
 };
@@ -69,6 +91,7 @@ pub use tenant_branding_repository::{
     PostgresTenantBrandingRepository, TenantBranding, TenantBrandingRepository,
     TenantBrandingRepositoryError,
 };
+pub use tenant_repository::{OidcCredentialCipher, TenantOidcProviderSummary};
 pub use tenant_repository::{PostgresTenantRepository, TenantRepository, TenantRepositoryError};
 pub use user_handlers::{
     create_user, delete_user, get_password_policy, get_recent_audit_log, get_user_audit_log,
@@ -94,6 +117,7 @@ pub fn build_router(state: AuthState, internal_secret: String) -> Router {
         // possessing a valid, single-use challenge_token plus a current TOTP code (ADR-0051),
         // the same "no header trust, so no internal-secret gate needed" shape as /login itself.
         .route("/v1/auth/local/mfa/challenge", post(post_mfa_challenge))
+        .route("/v1/service-accounts/introspect", get(introspect_service_account))
         // `GET` is the Console UI's login page (unauthenticated, workspace-name-keyed);
         // deliberately unauthenticated per `branding_handler::get_branding`'s doc comment.
         .route("/v1/tenants/:name/branding", get(get_branding))
@@ -134,10 +158,22 @@ pub fn build_router(state: AuthState, internal_secret: String) -> Router {
         // Admin-only tenant-wide security telemetry (ADR-0053) -- same access bar as /v1/users,
         // a step above the self-service MFA routes above it.
         .route("/v1/auth/local/login-attempts", get(get_login_attempts))
+        .route("/v1/auth/local/mfa-policy", get(get_mfa_policy).put(put_mfa_policy))
+        .route(
+            "/v1/auth/oidc/tenant-provider",
+            get(get_oidc_provider_policy).put(put_oidc_provider_policy),
+        )
+        .route("/v1/auth/oidc/tenant-config", get(get_tenant_oidc_configs))
+        .route(
+            "/v1/auth/oidc/tenant-config/:provider",
+            axum::routing::put(put_tenant_oidc_config).delete(delete_tenant_oidc_config),
+        )
         // Data subject export (ADR-0054) -- Admin-only, same bar as /v1/users since it's
         // reachable by user id in the same URL family.
         .route("/v1/users/:id/data-subject-export", get(get_data_subject_export))
         .route("/v1/auth/local/password-policy", get(get_password_policy))
+        .route("/v1/service-accounts", post(create_service_account).get(list_service_accounts))
+        .route("/v1/service-accounts/:id", axum::routing::delete(revoke_service_account))
         .with_state(state)
         .layer(axum::middleware::from_fn_with_state(internal_secret, require_internal_secret));
 

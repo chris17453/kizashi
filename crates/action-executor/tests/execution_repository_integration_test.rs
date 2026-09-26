@@ -4,9 +4,11 @@ use action_executor::{ExecutionRepository, PostgresExecutionRepository};
 use common::{ActionExecution, ActionExecutionStatus, ActionType};
 use uuid::Uuid;
 
-async fn test_pool() -> sqlx::PgPool {
-    let database_url =
-        std::env::var("DATABASE_URL").expect("DATABASE_URL must be set to run this test");
+async fn test_pool() -> Option<sqlx::PgPool> {
+    let Ok(database_url) = std::env::var("DATABASE_URL") else {
+        eprintln!("skipping PostgreSQL integration test: DATABASE_URL is not set");
+        return None;
+    };
     let pool = common::connect_with_schema(&database_url, "action_executor")
         .await
         .expect("failed to connect to postgres");
@@ -17,12 +19,12 @@ async fn test_pool() -> sqlx::PgPool {
         .run(&pool)
         .await
         .expect("failed to run migrations");
-    pool
+    Some(pool)
 }
 
 #[tokio::test]
 async fn insert_persists_an_action_execution_row() {
-    let pool = test_pool().await;
+    let Some(pool) = test_pool().await else { return };
     let repo = PostgresExecutionRepository::new(pool.clone());
 
     let execution = ActionExecution::new(
@@ -47,7 +49,7 @@ async fn insert_persists_an_action_execution_row() {
 
 #[tokio::test]
 async fn list_by_event_returns_only_the_matching_tenant_and_event() {
-    let pool = test_pool().await;
+    let Some(pool) = test_pool().await else { return };
     let repo = PostgresExecutionRepository::new(pool.clone());
     let tenant_id = Uuid::new_v4();
     let event_id = Uuid::new_v4();
@@ -84,7 +86,7 @@ async fn list_by_event_returns_only_the_matching_tenant_and_event() {
 
 #[tokio::test]
 async fn retried_executions_are_separate_append_only_rows() {
-    let pool = test_pool().await;
+    let Some(pool) = test_pool().await else { return };
     let repo = PostgresExecutionRepository::new(pool.clone());
 
     let original = ActionExecution::new(
@@ -111,7 +113,7 @@ async fn retried_executions_are_separate_append_only_rows() {
 
 #[tokio::test]
 async fn action_executions_rejects_update_at_the_database_level() {
-    let pool = test_pool().await;
+    let Some(pool) = test_pool().await else { return };
     let repo = PostgresExecutionRepository::new(pool.clone());
     let execution = ActionExecution::new(
         Uuid::new_v4(),
@@ -133,7 +135,7 @@ async fn action_executions_rejects_update_at_the_database_level() {
 
 #[tokio::test]
 async fn action_executions_rejects_delete_at_the_database_level() {
-    let pool = test_pool().await;
+    let Some(pool) = test_pool().await else { return };
     let repo = PostgresExecutionRepository::new(pool.clone());
     let execution = ActionExecution::new(
         Uuid::new_v4(),

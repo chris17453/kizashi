@@ -236,6 +236,8 @@ pub struct CreateScheduleForm {
     to: String,
     #[serde(default = "default_format")]
     format: String,
+    #[serde(default = "default_enabled")]
+    enabled: bool,
 }
 
 fn valid_frequency(value: &str) -> bool {
@@ -300,6 +302,57 @@ pub async fn post_delete_report_schedule(
     Redirect::to("/reports/schedules?notice=deleted").into_response()
 }
 
+pub async fn post_update_report_schedule(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Form(form): Form<CreateScheduleForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if !session.role.at_least(common::Role::Operator) {
+        return axum::http::StatusCode::FORBIDDEN.into_response();
+    }
+    if form.name.trim().is_empty()
+        || !valid_frequency(form.frequency.trim())
+        || !form.recipient.contains('@')
+        || !matches!(form.format.trim(), "csv" | "pdf")
+    {
+        return Redirect::to("/reports/schedules?notice=invalid").into_response();
+    }
+    let exists = state
+        .saved_search_queries_client
+        .list(session.tenant_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .any(|query| query.id == id);
+    if !exists {
+        return Redirect::to("/reports/schedules?notice=failed").into_response();
+    }
+    let filter = ScheduleFilter {
+        view_kind: "report_schedule".into(),
+        frequency: form.frequency.trim().into(),
+        recipient: form.recipient.trim().into(),
+        from: form.from,
+        to: form.to,
+        format: form.format.trim().into(),
+        enabled: form.enabled,
+    };
+    let updated = SavedSearchQuery {
+        id,
+        tenant_id: session.tenant_id,
+        name: form.name.trim().into(),
+        filter: serde_json::to_value(filter).unwrap_or_default(),
+    };
+    if state.saved_search_queries_client.update(session.tenant_id, updated).await.is_err() {
+        return Redirect::to("/reports/schedules?notice=failed").into_response();
+    }
+    Redirect::to("/reports/schedules?notice=updated").into_response()
+}
+
 pub async fn post_toggle_report_schedule(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -318,13 +371,16 @@ pub async fn post_toggle_report_schedule(
         let mut filter: ScheduleFilter = serde_json::from_value(query.filter).unwrap_or_default();
         if filter.view_kind == "report_schedule" {
             filter.enabled = !filter.enabled;
-            let _ = state.saved_search_queries_client.delete(session.tenant_id, id).await;
             let _ = state
                 .saved_search_queries_client
-                .create(
+                .update(
                     session.tenant_id,
-                    &query.name,
-                    serde_json::to_value(filter).unwrap_or_default(),
+                    SavedSearchQuery {
+                        id: query.id,
+                        tenant_id: query.tenant_id,
+                        name: query.name,
+                        filter: serde_json::to_value(filter).unwrap_or_default(),
+                    },
                 )
                 .await;
         }

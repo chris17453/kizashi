@@ -6,10 +6,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Groups related `Event`s into one trackable problem (ADR-0111) — the single biggest gap
-/// identified against Keep's Incidents feature. v1 is manual-only: an operator selects Events
-/// on the Events page and creates an Incident from them; auto-correlation, dedup, and
-/// AI-generated summaries are deferred to follow-up ADRs.
+/// Groups related `Event`s into one trackable problem (ADR-0111). Operators can create and
+/// curate incidents from the Events page; the incident service also performs tenant-scoped,
+/// unambiguous correlation for newly created events when a persisted group key matches.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Incident {
     pub id: Uuid,

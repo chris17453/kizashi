@@ -14,7 +14,7 @@ pub struct ConnectorStatSummary {
     pub last_ingested_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct RecordSummary {
     pub id: Uuid,
     #[serde(default)]

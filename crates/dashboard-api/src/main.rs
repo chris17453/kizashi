@@ -1,3 +1,4 @@
+use axum::{middleware, routing::get, Extension};
 use dashboard_api::{build_router, ClickHouseEventQueryRepository, DashboardState};
 use std::sync::Arc;
 
@@ -17,5 +18,10 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "dashboard-api listening");
-    axum::serve(listener, build_router(state)).await.expect("server error");
+    let metrics = Arc::new(common::HttpMetrics::default());
+    let app = build_router(state)
+        .route("/metrics", get(common::metrics_handler))
+        .layer(middleware::from_fn(common::record_request))
+        .layer(Extension(metrics));
+    axum::serve(listener, app).await.expect("server error");
 }

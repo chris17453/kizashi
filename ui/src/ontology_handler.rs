@@ -10,6 +10,7 @@ use axum::{
 };
 use common::SavedSearchQuery;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
@@ -42,6 +43,12 @@ struct OntologyTemplate {
     relationship_objects: Vec<RelationshipObjectView>,
     action_invocations: Vec<ActionInvocationView>,
     action_types: Vec<OntologyActionTypeView>,
+    action_history_contracts: Vec<ActionTypeHistoryContractView>,
+    link_history_contracts: Vec<LinkTypeHistoryContractView>,
+    object_type_history_contracts: Vec<ObjectTypeHistoryContractView>,
+    object_history_records: Vec<ObjectHistoryRecordView>,
+    link_history_records: Vec<LinkHistoryRecordView>,
+    selected_type_history: Vec<ObjectTypeHistoryView>,
     selected_type: Option<Uuid>,
     selected_object: Option<Uuid>,
     q: String,
@@ -53,6 +60,8 @@ struct OntologyTemplate {
     notice: String,
     created_count: usize,
     failed_count: usize,
+    updated: usize,
+    failed: usize,
     link_type_filter: Option<Uuid>,
     matching_link_count: usize,
     relationship_matrix_types: Vec<String>,
@@ -79,6 +88,21 @@ struct ObjectTypeView {
     property_percent: i32,
     mapping_percent: i32,
     link_percent: i32,
+}
+#[derive(Clone)]
+struct ObjectTypeHistoryView {
+    change_type: String,
+    actor: String,
+    before_state: String,
+    after_state: String,
+    changed_at: chrono::DateTime<chrono::Utc>,
+}
+
+struct ObjectTypeHistoryContractView {
+    id: Uuid,
+    name: String,
+    deleted: bool,
+    history: Vec<ObjectTypeHistoryView>,
 }
 struct PropertyView {
     key: String,
@@ -124,6 +148,7 @@ struct ObjectIncidentView {
     severity: String,
     status: String,
 }
+#[derive(Clone)]
 struct ObjectHistoryView {
     change_type: String,
     actor: String,
@@ -153,6 +178,13 @@ struct ObjectRiskMetric {
     label: String,
     count: usize,
     percent: i32,
+}
+
+fn shape_percent(numerator: usize, denominator: usize) -> i32 {
+    if denominator == 0 {
+        return if numerator == 0 { 0 } else { 100 };
+    }
+    ((numerator.saturating_mul(100) / denominator).min(100)) as i32
 }
 
 fn object_risk_posture(
@@ -218,6 +250,21 @@ struct LinkTypeView {
     target_name: String,
     selected: bool,
     instance_count: usize,
+}
+
+#[derive(Clone)]
+struct LinkTypeHistoryView {
+    change_type: String,
+    actor: String,
+    changed_at: chrono::DateTime<chrono::Utc>,
+    before_state: String,
+    after_state: String,
+}
+
+struct LinkTypeHistoryContractView {
+    name: String,
+    deleted: bool,
+    history: Vec<LinkTypeHistoryView>,
 }
 
 struct RelationshipMatrixCell {
@@ -351,6 +398,27 @@ struct LinkInstanceView {
     target_summary: String,
     properties: String,
 }
+
+#[derive(Clone)]
+struct LinkHistoryView {
+    change_type: String,
+    actor: String,
+    changed_at: chrono::DateTime<chrono::Utc>,
+    before_state: String,
+    after_state: String,
+}
+
+struct ObjectHistoryRecordView {
+    label: String,
+    deleted: bool,
+    history: Vec<ObjectHistoryView>,
+}
+
+struct LinkHistoryRecordView {
+    label: String,
+    deleted: bool,
+    history: Vec<LinkHistoryView>,
+}
 struct GraphNodeView {
     id: Uuid,
     type_name: String,
@@ -404,6 +472,8 @@ struct SavedOntologyFilter {
     risk: String,
     #[serde(default)]
     link_type_id: Option<Uuid>,
+    #[serde(default)]
+    object_ids: Vec<Uuid>,
 }
 struct SavedOntologyView {
     id: Uuid,
@@ -420,10 +490,13 @@ struct OntologyCompareTemplate {
     property_rows: Vec<ComparePropertyRow>,
     differing_property_count: usize,
     shared_property_count: usize,
+    object_ids_csv: String,
+    object_types_csv: String,
 }
 
 struct CompareObjectView {
     id: Uuid,
+    object_type_id: Uuid,
     type_name: String,
     summary: String,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -437,6 +510,27 @@ struct ComparePropertyRow {
 
 fn to_saved_ontology_view(query: SavedSearchQuery) -> SavedOntologyView {
     let filter: SavedOntologyFilter = serde_json::from_value(query.filter).unwrap_or_default();
+    if filter.object_ids.len() == 1 {
+        return SavedOntologyView {
+            id: query.id,
+            name: query.name,
+            load_url: format!("/ontology/objects/{}/360", filter.object_ids[0]),
+        };
+    }
+    if filter.object_ids.len() >= 2 {
+        let ids =
+            filter.object_ids.into_iter().take(6).map(|id| id.to_string()).collect::<Vec<_>>();
+        return SavedOntologyView {
+            id: query.id,
+            name: query.name,
+            load_url: format!(
+                "/ontology/compare?ids={}",
+                serde_urlencoded::to_string([("ids", ids.join(","))])
+                    .unwrap_or_default()
+                    .replace("ids=", ""),
+            ),
+        };
+    }
     let mut params = Vec::new();
     if let Some(type_id) = filter.type_id {
         params.push(("type_id", type_id.to_string()));
@@ -476,6 +570,28 @@ struct OntologyActionTypeView {
     target_options: Vec<OntologyActionTargetOption>,
     preconditions: String,
     effect_definition: String,
+}
+
+#[derive(Clone)]
+struct ActionTypeHistoryView {
+    change_type: String,
+    actor: String,
+    changed_at: chrono::DateTime<chrono::Utc>,
+    before_state: String,
+    after_state: String,
+}
+
+struct ActionTypeHistoryContractView {
+    name: String,
+    deleted: bool,
+    history: Vec<ActionTypeHistoryView>,
+}
+
+fn action_history_state(value: &Option<serde_json::Value>) -> String {
+    value
+        .as_ref()
+        .map(|state| serde_json::to_string_pretty(state).unwrap_or_default())
+        .unwrap_or_else(|| "—".to_string())
 }
 
 fn object_matches_filter(
@@ -573,7 +689,10 @@ fn shortest_object_path(
             } else {
                 continue;
             };
-            if object_ids.contains(&neighbor) && parent.insert(neighbor, Some(current)).is_none() {
+            // `from` is stored with a `None` parent, so using `insert(...).is_none()` as the
+            // visited check would treat an edge back to the origin as a new node forever.
+            if object_ids.contains(&neighbor) && !parent.contains_key(&neighbor) {
+                parent.insert(neighbor, Some(current));
                 if neighbor == to {
                     let mut path = vec![to];
                     let mut cursor = to;
@@ -785,6 +904,10 @@ pub struct OntologyQuery {
     #[serde(default)]
     pub failed_count: usize,
     #[serde(default)]
+    pub updated: usize,
+    #[serde(default)]
+    pub failed: usize,
+    #[serde(default)]
     pub path_from: Option<Uuid>,
     #[serde(default)]
     pub path_to: Option<Uuid>,
@@ -851,6 +974,12 @@ pub async fn list_ontology(
                     selected_type: query.type_id,
                     selected_object: query.object_id,
                     action_types: vec![],
+                    action_history_contracts: vec![],
+                    link_history_contracts: vec![],
+                    object_type_history_contracts: vec![],
+                    object_history_records: vec![],
+                    link_history_records: vec![],
+                    selected_type_history: vec![],
                     q: query.q.clone(),
                     property: query.property.clone(),
                     value: query.value.clone(),
@@ -860,6 +989,8 @@ pub async fn list_ontology(
                     notice: query.notice.clone(),
                     created_count: query.created_count,
                     failed_count: query.failed_count,
+                    updated: query.updated,
+                    failed: query.failed,
                     link_type_filter: query.link_type_id,
                     matching_link_count: 0,
                     relationship_matrix_types: vec![],
@@ -895,6 +1026,135 @@ pub async fn list_ontology(
     .map(ToString::to_string);
 
     let types = result.0.unwrap_or_default();
+    let object_type_names: HashMap<Uuid, String> =
+        types.iter().map(|object_type| (object_type.id, object_type.name.clone())).collect();
+    let mut object_type_history_by_id: HashMap<Uuid, (String, bool, Vec<ObjectTypeHistoryView>)> =
+        HashMap::new();
+    for entry in client.list_all_object_type_history(token).await.unwrap_or_default() {
+        let name = object_type_names
+            .get(&entry.object_type_id)
+            .cloned()
+            .or_else(|| {
+                entry
+                    .before_state
+                    .as_ref()
+                    .and_then(|state| state.get("name"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
+            .or_else(|| {
+                entry
+                    .after_state
+                    .as_ref()
+                    .and_then(|state| state.get("name"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
+            .unwrap_or_else(|| "Deleted object type".to_string());
+        let deleted = entry.change_type == "deleted";
+        let history = ObjectTypeHistoryView {
+            change_type: entry.change_type,
+            actor: entry.actor,
+            before_state: entry
+                .before_state
+                .map(|value| serde_json::to_string_pretty(&value).unwrap_or_default())
+                .unwrap_or_else(|| "—".to_string()),
+            after_state: entry
+                .after_state
+                .map(|value| serde_json::to_string_pretty(&value).unwrap_or_default())
+                .unwrap_or_else(|| "—".to_string()),
+            changed_at: entry.changed_at,
+        };
+        let contract = object_type_history_by_id
+            .entry(entry.object_type_id)
+            .or_insert_with(|| (name.clone(), false, Vec::new()));
+        if contract.0 == "Deleted object type" {
+            contract.0 = name;
+        }
+        contract.1 |= deleted;
+        contract.2.push(history);
+    }
+    let object_type_history_contracts = {
+        let mut contracts = object_type_history_by_id
+            .iter()
+            .map(|(id, (name, deleted, history))| ObjectTypeHistoryContractView {
+                id: *id,
+                name: name.clone(),
+                deleted: *deleted && !object_type_names.contains_key(id),
+                history: history.clone(),
+            })
+            .collect::<Vec<_>>();
+        contracts.sort_by(|left, right| left.name.cmp(&right.name));
+        contracts
+    };
+    let raw_link_types = result.1.unwrap_or_default();
+    let link_names: HashMap<Uuid, String> =
+        raw_link_types.iter().map(|link_type| (link_type.id, link_type.name.clone())).collect();
+    let mut link_type_histories = HashMap::new();
+    for entry in client.list_all_link_type_history(token).await.unwrap_or_default() {
+        let name = link_names
+            .get(&entry.link_type_id)
+            .cloned()
+            .or_else(|| {
+                entry
+                    .before_state
+                    .as_ref()
+                    .and_then(|state| state.get("name"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
+            .or_else(|| {
+                entry
+                    .after_state
+                    .as_ref()
+                    .and_then(|state| state.get("name"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
+            .unwrap_or_else(|| "Deleted relationship contract".to_string());
+        let deleted = entry.change_type == "deleted";
+        let history = LinkTypeHistoryView {
+            change_type: entry.change_type,
+            actor: entry.actor,
+            changed_at: entry.changed_at,
+            before_state: entry
+                .before_state
+                .map(|value| serde_json::to_string_pretty(&value).unwrap_or_default())
+                .unwrap_or_else(|| "—".to_string()),
+            after_state: entry
+                .after_state
+                .map(|value| serde_json::to_string_pretty(&value).unwrap_or_default())
+                .unwrap_or_else(|| "—".to_string()),
+        };
+        let contract = link_type_histories
+            .entry(entry.link_type_id)
+            .or_insert_with(|| (name.clone(), false, Vec::new()));
+        if contract.0 == "Deleted relationship contract" {
+            contract.0 = name;
+        }
+        contract.1 |= deleted;
+        contract.2.push(history);
+    }
+    let link_history_contracts = {
+        let mut contracts = link_type_histories
+            .iter()
+            .map(|(id, (name, deleted, history))| LinkTypeHistoryContractView {
+                name: name.clone(),
+                deleted: *deleted && !link_names.contains_key(id),
+                history: history.clone(),
+            })
+            .collect::<Vec<_>>();
+        contracts.sort_by(|left, right| left.name.cmp(&right.name));
+        contracts
+    };
+    let selected_type_history = match query.type_id {
+        Some(type_id) => object_type_history_contracts
+            .iter()
+            .find(|contract| contract.id == type_id)
+            .map(|contract| contract.history.clone())
+            .unwrap_or_default(),
+        None => vec![],
+    };
     let type_names: std::collections::HashMap<Uuid, String> =
         types.iter().map(|t| (t.id, t.name.clone())).collect();
     let all_objects_for_counts = client.list_objects(token, None).await.unwrap_or_default();
@@ -903,17 +1163,17 @@ pub async fn list_ontology(
         *object_counts.entry(object.object_type_id).or_default() += 1;
     }
     let total_object_count = all_objects_for_counts.len().max(1);
-    let link_types_for_counts = result.1.as_ref().map(|items| items.as_slice()).unwrap_or(&[]);
+    let link_types_for_counts = raw_link_types.as_slice();
     let max_property_count = types
         .iter()
         .map(|item| item.property_schema.as_object().map(|object| object.len()).unwrap_or(0))
         .max()
-        .unwrap_or(1);
+        .unwrap_or(0);
     let max_mapping_count = types
         .iter()
         .map(|item| item.mapping_rules.as_array().map(|array| array.len()).unwrap_or(0))
         .max()
-        .unwrap_or(1);
+        .unwrap_or(0);
     let max_link_type_count = types
         .iter()
         .map(|item| {
@@ -925,7 +1185,7 @@ pub async fn list_ontology(
                 .count()
         })
         .max()
-        .unwrap_or(1);
+        .unwrap_or(0);
     let object_types = types
         .iter()
         .map(|t| {
@@ -948,11 +1208,13 @@ pub async fn list_ontology(
                 selected: query.type_id == Some(t.id),
                 schema: serde_json::to_string_pretty(&t.property_schema).unwrap_or_default(),
                 mapping: serde_json::to_string_pretty(&t.mapping_rules).unwrap_or_default(),
-                object_percent: ((object_counts.get(&t.id).copied().unwrap_or(0) * 100)
-                    / total_object_count) as i32,
-                property_percent: ((property_count * 100) / max_property_count) as i32,
-                mapping_percent: ((mapping_count * 100) / max_mapping_count) as i32,
-                link_percent: ((link_type_count * 100) / max_link_type_count) as i32,
+                object_percent: shape_percent(
+                    object_counts.get(&t.id).copied().unwrap_or(0),
+                    total_object_count,
+                ),
+                property_percent: shape_percent(property_count, max_property_count),
+                mapping_percent: shape_percent(mapping_count, max_mapping_count),
+                link_percent: shape_percent(link_type_count, max_link_type_count),
             }
         })
         .collect();
@@ -977,55 +1239,104 @@ pub async fn list_ontology(
         })
         .collect::<Vec<_>>();
     let action_types_raw = client.list_action_types(token).await.unwrap_or_default();
-    let action_types = action_types_raw
-        .iter()
-        .map(|action| {
-            let mut target_options = all_objects_for_counts
-                .iter()
-                .map(|object| OntologyActionTargetOption {
-                    id: object.id,
-                    label: object
-                        .properties
-                        .get("name")
-                        .or_else(|| object.properties.get("subject"))
-                        .or_else(|| object.properties.get("id"))
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("Untitled object")
-                        .to_string(),
-                    type_name: type_names
-                        .get(&object.object_type_id)
-                        .cloned()
-                        .unwrap_or_else(|| "Entity".to_string()),
-                    eligible: action
-                        .target_object_type_id
-                        .map(|type_id| type_id == object.object_type_id)
-                        .unwrap_or(true)
-                        && satisfies_action_preconditions(
-                            &object.properties,
-                            &action.preconditions,
-                        ),
-                })
-                .collect::<Vec<_>>();
-            target_options.sort_by_key(|target| !target.eligible);
-            OntologyActionTypeView {
-                id: action.id,
-                name: action.name.clone(),
-                target_object_type_id: action.target_object_type_id,
-                target_type_name: action
+    let action_history_raw = client.list_all_action_type_history(token).await.unwrap_or_default();
+    let action_names: HashMap<Uuid, String> =
+        action_types_raw.iter().map(|action| (action.id, action.name.clone())).collect();
+    let mut history_by_id: HashMap<Uuid, (String, bool, Vec<ActionTypeHistoryView>)> =
+        HashMap::new();
+    for entry in action_history_raw {
+        let name = action_names
+            .get(&entry.action_type_id)
+            .cloned()
+            .or_else(|| {
+                entry
+                    .before_state
+                    .as_ref()
+                    .and_then(|state| state.get("name"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
+            .or_else(|| {
+                entry
+                    .after_state
+                    .as_ref()
+                    .and_then(|state| state.get("name"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
+            .unwrap_or_else(|| "Deleted governed action".to_string());
+        let deleted = entry.change_type == "deleted";
+        let history = ActionTypeHistoryView {
+            change_type: entry.change_type,
+            actor: entry.actor,
+            changed_at: entry.changed_at,
+            before_state: action_history_state(&entry.before_state),
+            after_state: action_history_state(&entry.after_state),
+        };
+        let contract = history_by_id
+            .entry(entry.action_type_id)
+            .or_insert_with(|| (name.clone(), false, Vec::new()));
+        if contract.0 == "Deleted governed action" {
+            contract.0 = name;
+        }
+        contract.1 |= deleted;
+        contract.2.push(history);
+    }
+    let action_history_contracts = {
+        let mut contracts = history_by_id
+            .into_iter()
+            .map(|(id, (name, deleted, history))| ActionTypeHistoryContractView {
+                name,
+                deleted: deleted && !action_names.contains_key(&id),
+                history,
+            })
+            .collect::<Vec<_>>();
+        contracts.sort_by(|left, right| left.name.cmp(&right.name));
+        contracts
+    };
+    let mut action_types = Vec::with_capacity(action_types_raw.len());
+    for action in &action_types_raw {
+        let mut target_options = all_objects_for_counts
+            .iter()
+            .map(|object| OntologyActionTargetOption {
+                id: object.id,
+                label: object
+                    .properties
+                    .get("name")
+                    .or_else(|| object.properties.get("subject"))
+                    .or_else(|| object.properties.get("id"))
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("Untitled object")
+                    .to_string(),
+                type_name: type_names
+                    .get(&object.object_type_id)
+                    .cloned()
+                    .unwrap_or_else(|| "Entity".to_string()),
+                eligible: action
                     .target_object_type_id
-                    .and_then(|id| type_names.get(&id).cloned())
-                    .unwrap_or_else(|| "Any object type".to_string()),
-                parameter_schema: serde_json::to_string_pretty(&action.parameter_schema)
-                    .unwrap_or_default(),
-                parameter_fields: build_action_parameter_fields(&action.parameter_schema),
-                target_options,
-                preconditions: serde_json::to_string_pretty(&action.preconditions)
-                    .unwrap_or_default(),
-                effect_definition: serde_json::to_string_pretty(&action.effect_definition)
-                    .unwrap_or_default(),
-            }
-        })
-        .collect::<Vec<_>>();
+                    .map(|type_id| type_id == object.object_type_id)
+                    .unwrap_or(true)
+                    && satisfies_action_preconditions(&object.properties, &action.preconditions),
+            })
+            .collect::<Vec<_>>();
+        target_options.sort_by_key(|target| !target.eligible);
+        action_types.push(OntologyActionTypeView {
+            id: action.id,
+            name: action.name.clone(),
+            target_object_type_id: action.target_object_type_id,
+            target_type_name: action
+                .target_object_type_id
+                .and_then(|id| type_names.get(&id).cloned())
+                .unwrap_or_else(|| "Any object type".to_string()),
+            parameter_schema: serde_json::to_string_pretty(&action.parameter_schema)
+                .unwrap_or_default(),
+            parameter_fields: build_action_parameter_fields(&action.parameter_schema),
+            target_options,
+            preconditions: serde_json::to_string_pretty(&action.preconditions).unwrap_or_default(),
+            effect_definition: serde_json::to_string_pretty(&action.effect_definition)
+                .unwrap_or_default(),
+        });
+    }
     let object_query = query.q.trim().to_ascii_lowercase();
     let property_query = query.property.trim().to_ascii_lowercase();
     let value_query = query.value.trim().to_ascii_lowercase();
@@ -1046,6 +1357,63 @@ pub async fn list_ontology(
             )
         })
         .collect();
+    let mut object_history_by_id: HashMap<Uuid, (String, bool, Vec<ObjectHistoryView>)> =
+        HashMap::new();
+    for entry in client.list_all_object_history(token).await.unwrap_or_default() {
+        let snapshot_label = |state: &Option<serde_json::Value>| {
+            state
+                .as_ref()
+                .and_then(|value| value.get("properties"))
+                .and_then(|value| {
+                    value
+                        .get("name")
+                        .or_else(|| value.get("subject"))
+                        .or_else(|| value.get("title"))
+                })
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        };
+        let label = object_summaries
+            .get(&entry.object_id)
+            .cloned()
+            .or_else(|| snapshot_label(&entry.before_state))
+            .or_else(|| snapshot_label(&entry.after_state))
+            .unwrap_or_else(|| "Deleted modeled object".to_string());
+        let deleted = entry.change_type == "deleted";
+        let history = ObjectHistoryView {
+            change_type: entry.change_type,
+            actor: entry.actor,
+            before_state: entry
+                .before_state
+                .map(|value| serde_json::to_string_pretty(&value).unwrap_or_default())
+                .unwrap_or_else(|| "—".to_string()),
+            after_state: entry
+                .after_state
+                .map(|value| serde_json::to_string_pretty(&value).unwrap_or_default())
+                .unwrap_or_else(|| "—".to_string()),
+            changed_at: entry.changed_at,
+        };
+        let record = object_history_by_id
+            .entry(entry.object_id)
+            .or_insert_with(|| (label.clone(), false, Vec::new()));
+        if record.0 == "Deleted modeled object" {
+            record.0 = label;
+        }
+        record.1 |= deleted;
+        record.2.push(history);
+    }
+    let object_history_records = {
+        let mut records = object_history_by_id
+            .into_iter()
+            .map(|(_id, (label, deleted, history))| ObjectHistoryRecordView {
+                label,
+                deleted,
+                history,
+            })
+            .collect::<Vec<_>>();
+        records.sort_by(|left, right| left.label.cmp(&right.label));
+        records
+    };
     let object_type_ids: std::collections::HashMap<Uuid, Uuid> =
         all_objects_for_counts.iter().map(|object| (object.id, object.object_type_id)).collect();
     let mut raw_objects = all_objects
@@ -1066,8 +1434,88 @@ pub async fn list_ontology(
         });
         !eligible
     });
-    let raw_links = result.1.unwrap_or_default();
+    let raw_links = raw_link_types.clone();
     let all_link_instances = result.4.unwrap_or_default();
+    let live_link_labels: HashMap<Uuid, String> = all_link_instances
+        .iter()
+        .map(|link| {
+            let link_name = raw_links
+                .iter()
+                .find(|link_type| link_type.id == link.link_type_id)
+                .map(|link_type| link_type.name.as_str())
+                .unwrap_or("Relationship");
+            let source = object_summaries
+                .get(&link.source_object_id)
+                .cloned()
+                .unwrap_or_else(|| link.source_object_id.to_string());
+            let target = object_summaries
+                .get(&link.target_object_id)
+                .cloned()
+                .unwrap_or_else(|| link.target_object_id.to_string());
+            (link.id, format!("{link_name}: {source} → {target}"))
+        })
+        .collect();
+    let mut link_history_by_id: HashMap<Uuid, (String, bool, Vec<LinkHistoryView>)> =
+        HashMap::new();
+    for entry in client.list_all_link_history(token).await.unwrap_or_default() {
+        let snapshot_label = |state: &Option<serde_json::Value>| {
+            let source = state
+                .as_ref()
+                .and_then(|value| value.get("source_object_id"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("?");
+            let target = state
+                .as_ref()
+                .and_then(|value| value.get("target_object_id"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("?");
+            if source == "?" && target == "?" {
+                None
+            } else {
+                Some(format!("Relationship: {source} → {target}"))
+            }
+        };
+        let label = live_link_labels
+            .get(&entry.link_id)
+            .cloned()
+            .or_else(|| snapshot_label(&entry.before_state))
+            .or_else(|| snapshot_label(&entry.after_state))
+            .unwrap_or_else(|| "Deleted relationship instance".to_string());
+        let deleted = entry.change_type == "deleted";
+        let history = LinkHistoryView {
+            change_type: entry.change_type,
+            actor: entry.actor,
+            changed_at: entry.changed_at,
+            before_state: entry
+                .before_state
+                .map(|value| serde_json::to_string_pretty(&value).unwrap_or_default())
+                .unwrap_or_else(|| "—".to_string()),
+            after_state: entry
+                .after_state
+                .map(|value| serde_json::to_string_pretty(&value).unwrap_or_default())
+                .unwrap_or_else(|| "—".to_string()),
+        };
+        let record = link_history_by_id
+            .entry(entry.link_id)
+            .or_insert_with(|| (label.clone(), false, Vec::new()));
+        if record.0 == "Deleted relationship instance" {
+            record.0 = label;
+        }
+        record.1 |= deleted;
+        record.2.push(history);
+    }
+    let link_history_records = {
+        let mut records = link_history_by_id
+            .into_iter()
+            .map(|(_id, (label, deleted, history))| LinkHistoryRecordView {
+                label,
+                deleted,
+                history,
+            })
+            .collect::<Vec<_>>();
+        records.sort_by(|left, right| left.label.cmp(&right.label));
+        records
+    };
     let (relationship_matrix_types, relationship_matrix) =
         relationship_matrix(&types, &raw_links, &all_link_instances);
     let (property_coverage_fields, property_coverage) =
@@ -1427,7 +1875,7 @@ pub async fn list_ontology(
     }
     let displayed_matching_count =
         if risk_filter.is_empty() { matching_count } else { objects.len() };
-    let link_types = raw_links
+    let link_types = raw_link_types
         .iter()
         .map(|l| LinkTypeView {
             id: l.id,
@@ -1485,6 +1933,12 @@ pub async fn list_ontology(
             relationship_objects,
             action_invocations,
             action_types,
+            action_history_contracts,
+            link_history_contracts,
+            object_type_history_contracts,
+            object_history_records,
+            link_history_records,
+            selected_type_history,
             selected_type: query.type_id,
             selected_object: query.object_id,
             q: query.q.clone(),
@@ -1496,6 +1950,8 @@ pub async fn list_ontology(
             notice: query.notice,
             created_count: query.created_count,
             failed_count: query.failed_count,
+            updated: query.updated,
+            failed: query.failed,
             link_type_filter: query.link_type_id,
             matching_link_count,
             relationship_matrix_types,
@@ -1550,6 +2006,7 @@ pub async fn get_ontology_compare(
         .filter_map(|id| by_id.get(&id))
         .map(|object| CompareObjectView {
             id: object.id,
+            object_type_id: object.object_type_id,
             type_name: type_names
                 .get(&object.object_type_id)
                 .cloned()
@@ -1597,6 +2054,13 @@ pub async fn get_ontology_compare(
         .filter(|row| row.values.windows(2).any(|values| values[0] != values[1]))
         .count();
     let shared_property_count = property_rows.len().saturating_sub(differing_property_count);
+    let object_ids_csv =
+        objects.iter().map(|object| object.id.to_string()).collect::<Vec<_>>().join(",");
+    let object_types_csv = objects
+        .iter()
+        .map(|object| format!("{}={}", object.id, object.object_type_id))
+        .collect::<Vec<_>>()
+        .join(",");
     Html(
         OntologyCompareTemplate {
             show_nav: true,
@@ -1605,6 +2069,8 @@ pub async fn get_ontology_compare(
             property_rows,
             differing_property_count,
             shared_property_count,
+            object_ids_csv,
+            object_types_csv,
         }
         .render()
         .unwrap(),
@@ -1683,6 +2149,8 @@ pub struct SaveOntologyViewForm {
     pub risk: String,
     #[serde(default)]
     pub link_type_id: Option<Uuid>,
+    #[serde(default)]
+    pub object_ids: String,
 }
 
 fn ontology_view_redirect(form: &SaveOntologyViewForm, notice: &str) -> Redirect {
@@ -1723,6 +2191,16 @@ pub async fn post_save_ontology_view(
         return ontology_view_redirect(&form, "view_invalid").into_response();
     }
     let filter = serde_json::json!({"surface": "ontology", "type_id": form.type_id, "q": form.q, "property": form.property, "value": form.value, "risk": form.risk, "link_type_id": form.link_type_id});
+    let mut filter = filter;
+    let object_ids = form
+        .object_ids
+        .split(',')
+        .filter_map(|value| Uuid::parse_str(value.trim()).ok())
+        .take(6)
+        .collect::<Vec<_>>();
+    if !object_ids.is_empty() {
+        filter["object_ids"] = serde_json::to_value(object_ids).unwrap_or_default();
+    }
     match state.saved_search_queries_client.create(session.tenant_id, name, filter).await {
         Ok(_) => ontology_view_redirect(&form, "view_saved").into_response(),
         Err(_) => ontology_view_redirect(&form, "view_failed").into_response(),
@@ -1749,6 +2227,30 @@ pub struct ObjectForm {
     pub object_type_id: Uuid,
     pub properties: String,
     pub source_lineage: String,
+    #[serde(default)]
+    pub return_to: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ObjectAnnotationForm {
+    pub body: String,
+    #[serde(default)]
+    pub return_to: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkObjectUpdateForm {
+    pub object_ids: String,
+    pub property: String,
+    pub value: String,
+}
+
+fn parse_bulk_object_value(value: &str) -> Result<serde_json::Value, &'static str> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("Value is required");
+    }
+    serde_json::from_str(trimmed).or_else(|_| Ok(serde_json::Value::String(trimmed.to_string())))
 }
 
 fn parse_object_form(form: ObjectForm) -> Result<CreateObjectRequest, Response> {
@@ -1804,6 +2306,7 @@ pub async fn update_ontology_object(
     if !session.role.at_least(common::Role::Operator) {
         return (StatusCode::FORBIDDEN, "Operator access required").into_response();
     }
+    let return_to = form.return_to.clone();
     let input = match parse_object_form(form) {
         Ok(input) => input,
         Err(response) => return response,
@@ -1812,7 +2315,14 @@ pub async fn update_ontology_object(
         return (StatusCode::SERVICE_UNAVAILABLE, "Ontology client unavailable").into_response();
     };
     match client.update_object(&session.bearer_token, id, &input).await {
-        Ok(()) => Redirect::to("/ontology?notice=object_updated").into_response(),
+        Ok(()) => {
+            let object_route = format!("/ontology/objects/{id}/360");
+            if return_to == object_route {
+                Redirect::to(&object_route).into_response()
+            } else {
+                Redirect::to("/ontology?notice=object_updated").into_response()
+            }
+        }
         Err(crate::ontology_client::OntologyClientError::Rejected(400)) => (
             StatusCode::BAD_REQUEST,
             "Object properties do not match the selected object type schema",
@@ -1820,6 +2330,107 @@ pub async fn update_ontology_object(
             .into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
     }
+}
+
+pub async fn create_ontology_object_annotation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Form(form): Form<ObjectAnnotationForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(s) => s,
+        Err(r) => return r,
+    };
+    if !session.role.at_least(common::Role::Operator) {
+        return (StatusCode::FORBIDDEN, "Operator access required").into_response();
+    }
+    let return_to = format!("/ontology/objects/{id}/360");
+    let Some(client) = ontology_client::global() else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "Ontology client unavailable").into_response();
+    };
+    match client
+        .create_object_annotation(
+            &session.bearer_token,
+            &session.username,
+            id,
+            &crate::ontology_client::CreateObjectAnnotationRequest { body: form.body },
+        )
+        .await
+    {
+        Ok(_) => Redirect::to(&return_to).into_response(),
+        Err(crate::ontology_client::OntologyClientError::Rejected(400)) => {
+            (StatusCode::BAD_REQUEST, "Annotation must contain 1–4000 characters").into_response()
+        }
+        Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+    }
+}
+
+/// Applies one schema-validated property change across a bounded selection. Each object is sent
+/// through the normal ontology update endpoint so every successful change gets its own immutable
+/// history snapshot and actor attribution.
+pub async fn bulk_update_ontology_objects(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<BulkObjectUpdateForm>,
+) -> Response {
+    let session = match require_session(state.session_store.as_ref(), &headers).await {
+        Ok(s) => s,
+        Err(r) => return r,
+    };
+    if !session.role.at_least(common::Role::Operator) {
+        return (StatusCode::FORBIDDEN, "Operator access required").into_response();
+    }
+    let property = form.property.trim();
+    if property.is_empty() || property.len() > 120 {
+        return Redirect::to("/ontology?notice=bulk_object_invalid").into_response();
+    }
+    let value = match parse_bulk_object_value(&form.value) {
+        Ok(value) => value,
+        Err(_) => return Redirect::to("/ontology?notice=bulk_object_invalid").into_response(),
+    };
+    let ids = form
+        .object_ids
+        .split(',')
+        .filter_map(|value| Uuid::parse_str(value.trim()).ok())
+        .take(25)
+        .collect::<Vec<_>>();
+    if ids.is_empty() {
+        return Redirect::to("/ontology?notice=bulk_object_empty").into_response();
+    }
+    let Some(client) = ontology_client::global() else {
+        return Redirect::to("/ontology?notice=bulk_object_failed").into_response();
+    };
+    let objects = match client.list_objects(&session.bearer_token, None).await {
+        Ok(objects) => objects,
+        Err(_) => return Redirect::to("/ontology?notice=bulk_object_failed").into_response(),
+    };
+    let mut updated = 0usize;
+    let mut failed = 0usize;
+    for id in ids {
+        let Some(object) = objects.iter().find(|object| object.id == id) else {
+            failed += 1;
+            continue;
+        };
+        let mut properties = object.properties.clone();
+        if let Some(map) = properties.as_object_mut() {
+            map.insert(property.to_string(), value.clone());
+        } else {
+            failed += 1;
+            continue;
+        }
+        let input = CreateObjectRequest {
+            object_type_id: object.object_type_id,
+            properties,
+            source_lineage: object.source_lineage.clone(),
+        };
+        match client.update_object(&session.bearer_token, id, &input).await {
+            Ok(()) => updated += 1,
+            Err(_) => failed += 1,
+        }
+    }
+    Redirect::to(&format!("/ontology?notice=bulk_object_updated&updated={updated}&failed={failed}"))
+        .into_response()
 }
 
 pub async fn delete_ontology_object(
@@ -1856,6 +2467,10 @@ pub struct LinkInstanceForm {
     pub source_object_id: Uuid,
     pub target_object_id: Uuid,
     pub properties: String,
+}
+#[derive(Debug, Deserialize, Default)]
+pub struct OntologyReturnQuery {
+    pub return_to: Option<String>,
 }
 #[derive(Debug, Deserialize)]
 pub struct BulkLinkInstanceForm {
@@ -1907,7 +2522,7 @@ pub async fn create_ontology_link_instance(
         target_object_id: form.target_object_id,
         properties,
     };
-    match client.create_link(&session.bearer_token, &input).await {
+    match client.create_link(&session.bearer_token, &session.username, &input).await {
         Ok(()) => Redirect::to("/ontology?notice=relationship_created").into_response(),
         Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
     }
@@ -1953,7 +2568,7 @@ pub async fn create_bulk_ontology_link_instances(
             target_object_id: form.target_object_id,
             properties: properties.clone(),
         };
-        match client.create_link(&session.bearer_token, &input).await {
+        match client.create_link(&session.bearer_token, &session.username, &input).await {
             Ok(()) => created_count += 1,
             Err(_) => failed_count += 1,
         }
@@ -1990,7 +2605,7 @@ pub async fn update_ontology_link_instance(
         target_object_id: form.target_object_id,
         properties,
     };
-    match client.update_link(&session.bearer_token, id, &input).await {
+    match client.update_link(&session.bearer_token, &session.username, id, &input).await {
         Ok(()) => Redirect::to("/ontology?notice=relationship_updated").into_response(),
         Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
     }
@@ -2000,6 +2615,7 @@ pub async fn delete_ontology_link_instance(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
+    Query(query): Query<OntologyReturnQuery>,
 ) -> Response {
     let session = match require_session(state.session_store.as_ref(), &headers).await {
         Ok(s) => s,
@@ -2011,8 +2627,12 @@ pub async fn delete_ontology_link_instance(
     let Some(client) = ontology_client::global() else {
         return (StatusCode::SERVICE_UNAVAILABLE, "Ontology client unavailable").into_response();
     };
-    match client.delete_link(&session.bearer_token, id).await {
-        Ok(()) => Redirect::to("/ontology?notice=relationship_deleted").into_response(),
+    let return_to = query
+        .return_to
+        .filter(|path| path.starts_with("/ontology/objects/") && path.ends_with("/360"))
+        .unwrap_or_else(|| "/ontology".to_string());
+    match client.delete_link(&session.bearer_token, &session.username, id).await {
+        Ok(()) => Redirect::to(&format!("{return_to}?notice=relationship_deleted")).into_response(),
         Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
     }
 }
@@ -2150,7 +2770,7 @@ pub async fn create_ontology_link(
         cardinality: form.cardinality,
         properties_schema: None,
     };
-    match client.create_link_type(&session.bearer_token, &input).await {
+    match client.create_link_type(&session.bearer_token, &session.username, &input).await {
         Ok(()) => Redirect::to("/ontology?notice=relationship_type_created").into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
     }
@@ -2171,7 +2791,7 @@ pub async fn delete_ontology_link(
     let Some(client) = ontology_client::global() else {
         return (StatusCode::SERVICE_UNAVAILABLE, "Ontology client unavailable").into_response();
     };
-    match client.delete_link_type(&session.bearer_token, id).await {
+    match client.delete_link_type(&session.bearer_token, &session.username, id).await {
         Ok(()) => Redirect::to("/ontology?notice=relationship_type_deleted").into_response(),
         Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
     }
@@ -2200,7 +2820,7 @@ pub async fn update_ontology_link(
         cardinality: form.cardinality,
         properties_schema: None,
     };
-    match client.update_link_type(&session.bearer_token, id, &input).await {
+    match client.update_link_type(&session.bearer_token, &session.username, id, &input).await {
         Ok(()) => Redirect::to("/ontology?notice=relationship_type_updated").into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
     }
@@ -2229,7 +2849,7 @@ pub async fn create_ontology_action(
     let Some(client) = ontology_client::global() else {
         return (StatusCode::SERVICE_UNAVAILABLE, "Ontology client unavailable").into_response();
     };
-    match client.create_action_type(&session.bearer_token, &input).await {
+    match client.create_action_type(&session.bearer_token, &session.username, &input).await {
         Ok(()) => Redirect::to("/ontology?notice=action_created").into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
     }
@@ -2250,7 +2870,7 @@ pub async fn delete_ontology_action(
     let Some(client) = ontology_client::global() else {
         return (StatusCode::SERVICE_UNAVAILABLE, "Ontology client unavailable").into_response();
     };
-    match client.delete_action_type(&session.bearer_token, id).await {
+    match client.delete_action_type(&session.bearer_token, &session.username, id).await {
         Ok(()) => Redirect::to("/ontology?notice=action_deleted").into_response(),
         Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
     }
@@ -2280,7 +2900,7 @@ pub async fn update_ontology_action(
     let Some(client) = ontology_client::global() else {
         return (StatusCode::SERVICE_UNAVAILABLE, "Ontology client unavailable").into_response();
     };
-    match client.update_action_type(&session.bearer_token, id, &input).await {
+    match client.update_action_type(&session.bearer_token, &session.username, id, &input).await {
         Ok(()) => Redirect::to("/ontology?notice=action_updated").into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
     }

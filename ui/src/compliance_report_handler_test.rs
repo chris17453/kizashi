@@ -158,6 +158,8 @@ async fn admin_sees_a_full_snapshot() {
     assert!(body.contains("/sensors?health=stale"));
     assert!(body.contains("Normalization completeness"));
     assert!(body.contains("/normalization-mappings?coverage=pending"));
+    assert!(body.contains("compliance-export"));
+    assert!(body.contains("Export fresh JSON"));
 }
 
 #[tokio::test]
@@ -206,4 +208,6 @@ fn compliance_snapshot_includes_connector_freshness_control() {
     assert!(template.contains("enabled_connector_count"));
     assert!(template.contains("normalized_record_count"));
     assert!(template.contains("stale_connector_count"));
+    assert!(template.contains("/api/v1/security/compliance-report"));
+    assert!(template.contains("compliance-snapshot-"));
 }

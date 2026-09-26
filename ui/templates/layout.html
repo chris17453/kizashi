@@ -22,13 +22,19 @@
       --danger: #f56565;
       --success: #4ade80;
       --warning: #fbbf24;
+      --space-1: .375rem;
+      --space-2: .625rem;
+      --space-3: .875rem;
+      --space-4: 1.25rem;
+      --space-5: 1.75rem;
+      --content-width: 1440px;
       --state-good-bg: rgba(74, 222, 128, .14);
       --state-good-text: #86efac;
       --state-warn-bg: rgba(251, 191, 36, .14);
       --state-warn-text: #fcd34d;
       --state-danger-bg: rgba(245, 101, 101, .14);
       --state-danger-text: #fca5a5;
-      --sidebar-width: 248px;
+      --sidebar-width: 232px;
       /* Compatibility aliases keep page-local visual modules on the same design tokens. */
       --panel: var(--surface);
       --panel-raised: var(--surface-raised);
@@ -98,7 +104,8 @@
     * { box-sizing: border-box; }
     body {
       margin: 0; font-family: Inter, ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg); color: var(--text); display: flex; min-height: 100vh;
+      background: radial-gradient(circle at 78% -10%, rgba(94,234,212,.075), transparent 30rem), var(--bg);
+      color: var(--text); display: flex; min-height: 100vh;
       font-size: 14px; line-height: 1.45;
     }
     .brand {
@@ -110,9 +117,18 @@
       display: flex; align-items: center; justify-content: center;
       color: var(--accent); font-size: 1.2rem; line-height: 1; filter: drop-shadow(0 0 8px rgba(94,234,212,.25));
     }
+    img.brand-logo { object-fit: contain; border-radius: 5px; background: var(--surface-raised); padding: .12rem; }
     .brand-name {
       font-weight: 750; font-size: 1.05rem; letter-spacing: 0.02em; color: var(--text);
     }
+    .brand-copy { min-width: 0; display: grid; gap: .08rem; }
+    .brand-meta { color: var(--text-dim); font: 600 .55rem var(--mono); letter-spacing: .13em; text-transform: uppercase; }
+    .nav-status {
+      display: flex; align-items: center; gap: .45rem; margin: 0 1.2rem 1rem; padding: .55rem .65rem;
+      border: 1px solid var(--border-subtle); border-radius: 6px; color: var(--text-dim);
+      background: rgba(94,234,212,.025); font: 600 .62rem var(--mono); letter-spacing: .05em; text-transform: uppercase;
+    }
+    .nav-status::before { content: ''; width: .42rem; height: .42rem; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
     nav {
       width: var(--sidebar-width); background: linear-gradient(180deg, #121820 0%, var(--surface) 45%);
       border-right: 1px solid var(--border); padding: 1.25rem 0; flex-shrink: 0;
@@ -139,8 +155,8 @@
       text-transform: uppercase; color: #647386; opacity: 1;
     }
     nav .nav-section:first-of-type { margin-top: 0.3rem; }
-    main { flex: 1; min-width: 0; padding: 2.5rem clamp(1.25rem, 4vw, 4rem); }
-    main > * { max-width: 1240px; }
+    main { flex: 1; min-width: 0; padding: clamp(1.25rem, 3vw, 2.5rem) clamp(1rem, 3.5vw, 3.5rem) 4rem; position: relative; }
+    main > * { width: min(100%, var(--content-width)); margin-left: auto; margin-right: auto; }
     h1 { font-size: clamp(1.5rem, 2vw, 1.85rem); margin-top: 0; margin-bottom: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -163,9 +179,10 @@
       padding: 0.6rem 0.8rem; margin-bottom: 1rem; font-size: 0.9rem;
     }
     .panel {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-      padding: 1.35rem 1.5rem; margin-bottom: 1.5rem; max-width: 480px; box-shadow: 0 8px 24px rgba(0,0,0,.12);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: var(--space-4); margin-bottom: var(--space-4); max-width: none; box-shadow: 0 8px 24px rgba(0,0,0,.1);
     }
+    .panel-narrow { max-width: 42rem; }
     .panel h2 { font-size: 1rem; margin: 0 0 1rem; color: var(--text-dim); font-weight: 600; }
     .key-reveal {
       display: block; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
@@ -312,6 +329,26 @@
       border-color: var(--border);
     }
     form.inline button:disabled:hover, .btn:disabled:hover { background: var(--surface-raised); }
+    /* Explicit query controls. `inline` predates the console command frame and remains for
+       compact mutation forms; filters opt into this grid so their fields never become a
+       sequence of full-width widgets. */
+    .query-bar {
+      display: grid; grid-template-columns: repeat(4, minmax(9rem, 1fr)) auto;
+      gap: var(--space-2); align-items: end; margin: 0 0 var(--space-4);
+      padding: .9rem; background: var(--surface-raised); border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+    }
+    .query-field { display: grid; gap: .35rem; min-width: 0; }
+    .query-field--wide { grid-column: span 2; }
+    .query-field label { margin: 0; font-size: .68rem; letter-spacing: .07em; text-transform: uppercase; color: var(--text-dim); }
+    .query-field input, .query-field select {
+      width: 100%; min-width: 0; box-sizing: border-box; margin: 0; padding: .55rem .65rem;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+      font: inherit; font-size: .85rem;
+    }
+    .query-field input:focus, .query-field select:focus { outline: none; border-color: var(--accent); }
+    .query-actions { display: flex; align-items: center; gap: .65rem; min-height: 2.2rem; white-space: nowrap; }
+    .query-actions .btn, .query-actions button { margin: 0; }
     .btn-link {
       background: none; border: none; color: var(--accent); cursor: pointer; padding: 0;
       font-size: inherit; text-decoration: underline;
@@ -327,11 +364,11 @@
 
     .kpi-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 1rem; margin-bottom: 2rem;
+      gap: var(--space-2); margin-bottom: var(--space-4);
     }
     .kpi-card {
       background: linear-gradient(145deg, var(--surface), #0f1319); border: 1px solid var(--border); border-radius: 10px;
-      padding: 1.25rem 1.35rem; position: relative; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.12);
+      padding: 1rem 1.1rem; position: relative; overflow: hidden; box-shadow: none;
     }
     .kpi-card::after { content: ''; position: absolute; width: 90px; height: 90px; right: -35px; top: -35px; border-radius: 50%; background: rgba(94,234,212,.05); }
     .kpi-card .kpi-label {
@@ -343,7 +380,7 @@
     .kpi-card.kpi-accent .kpi-value { color: var(--accent); }
     .kpi-card.kpi-danger .kpi-value { color: var(--danger); }
     .kpi-card.kpi-success .kpi-value { color: var(--success); }
-    .overview-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .overview-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     @media (max-width: 1180px) { .overview-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
     @media (max-width: 650px) { .overview-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .overview-meta { display: flex; align-items: center; gap: .5rem; font-size: .82rem; margin: -.75rem 0 1.75rem; }
@@ -595,17 +632,21 @@
     .schema-card pre { margin: 0; padding: .75rem; border-top: 1px solid var(--border); color: var(--text-dim); font-size: .72rem; white-space: pre-wrap; }
     @media (max-width: 850px) { .ontology-layout, .ontology-secondary-grid, .event-response-grid, .incident-board { grid-template-columns: 1fr; } .schema-property-row, .mapping-rule-header, .mapping-pair-row, .field-map-row { grid-template-columns: 1fr 1fr; } .queue-view-toggle { flex-wrap: wrap; justify-content: flex-end; } }
 
-    .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.75rem; }
+    .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--border-subtle); }
     .page-header h1 { margin-bottom: .35rem; }
     .page-kicker { color: var(--accent); font-size: .72rem; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; margin-bottom: .4rem; }
     .page-description { color: var(--text-dim); margin: 0; max-width: 620px; }
-    .quick-actions { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: flex-end; }
+    .quick-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; max-width: 38rem; }
+    .action-cluster { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-raised); }
+    .action-cluster .btn { margin: 0; }
     .btn-secondary { background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); }
     .btn-secondary:hover { background: var(--surface-hover); }
     .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 2rem 0 .8rem; }
     .section-heading .section-title { margin: 0; }
     .section-link { font-size: .82rem; font-weight: 600; }
-    .console-bar { display: flex; align-items: center; gap: .8rem; margin: -1rem 0 2rem; padding: .55rem .65rem; background: rgba(17,21,28,.78); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+    .console-bar { display: flex; align-items: center; gap: .8rem; margin: -1rem 0 2rem; padding: .48rem .65rem; background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--border); border-radius: 7px; box-shadow: 0 8px 24px rgba(0,0,0,.12); position: sticky; top: .75rem; z-index: 30; backdrop-filter: blur(14px); }
+    .console-identity { display: inline-flex; align-items: center; gap: .4rem; padding-right: .7rem; border-right: 1px solid var(--border); color: var(--accent); font: 700 .62rem var(--mono); letter-spacing: .1em; white-space: nowrap; }
+    .console-identity::before { content: '◆'; font-size: .48rem; }
     .console-search { display: flex; align-items: center; gap: .55rem; flex: 1; min-width: 180px; }
     .console-search-icon { color: var(--accent); font-size: .95rem; }
     .console-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: .86rem; }
@@ -621,6 +662,17 @@
     .console-links a:hover { background: var(--surface-hover); color: var(--text); text-decoration: none; }
     .console-switch { color: var(--text-dim); font-size: .68rem; white-space: nowrap; }
     .console-switch:hover { color: var(--accent); }
+    .workspace-switcher { position: relative; }
+    .workspace-switcher-toggle { border: 1px solid var(--border); border-radius: 999px; padding: .25rem .5rem; background: transparent; color: var(--text-dim); cursor: pointer; font-size: .68rem; white-space: nowrap; }
+    .workspace-switcher-toggle:hover, .workspace-switcher-toggle[aria-expanded="true"] { border-color: var(--accent-dim); color: var(--accent); }
+    .workspace-switcher-popover { position: absolute; z-index: 35; top: calc(100% + .55rem); right: 0; width: 240px; padding: .65rem; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); box-shadow: 0 16px 35px rgba(0,0,0,.35); }
+    .workspace-switcher-popover[hidden] { display: none; }
+    .workspace-switcher-heading { padding: .15rem .35rem .5rem; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: .66rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+    .workspace-switcher-list { display: grid; gap: .2rem; margin: .4rem 0; }
+    .workspace-switcher-list a, .workspace-switcher-choose { display: block; padding: .42rem .4rem; border-radius: 5px; color: var(--text); font-size: .7rem; }
+    .workspace-switcher-list a:hover, .workspace-switcher-choose:hover { background: var(--surface-hover); color: var(--accent); text-decoration: none; }
+    .workspace-switcher-empty { padding: .45rem .4rem; color: var(--text-dim); font-size: .68rem; }
+    .workspace-switcher-choose { border-top: 1px solid var(--border); border-radius: 0; color: var(--accent); }
     .audit-evidence summary { cursor: pointer; color: var(--accent); font-size: .72rem; white-space: nowrap; }
     .audit-evidence-meta { display: flex; flex-wrap: wrap; gap: .35rem .75rem; margin: .55rem 0; color: var(--text-dim); font-size: .68rem; }
     .audit-diff-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: .6rem; min-width: 520px; }
@@ -637,6 +689,24 @@
     a.kpi-card-link:hover { color: var(--text); text-decoration: none; border-color: var(--accent-dim); background: var(--surface-hover); transform: translateY(-1px); }
     .session-context { display: inline-flex; align-items: center; gap: .4rem; margin-left: auto; padding: .25rem .5rem; border: 1px solid var(--border); border-radius: 999px; color: var(--text-dim); font-size: .72rem; }
     .session-context strong { color: var(--text); font-weight: 650; }
+    .investigation-focus { display: none; align-items: center; gap: .35rem; max-width: 15rem; padding: .28rem .45rem; border: 1px solid var(--accent-dim); border-radius: 999px; background: rgba(94,234,212,.07); color: var(--text); font-size: .68rem; }
+    .investigation-focus.is-visible { display: inline-flex; }
+    .investigation-focus-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .investigation-focus a { padding: 0; color: var(--accent); font-size: .68rem; }
+    .investigation-focus-trace { color: var(--text-dim) !important; }
+    .investigation-focus-clear { padding: 0 .15rem; border: 0; background: transparent; color: var(--text-dim); cursor: pointer; font: inherit; }
+    .investigation-focus-clear:hover { color: var(--danger); }
+    .investigation-focus-shell { position: relative; display: inline-flex; align-items: center; gap: .25rem; }
+    .investigation-focus-history-toggle { border: 1px solid var(--border); border-radius: 999px; padding: .22rem .4rem; background: transparent; color: var(--text-dim); cursor: pointer; font-size: .64rem; }
+    .investigation-focus-history-toggle:hover, .investigation-focus-history-toggle[aria-expanded="true"] { border-color: var(--accent-dim); color: var(--accent); }
+    .investigation-focus-history-popover { position: absolute; z-index: 35; top: calc(100% + .55rem); right: 0; width: 285px; padding: .65rem; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); box-shadow: 0 16px 35px rgba(0,0,0,.35); }
+    .investigation-focus-history-popover[hidden] { display: none; }
+    .investigation-focus-history-heading { padding: .15rem .35rem .5rem; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: .66rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+    .investigation-focus-history-list { display: grid; gap: .2rem; margin-top: .4rem; }
+    .investigation-focus-history-list a { display: grid; gap: .08rem; padding: .42rem .4rem; border-radius: 5px; color: var(--text); font-size: .7rem; }
+    .investigation-focus-history-list a:hover { background: var(--surface-hover); text-decoration: none; }
+    .investigation-focus-history-list small { color: var(--text-dim); font-size: .62rem; }
+    .investigation-focus-history-empty { padding: .5rem .4rem; color: var(--text-dim); font-size: .68rem; }
     .session-role { color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
     .attention-link { display: inline-flex; align-items: center; gap: .35rem; }
     .attention-count { min-width: 1.1rem; padding: .05rem .28rem; border-radius: 999px; text-align: center; color: var(--text); background: var(--surface-raised); font: 700 .68rem ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -713,6 +783,10 @@
     .command-item:hover, .command-item:focus-visible, .command-item.is-active { border-color: var(--accent-dim); background: var(--surface-hover); color: var(--accent); outline: none; text-decoration: none; }
     .command-item-copy { display: grid; gap: .18rem; }
     .command-item-copy small { color: var(--text-dim); font-size: .72rem; }
+    .command-live-results { display: grid; gap: .15rem; }
+    .command-live-results:empty { display: none; }
+    .command-live-item { border-color: var(--border-subtle); }
+    .command-live-type { flex: 0 0 auto; color: var(--accent); font: .65rem ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .06em; }
     .command-empty { padding: 1rem .75rem; color: var(--text-dim); font-size: .82rem; }
     .decision-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
     .decision-card { display: flex; flex-direction: column; gap: .5rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; color: var(--text); text-decoration: none; transition: border-color .15s, background .15s, transform .15s; }
@@ -830,21 +904,14 @@
     .case-timeline-meta time { margin-left: auto; white-space: nowrap; }
     .case-timeline-summary { margin: .42rem 0 .18rem; font-size: .92rem; overflow-wrap: anywhere; }
     .owner-chip { display: inline-flex; align-items: center; max-width: 15rem; overflow: hidden; text-overflow: ellipsis; padding: .18rem .45rem; border: 1px solid rgba(94,234,212,.25); border-radius: 999px; background: rgba(94,234,212,.08); color: var(--accent); font-size: .72rem; }
-    .incident-filter-bar { display: grid; grid-template-columns: auto minmax(180px, 1.4fr) auto minmax(130px, .7fr) auto minmax(130px, .7fr) auto auto; align-items: end; gap: .55rem .7rem; }
-    .incident-filter-bar label { margin: 0; }
-    .incident-filter-bar input, .incident-filter-bar select { margin: 0; }
-    .incident-filter-bar button { margin: 0; }
     .events-export-form { margin: -.75rem 0 1rem; }
     .events-chart-panel, .events-filter-panel, .events-table-panel { max-width: none; margin-bottom: 1.5rem; }
     .events-filter-bar { margin: 0; }
     .events-table-panel table { margin-bottom: 0; }
     .action-history-panel { max-width: none; margin-bottom: 1.5rem; }
-    .action-history-filter { display: grid; grid-template-columns: auto minmax(220px, 1fr) auto minmax(140px, .35fr) auto auto; align-items: end; gap: .55rem .7rem; margin: 0 0 1rem; }
-    .action-history-filter input, .action-history-filter select, .action-history-filter button { margin: 0; }
     .action-parameter-fields { display: grid; gap: .55rem; padding: .7rem; border: 1px solid var(--border-subtle); border-radius: 7px; background: rgba(255,255,255,.015); }
     .action-parameter-fields label { display: grid; gap: .3rem; }
     .required-mark { color: var(--accent); font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
-    @media (max-width: 850px) { .action-history-filter { grid-template-columns: 1fr 1fr; } .action-history-filter input { grid-column: span 2; } }
     .data-reprocess-bar { display: flex; align-items: center; gap: .8rem; margin: -.5rem 0 1.5rem; padding: .8rem 1rem; border: 1px solid rgba(94,234,212,.18); border-radius: 8px; background: rgba(94,234,212,.045); }
     .data-reprocess-bar form { display: flex; align-items: center; flex-wrap: wrap; gap: .8rem; }
     .data-reprocess-bar button { margin: 0; }
@@ -861,7 +928,8 @@
     .success-banner, .warning-banner { padding: .75rem 1rem; border-radius: 7px; margin: 1rem 0; }
     .success-banner { color: var(--success); background: rgba(74,222,128,.08); border: 1px solid rgba(74,222,128,.2); }
     .warning-banner { color: var(--warning); background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.2); }
-    @media (max-width: 900px) { .incident-filter-bar { grid-template-columns: 1fr 1fr; } .incident-filter-bar input { grid-column: span 2; } }
+    @media (max-width: 900px) { .query-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); } .query-field--wide { grid-column: span 2; } .query-actions { grid-column: span 2; } }
+    @media (max-width: 560px) { .query-bar { grid-template-columns: 1fr; } .query-field--wide, .query-actions { grid-column: auto; } }
     .security-kpis { margin: 1.25rem 0 1.75rem; }
     .access-scope-panel { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(0, 1.3fr); gap: 1.25rem; align-items: center; margin: 0 0 1.5rem; }
     .access-scope-panel h2 { margin: .15rem 0 .35rem; }
@@ -1054,6 +1122,8 @@
       .quick-actions { justify-content: flex-start; margin-top: 1rem; }
       .overview-model-strip { grid-template-columns: repeat(2, 1fr); }
       .console-bar { margin-top: -.5rem; margin-bottom: 1.5rem; }
+      .console-bar { position: static; }
+      .console-identity { display: none; }
       .console-links { display: none; }
       .console-shortcut { display: none; }
     }
@@ -1193,21 +1263,26 @@
   <nav id="console-nav">
     <div class="brand">
       <span class="brand-mark">&#9670;</span>
-      <span class="brand-name">Kizashi</span>
+      <span class="brand-copy"><span class="brand-name">Kizashi</span><span class="brand-meta">Operational intelligence</span></span>
       <button class="nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="console-nav-links">Menu</button>
     </div>
+    <div class="nav-status">Control plane / online</div>
     <div id="console-nav-links">
     <a href="/overview"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Overview</a>
     <a href="/work"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 9-12h-7z"/></svg></span> My Work</a>
+    <a href="/workflows"><span class="nav-icon" aria-hidden="true">!</span> Exceptions</a>
 
     <div class="nav-section">Data &amp; Pipeline</div>
     <a href="/sensors"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg></span> Sensors</a>
     <a href="/data"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/></svg></span> Data</a>
     <a href="/events"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v12H4z"/><path d="m8 21 4-4 4 4M8 9h8M8 12h5"/></svg></span> Events</a>
     <a href="/event-types"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/><path d="M7 5V3M17 5V3"/></svg></span> Event Types</a>
-    <a href="/ontology"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="m8.3 7.1 7.4-.2M7.4 8.1l3.3 7.5M16.6 9.1l-3.3 6.5"/></svg></span> Ontology</a>
+    <a href="/ontology"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="m8.3 7.1 7.4-.2M7.4 8.1l3.3 7.5M16.6 9.1l-3.3 6.5"/></svg></span> Models</a>
+    <a href="/build"><span class="nav-icon" aria-hidden="true">◇</span> Build Studio</a>
+    <a href="/apps"><span class="nav-icon" aria-hidden="true">▦</span> Apps</a>
     <a href="/actions"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 4 15 8-15 8z"/><path d="M5 4v16"/></svg></span> Action Center</a>
     <a href="/actions/library"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h6"/><path d="M8 19v2M16 19v2"/></svg></span> Action Library</a>
+    <a href="/action-templates"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span> Action Templates</a>
     <a href="/incidents"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4z"/><path d="M12 9v5M12 17h.01"/></svg></span> Incidents</a>
     <a href="/pipeline"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="6" height="5" rx="1"/><rect x="15" y="15" width="6" height="5" rx="1"/><path d="M9 6.5h3a3 3 0 0 1 3 3v5.5M15 17.5h-3a3 3 0 0 1-3-3V9"/></svg></span> Pipeline Map</a>
     <a href="/reports"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h17"/><path d="m7 15 4-4 3 2 5-7"/></svg></span> Reports</a>
@@ -1224,6 +1299,7 @@
 
     <div class="nav-section">Security &amp; Compliance</div>
     <a href="/security"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.2 8.5 8 10 4.8-1.5 8-5 8-10V6z"/><path d="m8 12 2.5 2.5L16 9"/></svg></span> Security Overview</a>
+    <a href="/service-accounts"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="3"/><path d="m10.5 12.5 8-8M16 6l2 2M14 8l2 2"/></svg></span> Service Accounts</a>
     {% if is_admin %}
     <a href="/users"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c.5-3.5 2.5-5 6-5s5.5 1.5 6 5M16 11a3 3 0 1 0 0-6M16 15c3 0 4.6 1.5 5 5"/></svg></span> Users</a>
     {% endif %}
@@ -1250,6 +1326,7 @@
   </nav>
   <main>
     <div class="console-bar" role="search">
+      <span class="console-identity" aria-label="Operational console">OPS / 01</span>
       <form class="console-search" method="get" action="/search">
         <span class="console-search-icon" aria-hidden="true">&#8981;</span>
         <input id="console-search" type="search" name="q" placeholder="Search records, tickets, entities..." autocomplete="off" aria-label="Search records">
@@ -1261,12 +1338,13 @@
         <button class="console-refresh" id="console-refresh" type="button" title="Refresh live data">&#8635; Refresh</button>
         <button class="console-theme" id="console-theme" type="button" aria-pressed="false" title="Switch theme">☼ Light</button>
         <span class="console-updated" id="console-updated">Updated now</span>
-        <span class="attention-wrap"><a class="attention-link" id="attention-link" href="/work" aria-label="Open attention summary" aria-expanded="false">Attention <span class="attention-count" id="attention-count">—</span></a><div class="attention-popover" id="attention-popover" hidden><div class="attention-popover-heading"><span>Attention routing</span><span id="attention-total-label">live</span></div><a href="/incidents?status=open&severity=critical">Critical cases <span id="attention-critical">—</span></a><a href="/work?focus=unassigned">Unassigned work <span id="attention-unassigned">—</span></a><a href="/work?focus=review">Action review <span id="attention-review">—</span></a><a href="/incidents?sla=breached">SLA breaches <span id="attention-sla">—</span></a><a href="/pipeline">Critical queues <span id="attention-queues">—</span></a><a href="/sensors?health=stale">Stale connectors <span id="attention-connectors">—</span></a></div></span>
+        <div class="investigation-focus-shell"><span class="investigation-focus" id="investigation-focus" aria-label="Active investigation focus"><span aria-hidden="true">◎</span><span class="investigation-focus-label" id="investigation-focus-label"></span><a id="investigation-focus-open" href="/ontology" title="Open focused record">Open</a><a class="investigation-focus-trace" id="investigation-focus-trace" href="#" title="Trace focused record">Trace</a><button class="investigation-focus-clear" id="investigation-focus-clear" type="button" aria-label="Clear investigation focus">×</button></span><button class="investigation-focus-history-toggle" id="investigation-focus-history-toggle" type="button" aria-expanded="false" aria-controls="investigation-focus-history" hidden>History</button><div class="investigation-focus-history-popover" id="investigation-focus-history" hidden><div class="investigation-focus-history-heading">Recent investigations</div><div class="investigation-focus-history-list" id="investigation-focus-history-list"></div></div></div>
+        <span class="attention-wrap"><a class="attention-link" id="attention-link" href="/work" aria-label="Open attention summary" aria-expanded="false">Attention <span class="attention-count" id="attention-count">—</span></a><div class="attention-popover" id="attention-popover" hidden><div class="attention-popover-heading"><span>Attention routing</span><span id="attention-total-label">live</span></div><a href="/incidents?status=open&severity=critical">Critical cases <span id="attention-critical">—</span></a><a href="/work?focus=unassigned">Unassigned work <span id="attention-unassigned">—</span></a><a href="/work?focus=review">Action review <span id="attention-review">—</span></a><a href="/incidents?sla=breached">SLA breaches <span id="attention-sla">—</span></a><a href="/pipeline">Critical queues <span id="attention-queues">—</span></a><a href="/sensors?health=stale">Stale connectors <span id="attention-connectors">—</span></a><a href="/actions#pipeline-recovery">Dead-letter recovery <span id="attention-dead-letters">—</span></a></div></span>
         <a href="/incidents">Triage</a>
         <a href="/ontology">Model</a>
         <a href="/pipeline">Pipeline</a>
         <a class="session-context" id="session-context" href="/security/permissions" aria-label="Current session identity and permissions"><strong>Loading workspace</strong></a>
-        <a class="console-switch" href="/workspace/switch" title="End this session and choose another workspace">Switch workspace</a>
+        <span class="workspace-switcher"><button class="workspace-switcher-toggle" id="workspace-switcher-toggle" type="button" aria-expanded="false" aria-controls="workspace-switcher-popover">Workspace ▾</button><div class="workspace-switcher-popover" id="workspace-switcher-popover" hidden><div class="workspace-switcher-heading">Recent workspaces</div><div class="workspace-switcher-list" id="workspace-switcher-list"></div><a class="workspace-switcher-choose" href="/workspace/switch">Choose another workspace…</a></div></span>
       </div>
     </div>
     <div class="command-palette" id="command-palette" hidden>
@@ -1280,10 +1358,11 @@
         </form>
         <div class="command-hint">Jump to a workspace surface</div>
         <nav class="command-results" id="command-results" aria-label="Workspace destinations">
+          <div class="command-live-results" id="command-live-results" aria-live="polite"></div>
           <a class="command-item" href="/overview" data-command-item data-command-search="overview home operating picture"><span class="command-item-copy"><strong>Overview</strong><small>Executive operating picture</small></span><kbd>G O</kbd></a>
           <a class="command-item" href="/work" data-command-item data-command-search="work ownership queue assigned unassigned review"><span class="command-item-copy"><strong>My Work</strong><small>Ownership and decision queues</small></span><kbd>G W</kbd></a>
           <a class="command-item" href="/incidents" data-command-item data-command-search="incidents cases triage response"><span class="command-item-copy"><strong>Incidents</strong><small>Prioritize and resolve active cases</small></span><kbd>G I</kbd></a>
-          <a class="command-item" href="/ontology" data-command-item data-command-search="ontology model entities objects relationships"><span class="command-item-copy"><strong>Ontology</strong><small>Explore the operational model</small></span><kbd>G M</kbd></a>
+          <a class="command-item" href="/ontology" data-command-item data-command-search="models ontology entities objects relationships"><span class="command-item-copy"><strong>Models</strong><small>Explore the operational model</small></span><kbd>G M</kbd></a>
           <a class="command-item" href="/sensors" data-command-item data-command-search="sensors connectors ingestion install library"><span class="command-item-copy"><strong>Sensors</strong><small>Install and monitor connectors</small></span><kbd>G S</kbd></a>
           <a class="command-item" href="/events" data-command-item data-command-search="events signals stream lifecycle cases"><span class="command-item-copy"><strong>Events</strong><small>Inspect signals and move them into cases</small></span><kbd>G E</kbd></a>
           <a class="command-item" href="/event-types" data-command-item data-command-search="event types contracts schemas signals"><span class="command-item-copy"><strong>Event Types</strong><small>Inspect live signal contracts</small></span><kbd>G T</kbd></a>
@@ -1305,6 +1384,24 @@
   <script src="/static/confirm-danger.js" defer></script>
   <script src="/static/command-palette.js" defer></script>
   <script>
+    (function () {
+      // Live queue refreshes use a normal reload so server-rendered filters stay authoritative.
+      // Preserve the analyst's reading position for that reload without affecting route changes.
+      var key = 'kizashi.scroll.' + window.location.pathname + window.location.search;
+      var navigation = window.performance && window.performance.getEntriesByType && window.performance.getEntriesByType('navigation')[0];
+      if (navigation && navigation.type === 'reload') {
+        try {
+          var saved = JSON.parse(window.sessionStorage.getItem(key) || 'null');
+          if (saved && Date.now() - saved.at < 60000) {
+            window.requestAnimationFrame(function () { window.scrollTo(0, saved.y || 0); });
+          }
+          window.sessionStorage.removeItem(key);
+        } catch (_) {}
+      }
+      window.addEventListener('beforeunload', function () {
+        try { window.sessionStorage.setItem(key, JSON.stringify({ y: window.scrollY, at: Date.now() })); } catch (_) {}
+      });
+    }());
     document.addEventListener('keydown', function (event) {
       if (event.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
         event.preventDefault();
@@ -1342,7 +1439,9 @@
         if (updated) updated.textContent = 'Refreshing…';
         window.location.reload();
       });
-      var livePaths = ['/overview', '/pipeline', '/reports', '/health', '/configuration', '/security', '/events', '/incidents', '/actions', '/ontology', '/data'];
+      // Overview owns its own incremental read-model refresh so the operator's dashboard
+      // layout, mission mode, and investigation context survive live updates.
+      var livePaths = ['/pipeline', '/reports', '/health', '/configuration', '/security', '/events', '/incidents', '/actions', '/ontology', '/data'];
       if (livePaths.indexOf(window.location.pathname) !== -1) {
         window.setInterval(function () {
           var active = document.activeElement;
@@ -1352,6 +1451,41 @@
           else if (updated && (editing || inspecting)) updated.textContent = 'Live refresh paused while inspecting';
         }, 45000);
       }
+    }());
+  </script>
+  <script>
+    (function () {
+      var toggle = document.getElementById('workspace-switcher-toggle');
+      var popover = document.getElementById('workspace-switcher-popover');
+      var list = document.getElementById('workspace-switcher-list');
+      if (!toggle || !popover || !list) return;
+      var storageKey = 'kizashi.recent_workspaces';
+      var workspaces = [];
+      function close() { popover.hidden = true; toggle.setAttribute('aria-expanded', 'false'); }
+      function render() {
+        list.textContent = '';
+        if (!workspaces.length) {
+          var empty = document.createElement('div'); empty.className = 'workspace-switcher-empty'; empty.textContent = 'No recent workspaces'; list.appendChild(empty); return;
+        }
+        workspaces.forEach(function (workspace) {
+          var link = document.createElement('a'); link.href = '/workspace/switch?tenant_name=' + encodeURIComponent(workspace); link.textContent = workspace; link.title = 'Switch to ' + workspace; list.appendChild(link);
+        });
+      }
+      try { var stored = JSON.parse(localStorage.getItem(storageKey) || '[]'); if (Array.isArray(stored)) workspaces = stored.filter(function (value) { return typeof value === 'string' && value.trim(); }).slice(0, 5); } catch (_) {}
+      render();
+      toggle.addEventListener('click', function () { var open = !popover.hidden; popover.hidden = open; toggle.setAttribute('aria-expanded', String(!open)); });
+      document.addEventListener('click', function (event) { if (!event.target.closest('.workspace-switcher')) close(); });
+      document.addEventListener('keydown', function (event) { if (event.key === 'Escape') close(); });
+      fetch('/session/context', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function (response) { if (!response.ok) throw new Error('session unavailable'); return response.json(); })
+        .then(function (session) {
+          var workspace = String(session.workspace || '').trim();
+          if (!workspace) return;
+          workspaces = [workspace].concat(workspaces.filter(function (value) { return value !== workspace; })).slice(0, 5);
+          try { localStorage.setItem(storageKey, JSON.stringify(workspaces)); } catch (_) {}
+          render();
+        })
+        .catch(function () {});
     }());
   </script>
   <script>
@@ -1405,6 +1539,7 @@
             document.getElementById('attention-sla').textContent = String(summary.sla_breaches || 0);
             document.getElementById('attention-queues').textContent = String(summary.critical_queues || 0);
             document.getElementById('attention-connectors').textContent = String(summary.stale_connectors || 0);
+            document.getElementById('attention-dead-letters').textContent = String(summary.dead_letter_messages || 0);
             document.getElementById('attention-total-label').textContent = total + ' total';
             link.classList.toggle('attention-active', total > 0);
             link.title = total > 0 ? total + ' attention item' + (total === 1 ? '' : 's') + ' across the workspace' : 'No urgent attention items';
@@ -1415,6 +1550,124 @@
       window.setInterval(function () {
         if (document.visibilityState === 'visible') loadAttention();
       }, 30000);
+    }());
+  </script>
+  <script>
+    (function () {
+      var key = null;
+      var historyKey = null;
+      var focus = document.getElementById('investigation-focus');
+      var label = document.getElementById('investigation-focus-label');
+      var open = document.getElementById('investigation-focus-open');
+      var trace = document.getElementById('investigation-focus-trace');
+      var clear = document.getElementById('investigation-focus-clear');
+      var historyToggle = document.getElementById('investigation-focus-history-toggle');
+      var historyPopover = document.getElementById('investigation-focus-history');
+      var historyList = document.getElementById('investigation-focus-history-list');
+      var pendingValue = null;
+      var focusHistory = [];
+      function write(storageKey, value) {
+        if (!storageKey) return;
+        try { localStorage.setItem(storageKey, JSON.stringify(value)); } catch (_) {}
+      }
+      function readStorage(storageKey, fallback) {
+        if (!storageKey) return fallback;
+        try { return JSON.parse(localStorage.getItem(storageKey) || 'null') || fallback; } catch (_) { return fallback; }
+      }
+      function render(value) {
+        if (!focus || !label || !open || !trace) return;
+        if (!value || !value.id) { focus.classList.remove('is-visible'); return; }
+        label.textContent = (value.type ? value.type + ' · ' : '') + (value.label || value.id);
+        label.title = label.textContent;
+        open.href = value.href || ('/ontology?object_id=' + encodeURIComponent(value.id) + '#object-' + encodeURIComponent(value.id));
+        var type = String(value.type || '').toLowerCase();
+        if (type === 'case' || type === 'incident') {
+          trace.href = '/events?linked_incident=' + encodeURIComponent(value.id);
+          trace.textContent = 'Signals';
+          trace.title = 'Trace signals linked to this case';
+        } else if (type === 'signal' || type === 'event') {
+          trace.href = '/actions?q=' + encodeURIComponent(value.id);
+          trace.textContent = 'Response';
+          trace.title = 'Trace governed response for this signal';
+        } else {
+          trace.href = '/actions?q=' + encodeURIComponent(value.id);
+          trace.textContent = 'Actions';
+          trace.title = 'Trace governed actions for this object';
+        }
+        focus.classList.add('is-visible');
+      }
+      function renderHistory() {
+        if (!historyToggle || !historyPopover || !historyList) return;
+        historyList.textContent = '';
+        historyToggle.hidden = focusHistory.length === 0;
+        focusHistory.forEach(function (item) {
+          var link = document.createElement('a');
+          link.href = item.href || ('/ontology?object_id=' + encodeURIComponent(item.id) + '#object-' + encodeURIComponent(item.id));
+          var strong = document.createElement('strong');
+          strong.textContent = (item.type ? item.type + ' · ' : '') + (item.label || item.id);
+          var small = document.createElement('small');
+          small.textContent = 'Return to investigation';
+          link.appendChild(strong);
+          link.appendChild(small);
+          link.addEventListener('click', function () { setFocus(item); closeHistory(); });
+          historyList.appendChild(link);
+        });
+        if (!focusHistory.length) {
+          var empty = document.createElement('div');
+          empty.className = 'investigation-focus-history-empty';
+          empty.textContent = 'No recent investigations';
+          historyList.appendChild(empty);
+        }
+      }
+      function closeHistory() {
+        if (!historyPopover || !historyToggle) return;
+        historyPopover.hidden = true;
+        historyToggle.setAttribute('aria-expanded', 'false');
+      }
+      function setFocus(value) {
+        if (!value || !value.id) return;
+        pendingValue = value;
+        focusHistory = [value].concat(focusHistory.filter(function (item) { return item.id !== value.id || item.type !== value.type; })).slice(0, 6);
+        write(key, value);
+        write(historyKey, focusHistory);
+        renderHistory();
+        render(value);
+      }
+      document.addEventListener('click', function (event) {
+        var route = event.target.closest && event.target.closest('[data-investigation-route]');
+        if (!route) return;
+        var card = route.closest('[data-investigation-context]');
+        if (!card) return;
+        var value = { id: card.dataset.investigationContext, label: card.dataset.investigationLabel, type: card.dataset.investigationType, href: card.dataset.investigationHref };
+        setFocus(value);
+      });
+      if (clear) clear.addEventListener('click', function () {
+        pendingValue = null;
+        if (key) { try { localStorage.removeItem(key); } catch (_) {} }
+        render(null);
+      });
+      if (historyToggle) historyToggle.addEventListener('click', function () {
+        var isOpen = historyPopover && !historyPopover.hidden;
+        if (historyPopover) historyPopover.hidden = isOpen;
+        historyToggle.setAttribute('aria-expanded', String(!isOpen));
+      });
+      document.addEventListener('click', function (event) {
+        if (!event.target.closest('.investigation-focus-shell')) closeHistory();
+      });
+      fetch('/session/context', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function (response) { if (!response.ok) throw new Error('session unavailable'); return response.json(); })
+        .then(function (session) {
+          if (!session.tenant_id) throw new Error('tenant unavailable');
+          key = 'kizashi.investigation_focus.' + session.tenant_id;
+          historyKey = 'kizashi.investigation_history.' + session.tenant_id;
+          var storedHistory = readStorage(historyKey, []);
+          focusHistory = Array.isArray(storedHistory) ? storedHistory.filter(function (item) { return item && item.id; }).slice(0, 6) : [];
+          renderHistory();
+          if (pendingValue) {
+            setFocus(pendingValue);
+          } else render(readStorage(key, null));
+        })
+        .catch(function () { renderHistory(); render(null); });
     }());
   </script>
   <script>
@@ -1474,6 +1727,25 @@
             window.alert('Check the structured property values and JSON fields before saving.');
           }
         });
+      });
+    }());
+  </script>
+  <script>
+    (function () {
+      // Keep legacy entity links useful while every surface migrates to the dedicated Object 360
+      // workspace. This also updates investigation-focus metadata, so a jump from search, cases,
+      // reports, or action history never loses the selected modeled entity.
+      document.querySelectorAll('a[href], [data-investigation-href]').forEach(function (node) {
+        var attribute = node.hasAttribute('href') ? 'href' : 'data-investigation-href';
+        var value = node.getAttribute(attribute);
+        if (!value) return;
+        try {
+          var url = new URL(value, window.location.origin);
+          var objectId = url.pathname === '/ontology' && url.searchParams.get('object_id');
+          if (!objectId) return;
+          var canonical = '/ontology/objects/' + encodeURIComponent(objectId) + '/360';
+          node.setAttribute(attribute, canonical);
+        } catch (_) {}
       });
     }());
   </script>

@@ -18,6 +18,20 @@ pub struct ObjectType {
     pub updated_at: DateTime<Utc>,
 }
 
+/// Immutable snapshot of an ontology object-type definition mutation. Type history lets modelers
+/// inspect the schema and mapping contract that was active at each governed version.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ObjectTypeHistory {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub object_type_id: Uuid,
+    pub change_type: String,
+    pub actor: String,
+    pub before_state: Option<serde_json::Value>,
+    pub after_state: Option<serde_json::Value>,
+    pub changed_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Object {
     pub id: Uuid,
@@ -44,6 +58,17 @@ pub struct ObjectHistory {
     pub changed_at: DateTime<Utc>,
 }
 
+/// Append-only operator commentary attached to a modeled object investigation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ObjectAnnotation {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub object_id: Uuid,
+    pub author: String,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct LinkType {
     pub id: Uuid,
@@ -55,6 +80,32 @@ pub struct LinkType {
     pub properties_schema: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Immutable snapshot of a governed relationship-type definition mutation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct LinkTypeHistory {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub link_type_id: Uuid,
+    pub change_type: String,
+    pub actor: String,
+    pub before_state: Option<serde_json::Value>,
+    pub after_state: Option<serde_json::Value>,
+    pub changed_at: DateTime<Utc>,
+}
+
+/// Immutable snapshot of a governed relationship-instance mutation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct LinkHistory {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub link_id: Uuid,
+    pub change_type: String,
+    pub actor: String,
+    pub before_state: Option<serde_json::Value>,
+    pub after_state: Option<serde_json::Value>,
+    pub changed_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]

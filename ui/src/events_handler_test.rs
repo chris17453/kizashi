@@ -415,6 +415,14 @@ fn event_console_supports_case_scoped_signal_attachment() {
 }
 
 #[test]
+fn event_queue_exposes_persistent_investigation_focus_routes() {
+    let template = include_str!("../templates/events.html");
+    assert!(template.contains("data-investigation-context=\"{{ event.event.id }}\""));
+    assert!(template.contains("data-investigation-type=\"Signal\""));
+    assert!(template.contains("data-investigation-route"));
+}
+
+#[test]
 fn event_queue_keeps_source_lineage_visible_for_case_linked_signals() {
     let source = include_str!("../templates/events.html");
     assert!(source.contains("Source evidence"));

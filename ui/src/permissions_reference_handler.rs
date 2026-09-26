@@ -9,16 +9,17 @@ use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Response};
 
-struct PermissionRow {
-    area: String,
-    href: String,
-    viewer: String,
-    operator: String,
-    admin: String,
-    note: Option<String>,
-    viewer_state: String,
-    operator_state: String,
-    admin_state: String,
+#[derive(Debug, serde::Serialize)]
+pub(crate) struct PermissionRow {
+    pub(crate) area: String,
+    pub(crate) href: String,
+    pub(crate) viewer: String,
+    pub(crate) operator: String,
+    pub(crate) admin: String,
+    pub(crate) note: Option<String>,
+    pub(crate) viewer_state: String,
+    pub(crate) operator_state: String,
+    pub(crate) admin_state: String,
 }
 
 #[derive(Template)]
@@ -36,10 +37,10 @@ struct PermissionsReferenceTemplate {
 #[derive(Debug, serde::Deserialize, Default)]
 pub struct PermissionsQuery {
     #[serde(default)]
-    role: String,
+    pub(crate) role: String,
 }
 
-fn normalize_role(value: &str) -> String {
+pub(crate) fn normalize_role(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "viewer" | "operator" | "admin" => value.trim().to_ascii_lowercase(),
         _ => "".to_string(),
@@ -99,7 +100,7 @@ fn row(area: &str, viewer: &str, operator: &str, admin: &str, note: Option<&str>
 /// code as of ADR-0048 -- not an aspirational or design-doc description. If a future change
 /// alters what a role can do, this table must be updated in the same PR, the same discipline
 /// CLAUDE.md §5 already requires for audit-log-writing config changes.
-fn permission_rows() -> Vec<PermissionRow> {
+pub(crate) fn permission_rows() -> Vec<PermissionRow> {
     vec![
         row("Sensors / Connectors", "View", "View + create/edit/delete/toggle", "(same as Operator)", None),
         row("Triggers", "View", "View + create/edit", "(same as Operator)", None),

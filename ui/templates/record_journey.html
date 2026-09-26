@@ -71,6 +71,28 @@
 </section>
 {% endif %}
 {% if !timing.is_empty() %}<section class="panel" aria-label="Lineage timing profile"><div class="panel-heading"><div><h2>Pipeline timing profile</h2><p class="muted">Relative latency from ingestion through event generation and execution. Select a step to inspect its evidence.</p></div><span class="pill pill-muted">{{ timing.len() }} steps</span></div><div class="journey-timing">{% for bar in timing %}<a class="journey-timing-row" href="{{ bar.href }}"><span class="journey-timing-label"><strong>{{ bar.label }}</strong><small>{{ bar.detail }}</small></span><span class="journey-timing-track"><span class="journey-timing-fill{% if bar.failure %} failure{% endif %}" style="width:{{ bar.width_pct }}%"></span></span><span class="journey-timing-time">+{{ bar.latency }}</span></a>{% endfor %}</div><div class="journey-timing-legend"><span>completed / recorded</span><span class="failure">failed / needs review</span></div></section>{% endif %}
+<script>
+  (function () {
+    var recordId = '{{ record.id }}';
+    var actions = document.querySelector('.quick-actions');
+    if (!actions || !recordId) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-secondary';
+    button.id = 'record-journey-export';
+    button.textContent = 'Export evidence journey ↓';
+    button.addEventListener('click', function () {
+      button.disabled = true;
+      button.textContent = 'Preparing export…';
+      fetch('/api/v1/data/records/' + encodeURIComponent(recordId) + '/journey', { credentials: 'same-origin', cache: 'no-store', headers: { 'Accept': 'application/json' } })
+        .then(function (response) { if (!response.ok) throw new Error('Evidence journey unavailable (' + response.status + ')'); return response.blob(); })
+        .then(function (blob) { var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'evidence-journey-' + recordId + '.json'; document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(function () { URL.revokeObjectURL(link.href); }, 0); })
+        .catch(function (error) { window.alert(error.message); })
+        .finally(function () { button.disabled = false; button.textContent = 'Export evidence journey ↓'; });
+    });
+    actions.appendChild(button);
+  }());
+</script>
 {% else %}
 <p class="muted">Record not found.</p>
 {% endif %}
@@ -78,7 +100,7 @@
 {% if !modeled_objects.is_empty() %}
 <section class="panel journey-modeled-panel" id="modeled-entities">
   <div class="panel-heading"><div><h2>Modeled entities</h2><p class="muted">Ontology objects created from this source record’s lineage.</p></div><a class="btn-link" href="/ontology">Open ontology &rarr;</a></div>
-  <div class="record-context-list">{% for object in modeled_objects %}<a href="/ontology?object_id={{ object.id }}#object-{{ object.id }}"><strong>{{ object.label }}</strong><small>{{ object.type_name }} · Inspect modeled object &rarr;</small></a>{% endfor %}</div>
+  <div class="record-context-list">{% for object in modeled_objects %}<a data-investigation-context="{{ object.id }}" data-investigation-label="{{ object.label }}" data-investigation-type="Object" data-investigation-href="/ontology/objects/{{ object.id }}/360" data-investigation-route href="/ontology/objects/{{ object.id }}/360"><strong>{{ object.label }}</strong><small>{{ object.type_name }} · Inspect modeled object &rarr;</small></a>{% endfor %}</div>
 </section>
 {% endif %}
 
@@ -86,7 +108,7 @@
 <section class="panel journey-governed-panel" id="governed-decisions">
   <div class="panel-heading"><div><h2>Governed object decisions</h2><p class="muted">Ontology actions that changed modeled entities derived from this record.</p></div><a class="btn-link" href="/actions">Open action ledger &rarr;</a></div>
   <table><thead><tr><th>Action</th><th>Target object</th><th>Outcome</th><th>Human review</th><th>Executed</th></tr></thead><tbody>
-  {% for decision in governed_decisions %}<tr><td><strong>{{ decision.action_name }}</strong><br><a class="btn-link" href="/actions/{{ decision.invocation_id }}">Open decision record &rarr;</a></td><td><a href="/ontology?object_id={{ decision.target_id }}#object-{{ decision.target_id }}">{{ decision.target_label }}</a></td><td><span class="pill {% if decision.outcome == "Completed" %}pill-up{% else %}pill-down{% endif %}">{{ decision.outcome }}</span></td><td><span class="pill {% if decision.review_status == "approved" %}pill-up{% else if decision.review_stale %}pill-down{% else %}pill-muted{% endif %}">{{ decision.review_status }}{% if decision.review_stale %} · overdue{% endif %}</span>{% if let Some(owner) = decision.review_assignee %}<br><small class="muted">Owner: {{ owner }}</small>{% endif %}</td><td>{{ decision.executed_at }}</td></tr>{% endfor %}
+  {% for decision in governed_decisions %}<tr><td><strong>{{ decision.action_name }}</strong><br><a class="btn-link" data-investigation-context="{{ decision.invocation_id }}" data-investigation-label="{{ decision.action_name }}" data-investigation-type="Decision" data-investigation-href="/actions/{{ decision.invocation_id }}" data-investigation-route href="/actions/{{ decision.invocation_id }}">Open decision record &rarr;</a></td><td><a data-investigation-context="{{ decision.target_id }}" data-investigation-label="{{ decision.target_label }}" data-investigation-type="Object" data-investigation-href="/ontology/objects/{{ decision.target_id }}/360" data-investigation-route href="/ontology/objects/{{ decision.target_id }}/360">{{ decision.target_label }}</a></td><td><span class="pill {% if decision.outcome == "Completed" %}pill-up{% else %}pill-down{% endif %}">{{ decision.outcome }}</span></td><td><span class="pill {% if decision.review_status == "approved" %}pill-up{% else if decision.review_stale %}pill-down{% else %}pill-muted{% endif %}">{{ decision.review_status }}{% if decision.review_stale %} · overdue{% endif %}</span>{% if let Some(owner) = decision.review_assignee %}<br><small class="muted">Owner: {{ owner }}</small>{% endif %}</td><td>{{ decision.executed_at }}</td></tr>{% endfor %}
   </tbody></table>
 </section>
 {% endif %}

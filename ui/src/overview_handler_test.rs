@@ -40,6 +40,9 @@ fn overview_exposes_a_linked_attention_posture() {
     assert!(template.contains("Review posture"));
     assert!(template.contains("/actions?review=stale"));
     assert!(template.contains("/ontology?risk={{ metric.key }}"));
+    assert!(template.contains("Dead-letter recovery"));
+    assert!(template.contains("dead_letter_messages"));
+    assert!(template.contains("/actions#pipeline-recovery"));
 }
 
 #[test]
@@ -53,6 +56,73 @@ fn overview_exposes_an_executive_operating_brief() {
     assert!(template.contains("Data readiness"));
     assert!(template.contains("normalized_records"));
     assert!(template.contains("/data?normalized=false"));
+}
+
+#[test]
+fn overview_exposes_operator_mission_modes_for_the_command_center() {
+    let template = include_str!("../templates/overview.html");
+    assert!(template.contains("data-overview-mission-mode"));
+    assert!(template.contains("data-overview-mission-target"));
+    assert!(template.contains("mission-all"));
+    assert!(template.contains("mission-incidents"));
+    assert!(template.contains("mission-response"));
+    assert!(template.contains("mission-signals"));
+    assert!(template.contains("aria-pressed"));
+}
+
+#[test]
+fn overview_exposes_widget_visibility_controls() {
+    let template = include_str!("../templates/overview.html");
+    assert!(template.contains("dashboard-widget-toggle"));
+    assert!(template.contains("hiddenWidgets"));
+    assert!(template.contains("data-dashboard-widget-label"));
+    assert!(template.contains("Persisted dashboard layout"));
+}
+
+#[test]
+fn overview_migrates_legacy_order_only_dashboard_layouts() {
+    let template = include_str!("../templates/overview.html");
+    assert!(template.contains("if (Array.isArray(saved)) saved = { order: saved, hidden: [] };"));
+}
+
+#[test]
+fn overview_exposes_object_360_triage_routes() {
+    let template = include_str!("../templates/overview.html");
+    let layout = include_str!("../templates/layout.html");
+    assert!(template.contains("Object 360 triage"));
+    assert!(template.contains("Evidence search"));
+    assert!(template.contains("/actions?q={{ entity.id }}"));
+    assert!(template.contains("/ontology?object_id={{ entity.id }}#object-{{ entity.id }}"));
+    assert!(template.contains("data-investigation-context"));
+    assert!(template.contains("data-investigation-route"));
+    assert!(template.contains("data-investigation-type=\"Object\""));
+    assert!(layout.contains("kizashi.investigation_focus.' + session.tenant_id"));
+    assert!(layout.contains("session.tenant_id"));
+    assert!(layout.contains("pendingValue"));
+    assert!(layout.contains("investigation-focus-trace"));
+    assert!(layout.contains("linked_incident="));
+    assert!(layout.contains("Trace governed response"));
+}
+
+#[test]
+fn console_exposes_recent_investigation_history() {
+    let layout = include_str!("../templates/layout.html");
+    assert!(layout.contains("investigation-focus-history-toggle"));
+    assert!(layout.contains("investigation-focus-history"));
+    assert!(layout.contains("kizashi.investigation_history."));
+    assert!(layout.contains("focusHistory"));
+    assert!(layout.contains("Recent investigations"));
+    assert!(layout.contains("kizashi.scroll."));
+    assert!(layout.contains("window.scrollTo(0, saved.y || 0)"));
+}
+
+#[test]
+fn console_exposes_recent_workspace_switching() {
+    let layout = include_str!("../templates/layout.html");
+    assert!(layout.contains("workspace-switcher-toggle"));
+    assert!(layout.contains("workspace-switcher-list"));
+    assert!(layout.contains("kizashi.recent_workspaces"));
+    assert!(layout.contains("/workspace/switch?tenant_name="));
 }
 
 #[test]
@@ -189,10 +259,17 @@ async fn renders_kpi_cards_reflecting_real_data_when_signed_in() {
     assert!(body.contains(">2<")); // sensor_count
     assert!(body.contains("1 active")); // only support-poller has matching stats
     assert!(body.contains(">42<")); // total_records
-    assert!(body.contains("1/2 services up"));
+    assert!(body.contains(">1/2</span> services up"));
     assert!(body.contains("data-overview-live-status"));
     assert!(body.contains("data-overview-refresh"));
     assert!(body.contains("data-overview-toggle-live"));
+    assert!(body.contains("Overview refresh controls"));
+    assert!(body.contains("Dashboard layout controls"));
+    assert!(body.contains("data-overview-count=\"records\""));
+    assert!(body.contains("fetch('/api/v1/overview'"));
+    assert!(!body.contains("var livePaths = ['/overview'"));
+    assert!(body.contains("data-overview-attention-total"));
+    assert!(body.contains("data-overview-attention=\"critical_incidents\""));
     assert!(body.contains("kizashi.overview.live-refresh"));
     assert!(!body.contains("critical · <a href=\"/incidents\">"));
     assert!(!body.contains("needs review · <a href=\"/actions\">"));

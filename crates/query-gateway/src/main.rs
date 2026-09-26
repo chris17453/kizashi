@@ -1,3 +1,4 @@
+use axum::{middleware, routing::get, Extension};
 use query_gateway::{build_router, health_router, GatewayState, PostgresTokenStore};
 use std::sync::Arc;
 
@@ -33,7 +34,12 @@ async fn main() {
         internal_secret,
     };
 
-    let app = health_router().merge(build_router(state));
+    let metrics = Arc::new(common::HttpMetrics::default());
+    let app = health_router()
+        .merge(build_router(state))
+        .route("/metrics", get(common::metrics_handler))
+        .layer(middleware::from_fn(common::record_request))
+        .layer(Extension(metrics));
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "query-gateway listening");
     axum::serve(listener, app).await.expect("server error");

@@ -1,3 +1,6 @@
+#[path = "search_handler_test.rs"]
+mod search_handler_test;
+
 use crate::ingestion_stats_client::RecordSearchFilter;
 use crate::ontology_client;
 use crate::session_guard::require_session;
@@ -42,6 +45,7 @@ struct IdentityHit {
 
 struct EntityHit {
     id: uuid::Uuid,
+    object_type_id: uuid::Uuid,
     type_name: String,
     title: String,
     state: String,
@@ -105,6 +109,22 @@ struct AuditHit {
     changed_at: String,
 }
 
+struct ActionTemplateHit {
+    id: uuid::Uuid,
+    name: String,
+    description: String,
+    action_type: String,
+    version: i32,
+}
+
+struct AnnotationHit {
+    id: uuid::Uuid,
+    object_id: uuid::Uuid,
+    author: String,
+    body: String,
+    created_at: String,
+}
+
 #[derive(Template)]
 #[template(path = "search.html")]
 struct SearchTemplate {
@@ -122,6 +142,8 @@ struct SearchTemplate {
     actions: Vec<ActionHit>,
     events: Vec<EventHit>,
     audits: Vec<AuditHit>,
+    templates: Vec<ActionTemplateHit>,
+    annotations: Vec<AnnotationHit>,
     errors: Vec<String>,
     searched: bool,
 }
@@ -152,10 +174,17 @@ fn contains(haystack: &str, needle: &str) -> bool {
     haystack.to_ascii_lowercase().contains(&needle.to_ascii_lowercase())
 }
 
+fn action_type_label(action_type: common::ActionType) -> String {
+    serde_json::to_value(action_type)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| "custom".to_string())
+}
+
 fn normalize_scope(scope: &str) -> String {
     match scope.trim().to_ascii_lowercase().as_str() {
         "records" | "entities" | "incidents" | "events" | "actions" | "audit" | "sensors"
-        | "identities" => scope.trim().to_ascii_lowercase(),
+        | "identities" | "templates" | "annotations" => scope.trim().to_ascii_lowercase(),
         _ => "all".to_string(),
     }
 }
@@ -197,6 +226,8 @@ pub async fn get_search(
     let mut actions = Vec::new();
     let mut events = Vec::new();
     let mut audits = Vec::new();
+    let mut templates = Vec::new();
+    let mut annotations = Vec::new();
 
     if !term.is_empty() {
         let record_filter =
@@ -431,6 +462,7 @@ pub async fn get_search(
                                 cases.truncate(4);
                                 entities.push(EntityHit {
                                     id: object.id,
+                                    object_type_id: object.object_type_id,
                                     type_name: type_names
                                         .get(&object.object_type_id)
                                         .cloned()
@@ -569,6 +601,36 @@ pub async fn get_search(
                 errors.push("ontology: client unavailable".to_string());
             }
         }
+        if scope_is(&scope, "annotations") {
+            let annotation_token = session.bearer_token.clone();
+            let annotation_result = ontology_client::global().map(|client| async move {
+                client.list_all_object_annotations(&annotation_token).await
+            });
+            match annotation_result {
+                Some(result) => match result.await {
+                    Ok(items) => {
+                        annotations = items
+                            .into_iter()
+                            .filter(|item| {
+                                contains(&item.body, &term)
+                                    || contains(&item.author, &term)
+                                    || contains(&item.object_id.to_string(), &term)
+                            })
+                            .take(24)
+                            .map(|item| AnnotationHit {
+                                id: item.id,
+                                object_id: item.object_id,
+                                author: item.author,
+                                body: item.body,
+                                created_at: item.created_at.to_rfc3339(),
+                            })
+                            .collect();
+                    }
+                    Err(error) => errors.push(format!("annotations: {error}")),
+                },
+                None => errors.push("annotations: client unavailable".to_string()),
+            }
+        }
 
         if scope_is(&scope, "incidents") {
             let all_events = match state
@@ -696,6 +758,34 @@ pub async fn get_search(
                 .take(24)
                 .collect();
         }
+
+        if scope_is(&scope, "templates") {
+            match crate::action_templates_client::global() {
+                Some(client) => match client.list(session.tenant_id).await {
+                    Ok(items) => {
+                        templates = items
+                            .into_iter()
+                            .filter(|template| {
+                                contains(&template.name, &term)
+                                    || contains(&template.description, &term)
+                                    || contains(&action_type_label(template.action_type), &term)
+                                    || contains(&template.id.to_string(), &term)
+                                    || contains(&template.config.to_string(), &term)
+                            })
+                            .map(|template| ActionTemplateHit {
+                                id: template.id,
+                                name: template.name,
+                                description: template.description,
+                                action_type: action_type_label(template.action_type),
+                                version: template.version,
+                            })
+                            .collect();
+                    }
+                    Err(error) => errors.push(format!("templates: {error}")),
+                },
+                None => errors.push("templates: client unavailable".to_string()),
+            }
+        }
     }
 
     Html(
@@ -714,6 +804,8 @@ pub async fn get_search(
             actions,
             events,
             audits,
+            templates,
+            annotations,
             errors,
             searched: !query.q.trim().is_empty(),
         }
@@ -796,6 +888,8 @@ mod search_scope_tests {
         assert_eq!(normalize_scope("connectors"), "all");
         assert_eq!(normalize_scope("sensors"), "sensors");
         assert_eq!(normalize_scope("identities"), "identities");
+        assert_eq!(normalize_scope("templates"), "templates");
+        assert_eq!(normalize_scope("annotations"), "annotations");
         assert_eq!(normalize_scope("audit"), "audit");
         assert_eq!(normalize_scope("not-a-scope"), "all");
     }
@@ -804,6 +898,8 @@ mod search_scope_tests {
     fn all_scope_includes_every_category() {
         assert!(scope_is("all", "records"));
         assert!(scope_is("all", "audit"));
+        assert!(scope_is("all", "templates"));
+        assert!(scope_is("all", "annotations"));
         assert!(!scope_is("events", "entities"));
     }
 
@@ -823,6 +919,15 @@ mod search_scope_tests {
         assert!(template.contains("hit.event_links"));
         assert!(template.contains("search-operating-chain"));
         assert!(template.contains("scope=entities"));
+        assert!(template.contains("data-investigation-type=\"Case\""));
+        assert!(template.contains("data-investigation-type=\"Signal\""));
+        assert!(template.contains("data-investigation-type=\"Decision\""));
+        assert!(template.contains("data-investigation-type=\"Evidence\""));
+        assert!(template.contains("data-investigation-route"));
         assert!(template.contains("Governed actions"));
+        assert!(template.contains("Action templates"));
+        assert!(template.contains("scope=templates"));
+        assert!(template.contains("Investigation annotations"));
+        assert!(template.contains("scope=annotations"));
     }
 }

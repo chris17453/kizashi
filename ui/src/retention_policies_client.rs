@@ -42,7 +42,7 @@ pub enum RetentionPoliciesClientError {
     Rejected(u16),
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, serde::Deserialize)]
 pub struct ReimportSummary {
     pub records_reimported: usize,
     pub records_failed: usize,

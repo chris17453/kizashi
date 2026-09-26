@@ -144,6 +144,9 @@ async fn shows_an_empty_state_with_no_activity() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(body.contains("No audit activity"));
+    assert!(body.contains("data-audit-live-status"));
+    assert!(body.contains("/api/v1/audit-log?"));
+    assert!(body.contains("New audit activity detected"));
 }
 
 #[tokio::test]

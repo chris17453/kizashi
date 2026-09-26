@@ -8093,6 +8093,228 @@ rendered KPI links; live verification of `/incidents?status=active&view=board` c
 - Added a shared hover and keyboard tooltip layer to the dependency-free SVG chart renderer.
 - Report and Overview charts now expose exact label/value readouts while retaining direct drill-through links and server-rendered fallback content.
 
+### feature/api-v1-observability-feed
+- Added authenticated `/api/v1/health` and tenant-scoped `/api/v1/audit-log` endpoints for external operators.
+- Audit responses merge the existing control-plane sources, sort newest-first, expose service and actor attribution, and provide bounded cursor pagination.
+
+### feature/api-v1-tenant-configuration-controls
+- Added authenticated versioned API parity for tenant branding, AI analysis configuration, and egress allowlist controls.
+- Preserved Admin-only branding writes, Operator-only analysis/egress writes, tenant isolation, and tri-state analysis-key handling without returning stored secrets.
+- Added bounded egress-domain validation and route/validation regression coverage.
+
+### feature/api-v1-security-operations
+- Added Admin-scoped versioned APIs for active session inventory/revocation, login-attempt telemetry, backup history, and backup triggering.
+- Session responses intentionally project identity and timing fields only; bearer tokens remain server-side, and revocations retain tenant-scoped audit attribution.
+- Added bounded login-attempt pagination and authenticated backup operations alongside route regression coverage.
+
+### feature/api-v1-compliance-snapshot
+- Added an Admin-scoped `/api/v1/security/compliance-report` JSON snapshot using the same evidence sources as the auditor-facing compliance page.
+- Exposed control state, score, drill-through links, operational metrics, and source errors for RBAC/MFA, retention, egress, connector freshness, normalization, backup recovery, login anomalies, and recent admin activity.
+
+### feature/api-v1-report-exports
+- Added authenticated `/api/v1/reports/export.csv` and `/api/v1/reports/export.pdf` endpoints for external operators.
+- Preserved the report window, tenant-scoped signal/incident/action evidence, downloadable content types, filenames, and the existing dependency-free PDF writer.
+
+### feature/api-v1-self-service-security
+- Added authenticated MFA status, enrollment, verification, and disable endpoints plus self-service password change through the versioned API.
+- Preserved one-time enrollment material handling, six-digit TOTP validation, current-password enforcement, and password confirmation checks.
+
+### feature/api-v1-incident-case-operations
+- Added Operator-scoped incident update, status transition, claim, note, and bounded bulk-update endpoints.
+- Mutations re-read tenant-owned cases, preserve audited incident-service updates, and return explicit conflict/not-found/validation responses for case coordination.
+
+### feature/api-v1-signal-response-operations
+- Added Operator-scoped bulk event lifecycle updates for `new`, `triggered`, `actioned`, and `dismissed` signals.
+- Added bounded bulk event-to-incident linking with target-case tenant verification and per-item success/failure counts.
+
+### feature/api-v1-data-export
+- Added authenticated `/api/v1/data/export.csv` parity for the Data Explorer's connector, source, text, subject, attachment, date, and normalization filters.
+- Bounded exports to 2,000 records per request and expose `X-Next-Offset` when a continuation is available.
+
+### feature/api-v1-work-export
+- Added authenticated `/api/v1/work/export.csv` parity for the Work Queue's filtered case and pending governed-action handoff.
+- Exports preserve tenant-scoped ownership, case status/severity, action outcomes, and stable queue/source labels.
+
+### feature/api-v1-ontology-export
+- Added authenticated `/api/v1/ontology/export.csv` for filtered Ontology object-set handoff.
+- Preserved type, text, property, and value scopes; exports include type labels, properties, source lineage, and a truncation marker beyond 5,000 objects.
+
+### feature/api-v1-ontology-authoring
+- Added authenticated versioned CRUD parity for Ontology object types, relationship types, and relationship instances.
+- Preserved the console's operator/admin governance boundary, contract-shape validation, and tenant-scoped Query Gateway writes.
+
+### feature/api-v1-ontology-investigation
+- Added authenticated object-history and relationship-traversal endpoints for API consumers following the same investigation lineage as the Ontology console.
+- Made traversal responses serializable and preserved tenant-scoped read access through the existing Ontology client boundary.
+
+### feature/api-v1-action-ledger
+- Added authenticated `/api/v1/actions` parity for bounded Action Center review feeds.
+- Joined governed invocations with contract metadata and human-review state while preserving query, outcome, contract, review, date, pagination, and tenant-scoping semantics.
+- Added `/api/v1/actions/export.csv` using the same review scope for durable handoff artifacts.
+
+### feature/api-v1-audit-export
+- Added authenticated `/api/v1/audit-log/export.csv` parity for merged tenant audit evidence.
+- Preserved cursor continuation, bounded multi-source collection, query/service/change/date filters, and truncation signaling for compliance handoffs.
+
+### feature/api-v1-data-modeling
+- Added authenticated `/api/v1/data/model` and `/api/v1/data/records/:id/model` parity for promoting source evidence into Ontology objects.
+- Preserved normalized-payload preference, source-record lineage, operator governance, tenant lookup, and a 25-record bulk safety bound with per-record success/failure results.
+
+### feature/api-v1-work-scope-integrity
+- Tightened `/api/v1/work` so text-filtered queues keep governed invocations and reviews aligned with the incident scope.
+- Made Work Queue claim batches explicitly reject empty or oversized requests and deduplicate accepted case IDs instead of silently truncating caller input.
+
+### feature/api-v1-trigger-bulk-controls
+- Added authenticated `/api/v1/triggers/bulk-toggle` parity for bounded bulk enable/disable operations.
+- Re-fetches each tenant-scoped trigger before updating its full definition, preserving audit attribution and per-trigger success/failure results.
+
+### feature/api-v1-session-bulk-revocation
+- Added authenticated `/api/v1/security/sessions/bulk-revoke` parity for administrator access reviews.
+- Preserved tenant membership checks, bounded/deduplicated opaque session IDs, durable per-session revocation audit records, and per-session outcomes.
+
+### feature/api-v1-login-attempt-export
+- Added authenticated `/api/v1/security/login-attempts/export.csv` parity for compliance handoffs.
+- Preserved administrator RBAC, cursor continuation, bounded collection, username/status/reason filters, and explicit continuation signaling.
+
+### feature/api-v1-sensor-bulk-delete
+- Added authenticated `/api/v1/sensors/bulk-delete` parity for bounded connector inventory cleanup.
+- Revalidates each sensor in the authenticated tenant before deletion and returns per-sensor outcomes.
+
+### feature/api-v1-user-bulk-controls
+- Added authenticated `/api/v1/users/bulk-delete` and `/api/v1/users/bulk-role` parity for identity administration.
+- Preserved admin governance, tenant membership revalidation, bounded/deduplicated user IDs, backend last-admin protections, and per-user outcomes.
+
+### feature/api-v1-api-key-bulk-revocation
+- Added authenticated `/api/v1/api-keys/bulk-revoke` parity for operator credential rotation.
+- Revalidates each key in the tenant before revocation and returns bounded per-key outcomes with existing audit attribution.
+
+### feature/api-v1-event-contract-scopes
+- Extended `/api/v1/event-types` with catalog search and governed, observed-only, and triggerless coverage scopes.
+- Preserved version selection while deriving coverage from the tenant's live trigger inventory and rejecting unknown scope values.
+
+### feature/api-v1-sensor-inventory-filters
+- Extended `/api/v1/sensors` with connector name/ID search, connector-type filtering, and enabled-state filtering.
+- Preserved bounded pagination while allowing API consumers to drive the same focused connector inventory views as the console.
+
+### feature/api-v1-trigger-inventory-filters
+- Extended `/api/v1/triggers` with name/event-match/ID search and enabled-state filtering.
+- Preserved bounded pagination while exposing the same detection-inventory focus controls as the console.
+
+### feature/api-v1-incident-triage-filters
+- Extended `/api/v1/incidents` and its CSV export with text, severity, and owner/unassigned filters alongside lifecycle status.
+- Kept JSON and CSV predicates aligned so API handoffs preserve the active case-triage scope.
+
+### feature/api-v1-report-schedule-scopes
+- Extended `/api/v1/report-schedules` with name/recipient search, enabled and format scopes, and normalized success/failed/running run-outcome filters.
+- Preserved schedule and run result alignment so API consumers can reproduce the scheduler posture shown in the console.
+
+### feature/api-v1-retention-policy-scopes
+- Extended `/api/v1/retention-policies` with validated raw/normalized/event data-class and enabled-state filters.
+- Preserved tenant-scoped lifecycle policy reads while exposing the same compliance-gap slices as the console.
+
+### feature/api-v1-normalization-mapping-filters
+- Extended `/api/v1/normalization-mappings` with source-type search and exact source-type filters.
+- Preserved tenant-scoped mapping reads while allowing API consumers to focus on a normalization contract family.
+
+### feature/api-v1-compliance-hold-scopes
+- Extended `/api/v1/retention-policies/holds` with validated data-class and active-state filters.
+- Preserved tenant-scoped legal-hold reads while exposing the same active lifecycle posture slices as the console.
+
+### feature/api-v1-backup-outcome-scopes
+- Extended `/api/v1/security/backups` with normalized success, failed, and running outcome filters.
+- Preserved cursor-based recovery history reads and rejected unknown operational states.
+
+### feature/api-v1-audit-feed-scopes
+- Extended `/api/v1/audit-log` with the same free-text, service, change-type, and YYYY-MM-DD date scopes already supported by its CSV export.
+- Kept the authenticated merged audit feed tenant-scoped and rejected malformed date filters consistently across JSON and CSV consumers.
+
+### feature/api-v1-ontology-object-filters
+- Extended `/api/v1/ontology/objects` with text, property, and property-value filters used by the object explorer.
+- Shared the predicate with ontology CSV export so API investigation and export results remain aligned.
+
+### feature/api-v1-ontology-object-detail
+- Added authenticated `GET /api/v1/ontology/objects/:id` for direct object-centric investigation handoffs.
+- Preserved tenant scoping and explicit 404 behavior while resolving through the ontology service boundary.
+
+### feature/pipeline-connector-intake-lane
+- Extended the live Pipeline Map's connector boundary from an aggregate count to registered sensor instances with direct detail links and enabled/disabled posture.
+- Preserved the empty-state and existing stage/backlog topology so operators can trace intake sources into the operating chain.
+
+### feature/api-v1-pipeline-read-model
+- Added authenticated `GET /api/v1/pipeline`, exposing connector posture, stage health, queue boundaries, and tenant-scoped records/events/incidents/trigger counts.
+- Omitted connector configuration secrets and kept platform health/backlog data behind the authenticated console API boundary.
+
+### feature/api-v1-record-journey
+- Added authenticated `GET /api/v1/data/records/:id/journey` for source-record → event → execution lineage with linked incident context and hop latency.
+- Preserved tenant-scoped reads, explicit missing-record behavior, and a presentation-independent evidence response.
+
+### feature/api-v1-action-detail
+- Added authenticated `GET /api/v1/actions/:id` for direct governed-invocation investigation with its action contract and human-review state.
+- Preserved ontology-service tenant scoping and explicit 404 behavior for unknown invocation IDs.
+
+### feature/api-v1-user-detail
+- Added authenticated admin-only `GET /api/v1/users/:id` for focused identity administration and investigation.
+- Preserved Auth Service tenant scoping and explicit 404 behavior without accepting caller-supplied tenant IDs.
+
+### feature/api-v1-saved-view-management
+- Added authenticated `GET/POST /api/v1/saved-views` and `DELETE /api/v1/saved-views/:id` for durable Data, Events, Incidents, Actions, Work, Ontology, Search, and Reports views.
+- Validated surfaces, enforced JSON-object filters, and preserved tenant-scoped existence checks for deletion.
+
+### feature/api-v1-action-review-control
+- Added operator-only `POST /api/v1/actions/:id/review` for action-centric human-review updates.
+- Preserved the ontology review contract while making the browser's direct action-detail handoff available to API clients.
+
+### feature/api-v1-ontology-link-scopes
+- Extended `GET /api/v1/ontology/links` with link-type, source-object, and target-object scopes and added direct `GET /api/v1/ontology/links/:id` detail reads.
+- Preserved tenant-scoped ontology resolution and explicit 404 behavior for missing relationship instances.
+
+### feature/api-v1-ontology-type-details
+- Added direct detail reads for ontology object types, link types, and action types at their existing versioned resource paths.
+- Preserved collection-backed tenant scoping and explicit 404 behavior for unknown model contracts.
+
+### feature/api-v1-event-type-detail
+- Added authenticated `GET /api/v1/event-types/:id` for direct event-contract inspection across versions.
+- Preserved immutable versioning by leaving contract changes on the existing append-only versions endpoint.
+
+### feature/api-v1-retention-detail
+- Added direct authenticated detail reads for retention policies and compliance holds at their existing versioned resource paths.
+- Preserved tenant-scoped lifecycle reads and explicit 404 behavior for unknown policy or hold IDs.
+
+### feature/api-v1-signal-case-exports
+- Added authenticated `/api/v1/events/export.csv` and `/api/v1/incidents/export.csv` endpoints.
+- Preserved Events search/status/date filters, Incident status filters, tenant scoping, stable handoff columns, and bounded truncation signaling.
+
+### feature/api-v1-global-search
+- Added authenticated `/api/v1/search` parity for the Console's cross-domain investigation search.
+- Preserved saved-view-compatible scope fields with bounded tenant-scoped matches across records, sensors, identities, ontology entities/actions, incidents, events, and audit evidence; partial source failures are returned explicitly.
+
+### feature/api-v1-governed-action-and-credential-controls
+- Extended the authenticated versioned Console API with governed ontology action-contract create, update, delete, and history endpoints.
+- Added tenant-scoped service-account list, issue, and revoke endpoints with admin enforcement and one-time credential delivery.
+- Added authenticated dashboard layout GET/PUT/DELETE endpoints backed by the same durable per-user saved-view store as the UI.
+- Added tenant-scoped Data Explorer record search/detail/reprocess endpoints with bounded pagination, RFC3339 filters, and operator enforcement for recovery.
+- Added a versioned Work queue read model joining tenant-scoped incidents, governed action invocations, and human reviews, plus operator-only bulk claim with conflict-safe revalidation.
+- Added contract-shape and credential-label validation plus route regression coverage.
+- Tests: `cargo test -p kizashi-ui --lib api_v1_handler` (14 passed); `cargo check -p kizashi-ui`.
+
+### feature/action-templates
+- Added a tenant-scoped, versioned Action Template entity with immutable Config/Admin audit history.
+- Added provider-aware Console authoring for webhook, email, Teams, ticket, and custom response templates.
+- Added Config/Admin HTTP CRUD and authenticated `/api/v1/action-templates` parity, while preserving inline trigger action compatibility.
+- Trigger authoring can now select a tenant template; the selected provider/config is snapshotted into the trigger so later template edits do not mutate existing automation.
+- Tests: Config/Admin action-template tests (4 passed), UI action-template/API/trigger tests (19 focused tests passed); `cargo check -p kizashi-ui -p config-admin-service -p common`.
+
+### feature/native-artifact-response-actions
+- Added native `GeneratePdf` and `GenerateXlsx` action types to the governed trigger/template contract.
+- Action Executor now generates bounded valid PDF and Excel-compatible SpreadsheetML artifacts and delivers them through the tenant-aware Egress path.
+- Recorded artifact format and byte count in the existing append-only action execution detail.
+- Tests: Action Executor (69 passed); `cargo check -p action-executor -p common -p kizashi-ui -p config-admin-service`.
+
+### feature/api-v1-connector-credential-controls
+- Added authenticated `/api/v1/api-keys` list/create/revoke parity for tenant connector credentials.
+- Preserved one-time plaintext delivery on create and operator-only mutation enforcement.
+- Tests: UI API handler suite (16 focused tests passed); `cargo check -p kizashi-ui`.
+
 ### feature/0508-ontology-property-coverage
 - Added a live property-coverage heatmap to Ontology, measuring declared-field population across every modeled object type.
 - Coverage cells expose exact populated/total counts, completeness bands, and direct type drill-throughs for data-quality investigation.
@@ -8352,3 +8574,848 @@ rendered KPI links; live verification of `/incidents?status=active&view=board` c
 ### feature/0452-chart-investigation-tooltips
 - Added a shared hover and keyboard tooltip layer to the dependency-free SVG chart renderer.
 - Report and Overview charts now expose exact label/value readouts while retaining direct drill-through links and server-rendered fallback content.
+### feature/docker-cargo-cache-locking
+- Made the shared Cargo registry, Git, and workspace target cache mounts in the common Dockerfile use BuildKit's locked sharing mode.
+- This prevents parallel `docker compose build` jobs for the monorepo's many binaries from corrupting unpacked crates or release artifacts.
+- Rebuilt the full compose application stack from the current worktree and verified every HTTP service health endpoint plus the Console login, static assets, and authenticated API boundary.
+
+### feature/demo-seed-compose-target
+- Added an explicit `SEED_DATABASE_NAME` override to the local demo seed script so the host-process launcher can continue using isolated `kizashi_test` data while Docker Compose can seed its live `kizashi` database.
+- Loaded the coherent demo tenant into the running Compose stack and verified the live UI and API expose six connectors, 23 records, 12 events, three open cases, and one active trigger.
+
+### feature/demo-seed-compose-command
+- Added `scripts/seed-local-demo.sh --compose` as the unambiguous Compose workflow; the default remains the host launcher's isolated `DATABASE_URL` database.
+- Added built-in usage/help and unknown-option validation so demo data cannot silently land in a database the running UI does not read.
+
+### feature/api-attention-summary
+- Added `GET /api/v1/attention`, exposing the same live incident, action-review, queue-pressure, SLA, and stale-connector summary used by the Console's command-center attention rail.
+- Centralized the aggregation so browser and service-account consumers cannot silently diverge in their definition of operational pressure.
+
+### feature/api-security-overview
+- Added `GET /api/v1/security/overview`, exposing the tenant-scoped security posture used by the Security overview page: active sessions, RBAC distribution, MFA coverage, retention coverage, egress controls, and recent audit activity.
+- Reused the browser aggregation and preserved its partial-backend-error behavior and existing role boundaries.
+
+### feature/api-reports-summary
+- Added `GET /api/v1/reports/summary`, exposing windowed connector/record volume, event-type counts, incident posture and SLA breaches, ontology coverage, and governed action outcomes.
+- Report consumers receive explicit source errors instead of silently interpreting a degraded backend as zero activity.
+
+### feature/api-ontology-compare
+- Added `GET /api/v1/ontology/compare?ids=...`, exposing bounded object comparison with type context, property variance, matched/requested counts, and shared/differing property totals.
+- Preserved the six-object limit and tenant-scoped ontology lookup used by the HTML workbench.
+
+### feature/api-data-compare
+- Added `GET /api/v1/data/compare?ids=...`, exposing bounded raw/normalized record comparison, field presence and variance, contributing signals, and modeled-object lineage.
+- Preserved the four-record limit and explicit errors for malformed or missing record identifiers.
+
+### feature/api-permissions-reference
+- Added `GET /api/v1/security/permissions`, exposing the authoritative tenant RBAC reference matrix, role access counts, and optional active-role scope used by the Security permissions page.
+- Kept the endpoint descriptive-only: reading the policy matrix does not bypass any write enforcement.
+
+### feature/api-connector-onboarding
+- Added `GET /api/v1/sensors/catalog` for the connector marketplace contract and `POST /api/v1/sensors/generate` for bash, PowerShell, and Docker deployment artifacts.
+- Validates connector fields and required credentials, limits the sensor name, rejects non-HTTP gateway URLs, and never persists submitted secrets.
+
+### feature/api-configuration-center
+- Added `GET /api/v1/configuration`, a unified Connect → Normalize → Understand → Model → Detect → Respond read model with live domain counts, healthy/attention posture, handoff links, and explicit backend errors.
+- Included retention and egress governance in the same configuration readiness response used by external operator consoles.
+
+### feature/api-session-context
+- Added `GET /api/v1/session/context`, exposing the authenticated username, role, tenant, and workspace context for external operator shells.
+- Browser sessions and service-account requests share the same tenant-scoped identity projection, with a deterministic tenant fallback when no workspace cookie is present.
+
+### feature/api-pipeline-graph
+- Extended `GET /api/v1/pipeline` with an explicit directed graph model: connector, service, signal-aggregation, and governed-response nodes plus queue-backed edges carrying live health, backlog, severity, and control-surface links.
+- Preserved the existing `connectors`, `stages`, and `queues` arrays for compatible consumers while allowing external operator shells to render the live topology without hardcoding Kizashi's pipeline order.
+- Connector nodes now use the same healthy/stale/no-data/disabled freshness classification as the Sensors console, so intake silence is visible in the graph itself.
+
+### feature/report-schedule-editing
+- Added tenant-scoped in-place update support for saved report schedules in Config/Admin, preserving the schedule UUID and its run history.
+- Added `PUT /api/v1/report-schedules/:id` plus an authenticated Console editor for cadence, format, recipient, date window, enabled state, and name changes.
+
+### feature/api-saved-view-editing
+- Added validated `PUT /api/v1/saved-views/:id` support across every saved-view surface: Data, Events, Incidents, Actions, Work, Ontology, Search, and Reports.
+- Updates preserve the tenant-scoped saved-view UUID while validating the surface, name, and JSON filter contract.
+- Added a command-center editor for renaming saved operational views in the browser without changing their investigation filters or deep links.
+
+### feature/durable-saved-view-mutations
+- Changed dashboard layout persistence and report-schedule toggles to update their existing saved-query rows instead of delete/recreate cycles.
+- Saved-view UUIDs now remain stable across layout changes and schedule enable/disable operations, preserving pins, deep links, and run-history references.
+
+### feature/api-overview-command-center
+- Added authenticated `GET /api/v1/overview`, combining workspace identity, attention posture, platform health, tenant counts, and explicit partial-source errors for external operator shells.
+- Kept domain APIs as drill-down surfaces while giving shell clients one bounded initial-read request.
+
+### feature/api-ontology-graph
+- Added authenticated `GET /api/v1/ontology/graph` with bounded nodes, typed relationship edges, center-object neighborhood depth, relationship-type filtering, and operator-shell-safe object evidence.
+- Preserved the same tenant, depth, and result limits used by the browser Ontology workbench so external graph clients cannot accidentally request an unbounded object traversal.
+
+### feature/overview-incremental-live-mode
+- Changed Overview live mode from full-page reloads to incremental authenticated reads from `/api/v1/overview`.
+- KPI, attention, and platform-health values now update in place while preserving the analyst's dashboard layout, mission mode, selected window, and scroll context; update failures are surfaced as degraded live-status feedback.
+- Disabled the shared full-page live timer on `/overview` so it cannot compete with the incremental command-center refresh.
+
+### feature/api-ontology-object-360
+- Added authenticated `GET /api/v1/ontology/objects/:id/360`, joining the tenant-scoped object and type with bounded relationships, source-derived signals, linked incidents, governed action/review activity, and immutable object history.
+- Preserved the browser Ontology investigation boundaries so external shells can open a complete object-centric context without issuing a fan-out of uncoordinated cross-domain requests.
+
+### feature/api-event-360
+- Added authenticated `GET /api/v1/events/:id/360`, joining the event payload with bounded source records, status history, linked incidents, executor activity, modeled ontology objects, governed action invocations, and human reviews.
+- Preserved explicit partial-source errors and the browser's bounded investigation semantics so external operator shells can follow a signal through case, model, and decision context without treating a degraded optional join as an empty success.
+
+### feature/api-incident-360
+- Added authenticated `GET /api/v1/incidents/:id/360`, joining the case with linked signals, source evidence, executor activity, immutable case audit, modeled impact objects and relationships, governed responses, and human reviews.
+- Preserved tenant scoping, bounded joins, and explicit partial-source errors so external operator shells can open a complete case investigation without coordinating independent cross-domain requests.
+
+### feature/api-action-360
+- Added authenticated `GET /api/v1/actions/:id/360`, joining the immutable invocation with its contract, human review, modeled targets, triggering event, linked case, and contributing source records.
+- Preserved contract and tenant boundaries while returning explicit partial-source errors for optional causal or evidence joins.
+
+### feature/queue-refresh-scroll-continuity
+- Preserved the analyst's scroll position across same-route live queue refreshes, including Events, Incidents, Actions, and My Work, while retaining server-authoritative filters and persisted selections.
+- Scoped the temporary position to the exact pathname and query string and expire it after one minute so ordinary navigation never inherits stale viewport state.
+
+### feature/command-palette-audit-handoffs
+- Corrected live command-palette audit result handling to match the nested service-plus-entry search contract.
+- Audit matches now route to the correct service-specific immutable history page instead of failing silently or dropping the backend service context.
+
+### feature/api-entity-audit-history
+- Added authenticated `GET /api/v1/audit-log/:service/:entity_id`, exposing the same tenant-scoped immutable entity history as the browser audit page.
+- Covers config, retention, auth, ingestion, egress, incident, and ontology action activity with bounded service selection and explicit backend errors.
+
+### feature/pipeline-typed-graph-ui
+- Added an interactive typed topology panel to Pipeline Map, consuming the authenticated `/api/v1/pipeline` graph read model.
+- Operators can inspect connector, service, signal, and governed-response nodes plus queue-bearing transitions without leaving the live pipeline surface; backend failure degrades to the existing server-rendered map.
+
+### feature/command-palette-audit-service-routing
+- Extended command-palette audit handoffs to route ingestion-gateway and egress-gateway entries to their owning immutable history surfaces.
+- Preserved the existing nested service-plus-entry search contract while preventing those results from incorrectly opening config history.
+
+### feature/overview-live-attention-contract
+- Aligned the Overview attention KPI markup with the versioned API's `critical_incidents` field.
+- Critical-case counts now update during incremental live refresh instead of remaining stuck on the initial server-rendered value.
+
+### feature/api-incident-evidence-unlink
+- Added authenticated `DELETE /api/v1/incidents/:incident_id/events/:event_id` parity with the browser's incident evidence unlink control.
+- The operation requires an operator, verifies the incident belongs to the caller's tenant, preserves immutable event/source lineage, and audits the relationship mutation through Incident Service.
+
+### feature/api-governed-action-bulk-controls
+- Added versioned API parity for governed action bulk review transitions, immutable invocation retries, and dead-letter replay.
+- All endpoints enforce operator/admin transition boundaries, tenant-scoped invocation lookup, bounded request sizes, and explicit partial-success counts or queue errors.
+## [2026-07-24] feature/oidc-provider-selection-and-compose-wiring — Expose generic OIDC SSO end to end
+
+- **Summary:** Completes the previously identified SSO portability gap. The Console login page now
+  offers Microsoft Entra ID and a generic OIDC provider, forwarding the selected provider through
+  the existing PKCE flow. Compose now passes the generic provider's issuer, client credentials,
+  authorization, token, userinfo, and redirect settings into `auth-service`, so the already-tested
+  generic OIDC implementation is usable in a deployed stack rather than only by direct API calls.
+- **Verification:** `cargo test -p kizashi-ui --lib sso_login_handler::sso_login_handler_test` (6
+  passed), `cargo test -p auth-service --lib oidc_handler::oidc_handler_test` (8 passed),
+  `docker compose config --quiet`, `cargo fmt --all --check`, `git diff --check`, and live login
+  HTML/health checks. An unconfigured generic provider degrades to the existing clear login error.
+### feature/auto-correlation-safe-sweep
+- Added a deterministic operator control to apply every currently safe incident-correlation
+  candidate in one bounded sweep. Only unlinked signals whose normalized group key maps to one
+  active case are eligible; ambiguous keys, blank keys, and resolved cases remain excluded.
+- Added browser and versioned API paths (`POST /incidents/correlation-sweep/auto` and
+  `POST /api/v1/incidents/correlation-sweep/auto`) with operator RBAC, tenant-scoped evidence,
+  immutable signal/case payloads, and existing incident-service audit logging for each link.
+- Verified with the incident-correlation handler tests, UI clippy, formatting, and diff checks.
+### feature/action-template-console-editing
+- Completed the reusable governed-response contract workflow: Action Templates now expose an
+  operator-gated inline editor backed by `POST /action-templates/:id/edit`, using the existing
+  versioned Config/Admin update API rather than delete/recreate. The editor preserves template
+  identity and creation time while Config/Admin increments the version and writes the immutable
+  audit entry.
+- Verified with UI handler/client tests, Config/Admin action-template tests, clippy, formatting,
+  diff checks, and a live create → edit (v1 to v2) → delete smoke test against the Compose stack.
+
+### feature/action-template-global-search
+- Added Action Templates to the authenticated global search page, searchable by name, description,
+  provider, configuration, or ID, with a direct handoff to the template catalog.
+- Added the same tenant-scoped category to `GET /api/v1/search` and the command palette's live
+  results, preserving the existing response fields while making reusable response contracts
+  discoverable alongside incidents, signals, and governed decisions.
+- Included Action Templates in the result distribution accounting so template-only searches still
+  render a proportional result bar instead of silently disappearing from the visual summary.
+- Verified with UI search tests, `cargo clippy -p kizashi-ui --lib -- -D warnings`, formatting,
+  `git diff --check`, a Compose rebuild, authenticated HTML/API smoke checks, and a temporary
+  create → search → delete workflow against the live stack.
+
+### feature/incident-evidence-brief
+- Added an operator-only `POST /incidents/:id/brief` workflow that regenerates a bounded case
+  brief from the incident's current linked signals: signal count, event types, statuses, group
+  keys, ownership, severity, and evidence time window.
+- Persisted the generated brief through the existing Incident Service update path, so each
+  regeneration is tenant-scoped and appears in immutable case audit history; no model output is
+  written outside the governed mutation contract.
+- Added success/failure feedback and a direct regenerate control to the case detail page.
+- Verified with 773 UI tests, UI clippy, formatting, diff checks, a rebuilt Compose image, and a
+  live create/read/restore smoke on seeded case `00000000-0000-0000-0000-000000000060`; the
+  generated summary rendered with the success notice and was then restored to its original demo
+  brief after verification.
+
+### feature/tenant-mfa-enforcement
+- Added a persisted, tenant-scoped `mfa_required` policy with an admin-only Auth Service read/update
+  endpoint and a Security Overview control for enabling or relaxing enforcement.
+- Local password login checks the tenant policy before deciding the post-password flow: enrolled
+  users receive the existing one-time MFA challenge, while unenrolled users receive a narrowly
+  scoped session redirect to the required authenticator enrollment screen instead of a dead-end
+  challenge with no secret to verify.
+- Added repository, migration, browser client, Security Overview control, and versioned API parity
+  (`GET/PUT /api/v1/security/mfa-policy`) with focused auth/UI tests, clippy, and diff verification.
+
+### feature/tenant-oidc-provider-policy
+- Added tenant-scoped OIDC provider pinning with a Postgres migration, admin-only Auth Service
+  policy endpoint, and Security Overview control. Administrators can select one configured
+  provider or allow all deployment-configured providers.
+- Enforced the pin on both authorization and callback, preventing a flow from switching providers
+  between the workspace login page and the code exchange while preserving legacy behavior for
+  tenants without a pin.
+- Added browser and versioned API parity (`GET/PUT /api/v1/security/oidc-provider`) plus tenant
+  repository coverage; the existing Entra/generic credentials remain deployment-managed secrets.
+- Tenant MFA and OIDC policy mutations now require an actor identity and write immutable
+  `tenant_security_policy` audit entries transactionally with the tenant update.
+
+### feature/prometheus-platform-snapshot
+- Added `GET /metrics` to the Observability service with Prometheus text exposition for platform
+  availability, per-registered-service health, and bounded pipeline queue depth gauges.
+- Reuses the same health and backlog reads shown in the operator Health surface, escapes metric
+  labels, and degrades unavailable backlog reads to an empty gauge set rather than returning a
+  misleading partial JSON document.
+- Added a focused exposition-format regression test; 21 Observability tests, clippy, and diff
+  checks pass.
+
+### feature/per-service-http-metrics
+- Added a shared Axum middleware for request totals, server-error totals, and cumulative request
+  latency, exposed as Prometheus text at `/metrics`.
+- Wired the middleware into Auth Service, Query Gateway, Dashboard API, and the operator UI so
+  service health can be correlated with actual request volume and latency rather than health status
+  alone.
+- Added an Observability `/v1/service-metrics` snapshot that parses the instrumented service
+  counters without changing the existing `/v1/health` availability contract; the Health page now
+  renders request count, 5xx count, and average latency on each instrumented service card.
+- Added focused middleware, parser, API-client, and UI coverage; verified the affected services
+  with cargo check, clippy, formatting, release images, and a live Compose snapshot.
+- Extended the same middleware helper across the remaining HTTP-serving runtime binaries so the
+  registered pipeline stages expose consistent request evidence rather than only the UI-facing
+  services.
+
+### feature/tenant-managed-oidc-connections
+- Added tenant-scoped OIDC provider management to Auth Service with encrypted client-secret
+  persistence in `auth_service.tenant_oidc_providers`. AES-256-GCM uses the deployment-provided
+  `OIDC_CREDENTIALS_ENCRYPTION_KEY`; missing key material disables writes instead of permitting
+  plaintext fallback.
+- Added admin-only browser and versioned API workflows for creating, listing, replacing, and
+  removing tenant providers. Secret values are write-only, absent from response bodies and audit
+  entries, while endpoint metadata and actor attribution remain auditable.
+- Tenant-managed clients are selected for both PKCE authorization and callback exchange before
+  deployment-wide fallback clients, and tenant provider names participate in the SSO policy
+  picker. Existing environment-managed Entra and generic OIDC configuration remains compatible.
+
+### feature/imap-xoauth2-authentication
+- Added RFC 7628 XOAUTH2 authentication to the IMAP connector while preserving password LOGIN.
+- Connector runs may supply `IMAP_ACCESS_TOKEN` directly or configure `IMAP_OAUTH_TOKEN_URL`,
+  `IMAP_OAUTH_CLIENT_ID`, `IMAP_OAUTH_CLIENT_SECRET`, and optional `IMAP_OAUTH_SCOPE` to obtain a
+  fresh client-credentials token for each isolated poll. The access token is never included in
+  records or logs.
+- Added unit coverage for the exact XOAUTH2 initial response; existing UID cursor, chunked
+  backfill, password, and real-IMAP integration paths remain unchanged.
+
+### feature/kubernetes-job-invoker
+- Added a Kubernetes-native agent-scheduler invoker that creates bounded per-poll Jobs, monitors
+  completion, reads checkpoint markers from pod logs, and cleans up Jobs through TTL metadata.
+- Added Helm ServiceAccount, namespace Role, and RoleBinding resources; the chart defaults to the
+  Kubernetes invoker without mounting the Docker socket, while Docker Compose keeps its existing
+  Docker invoker path.
+- Verified with scheduler unit tests, clippy, formatting, manifest diff checks, and Helm rendering;
+  live-cluster integration remains deployment-specific.
+
+### feature/trigger-edit-action-template-selection
+- Extended the trigger editor so operators can select an existing tenant-scoped Action Template
+  while editing a rule, matching the reusable-template workflow already available during trigger
+  creation. The selected template is resolved server-side and stored as an immutable provider
+  snapshot in the updated trigger contract; inline JSON remains available when no template is
+  selected.
+- Added safe selector-option serialization and form coverage for tenant-scoped template IDs.
+- Verified with 774 UI tests, focused trigger-detail tests, UI clippy, formatting, and diff checks.
+
+### feature/dedup-suppression-telemetry
+- Added a persisted tenant-scoped `suppressed_count` to normalization fingerprints and a protected
+  `/v1/dedup/summary` endpoint for operational reporting. Duplicate hits continue to retain raw
+  and normalized records while incrementing suppression telemetry.
+- Added the UI client and a Duplicate suppression panel to Normalization Mappings with tracked
+  fingerprint, repeated-key, and suppressed-republish KPIs. Backend failures keep the page usable
+  and omit telemetry when the internal service is unavailable.
+- Verified with normalization-service tests, focused UI normalization tests, formatting, and
+  tenant-scoped HTTP client coverage.
+
+### feature/governed-ai-incident-briefs
+- Added a tenant-scoped, internal-secret-protected analysis-service endpoint for generating
+  bounded incident briefs through the configured AI provider and existing transient fallback.
+- The incident detail action now sends linked evidence through that boundary and persists the
+  returned brief using the normal audited incident update path. If AI is unavailable, it retains
+  the deterministic evidence brief so investigation remains usable.
+- Added service/client coverage, lint verification, and ADR-0115 documenting the trust boundary,
+  size limits, and fallback behavior.
+
+### feature/event-driven-incident-correlation
+- Added persisted normalized correlation context to incident links and a durable Incident Service
+  consumer for `event.created`. It auto-links only when exactly one active incident in the same
+  tenant has the same group key; blank, resolved, and ambiguous matches remain untouched.
+- Updated Console incident-linking paths to retain event group context, with repository and
+  consumer coverage, migration, Compose wiring, and ADR-0116.
+
+### feature/helm-runtime-topology-parity
+- Added Helm Deployments and Services for Incident Service, Ontology Service, and Report Scheduler,
+  and wired Query Gateway, Action Executor, Console, and Observability to their chart-local
+  service endpoints. The Kubernetes chart now renders the same application workflow surface as
+  the Compose topology; ADR-0117 records the boundary.
+
+### feature/governed-ambiguous-correlation-resolution
+- Extended the correlation review with explicit ambiguity groups: unlinked signals matching
+  multiple active cases now show every active target and require an operator-selected case.
+- Revalidate the normalized group, active target, tenant scope, and selected event IDs immediately
+  before linking; links retain context and remain audited. The versioned read API exposes the same
+  review groups, with ADR-0118 documenting the fail-closed boundary.
+### Ontology object-type definition history (2026-07-25)
+
+Object-type creation, updates, and deletion now write immutable, tenant-scoped definition snapshots containing the schema, source mappings, actor, and change type. The Console exposes the selected type’s read-only definition history, and the versioned API serves it at `/api/v1/ontology/object-types/:id/history`. Existing definitions receive a system-created baseline during migration. See ADR-0119.
+
+### Shared command-center layouts (2026-07-25)
+
+Dashboard widget order and visibility can now be saved as either a personal layout or an explicit workspace-shared layout. Operators can switch scope from the Console customizer; workspace writes are role-gated and the versioned `/api/v1/dashboard/layout` API supports scoped GET, PUT, and DELETE operations. Legacy layouts remain personal by default. See ADR-0120.
+
+### Governed action-template contract validation (2026-07-25)
+
+Action templates now share provider-aware validation across the Console and Config/Admin service. Webhook, Teams, ticket, custom, and artifact providers require endpoints; SMTP and Graph email require their sender, recipient, and credential contract; generic email relays remain supported. The Console provides structured common fields with an advanced JSON escape hatch, while the server remains authoritative. See ADR-0121.
+
+### Governed partial-duplicate incident correlation (2026-07-25)
+
+Incident event links now retain event type and entity identity. Exact group-key correlation remains authoritative; when no exact case exists, a single active case with the same tenant-scoped event type and entity receives a separately audited partial link. Multiple candidates remain ambiguous and untouched, while historical links without identity fields are never inferred. See ADR-0122.
+
+### Incident signal correlation provenance (2026-07-25)
+
+Incident evidence rows now label exact group-key, partial-duplicate, and manual links from the immutable incident-event audit entry, keeping operator-facing provenance aligned with the backend decision. See ADR-0122.
+
+### Dead-letter message inspection (2026-07-25)
+
+The Action Center can now inspect a bounded preview of the oldest message in each pipeline dead-letter queue before replaying it. The protected peek operation requeues the message unchanged, while replay remains one-message-at-a-time with a fresh retry budget. See ADR-0123.
+
+### Dead-letter inspection API parity (2026-07-25)
+
+The versioned `POST /api/v1/actions/dead-letter/peek` endpoint now exposes the same bounded, non-consuming queue preview to operator-authenticated service accounts and session callers. It preserves the operational mixed-tenant boundary while keeping Console recovery automatable.
+
+### Overview dead-letter posture (2026-07-25)
+
+The command-center overview now includes known dead-letter message pressure in its attention rail and links directly to Action Center pipeline recovery. Unknown queue counts remain actionable without claiming false precision, and execution-service failures use the overview's existing degraded-error reporting. See ADR-0124.
+
+### Incident brief API parity (2026-07-25)
+
+`POST /api/v1/incidents/:id/brief` now exposes the Console's evidence-backed brief regeneration to operator-authenticated sessions and service accounts. It preserves tenant scope, linked-event bounds, the configured AI provider with deterministic fallback, and the audited incident update path. See ADR-0125.
+
+### Event lifecycle history API (2026-07-25)
+
+`GET /api/v1/events/:id/status-history` now exposes the immutable lifecycle transitions used by Event Detail as a focused, tenant-scoped API resource. Missing events return `404`, while Query Gateway failures remain explicit. See ADR-0126.
+
+### Corrected pipeline graph flow (2026-07-25)
+
+The typed Pipeline Map graph now renders the final operating chain in the correct direction: Trigger Engine → Signal aggregation → Action Executor → Governed response. The prior backward Action Executor → Signal aggregation edge was removed without changing queue consumption. See ADR-0127.
+
+### Retention policy bulk API (2026-07-25)
+
+`POST /api/v1/retention-policies/bulk-delete` now matches the Console's bounded bulk deletion workflow. It requires an operator principal, applies the existing tenant-scoped audited delete contract per policy, and reports deleted versus failed items. See ADR-0128.
+
+### Ontology bulk relationship API (2026-07-25)
+
+`POST /api/v1/ontology/links/instances/bulk` now exposes the Ontology workbench's bounded relationship creation workflow. It accepts up to 25 source objects for one governed target and reports created versus failed instances while preserving ontology-service validation and audit rules. See ADR-0129.
+
+### Action Library read-model API (2026-07-25)
+
+`GET /api/v1/actions/library` now exposes the Console's governed-action readiness model: contracts, target eligibility, execution posture, and contract history. It preserves tenant-scoped ontology evaluation while leaving lower-level action resources available for specialized clients. See ADR-0130.
+
+### Incident 360 timeline read model (2026-07-25)
+
+`GET /api/v1/incidents/:id/360` now includes the bounded, newest-first chronology already used by the incident detail page: case opening, linked signals, case audit activity, investigation notes, and governed responses. Each entry carries actor, timestamp, detail, optional navigation link, and failure posture. See ADR-0131.
+
+### Ontology contract search (2026-07-25)
+
+Global search and the command palette now discover tenant-scoped object-type and governed action-type definitions in addition to runtime entities and invocations. Contract names, schemas, mappings, preconditions, effects, and action targets are searchable, with links into Ontology and Action Library. See ADR-0132.
+
+### Relationship-type definition history (2026-07-25)
+
+Ontology relationship contracts now retain immutable create, update, and delete snapshots with actor, before/after state, and timestamp. The Ontology workbench displays that history, and the versioned API serves it at `/api/v1/ontology/link-types/:id/history`. Existing definitions receive a created baseline during migration. See ADR-0133.
+
+### Relationship-instance history (2026-07-25)
+
+Ontology relationship instances now retain immutable graph-state snapshots for create, update, and delete operations. The Console displays endpoint/property history, actor attribution propagates through the Query Gateway, and the versioned API serves it at `/api/v1/ontology/links/:id/history`. Existing instances receive a created baseline during migration. See ADR-0134.
+
+### Governed action contract history in Ontology (2026-07-25)
+
+The Ontology workbench now displays immutable create, update, and delete snapshots for governed
+action-type definitions, including actor, timestamp, change type, and before/after JSON. It uses
+the existing ontology-service history resource and keeps current authoring usable when an
+individual history read is unavailable. See ADR-0135.
+
+### Governed action actor attribution correction (2026-07-25)
+
+Action-type create, update, and delete mutations now propagate the authenticated actor through
+the Console, Action Library, Query Gateway, and ontology service. The ontology service uses the
+forwarded actor for action history and invocation context, with regression coverage preventing
+new contract history from falling back to `unknown`.
+
+### Complete authenticated white-label shell branding (2026-07-25)
+
+Tenant branding middleware now applies a configured logo even when product name and accent color
+are unset, and replaces the authenticated document title with the tenant product name. Logo URLs
+remain limited to HTTP(S) and product names are HTML-escaped. This completes the authenticated
+shell behavior described by ADR-0059 without adding per-template branding fields.
+
+### Ontology contract identity timestamps (2026-07-25)
+
+Relationship-type and governed action-type updates now preserve each contract’s original
+`created_at` while advancing `updated_at`. Missing action-type updates return `404`, and tests
+cover the invariant across both contract families. See ADR-0136.
+
+### Global deleted governed-action history (2026-07-25)
+
+The Ontology workbench now retains deleted governed action contracts in its
+history read model. A tenant-scoped global history endpoint groups immutable
+events by contract, derives names from retained snapshots, and marks deleted
+contracts explicitly in the audit panel. See ADR-0137.
+
+### Versioned global governed-action history API (2026-07-25)
+
+The authenticated API now exposes `GET /api/v1/ontology/action-types/history`,
+returning tenant-scoped immutable history for active and deleted governed action
+contracts. This gives API consumers the same complete audit surface as the
+Ontology workbench while preserving the existing per-contract history resource.
+See ADR-0138.
+
+### Global deleted relationship-contract history (2026-07-25)
+
+Relationship-type history now has the same complete audit behavior as governed
+actions. The Ontology workbench and `GET /api/v1/ontology/link-types/history`
+retain and mark deleted relationship contracts using immutable snapshots. See
+ADR-0139.
+
+### Global deleted object-type history (2026-07-25)
+
+Object-type history now retains deleted modeled contracts in the Ontology
+workbench and through `GET /api/v1/ontology/object-types/history`. Names are
+recovered from immutable snapshots and deleted types are explicitly marked,
+completing consistent audit retention across object, relationship, and action
+definitions. See ADR-0140.
+
+### Global deleted runtime-entity history (2026-07-25)
+
+The Ontology workbench now retains deleted modeled objects and relationship
+instances in dedicated immutable-history panels. Tenant-scoped global resources
+and versioned APIs expose the same records at `/api/v1/ontology/objects/history`
+and `/api/v1/ontology/links/history`. See ADR-0141.
+
+### Dead-letter attention routing (2026-07-25)
+
+The global command-center Attention rail and `/api/v1/attention` now include
+messages waiting in execution dead-letter queues, with a direct route into
+pipeline recovery. The shared summary remains aligned with Overview and
+Actions. See ADR-0142.
+
+### Dedicated Object 360 workspace (2026-07-25)
+
+Modeled entities now have a first-class `/ontology/objects/:id/360` operator
+workspace backed by the versioned object-360 read model. It presents object
+state, graph neighbors, lineage signals, incidents, governed decisions, and
+immutable history with deep links into the investigation workflow. See
+ADR-0143.
+
+### Canonical object investigation handoffs (2026-07-25)
+
+Legacy object links emitted by search, cases, reports, actions, and lineage
+surfaces are now upgraded in the authenticated shell to the dedicated Object
+360 workspace, preserving entity context across the Console. See ADR-0144.
+
+### Persisted ontology investigation sets (2026-07-25)
+
+Operators can now name and save selected ontology entities as durable
+investigation sets. Saved sets reopen in the bounded side-by-side comparison
+workspace and use the existing saved-view API and tenant-scoped persistence.
+See ADR-0145.
+
+### Governed bulk object property updates (2026-07-25)
+
+Operators can now apply one JSON or text property change to up to 25 selected
+modeled entities. Each object uses the normal update path, preserving schema
+validation and immutable history, with equivalent browser and REST workflows.
+See ADR-0146.
+
+### Load saved object sets into the workbench (2026-07-25)
+
+Saved ontology sets now include a direct comparison action that restores their
+live entities into the active Ontology workbench selection. Operators can
+continue from a saved comparison into existing relationship and governed bulk
+update workflows without selecting the entities again. See ADR-0147.
+
+### Complete saved-set selection restoration (2026-07-25)
+
+The saved-set handoff now restores both object IDs and object-type IDs, keeping
+type-aware relationship and governed action eligibility intact when an
+investigation set returns to the workbench.
+
+### Object 360 investigation timeline (2026-07-25)
+
+Object 360 now presents a bounded newest-first timeline combining immutable
+model changes, lineage-backed signals, linked cases, and governed decisions.
+Each activity keeps its deep link into the relevant operator workspace. See
+ADR-0148.
+
+### Search-to-Ontology investigation handoff (2026-07-25)
+
+Modeled-entity search results now support typed multi-selection. Operators can
+carry matching entities into the persistent Ontology workbench selection,
+compare up to six results, or continue directly into bounded relationship and
+governed-action workflows. See ADR-0149.
+
+### Case impact to Ontology handoff (2026-07-25)
+
+Incident detail now supports typed selection of evidence-derived modeled
+impact entities. Operators can compare affected entities or load them into the
+Ontology workbench without repeating the investigation selection. See
+ADR-0150.
+
+### Event-to-model Ontology handoff (2026-07-25)
+
+Event Detail now supports typed multi-selection of related modeled entities.
+Operators can compare signal-derived objects or load them into the Ontology
+workbench while preserving their type-aware downstream controls. See
+ADR-0151.
+
+### Object 360 governed editing (2026-07-25)
+
+Operator Object 360 workspaces now hydrate a governed modeled-state editor.
+Corrections reuse the normal ontology update contract for schema validation,
+actor attribution, and immutable history, then return to the same Object 360
+context. See ADR-0152.
+
+### Object 360 governed actions (2026-07-25)
+
+Object 360 now exposes eligible governed action contracts for the current
+object, including parameter schema, preconditions, effect definition, and
+blocked/eligible posture. Operators can execute directly from the investigation
+and return to the same object context. See ADR-0153.
+
+### Object 360 typed action parameters (2026-07-25)
+
+Object 360 action forms now generate controls from each governed JSON Schema,
+including required, numeric, boolean, array, and object parameters. The typed
+controls serialize into the same audited invocation contract used by the
+Action Center. See ADR-0154.
+
+### Object 360 schema-aware editing (2026-07-25)
+
+Object 360 now renders declared modeled properties using typed controls derived
+from the object-type property schema. Structured edits merge into the complete
+properties payload, preserving unknown source fields and the existing governed
+update path. See ADR-0155.
+
+### Object 360 relationship graph (2026-07-25)
+
+Object 360 now renders its bounded immediate neighborhood as an interactive
+radial graph with relationship labels and deep links to neighboring objects. The
+existing related-object list remains available as an accessible text fallback,
+and operators can open the full multi-hop Ontology graph from the same center.
+See ADR-0156.
+
+### Command-palette investigation handoffs (2026-07-25)
+
+Live command-palette results for modeled entities now open the canonical Object
+360 workspace and carry investigation-focus metadata. Case, signal, and decision
+results likewise update the shared focus rail when selected. See ADR-0157.
+
+### Record Journey Object 360 handoffs (2026-07-25)
+
+Record Journey now emits canonical Object 360 links for modeled entities and
+governed decision targets, with shared investigation-focus metadata for both
+object and decision context. See ADR-0158.
+
+### Object 360 durable focus views (2026-07-25)
+
+Object 360 now lets operators save the current entity as a named, tenant-scoped
+investigation view. Single-object saved views reopen the canonical Object 360
+workspace, while multi-object sets continue to reopen the comparison workspace.
+See ADR-0159.
+
+### Command-palette saved investigations (2026-07-25)
+
+The command palette now searches saved investigation views alongside live
+records and entities. Single-object views reopen Object 360, multi-object views
+reopen comparison, and saved-view search degrades independently if unavailable.
+See ADR-0160.
+
+### Object 360 source evidence (2026-07-25)
+
+Object 360 now resolves up to 25 retained source records from object lineage,
+renders them in a dedicated Source Evidence panel, and includes them in the
+investigation timeline with direct Record Journey links. See ADR-0161.
+
+### Object 360 bounded export (2026-07-25)
+
+Object 360 now exports the currently loaded bounded investigation read model as
+JSON, including modeled state, graph context, source evidence, signals, cases,
+decisions, and history. The export uses no additional data fetch and remains
+inside the existing tenant-scoped API boundary. See ADR-0162.
+
+### Object 360 relationship evidence (2026-07-25)
+
+Object 360 now exposes relationship-instance properties and direct immutable
+edge-history handoffs for each related object. Operators can inspect both the
+neighbor and the evidence/audit state of the connection. See ADR-0163.
+
+### Object 360 inline relationship history (2026-07-25)
+
+Object 360 now includes bounded immutable before/after history for each related
+relationship instance and renders it inline as a collapsed evidence disclosure.
+Operators can inspect edge mutations without leaving the active investigation,
+while the direct history API handoff remains available. See ADR-0164.
+
+### Object 360 governed relationship editing (2026-07-25)
+
+Object 360 now exposes operator-only edit controls for each related
+relationship instance, including its declared property contract and governed
+source/target context. Relationship writes validate the declared property
+schema at the ontology service boundary and continue recording immutable edge
+history. See ADR-0165.
+
+### Object 360 relationship creation (2026-07-25)
+
+Object 360 now exposes bounded, type-aware relationship contracts with
+compatible target objects and governed creation forms. Operators can connect
+the focused entity without leaving the investigation, while the ontology
+service remains authoritative for endpoint, cardinality, property-schema,
+actor, and immutable-history enforcement. See ADR-0166.
+
+### Object 360 relationship deletion (2026-07-25)
+
+Administrator-only Object 360 relationship cards now support guarded deletion
+with a validated return to the active Object 360 context. Deleted edges leave
+the live graph while their immutable delete history remains available. See
+ADR-0167.
+
+### Relationship cardinality enforcement (2026-07-25)
+
+The ontology service now enforces `many-to-one`, `one-to-many`, and
+`one-to-one` multiplicity at relationship create/update boundaries, and Object
+360 projects the resulting creation eligibility before submission. Unknown
+cardinalities are rejected. See ADR-0168.
+
+### Object 360 context refresh (2026-07-25)
+
+Object 360 now provides an explicit bounded-context refresh control with
+freshness and failure status. Operators can reload signals, cases, modeled
+state, relationships, actions, and history before taking a governed action;
+existing context remains visible if refresh fails. See ADR-0169.
+
+### Object investigation annotations (2026-07-25)
+
+Object 360 now supports tenant-scoped, append-only operator annotations. Notes
+are attributed to the acting operator, included in the bounded Object 360 read
+model and timeline, and remain distinct from immutable modeled-state history.
+See ADR-0171.
+
+### Versioned object annotation API (2026-07-25)
+
+Object annotations are now available as a first-class authenticated API resource
+at `/api/v1/ontology/objects/:id/annotations`, supporting tenant-scoped reads
+and operator-only creation for external command surfaces and integrations. See
+ADR-0172.
+
+### Explainable correlation evidence (2026-07-25)
+
+Correlation Review now exposes confidence and rationale for every safe match:
+the normalized group key matched exactly and exactly one active target case was
+found. The same bounded evidence is returned to machine clients; ambiguous
+groups remain explicitly unresolved. See ADR-0173.
+
+### Object 360 valid relationship forms (2026-07-25)
+
+Relationship editing and administrator deletion now render as sibling forms
+inside the Object 360 relationship disclosure. This removes invalid nested form
+markup and the client-side DOM repair observer, keeping each governed mutation
+boundary valid through refreshes. See ADR-0170.
+
+### Searchable object annotations (2026-07-25)
+
+Durable Object 360 annotations are now discoverable through global search and
+the command palette. Body, author, and object ID matches deep-link to the
+canonical Object 360 workspace with investigation-focus context. See ADR-0174.
+
+### Object 360 timeline filters (2026-07-25)
+
+The Object 360 investigation rail now supports local source-kind and free-text
+filtering across evidence, model changes, signals, cases, governed decisions,
+and annotations, plus inclusive start/end date windows that survive context
+refreshes. Visible-versus-total counts preserve operator awareness while
+existing timeline handoffs remain intact. See ADR-0175.
+
+### Case timeline filters (2026-07-25)
+
+Incident detail now supports source-kind, free-text, and inclusive date-window
+filtering across signals, governed responses, case lifecycle activity, model
+changes, correlation, and investigation notes. Visible-versus-total status
+preserves operator awareness while existing case evidence handoffs remain
+intact. See ADR-0176.
+
+### Signal timeline filters (2026-07-25)
+
+Signal detail now supports downstream-step and free-text filtering across the
+response waterfall and chronological execution table. Operators can isolate
+source records, normalization, analysis, triggering, governed actions, or case
+handoffs while preserving the signal evidence context. See ADR-0177.
+
+### Signal investigation export (2026-07-25)
+
+Event detail now offers a one-click JSON handoff built from the authenticated
+Event 360 contract. The bounded bundle includes signal evidence, lifecycle
+history, source records, linked cases, executions, modeled objects, governed
+actions, reviews, and degradation errors. See ADR-0178.
+
+### Case investigation export (2026-07-25)
+
+Case detail now offers a one-click JSON handoff built from the authenticated
+Incident 360 contract. The bounded bundle preserves case evidence, lifecycle
+timeline, governed responses, modeled context, review posture, and degradation
+errors while retaining the existing CSV export for tabular use. See ADR-0179.
+
+### Fresh Object 360 investigation export (2026-07-25)
+
+Object 360 now refreshes its bounded authenticated read model at export time,
+so the downloaded investigation handoff reflects current relationships,
+evidence, annotations, timeline, governed decisions, and immutable history
+instead of only the last page hydration. See ADR-0180.
+
+### Decision investigation export (2026-07-25)
+
+Action detail now offers a fresh one-click JSON handoff from the authenticated
+Action 360 contract. The bounded export preserves the immutable decision,
+contract snapshot, parameters, targets, source evidence, review posture, and
+governed recovery context without mutating the action. See ADR-0181.
+
+### Live Work queue polling (2026-07-25)
+
+My Work live mode now polls the authenticated Work API every 30 seconds,
+updates assigned, unassigned, other-owner, and decision-review counters without
+disrupting queue selections, and clearly signals when a full refresh is needed
+to inspect changed rows. See ADR-0182.
+
+### Evidence journey export (2026-07-25)
+
+Record Journey now offers a fresh one-click JSON handoff from the authenticated
+record-journey contract. The export preserves source-record identity and its
+downstream signal, case, governed-execution, and modeled-entity lineage while
+leaving replay and modeling controls unchanged. See ADR-0183.
+
+### Filtered audit API pagination (2026-07-25)
+
+Versioned audit-log queries now walk a bounded cursor window when filters are
+active, so matching immutable events beyond the newest backend page are not
+silently omitted. Continuation state is exposed through `has_more` and
+`next_before`, with the same bounded behavior documented for the operator
+feed and CSV export. See ADR-0184.
+
+### Live audit monitoring (2026-07-25)
+
+The audit feed now offers opt-in 30-second monitoring that preserves the
+current evidence filters and alerts the operator when newer immutable activity
+arrives. Refresh remains explicit so open diffs and investigation context are
+not disrupted. See ADR-0185.
+
+### Compliance evidence JSON export (2026-07-25)
+
+Compliance Snapshot now offers a fresh, authenticated JSON download built from
+the versioned compliance evidence API. It preserves control readiness,
+governance metrics, and explicit degradation errors as a structured auditor
+handoff while retaining printable output. See ADR-0186.
+
+### Persistent ontology investigation workbench (2026-07-25)
+
+Ontology now renders the browser-persisted investigation set as a visible
+workbench across search results and object filters. Each selected entity links
+to Object 360, the set can open bounded comparison, and individual selections
+can be removed without losing the rest of the investigation context. See
+ADR-0187.
+
+### Console command frame and query bars (2026-07-25)
+
+The console now uses a shared command frame and responsive query-bar fields for
+Audit, Incident Queue, and governed Action history. Related header controls are
+explicitly grouped while remaining visible; filters no longer inherit the
+legacy full-width inline-form behavior. See ADR-0188.
+
+### Configurable operational data platform (2026-07-25)
+
+Kizashi is being evolved from separate console capabilities into a configurable
+platform for typed business models, external systems of record, streaming and
+batch pipelines, governed write-back, workflows, and publishable applications.
+The platform uses reusable contracts rather than hardcoded invoice or OCR flows;
+document extraction providers are scalable pipeline processors with evidence and
+review boundaries. See ADR-0189.
+
+### Rich ontology property contract (2026-07-25)
+
+Ontology object and relationship writes now validate a shared, backward-compatible
+property contract for identity, precise numbers, money, dates/timestamps,
+object-storage evidence, vectors, coordinates, enums, entity references, and
+nested values. Definitions can carry display, sensitivity, provenance, source
+ownership, and write-policy metadata while undeclared source fields remain
+additive. See ADR-0190.
+
+### Data Source and Pipeline definition contracts (2026-07-25)
+
+Kizashi now has shared, versioned contract types for external Data Sources and
+declarative Pipeline Definitions. Data Sources distinguish read, projection,
+and command capability while requiring secret-manager references instead of
+persisted credentials; pipelines use bounded extract/transform/validate/match/
+route/write-back steps and reject arbitrary inline scripts. See ADR-0191.
+
+### Pipeline Definition control plane (2026-07-25)
+
+Config Admin now persists tenant-scoped Data Sources and Pipeline Definitions
+with authenticated CRUD APIs and immutable create/update/delete audit history.
+Pipeline changes verify that the selected Data Source is owned by the same
+tenant, closing the UUID-only cross-tenant reference path. See ADR-0192.
+
+### Pipeline Runtime durable delivery (2026-07-25)
+
+A new Pipeline Runtime service now persists version-snapshotted pipeline
+executions, tenant/pipeline-scoped idempotency keys, transactional outbox
+events, and deduplicated authoritative confirmation inbox records. Command
+execution remains awaiting confirmation until the source system reports it;
+the internal runtime API is shared-secret protected. Leased outbox rows publish
+at-least-once to RabbitMQ's `pipeline.execution` topic, and the reference HTTP
+command adapter requires idempotency and `If-Match` concurrency headers. See ADR-0193.
+
+## [2026-09-26] feature/0117-operational-platform-and-object-360 — Correction: IMAP connector follow-ups closed
+- **Type:** docs
+- **Branch:** feature/0117-operational-platform-and-object-360
+- **Summary:** Corrects the "Known gaps" line of the initial `connector-imap` entry. XOAUTH2 and
+  UID cursors were subsequently implemented by `feature/0042-imap-uid-cursor` and
+  `feature/imap-xoauth2-authentication`. Raw IMAP traffic remains outside the HTTP Egress
+  Gateway tunnel by design. Also corrects the `feature/0042-imap-uid-cursor` "Live verification"
+  line: the bounded cursor path is covered by the real Greenmail-backed connector integration and
+  the scheduler's checkpoint propagation tests; a customer-hosted mailbox is not required for the
+  deterministic cursor contract.
+- **Tests:** n/a (log correction only)
+- **PR:** (this branch's PR)
+- **ADR:** n/a
+
+## [2026-09-26] feature/0117-operational-platform-and-object-360 — Restore a green main: Rust 1.98, advisories, lint
+- **Type:** fix
+- **Branch:** feature/0117-operational-platform-and-object-360
+- **Summary:** CI pins Rust 1.98.0 and replaces the no-longer-published MinIO image with RustFS
+  (ADR-0209). Clears RUSTSEC-2026-0258 (h2 0.3, removed by moving the AWS SDK to its modern HTTP
+  client and replacing `oauth2`'s legacy `reqwest` 0.11 transport) and RUSTSEC-2026-0285 (rustls);
+  stale `deny.toml` waivers removed. Fixes new Rust 1.98 clippy lints and makes a date test that
+  had a hard-coded date relative to today, so it no longer expires out of the page's 7-day window.
+- **Tests:** full `scripts/ci-local.sh` against a real Postgres/RabbitMQ/ClickHouse/RustFS/SQL
+  Server/Greenmail stack — results in this branch's PR description.
+- **PR:** (this branch's PR)
+- **ADR:** [ADR-0209](adr/0209-rustfs-replaces-minio-image.md)

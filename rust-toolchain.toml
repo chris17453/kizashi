@@ -1,0 +1,6 @@
+# Pinned so local, CI and container builds use the same compiler and the same clippy lints.
+# Bump deliberately in its own PR (ADR-0209), never implicitly via "stable" or nightly drift.
+[toolchain]
+channel = "1.98.0"
+components = ["rustfmt", "clippy", "llvm-tools-preview"]
+profile = "minimal"

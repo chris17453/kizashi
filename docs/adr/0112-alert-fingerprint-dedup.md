@@ -65,9 +65,9 @@ AI-generated summaries.
   the record stays fully visible/investigable on the Data page) but does **not** publish
   `record.normalized` — analysis-service and trigger-engine never see it, so no re-analysis, no
   repeated trigger fire, no duplicate Action executions. `occurrence_count`/`last_seen_at` are
-  updated regardless, so the suppression itself is observable (a future UI surface — a
-  "Duplicates suppressed: N" indicator — is a cheap follow-up once this lands, not required for
-  the MVP).
+  updated regardless, so the suppression itself is observable. The normalization service also
+  persists a tenant-scoped `suppressed_count` and exposes a protected summary endpoint; the
+  Console renders those counts on the normalization mappings page.
 
 ## Consequences
 
@@ -76,6 +76,5 @@ opts a mapping into dedup, without violating the "raw/normalized data is never s
 dropped" principle — everything is still stored and visible, only the *event-driven reaction*
 to an exact repeat is suppressed. Opt-in via empty `dedup_fields` means this ships with zero
 behavior change for every existing tenant/mapping until someone deliberately configures it.
-Partial-duplicate-as-update, and any UI for configuring `dedup_fields`/viewing suppression
-counts, remain open follow-up work — this ADR scopes the backend mechanism only; no
-implementation has started yet.
+Partial-duplicate-as-update remains open follow-up work. The mapping configuration UI and
+tenant-scoped suppression telemetry are now implemented as part of this ADR's rollout.

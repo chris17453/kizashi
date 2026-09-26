@@ -14,7 +14,10 @@ fn router(state: SavedSearchQueryState) -> Router {
             "/v1/saved-search-queries",
             post(create_saved_search_query).get(list_saved_search_queries),
         )
-        .route("/v1/saved-search-queries/:id", axum::routing::delete(delete_saved_search_query))
+        .route(
+            "/v1/saved-search-queries/:id",
+            axum::routing::put(update_saved_search_query).delete(delete_saved_search_query),
+        )
         .with_state(state)
 }
 
@@ -122,6 +125,30 @@ async fn delete_removes_the_query() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn update_preserves_the_id_and_changes_the_query() {
+    let tenant_id = Uuid::new_v4();
+    let state = default_state();
+    let query = sample_query(tenant_id);
+    state.saved_search_query_repository.create(query.clone()).await.unwrap();
+    let mut updated = query.clone();
+    updated.name = "changed".to_string();
+    updated.filter = serde_json::json!({"q":"changed"});
+    let response = send(
+        router(state),
+        "PUT",
+        format!("/v1/saved-search-queries/{}", query.id),
+        Some(tenant_id),
+        Some(serde_json::to_value(&updated).unwrap()),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let returned: SavedSearchQuery = serde_json::from_slice(&body).unwrap();
+    assert_eq!(returned.id, query.id);
+    assert_eq!(returned.name, "changed");
 }
 
 #[tokio::test]

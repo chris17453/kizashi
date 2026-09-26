@@ -145,3 +145,79 @@ pub async fn process_batch(
     }
     Ok(published)
 }
+
+/// Generates one bounded incident brief through the tenant's configured analysis provider.
+/// Incident evidence is sent as a single synthetic record so the provider selection, fallback,
+/// and response parsing remain identical to normal analysis calls.
+pub async fn generate_incident_brief(
+    deps: &AnalysisDeps,
+    tenant_id: Uuid,
+    evidence: serde_json::Value,
+) -> Result<String, BatchError> {
+    const MAX_EVIDENCE_BYTES: usize = 64 * 1024;
+    let serialized_evidence = serde_json::to_string(&evidence)
+        .map_err(|error| BatchError::Analysis(error.to_string()))?;
+    if serialized_evidence.len() > MAX_EVIDENCE_BYTES {
+        return Err(BatchError::Analysis("incident evidence exceeds the 64 KiB limit".to_string()));
+    }
+
+    let config = deps
+        .analysis_config_repository
+        .get(tenant_id)
+        .await
+        .map_err(|error| BatchError::ConfigLookup(error.to_string()))?;
+    let instructions = format!("Write a concise operational incident brief from the evidence below. State impact, scope, timeline, and the next investigation step. Do not invent facts. Return JSON with a single string field named text.\n\nEvidence:\n{serialized_evidence}");
+    let prompt = config
+        .as_ref()
+        .filter(|config| !config.prompt.trim().is_empty())
+        .map(|config| format!("Tenant analysis focus:\n{}\n\n{instructions}", config.prompt))
+        .unwrap_or(instructions);
+    let record = RawRecord {
+        normalized_payload: Some(evidence),
+        ..RawRecord::new(
+            "incident-brief",
+            common::SourceType::Generic,
+            tenant_id,
+            serde_json::json!({}),
+        )
+    };
+    let primary = resolve_analysis_client(deps, config.as_ref());
+    let fallback = resolve_fallback_client(deps, config.as_ref());
+    let result = match primary.analyze_batch(tenant_id, std::slice::from_ref(&record), Some(&prompt)).await {
+        Ok(mut results) => results.pop().ok_or_else(|| {
+            BatchError::Analysis("analysis provider returned no incident brief".to_string())
+        })?,
+        Err(primary_error) if primary_error.is_retryable() && fallback.is_some() => fallback
+            .as_ref()
+            .expect("fallback checked above")
+            .analyze_batch(tenant_id, &[record], Some(&prompt))
+            .await
+            .map_err(|fallback_error| {
+                BatchError::Analysis(format!(
+                    "primary provider failed: {primary_error}; fallback provider failed: {fallback_error}"
+                ))
+            })?
+            .into_iter()
+            .next()
+            .ok_or_else(|| BatchError::Analysis("analysis provider returned no incident brief".to_string()))?,
+        Err(error) => return Err(BatchError::Analysis(error.to_string())),
+    };
+
+    let text = result
+        .get("text")
+        .or_else(|| result.get("summary"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+        .or_else(|| result.as_str().map(str::to_string))
+        .ok_or_else(|| {
+            BatchError::Analysis("analysis provider returned no brief text".to_string())
+        })?;
+    if text.len() > 8 * 1024 {
+        return Err(BatchError::Analysis(
+            "analysis provider returned an oversized brief".to_string(),
+        ));
+    }
+    Ok(text)
+}

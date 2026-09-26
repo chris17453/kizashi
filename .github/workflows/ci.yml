@@ -47,21 +47,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # minio/minio's image needs an explicit `server /data` command, which the `services:`
-      # block above can't override (no `command:` key in that schema) — so it's started as a
-      # plain docker run step instead, same image as docker-compose.yml's minio service
-      # (ADR-0011, retention-service's S3-compatible archival backend). The root password is
+      # S3-compatible object store for retention-service archival (ADR-0011) and backups.
+      # Same image as docker-compose.yml's `minio` service: RustFS, because MinIO no longer
+      # publishes pullable images (ADR-0209). Started as a plain docker run step so the
+      # credential can be generated at runtime. The root password is
       # generated fresh each run rather than hardcoded, so no secret-shaped literal ever lives
       # in this file (this is a throwaway per-run credential for a container with no data worth
       # protecting, not a real secret — generating it avoids relying on static-secret-scanner
       # path allowlisting, which doesn't reliably suppress new literals here).
-      - name: Start MinIO
+      - name: Start S3-compatible object store (RustFS)
         run: |
           MINIO_PASSWORD="ci-$(openssl rand -hex 16)"
           docker run -d --name minio -p 9100:9000 \
-            -e MINIO_ROOT_USER=kizashi \
-            -e MINIO_ROOT_PASSWORD="$MINIO_PASSWORD" \
-            minio/minio:latest server /data
+            -e RUSTFS_ACCESS_KEY=kizashi \
+            -e RUSTFS_SECRET_KEY="$MINIO_PASSWORD" \
+            rustfs/rustfs:1.0.0
           until curl -sf http://localhost:9100/minio/health/live >/dev/null; do sleep 1; done
           echo "AWS_SECRET_ACCESS_KEY=$MINIO_PASSWORD" >> "$GITHUB_ENV"
 
@@ -108,7 +108,7 @@ jobs:
           done
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.98.0
         with:
           components: rustfmt, clippy
 
@@ -133,7 +133,7 @@ jobs:
           S3_ENDPOINT_URL: http://localhost:9100
           AWS_S3_BUCKET: kizashi-archive
           AWS_ACCESS_KEY_ID: kizashi
-          # AWS_SECRET_ACCESS_KEY is set by the "Start MinIO" step via $GITHUB_ENV
+          # AWS_SECRET_ACCESS_KEY is set by the object-store start step via $GITHUB_ENV
           FABRIC_TEST_HOST: 127.0.0.1
           FABRIC_TEST_PORT: "14330"
           IMAP_TEST_HOST: 127.0.0.1

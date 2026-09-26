@@ -2,7 +2,7 @@
 #[cfg(test)]
 mod dead_letter_handlers_test;
 
-use crate::dead_letter::DeadLetterManager;
+use crate::dead_letter::{DeadLetterManager, DeadLetterPreview};
 use crate::health::ConsumerHeartbeat;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
@@ -40,9 +40,31 @@ fn has_valid_internal_secret(state: &DeadLetterState, headers: &HeaderMap) -> bo
 pub fn build_router(state: DeadLetterState) -> Router {
     Router::new()
         .route("/v1/dead-letter", get(get_dead_letter_count))
+        .route("/v1/dead-letter/peek", get(get_dead_letter_preview))
         .route("/v1/dead-letter/replay", post(post_dead_letter_replay))
         .route("/v1/resilience", get(get_resilience))
         .with_state(state)
+}
+
+#[derive(serde::Serialize)]
+struct DeadLetterPreviewResponse {
+    preview: Option<DeadLetterPreview>,
+}
+
+pub async fn get_dead_letter_preview(
+    State(state): State<DeadLetterState>,
+    headers: HeaderMap,
+) -> Response {
+    if !has_valid_internal_secret(&state, &headers) {
+        return error_response(StatusCode::UNAUTHORIZED, "invalid internal secret");
+    }
+    match state.dead_letter_manager.peek_oldest().await {
+        Ok(preview) => Json(DeadLetterPreviewResponse { preview }).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "dead letter preview failed");
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, "dead-letter preview unavailable")
+        }
+    }
 }
 
 #[derive(serde::Serialize)]

@@ -10,12 +10,12 @@ mod platform_health;
 mod service_registry;
 
 pub use backlog::{BacklogError, BacklogReader, QueueDepth, RabbitMqManagementBacklogReader};
-pub use handlers::{get_backlog, get_platform_health, AppState};
+pub use handlers::{get_backlog, get_metrics, get_platform_health, get_service_metrics, AppState};
 pub use health::healthz;
 pub use pipeline_queues::PIPELINE_QUEUES;
 pub use platform_health::{
-    check_platform_health, HttpServiceHealthChecker, PlatformHealth, ServiceHealth,
-    ServiceHealthChecker, Status,
+    check_platform_health, collect_service_metrics, HttpServiceHealthChecker, PlatformHealth,
+    ServiceHealth, ServiceHealthChecker, ServiceRequestMetrics, Status,
 };
 pub use service_registry::{parse_registry, ServiceEndpoint};
 
@@ -26,6 +26,8 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(healthz))
         .route("/v1/health", get(get_platform_health))
+        .route("/v1/service-metrics", get(get_service_metrics))
         .route("/v1/backlog", get(get_backlog))
+        .route("/metrics", get(get_metrics))
         .with_state(state)
 }

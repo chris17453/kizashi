@@ -1,0 +1,2 @@
+ALTER TABLE tenants
+    ADD COLUMN mfa_required BOOLEAN NOT NULL DEFAULT FALSE;

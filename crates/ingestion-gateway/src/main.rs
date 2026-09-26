@@ -47,5 +47,8 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "ingestion-gateway listening");
-    axum::serve(listener, build_router(state)).await.expect("server error");
+    let metrics = Arc::new(common::HttpMetrics::default());
+    axum::serve(listener, common::instrument_router(build_router(state), metrics))
+        .await
+        .expect("server error");
 }

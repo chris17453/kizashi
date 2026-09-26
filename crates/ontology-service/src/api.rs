@@ -1,4 +1,7 @@
 #[cfg(test)]
+#[path = "api_property_contract_test.rs"]
+mod api_property_contract_test;
+#[cfg(test)]
 #[path = "api_test.rs"]
 mod api_test;
 
@@ -11,8 +14,8 @@ use axum::{
     Router,
 };
 use common::ontology::{
-    ActionInvocation, ActionReview, ActionType, ActionTypeHistory, Link, LinkType, Object,
-    ObjectHistory, ObjectType,
+    ActionInvocation, ActionReview, ActionType, ActionTypeHistory, Link, LinkHistory, LinkType,
+    LinkTypeHistory, Object, ObjectAnnotation, ObjectHistory, ObjectType, ObjectTypeHistory,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -26,27 +29,40 @@ pub struct ApiState {
 pub fn ontology_router(state: ApiState) -> Router {
     Router::new()
         .route("/api/ontology/objects/types", get(list_object_types))
+        .route("/api/ontology/objects/types/history", get(list_all_object_type_history))
         .route("/api/ontology/objects/types", post(create_object_type))
         .route("/api/ontology/objects/types/:id", get(get_object_type))
         .route(
             "/api/ontology/objects/types/:id",
             post(update_object_type).delete(delete_object_type),
         )
+        .route("/api/ontology/objects/types/:id/history", get(list_object_type_history))
         .route("/api/ontology/links/types", get(list_link_types))
+        .route("/api/ontology/links/types/history", get(list_all_link_type_history))
+        .route("/api/ontology/links/types/:id/history", get(list_link_type_history))
         .route("/api/ontology/links/types", post(create_link_type))
         .route("/api/ontology/links/types/:id", post(update_link_type).delete(delete_link_type))
         .route("/api/ontology/links", get(list_links).post(create_link))
+        .route("/api/ontology/links/history", get(list_all_link_history))
+        .route("/api/ontology/links/:id/history", get(list_link_history))
         .route("/api/ontology/links/:id", post(update_link).delete(delete_link))
         .route("/api/ontology/objects", get(list_objects))
+        .route("/api/ontology/objects/history", get(list_all_object_history))
         .route("/api/ontology/objects", post(create_object))
         .route("/api/ontology/objects/:id", get(get_object))
         .route("/api/ontology/objects/:id", post(update_object).delete(delete_object))
         .route("/api/ontology/objects/:id/history", get(list_object_history))
+        .route("/api/ontology/objects/annotations", get(list_all_object_annotations))
+        .route(
+            "/api/ontology/objects/:id/annotations",
+            get(list_object_annotations).post(create_object_annotation),
+        )
         .route("/api/ontology/objects/:id/links/:link_type_id", get(traverse_links))
         .route("/api/ontology/actions/invocations", get(list_action_invocations))
         .route("/api/ontology/actions/reviews", get(list_action_reviews).post(upsert_action_review))
         .route("/api/ontology/actions/invoke", post(invoke_action))
         .route("/api/ontology/actions/types", get(list_action_types).post(create_action_type))
+        .route("/api/ontology/actions/types/history", get(list_all_action_type_history))
         .route("/api/ontology/actions/types/:id/history", get(list_action_type_history))
         .route(
             "/api/ontology/actions/types/:id",
@@ -80,7 +96,8 @@ fn write_check(headers: &HeaderMap) -> Result<Uuid, StatusCode> {
 
 fn actor(headers: &HeaderMap) -> String {
     headers
-        .get("x-username")
+        .get("x-actor")
+        .or_else(|| headers.get("x-username"))
         .and_then(|value| value.to_str().ok())
         .filter(|value| !value.trim().is_empty())
         .unwrap_or("system")
@@ -92,6 +109,15 @@ fn object_state(object: &Object) -> serde_json::Value {
         "object_type_id": object.object_type_id,
         "properties": object.properties,
         "source_lineage": object.source_lineage,
+    })
+}
+
+fn object_type_state(object_type: &ObjectType) -> serde_json::Value {
+    serde_json::json!({
+        "name": object_type.name,
+        "version": object_type.version,
+        "property_schema": object_type.property_schema,
+        "mapping_rules": object_type.mapping_rules,
     })
 }
 
@@ -108,6 +134,11 @@ struct ObjectInput {
     object_type_id: Uuid,
     properties: serde_json::Value,
     source_lineage: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+struct ObjectAnnotationInput {
+    body: String,
 }
 
 async fn create_object(
@@ -246,12 +277,83 @@ async fn list_object_history(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
+async fn list_all_object_history(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ObjectHistory>>, StatusCode> {
+    state
+        .repository
+        .list_all_object_history(tenant(&headers)?)
+        .await
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn list_object_annotations(
+    State(state): State<ApiState>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ObjectAnnotation>>, StatusCode> {
+    state
+        .repository
+        .list_object_annotations(tenant(&headers)?, id)
+        .await
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn list_all_object_annotations(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ObjectAnnotation>>, StatusCode> {
+    state
+        .repository
+        .list_all_object_annotations(tenant(&headers)?)
+        .await
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn create_object_annotation(
+    State(state): State<ApiState>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(input): Json<ObjectAnnotationInput>,
+) -> Result<Json<ObjectAnnotation>, StatusCode> {
+    let tenant_id = write_check(&headers)?;
+    let body = input.body.trim();
+    if body.is_empty() || body.len() > 4000 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    state
+        .repository
+        .get_object(tenant_id, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let annotation = ObjectAnnotation {
+        id: Uuid::new_v4(),
+        tenant_id,
+        object_id: id,
+        author: actor(&headers),
+        body: body.to_string(),
+        created_at: chrono::Utc::now(),
+    };
+    state
+        .repository
+        .create_object_annotation(annotation.clone())
+        .await
+        .map_err(|_| StatusCode::CONFLICT)?;
+    Ok(Json(annotation))
+}
+
 async fn create_object_type(
     State(state): State<ApiState>,
     headers: HeaderMap,
     Json(input): Json<ObjectTypeInput>,
 ) -> Result<Json<ObjectType>, StatusCode> {
     let tenant_id = write_check(&headers)?;
+    crate::property_contract::validate_schema(&input.property_schema)?;
     let now = chrono::Utc::now();
     let value = ObjectType {
         id: Uuid::new_v4(),
@@ -264,6 +366,20 @@ async fn create_object_type(
         updated_at: now,
     };
     state.repository.create_object_type(value.clone()).await.map_err(|_| StatusCode::CONFLICT)?;
+    state
+        .repository
+        .record_object_type_history(ObjectTypeHistory {
+            id: Uuid::new_v4(),
+            tenant_id,
+            object_type_id: value.id,
+            change_type: "created".to_string(),
+            actor: actor(&headers),
+            before_state: None,
+            after_state: Some(object_type_state(&value)),
+            changed_at: value.created_at,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(value))
 }
 
@@ -274,6 +390,7 @@ async fn update_object_type(
     Json(input): Json<ObjectTypeInput>,
 ) -> Result<Json<ObjectType>, StatusCode> {
     let tenant_id = write_check(&headers)?;
+    crate::property_contract::validate_schema(&input.property_schema)?;
     let existing = state
         .repository
         .get_object_type(tenant_id, id)
@@ -295,7 +412,46 @@ async fn update_object_type(
         .update_object_type(value.clone())
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .repository
+        .record_object_type_history(ObjectTypeHistory {
+            id: Uuid::new_v4(),
+            tenant_id,
+            object_type_id: value.id,
+            change_type: "updated".to_string(),
+            actor: actor(&headers),
+            before_state: Some(object_type_state(&existing)),
+            after_state: Some(object_type_state(&value)),
+            changed_at: value.updated_at,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(value))
+}
+
+async fn list_object_type_history(
+    State(state): State<ApiState>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ObjectTypeHistory>>, StatusCode> {
+    state
+        .repository
+        .list_object_type_history(tenant(&headers)?, id)
+        .await
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn list_all_object_type_history(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ObjectTypeHistory>>, StatusCode> {
+    state
+        .repository
+        .list_all_object_type_history(tenant(&headers)?)
+        .await
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 async fn delete_object_type(
@@ -304,7 +460,27 @@ async fn delete_object_type(
     headers: HeaderMap,
 ) -> Result<StatusCode, StatusCode> {
     let tenant_id = write_check(&headers)?;
+    let existing = state
+        .repository
+        .get_object_type(tenant_id, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
     state.repository.delete_object_type(tenant_id, id).await.map_err(|_| StatusCode::CONFLICT)?;
+    state
+        .repository
+        .record_object_type_history(ObjectTypeHistory {
+            id: Uuid::new_v4(),
+            tenant_id,
+            object_type_id: id,
+            change_type: "deleted".to_string(),
+            actor: actor(&headers),
+            before_state: Some(object_type_state(&existing)),
+            after_state: None,
+            changed_at: chrono::Utc::now(),
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -317,12 +493,31 @@ struct LinkTypeInput {
     properties_schema: Option<serde_json::Value>,
 }
 
+fn link_type_state(link_type: &LinkType) -> serde_json::Value {
+    serde_json::json!({
+        "name": link_type.name,
+        "source_object_type_id": link_type.source_object_type_id,
+        "target_object_type_id": link_type.target_object_type_id,
+        "cardinality": link_type.cardinality,
+        "properties_schema": link_type.properties_schema,
+    })
+}
+
 #[derive(Deserialize)]
 struct LinkInput {
     link_type_id: Uuid,
     source_object_id: Uuid,
     target_object_id: Uuid,
     properties: Option<serde_json::Value>,
+}
+
+fn link_state(link: &Link) -> serde_json::Value {
+    serde_json::json!({
+        "link_type_id": link.link_type_id,
+        "source_object_id": link.source_object_id,
+        "target_object_id": link.target_object_id,
+        "properties": link.properties,
+    })
 }
 
 async fn list_links(
@@ -342,6 +537,7 @@ async fn validate_link_endpoints(
     state: &ApiState,
     tenant_id: Uuid,
     input: &LinkInput,
+    exclude_link_id: Option<Uuid>,
 ) -> Result<(), StatusCode> {
     let link_type = state
         .repository
@@ -368,7 +564,47 @@ async fn validate_link_endpoints(
     {
         return Err(StatusCode::BAD_REQUEST);
     }
+    if let Some(schema) = link_type.properties_schema.as_ref() {
+        validate_object_properties(
+            schema,
+            input.properties.as_ref().unwrap_or(&serde_json::Value::Object(serde_json::Map::new())),
+        )?;
+    }
+    let links = state
+        .repository
+        .list_links(tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if link_cardinality_violated(
+        &link_type.cardinality,
+        &links,
+        input.source_object_id,
+        input.target_object_id,
+        exclude_link_id,
+    )? {
+        return Err(StatusCode::CONFLICT);
+    }
     Ok(())
+}
+
+fn link_cardinality_violated(
+    cardinality: &str,
+    links: &[Link],
+    source_object_id: Uuid,
+    target_object_id: Uuid,
+    exclude_link_id: Option<Uuid>,
+) -> Result<bool, StatusCode> {
+    let (source_unique, target_unique) = match cardinality {
+        "many-to-one" => (true, false),
+        "one-to-many" => (false, true),
+        "one-to-one" => (true, true),
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+    Ok(links.iter().any(|link| {
+        Some(link.id) != exclude_link_id
+            && ((source_unique && link.source_object_id == source_object_id)
+                || (target_unique && link.target_object_id == target_object_id))
+    }))
 }
 
 async fn create_link(
@@ -377,7 +613,7 @@ async fn create_link(
     Json(input): Json<LinkInput>,
 ) -> Result<Json<Link>, StatusCode> {
     let tenant_id = write_check(&headers)?;
-    validate_link_endpoints(&state, tenant_id, &input).await?;
+    validate_link_endpoints(&state, tenant_id, &input, None).await?;
     let now = chrono::Utc::now();
     let link = Link {
         id: Uuid::new_v4(),
@@ -390,7 +626,48 @@ async fn create_link(
         updated_at: now,
     };
     state.repository.create_link(link.clone()).await.map_err(|_| StatusCode::CONFLICT)?;
+    state
+        .repository
+        .record_link_history(LinkHistory {
+            id: Uuid::new_v4(),
+            tenant_id,
+            link_id: link.id,
+            change_type: "created".to_string(),
+            actor: actor(&headers),
+            before_state: None,
+            after_state: Some(link_state(&link)),
+            changed_at: now,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(link))
+}
+
+async fn list_link_history(
+    State(state): State<ApiState>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<LinkHistory>>, StatusCode> {
+    Ok(Json(
+        state
+            .repository
+            .list_link_history(tenant(&headers)?, id)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
+}
+
+async fn list_all_link_history(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<LinkHistory>>, StatusCode> {
+    Ok(Json(
+        state
+            .repository
+            .list_all_link_history(tenant(&headers)?)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
 }
 
 async fn update_link(
@@ -400,7 +677,7 @@ async fn update_link(
     Json(input): Json<LinkInput>,
 ) -> Result<Json<Link>, StatusCode> {
     let tenant_id = write_check(&headers)?;
-    validate_link_endpoints(&state, tenant_id, &input).await?;
+    validate_link_endpoints(&state, tenant_id, &input, Some(id)).await?;
     let existing = state
         .repository
         .list_links(tenant_id)
@@ -424,6 +701,20 @@ async fn update_link(
         .update_link(link.clone())
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .repository
+        .record_link_history(LinkHistory {
+            id: Uuid::new_v4(),
+            tenant_id,
+            link_id: id,
+            change_type: "updated".to_string(),
+            actor: actor(&headers),
+            before_state: Some(link_state(&existing)),
+            after_state: Some(link_state(&link)),
+            changed_at: link.updated_at,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(link))
 }
 
@@ -432,11 +723,30 @@ async fn delete_link(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<StatusCode, StatusCode> {
+    let tenant_id = write_check(&headers)?;
+    let existing = state
+        .repository
+        .list_links(tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .into_iter()
+        .find(|link| link.id == id)
+        .ok_or(StatusCode::NOT_FOUND)?;
+    state.repository.delete_link(tenant_id, id).await.map_err(|_| StatusCode::CONFLICT)?;
     state
         .repository
-        .delete_link(write_check(&headers)?, id)
+        .record_link_history(LinkHistory {
+            id: Uuid::new_v4(),
+            tenant_id,
+            link_id: id,
+            change_type: "deleted".to_string(),
+            actor: actor(&headers),
+            before_state: Some(link_state(&existing)),
+            after_state: None,
+            changed_at: chrono::Utc::now(),
+        })
         .await
-        .map_err(|_| StatusCode::CONFLICT)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -446,6 +756,9 @@ async fn create_link_type(
     Json(input): Json<LinkTypeInput>,
 ) -> Result<Json<LinkType>, StatusCode> {
     let tenant_id = write_check(&headers)?;
+    if let Some(schema) = input.properties_schema.as_ref() {
+        crate::property_contract::validate_schema(schema)?;
+    }
     let now = chrono::Utc::now();
     let value = LinkType {
         id: Uuid::new_v4(),
@@ -459,7 +772,48 @@ async fn create_link_type(
         updated_at: now,
     };
     state.repository.create_link_type(value.clone()).await.map_err(|_| StatusCode::CONFLICT)?;
+    state
+        .repository
+        .record_link_type_history(LinkTypeHistory {
+            id: Uuid::new_v4(),
+            tenant_id,
+            link_type_id: value.id,
+            change_type: "created".to_string(),
+            actor: actor(&headers),
+            before_state: None,
+            after_state: Some(link_type_state(&value)),
+            changed_at: now,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(value))
+}
+
+async fn list_link_type_history(
+    State(state): State<ApiState>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<LinkTypeHistory>>, StatusCode> {
+    Ok(Json(
+        state
+            .repository
+            .list_link_type_history(tenant(&headers)?, id)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
+}
+
+async fn list_all_link_type_history(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<LinkTypeHistory>>, StatusCode> {
+    Ok(Json(
+        state
+            .repository
+            .list_all_link_type_history(tenant(&headers)?)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
 }
 
 async fn delete_link_type(
@@ -467,11 +821,30 @@ async fn delete_link_type(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<StatusCode, StatusCode> {
+    let tenant_id = write_check(&headers)?;
+    let existing = state
+        .repository
+        .list_link_types(tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .into_iter()
+        .find(|link_type| link_type.id == id)
+        .ok_or(StatusCode::NOT_FOUND)?;
+    state.repository.delete_link_type(tenant_id, id).await.map_err(|_| StatusCode::CONFLICT)?;
     state
         .repository
-        .delete_link_type(write_check(&headers)?, id)
+        .record_link_type_history(LinkTypeHistory {
+            id: Uuid::new_v4(),
+            tenant_id,
+            link_type_id: id,
+            change_type: "deleted".to_string(),
+            actor: actor(&headers),
+            before_state: Some(link_type_state(&existing)),
+            after_state: None,
+            changed_at: chrono::Utc::now(),
+        })
         .await
-        .map_err(|_| StatusCode::CONFLICT)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -482,6 +855,17 @@ async fn update_link_type(
     Json(input): Json<LinkTypeInput>,
 ) -> Result<StatusCode, StatusCode> {
     let tenant_id = write_check(&headers)?;
+    if let Some(schema) = input.properties_schema.as_ref() {
+        crate::property_contract::validate_schema(schema)?;
+    }
+    let before = state
+        .repository
+        .list_link_types(tenant_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .into_iter()
+        .find(|link_type| link_type.id == id)
+        .ok_or(StatusCode::NOT_FOUND)?;
     let now = chrono::Utc::now();
     let value = LinkType {
         id,
@@ -491,12 +875,26 @@ async fn update_link_type(
         target_object_type_id: input.target_object_type_id,
         cardinality: input.cardinality,
         properties_schema: input.properties_schema,
-        created_at: now,
+        created_at: before.created_at,
         updated_at: now,
     };
     state
         .repository
-        .update_link_type(value)
+        .update_link_type(value.clone())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .repository
+        .record_link_type_history(LinkTypeHistory {
+            id: Uuid::new_v4(),
+            tenant_id,
+            link_type_id: id,
+            change_type: "updated".to_string(),
+            actor: actor(&headers),
+            before_state: Some(link_type_state(&before)),
+            after_state: Some(link_type_state(&value)),
+            changed_at: now,
+        })
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
@@ -524,6 +922,19 @@ async fn list_action_type_history(
         state
             .repository
             .list_action_type_history(tenant(&headers)?, id)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
+}
+
+async fn list_all_action_type_history(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ActionTypeHistory>>, StatusCode> {
+    Ok(Json(
+        state
+            .repository
+            .list_all_action_type_history(tenant(&headers)?)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     ))
@@ -645,43 +1056,10 @@ fn validate_object_properties(
     schema: &serde_json::Value,
     properties: &serde_json::Value,
 ) -> Result<(), StatusCode> {
-    let Some(schema) = schema.as_object() else {
-        return if schema.is_null() { Ok(()) } else { Err(StatusCode::BAD_REQUEST) };
-    };
-    let Some(properties) = properties.as_object() else {
-        return Err(StatusCode::BAD_REQUEST);
-    };
-    for (name, definition) in schema {
-        let Some(definition) = definition.as_object() else {
-            return Err(StatusCode::BAD_REQUEST);
-        };
-        let required =
-            definition.get("required").and_then(serde_json::Value::as_bool).unwrap_or(false);
-        let Some(value) = properties.get(name) else {
-            if required {
-                return Err(StatusCode::BAD_REQUEST);
-            }
-            continue;
-        };
-        let Some(expected) = definition.get("type").and_then(serde_json::Value::as_str) else {
-            return Err(StatusCode::BAD_REQUEST);
-        };
-        let matches = match expected {
-            "string" => value.is_string(),
-            "number" => value.is_number(),
-            "integer" => value.as_i64().is_some() || value.as_u64().is_some(),
-            "boolean" => value.is_boolean(),
-            "object" => value.is_object(),
-            "array" => value.is_array(),
-            _ => false,
-        };
-        if !matches {
-            return Err(StatusCode::BAD_REQUEST);
-        }
-    }
-    Ok(())
+    crate::property_contract::validate_properties(schema, properties)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn record_rejected_action(
     state: &ApiState,
     tenant_id: Uuid,
@@ -705,13 +1083,7 @@ async fn record_rejected_action(
                 triggering_event_ref.cloned().unwrap_or_else(|| serde_json::json!({}));
             if let Some(object) = context.as_object_mut() {
                 object.entry("source").or_insert_with(|| serde_json::json!("console"));
-                object.insert(
-                    "actor".to_string(),
-                    serde_json::json!(headers
-                        .get("x-username")
-                        .and_then(|h| h.to_str().ok())
-                        .unwrap_or("unknown")),
-                );
+                object.insert("actor".to_string(), serde_json::json!(actor(headers)));
                 object.insert("reason".to_string(), serde_json::json!(reason));
             }
             context
@@ -880,13 +1252,7 @@ async fn invoke_action(
             let mut context = input.triggering_event_ref.unwrap_or_else(|| serde_json::json!({}));
             if let Some(object) = context.as_object_mut() {
                 object.entry("source").or_insert_with(|| serde_json::json!("console"));
-                object.insert(
-                    "actor".to_string(),
-                    serde_json::json!(headers
-                        .get("x-username")
-                        .and_then(|h| h.to_str().ok())
-                        .unwrap_or("unknown")),
-                );
+                object.insert("actor".to_string(), serde_json::json!(actor(&headers)));
             }
             context
         },
@@ -927,7 +1293,7 @@ async fn create_action_type(
         .record_action_type_history(action_history(
             &value,
             "created",
-            headers.get("x-username").and_then(|h| h.to_str().ok()).unwrap_or("unknown"),
+            &actor(&headers),
             None,
             Some(serde_json::to_value(&value).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?),
         ))
@@ -956,7 +1322,7 @@ async fn delete_action_type(
             .record_action_type_history(action_history(
                 &action,
                 "deleted",
-                headers.get("x-username").and_then(|h| h.to_str().ok()).unwrap_or("unknown"),
+                &actor(&headers),
                 Some(serde_json::to_value(&action).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?),
                 None,
             ))
@@ -979,7 +1345,8 @@ async fn update_action_type(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .into_iter()
-        .find(|action| action.id == id);
+        .find(|action| action.id == id)
+        .ok_or(StatusCode::NOT_FOUND)?;
     let now = chrono::Utc::now();
     let value = ActionType {
         id,
@@ -989,7 +1356,7 @@ async fn update_action_type(
         parameter_schema: input.parameter_schema,
         preconditions: input.preconditions,
         effect_definition: input.effect_definition,
-        created_at: now,
+        created_at: before.created_at,
         updated_at: now,
     };
     state
@@ -1002,8 +1369,8 @@ async fn update_action_type(
         .record_action_type_history(action_history(
             &value,
             "updated",
-            headers.get("x-username").and_then(|h| h.to_str().ok()).unwrap_or("unknown"),
-            before.map(|old| serde_json::to_value(old).unwrap_or_default()),
+            &actor(&headers),
+            Some(serde_json::to_value(&before).unwrap_or_default()),
             Some(serde_json::to_value(&value).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?),
         ))
         .await

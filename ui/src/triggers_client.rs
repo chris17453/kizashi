@@ -7,7 +7,7 @@ use common::{Role, TriggerDefinition};
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct TriggerSummary {
     pub id: Uuid,
     pub name: String,
@@ -93,7 +93,7 @@ pub trait TriggersClient: Send + Sync {
     ) -> Result<(), TriggersClientError>;
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, serde::Deserialize)]
 pub struct TriggerTestResult {
     pub would_fire: bool,
     pub contributing_record_count: usize,

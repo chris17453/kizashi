@@ -30,6 +30,21 @@ impl SavedSearchQueryRepository for InMemorySavedSearchQueryRepository {
             .collect())
     }
 
+    async fn update(
+        &self,
+        query: SavedSearchQuery,
+    ) -> Result<SavedSearchQuery, SavedSearchQueryRepositoryError> {
+        let mut queries = self.queries.lock().unwrap();
+        let Some(existing) = queries
+            .iter_mut()
+            .find(|existing| existing.id == query.id && existing.tenant_id == query.tenant_id)
+        else {
+            return Err(SavedSearchQueryRepositoryError::NotFound(query.id));
+        };
+        *existing = query.clone();
+        Ok(query)
+    }
+
     async fn delete(
         &self,
         tenant_id: Uuid,
@@ -60,6 +75,13 @@ impl SavedSearchQueryRepository for FailingSavedSearchQueryRepository {
         &self,
         _tenant_id: Uuid,
     ) -> Result<Vec<SavedSearchQuery>, SavedSearchQueryRepositoryError> {
+        Err(SavedSearchQueryRepositoryError::Backend("simulated failure".to_string()))
+    }
+
+    async fn update(
+        &self,
+        _query: SavedSearchQuery,
+    ) -> Result<SavedSearchQuery, SavedSearchQueryRepositoryError> {
         Err(SavedSearchQueryRepositoryError::Backend("simulated failure".to_string()))
     }
 

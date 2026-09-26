@@ -33,6 +33,19 @@ fn sample_event() -> Event {
 
 #[tokio::test]
 async fn a_real_smtp_send_is_actually_delivered_and_readable_via_imap() {
+    if [
+        "SMTP_TEST_HOST",
+        "SMTP_TEST_PORT",
+        "IMAP_TEST_PORT",
+        "IMAP_TEST_USERNAME",
+        "IMAP_TEST_PASSWORD",
+    ]
+    .iter()
+    .any(|name| std::env::var(name).is_err())
+    {
+        eprintln!("skipping SMTP/IMAP integration test: test-mail environment is not configured");
+        return;
+    }
     let smtp_host = test_env("SMTP_TEST_HOST");
     let smtp_port: u16 = test_env("SMTP_TEST_PORT").parse().expect("SMTP_TEST_PORT must be a port");
     let imap_port: u16 = test_env("IMAP_TEST_PORT").parse().expect("IMAP_TEST_PORT must be a port");

@@ -36,15 +36,15 @@ At minimum, `my-values.yaml` must override:
 
 | Kind | Count | What |
 |---|---|---|
-| Deployment | 16 | Long-running HTTP app services (`values.yaml` → `services`) — ingestion-service, normalization-service, analysis-service, trigger-engine, action-executor, agent-scheduler, dashboard-api, egress-gateway, config-admin-service, ingestion-gateway, query-gateway, retention-service, backup-service, auth-service, observability, kizashi-ui |
+| Deployment | 19 | Long-running HTTP app services (`values.yaml` → `services`) — including Incident Service, Ontology Service, and Report Scheduler alongside the ingestion, investigation, action, and Console services |
 | Deployment | 2 | `retention-sweep-scheduler` / `backup-scheduler` — see judgment call 1 below |
-| Service | 16 | ClusterIP, one per app-service Deployment, port 8080 (`egress-gateway` also exposes 3128 for its CONNECT proxy) |
+| Service | 19 | ClusterIP, one per app-service Deployment, port 8080 (`egress-gateway` also exposes 3128 for its CONNECT proxy) |
 | CronJob | 7 | One per connector under `crates/connectors` — generic, sql, zendesk, graph-mail, graph-teams, fabric, imap |
 | ConfigMap | 1 | Shared non-secret env (`sharedEnv` in `values.yaml`), injected into every app/scheduler pod via `envFrom` |
 | Secret | 0 or 1 | Rendered only if `secret.create: true` (default); holds `secrets` placeholders |
 
-Total with default values: 18 Deployments, 16 Services, 7 CronJobs, 1 ConfigMap, 1 Secret — 43
-objects, matching `helm template kizashi deploy/helm/kizashi | grep -c '^kind:'`.
+Total with default values: 21 Deployments, 19 Services, 7 CronJobs, 1 ConfigMap, 1 Secret,
+1 ServiceAccount, 1 Role, 1 RoleBinding — 52 objects.
 
 Postgres, RabbitMQ, ClickHouse, and MinIO are **not** deployed by this chart — see below.
 
@@ -67,23 +67,11 @@ Postgres, RabbitMQ, ClickHouse, and MinIO are **not** deployed by this chart —
    by default since none has real per-tenant `TENANT_ID`/credentials/schedule yet — enabling one
    is an explicit per-tenant `values.yaml` override (see the comment above `connectors:` in
    `values.yaml`).
-3. **`agent-scheduler`'s Docker-socket mount is carried over as-is** (ADR-0020: it shells out to
-   `docker run` against the host's Docker socket). `templates/deployment.yaml` hostPath-mounts
-   `/var/run/docker.sock` and runs the pod as root when `services.agent-scheduler.runAsRoot`/
-   `dockerSocket` are true (the defaults). This is a real, known limitation, not an oversight:
-   - It only works on nodes actually running `dockerd` (not containerd-only nodes, which most
-     managed Kubernetes offerings default to today).
-   - It grants the pod effective node-root via the socket.
-   - `DOCKER_IMAGE_PREFIX`/`DOCKER_NETWORK` (in `sharedEnv`) are docker-compose concepts with no
-     direct Kubernetes equivalent; they're passed through unchanged so agent-scheduler's existing
-     binary doesn't need code changes, but they won't mean anything useful in-cluster.
-
-     The honest fix is a follow-up: give agent-scheduler a Kubernetes-native invocation path
-     (create a Job per due connector via the Jobs API, using a ServiceAccount scoped to
-     `create`/`get`/`list`/`watch` on `jobs` in its namespace) instead of shelling to `docker
-     run`. Until that lands, don't enable `agent-scheduler` against a containerd-only cluster —
-     use the manually-triggered CronJobs above, or run scheduled connectors from outside the
-     cluster.
+3. **`agent-scheduler` uses the Kubernetes Jobs API in this chart.** It runs as a non-root pod
+   with a dedicated ServiceAccount, namespace-scoped Role, and RoleBinding. Each due connector
+   becomes a bounded `batch/v1 Job` with `backoffLimit: 0` and automatic TTL cleanup; the
+   connector's checkpoint is recovered from its pod logs. Docker Compose continues to use the
+   Docker invoker and socket mount, so these two deployment paths remain explicit.
 4. **Every app pod gets the *entire* shared Secret and ConfigMap via `envFrom`**, not a
    per-service subset. Simpler for a v1 "basic" chart; not least-privilege (e.g.
    `dashboard-api`, which only needs `CLICKHOUSE_URL`, also receives `AWS_SECRET_ACCESS_KEY` as
@@ -114,7 +102,8 @@ Postgres, RabbitMQ, ClickHouse, and MinIO are **not** deployed by this chart —
   silently missing infrastructure — `sharedEnv.INGESTION_GATEWAY_PUBLIC_URL` and
   `COOKIE_SECURE` in `values.yaml` are the two settings that need to change together once you
   add one.
-- **A Kubernetes-native path for `agent-scheduler`** — see judgment call 3 above.
+- **Cluster hardening and secret isolation** — add NetworkPolicies, external-secret integration,
+  and per-service secret references once the target cluster topology is finalized.
 - **Postgres / RabbitMQ / ClickHouse / MinIO manifests** — see below.
 
 ## Infra dependencies: bring your own, on purpose

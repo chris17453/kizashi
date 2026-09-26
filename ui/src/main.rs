@@ -1,12 +1,15 @@
 use kizashi_ui::{
-    build_router, AppState, HttpAnalysisConfigClient, HttpApiKeysClient, HttpAuditLogClient,
+    build_router, initialize_action_templates_client, initialize_build_studio_client,
+    initialize_incident_brief_client, initialize_workflow_client, AppState,
+    HttpActionTemplatesClient, HttpAnalysisConfigClient, HttpApiKeysClient, HttpAuditLogClient,
     HttpAuthClient, HttpBacklogClient, HttpBackupStatusClient, HttpBrandingClient,
-    HttpEgressAllowlistClient, HttpEventsClient, HttpExecutionClient, HttpHealthClient,
-    HttpIncidentsClient, HttpIngestionStatsClient, HttpLoginAttemptsClient, HttpMfaClient,
-    HttpNormalizationMappingsClient, HttpOidcClient, HttpOntologyClient,
+    HttpBuildStudioClient, HttpEgressAllowlistClient, HttpEventsClient, HttpExecutionClient,
+    HttpHealthClient, HttpIncidentBriefClient, HttpIncidentsClient, HttpIngestionStatsClient,
+    HttpLoginAttemptsClient, HttpMfaClient, HttpNormalizationMappingsClient,
+    HttpNormalizationTelemetryClient, HttpOidcClient, HttpOntologyClient,
     HttpRetentionPoliciesClient, HttpSavedSearchQueriesClient, HttpSensorsClient,
-    HttpTriggersClient, HttpUsersClient, InMemoryPendingOidcFlowStore, InMemorySessionStore,
-    IngestionGatewayApiKeyAuditLogClient,
+    HttpTriggersClient, HttpUsersClient, HttpWorkflowClient, InMemoryPendingOidcFlowStore,
+    InMemorySessionStore, IngestionGatewayApiKeyAuditLogClient,
 };
 use std::sync::Arc;
 
@@ -44,6 +47,8 @@ async fn main() {
         std::env::var("TRIGGER_ENGINE_URL").expect("TRIGGER_ENGINE_URL must be set");
     let incident_service_url =
         std::env::var("INCIDENT_SERVICE_URL").expect("INCIDENT_SERVICE_URL must be set");
+    let pipeline_runtime_url =
+        std::env::var("PIPELINE_RUNTIME_URL").expect("PIPELINE_RUNTIME_URL must be set");
     let internal_secret =
         std::env::var("INTERNAL_API_SECRET").expect("INTERNAL_API_SECRET must be set");
     // Enterprise session-timeout policy (a real gap until this change -- sessions previously
@@ -76,10 +81,30 @@ async fn main() {
     )));
     let execution_client = HttpExecutionClient::new(client.clone(), action_executor_url)
         .with_dead_letter_services(vec![
-            ("normalization-service", normalization_service_url),
-            ("analysis-service", analysis_service_url),
+            ("normalization-service", normalization_service_url.clone()),
+            ("analysis-service", analysis_service_url.clone()),
             ("trigger-engine", trigger_engine_url.clone()),
         ]);
+    initialize_action_templates_client(Arc::new(HttpActionTemplatesClient::new(
+        client.clone(),
+        config_admin_service_url.clone(),
+    )));
+    initialize_build_studio_client(Arc::new(HttpBuildStudioClient::new(
+        client.clone(),
+        config_admin_service_url.clone(),
+        internal_secret.clone(),
+    )));
+    initialize_workflow_client(Arc::new(HttpWorkflowClient::new(
+        client.clone(),
+        pipeline_runtime_url,
+    )));
+    kizashi_ui::initialize_normalization_telemetry_client(Arc::new(
+        HttpNormalizationTelemetryClient::new(client.clone(), normalization_service_url.clone()),
+    ));
+    initialize_incident_brief_client(Arc::new(HttpIncidentBriefClient::new(
+        client.clone(),
+        analysis_service_url,
+    )));
     let state = AppState {
         session_store: Arc::new(InMemorySessionStore::with_idle_timeout(
             chrono::Duration::minutes(session_idle_timeout_minutes),
@@ -167,5 +192,10 @@ async fn main() {
     };
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind failed");
     tracing::info!(%addr, "kizashi-ui listening");
-    axum::serve(listener, build_router(state)).await.expect("server error");
+    let metrics = std::sync::Arc::new(common::HttpMetrics::default());
+    let app = build_router(state)
+        .route("/metrics", axum::routing::get(common::metrics_handler))
+        .layer(axum::middleware::from_fn(common::record_request))
+        .layer(axum::Extension(metrics));
+    axum::serve(listener, app).await.expect("server error");
 }

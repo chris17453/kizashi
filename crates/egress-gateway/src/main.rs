@@ -112,8 +112,11 @@ async fn main() {
     };
     let admin_listener = tokio::net::TcpListener::bind(&admin_addr).await.expect("bind failed");
     tracing::info!(addr = %admin_addr, "egress-gateway admin API listening");
+    let metrics = Arc::new(common::HttpMetrics::default());
     tokio::spawn(async move {
-        axum::serve(admin_listener, admin_router(admin_state)).await.expect("admin server error");
+        axum::serve(admin_listener, common::instrument_router(admin_router(admin_state), metrics))
+            .await
+            .expect("admin server error");
     });
 
     let proxy_listener = TcpListener::bind(&proxy_addr).await.expect("bind failed");

@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use common::{ActionRef, ActionType, Event};
 
 use crate::action_dispatcher::{ActionDispatcher, DispatchError, HttpActionDispatcher};
+use crate::artifact_action_dispatcher::ArtifactActionDispatcher;
 use crate::graph_send_mail_action_dispatcher::GraphSendMailActionDispatcher;
 use crate::smtp_action_dispatcher::SmtpActionDispatcher;
 use crate::teams_alert_action_dispatcher::TeamsAlertActionDispatcher;
@@ -24,6 +25,7 @@ pub struct RoutingActionDispatcher {
     smtp: SmtpActionDispatcher,
     graph: GraphSendMailActionDispatcher,
     teams: TeamsAlertActionDispatcher,
+    artifact: ArtifactActionDispatcher,
 }
 
 impl RoutingActionDispatcher {
@@ -32,7 +34,8 @@ impl RoutingActionDispatcher {
             http: HttpActionDispatcher::new(egress_proxy_url.clone()),
             smtp: SmtpActionDispatcher::new(),
             graph: GraphSendMailActionDispatcher::new(),
-            teams: TeamsAlertActionDispatcher::new(egress_proxy_url),
+            teams: TeamsAlertActionDispatcher::new(egress_proxy_url.clone()),
+            artifact: ArtifactActionDispatcher::new(egress_proxy_url),
         }
     }
 }
@@ -58,6 +61,8 @@ impl ActionDispatcher for RoutingActionDispatcher {
             self.graph.dispatch(action, event).await
         } else if action.action_type == ActionType::TeamsAlert {
             self.teams.dispatch(action, event).await
+        } else if matches!(action.action_type, ActionType::GeneratePdf | ActionType::GenerateXlsx) {
+            self.artifact.dispatch(action, event).await
         } else {
             self.http.dispatch(action, event).await
         }

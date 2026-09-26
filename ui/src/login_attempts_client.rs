@@ -8,7 +8,7 @@ use common::Role;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct LoginAttempt {
     pub username: String,
     pub success: bool,

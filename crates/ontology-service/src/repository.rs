@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use common::ontology::{
-    ActionInvocation, ActionReview, ActionType, ActionTypeHistory, Link, LinkType, Object,
-    ObjectHistory, ObjectType,
+    ActionInvocation, ActionReview, ActionType, ActionTypeHistory, Link, LinkHistory, LinkType,
+    LinkTypeHistory, Object, ObjectAnnotation, ObjectHistory, ObjectType, ObjectTypeHistory,
 };
 use uuid::Uuid;
 
@@ -19,6 +19,19 @@ pub trait OntologyRepository: Send + Sync {
     async fn create_object_type(&self, object_type: ObjectType) -> Result<(), RepositoryError>;
     async fn update_object_type(&self, object_type: ObjectType) -> Result<(), RepositoryError>;
     async fn delete_object_type(&self, tenant_id: Uuid, id: Uuid) -> Result<(), RepositoryError>;
+    async fn list_object_type_history(
+        &self,
+        tenant_id: Uuid,
+        object_type_id: Uuid,
+    ) -> Result<Vec<ObjectTypeHistory>, RepositoryError>;
+    async fn list_all_object_type_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ObjectTypeHistory>, RepositoryError>;
+    async fn record_object_type_history(
+        &self,
+        history: ObjectTypeHistory,
+    ) -> Result<(), RepositoryError>;
     async fn upsert_object(&self, object: Object) -> Result<(), RepositoryError>;
     async fn create_object(&self, object: Object) -> Result<(), RepositoryError>;
     async fn update_object(&self, object: Object) -> Result<(), RepositoryError>;
@@ -28,7 +41,24 @@ pub trait OntologyRepository: Send + Sync {
         tenant_id: Uuid,
         object_id: Uuid,
     ) -> Result<Vec<ObjectHistory>, RepositoryError>;
+    async fn list_all_object_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ObjectHistory>, RepositoryError>;
     async fn record_object_history(&self, history: ObjectHistory) -> Result<(), RepositoryError>;
+    async fn list_object_annotations(
+        &self,
+        tenant_id: Uuid,
+        object_id: Uuid,
+    ) -> Result<Vec<ObjectAnnotation>, RepositoryError>;
+    async fn list_all_object_annotations(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<ObjectAnnotation>, RepositoryError>;
+    async fn create_object_annotation(
+        &self,
+        annotation: ObjectAnnotation,
+    ) -> Result<(), RepositoryError>;
     async fn get_object_type(
         &self,
         tenant_id: Uuid,
@@ -42,6 +72,29 @@ pub trait OntologyRepository: Send + Sync {
     async fn create_link_type(&self, link_type: LinkType) -> Result<(), RepositoryError>;
     async fn update_link_type(&self, link_type: LinkType) -> Result<(), RepositoryError>;
     async fn delete_link_type(&self, tenant_id: Uuid, id: Uuid) -> Result<(), RepositoryError>;
+    async fn list_link_type_history(
+        &self,
+        tenant_id: Uuid,
+        link_type_id: Uuid,
+    ) -> Result<Vec<LinkTypeHistory>, RepositoryError>;
+    async fn list_all_link_type_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<LinkTypeHistory>, RepositoryError>;
+    async fn record_link_type_history(
+        &self,
+        history: LinkTypeHistory,
+    ) -> Result<(), RepositoryError>;
+    async fn list_link_history(
+        &self,
+        tenant_id: Uuid,
+        link_id: Uuid,
+    ) -> Result<Vec<LinkHistory>, RepositoryError>;
+    async fn list_all_link_history(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Vec<LinkHistory>, RepositoryError>;
+    async fn record_link_history(&self, history: LinkHistory) -> Result<(), RepositoryError>;
     async fn list_objects(
         &self,
         tenant_id: Uuid,
@@ -70,6 +123,10 @@ pub trait OntologyRepository: Send + Sync {
         &self,
         tenant_id: Uuid,
         action_type_id: Uuid,
+    ) -> Result<Vec<ActionTypeHistory>, RepositoryError>;
+    async fn list_all_action_type_history(
+        &self,
+        tenant_id: Uuid,
     ) -> Result<Vec<ActionTypeHistory>, RepositoryError>;
     async fn record_action_type_history(
         &self,
