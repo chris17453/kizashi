@@ -8352,3 +8352,28 @@ rendered KPI links; live verification of `/incidents?status=active&view=board` c
 ### feature/0452-chart-investigation-tooltips
 - Added a shared hover and keyboard tooltip layer to the dependency-free SVG chart renderer.
 - Report and Overview charts now expose exact label/value readouts while retaining direct drill-through links and server-rendered fallback content.
+
+---
+
+## [2026-09-26] feature/0116-yocho-crypto — `yocho-crypto`: per-subject envelope encryption and crypto-shredding
+- **Type:** feature
+- **Branch:** feature/0116-yocho-crypto
+- **Summary:** New platform-generic library crate `crates/yocho-crypto` (Yochō Phase 0 P0-2,
+  ADR-0204/ADR-0202). `KeyProvider` trait (create tenant KEK, wrap/unwrap DEK, per-tenant
+  blind-index key) with `LocalKeyProvider` (KEKs/index keys HMAC-derived from `YOCHO_MASTER_KEY`);
+  AES-256-GCM `envelope` with version byte, random nonce and AAD binding tenant+subject;
+  TTL/capacity-bounded in-memory `DekCache` evictable per subject/tenant; HMAC-SHA256
+  `BlindIndexer` with email normalisation; `yocho_subject_keys` + append-only `yocho_key_audit`
+  Postgres tables (triggers reject audit UPDATE/DELETE/TRUNCATE and any key-row change other than
+  the one-way shred transition); `SubjectCrypto::shred` tombstones the row (wrapped DEK nulled,
+  `shredded_at` set), audits in the same transaction, evicts the cache and returns the
+  `subject.shredded` event. Azure Key Vault provider is a follow-up.
+- **Tests:** `cargo test -p yocho-crypto` — 62 unit (incl. 2 proptest never-panic properties on
+  `envelope::open`), 8 real-Postgres integration (`tests/pg_key_store_integration_test.rs`:
+  round-trip across cold nodes, shred → `SubjectShredded` on every node, idempotent audited shred,
+  tombstone blocks re-keying, tenant isolation, audit/key-row immutability triggers), 5 contract
+  (`tests/subject_shredded_contract_test.rs`); 75 passed, 0 failed. `cargo llvm-cov -p
+  yocho-crypto`: 96.58% line coverage on source files. `cargo clippy -p yocho-crypto
+  --all-targets -- -D warnings` and `cargo fmt --all --check` clean.
+- **PR:** (opened in this branch's PR)
+- **ADR:** docs/adr/0204-crypto-shredding-scope.md, docs/adr/0202-yocho-cloud-portability-provider-traits.md (landing via #146)
