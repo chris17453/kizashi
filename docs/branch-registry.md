@@ -12,7 +12,7 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0115         |
+| feature       | `feature/` | 0117         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
 | docs          | `docs/`    | 0005         |
@@ -167,3 +167,4 @@ manually created branches.
 | 0004 | `docs/0004-adr-alert-fingerprint-dedup` | docs | 2026-07-20 | open | pending | |
 | 0113 | `feature/0113-alert-fingerprint-dedup` | feature | 2026-07-21 | open | pending | |
 | 0114 | `feature/0114-ontology-layer` | feature | 2026-07-22 | open | pending | |
+| 0116 | `feature/0116-yocho-crypto` | feature | 2026-09-26 | open | pending | created via worktree |

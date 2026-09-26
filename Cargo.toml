@@ -29,6 +29,7 @@ members = [
   "crates/report-scheduler",
   "crates/retention-service",
   "crates/trigger-engine",
+  "crates/yocho-crypto",
   "ui",
 ]
 
@@ -74,6 +75,8 @@ mail-parser = { version = "0.9" }
 lettre = { version = "0.11", default-features = false, features = ["tokio1", "tokio1-native-tls", "smtp-transport", "builder"] }
 totp-rs = { version = "5", features = ["gen_secret", "otpauth", "qr"] }
 aes-gcm = { version = "0.10" }
+hmac = { version = "0.12" }
+zeroize = { version = "1" }
 
 [profile.dev]
 debug = 1
