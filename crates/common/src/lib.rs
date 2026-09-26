@@ -23,6 +23,7 @@ pub mod http_metrics;
 pub mod incident;
 pub mod mapping_change_event;
 pub mod normalization_mapping;
+pub mod oauth2_http;
 pub mod pipeline_definition;
 pub mod pipeline_execution;
 pub mod raw_record;
@@ -58,6 +59,7 @@ pub use incident::{
 };
 pub use mapping_change_event::MappingChangeEvent;
 pub use normalization_mapping::NormalizationMapping;
+pub use oauth2_http::{execute_oauth2_request, OAuth2HttpError};
 pub use pipeline_definition::{validate_pipeline_definition, PipelineDefinition, PipelineMode};
 pub use pipeline_execution::{PipelineExecution, PipelineExecutionStatus};
 pub use raw_record::{RawRecord, SourceType};
