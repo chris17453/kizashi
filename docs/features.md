@@ -8352,3 +8352,17 @@ rendered KPI links; live verification of `/incidents?status=active&view=board` c
 ### feature/0452-chart-investigation-tooltips
 - Added a shared hover and keyboard tooltip layer to the dependency-free SVG chart renderer.
 - Report and Overview charts now expose exact label/value readouts while retaining direct drill-through links and server-rendered fallback content.
+
+## [2026-09-26] docs/0005-yocho-integration-adrs — Yochō plan and Kizashi integration ADRs
+- **Type:** docs
+- **Branch:** docs/0005-yocho-integration-adrs
+- **Summary:** Adds the Yochō churn early-warning module plan (`docs/yocho.md`), closes its eight
+  Kizashi-integration conflicts as reversible defaults in ADR-0200 … ADR-0208 (flat `crates/yocho-*`
+  layout in this workspace, multi-tenant signals, per-source raw retention, provider traits for
+  keys/models/training, Sensor webhook nudges, crypto-shredding scoped to Yochō data, a separate
+  ClickHouse signal tier with promotion to Events, signal retention tiers, Podman-compatible
+  compose, late-binding attribution), and a Phase 0 work breakdown (`docs/yocho-phase0.md`).
+  ADR numbering starts at 0200 to avoid colliding with ADRs 0113–0193 in uncommitted work.
+- **Tests:** docs only; no code changed, so `cargo test`/clippy/fmt were not run for this PR.
+- **PR:** pending
+- **ADR:** ADR-0200 … ADR-0208
