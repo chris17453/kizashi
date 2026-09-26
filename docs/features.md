@@ -1917,10 +1917,10 @@ architectural decision.
   raw TCP can't route through Egress Gateway's HTTP CONNECT tunnel). Added a
   `docker-compose.yml` `imap-connector` service entry following the existing
   `<name>-connector` pattern (build-arg `BIN: connector-imap`, `connectors` profile).
-- **Original follow-ups:** XOAUTH2 and UID cursors were not part of this initial connector
-  entry; both were subsequently implemented by `feature/0042-imap-uid-cursor` and
-  `feature/imap-xoauth2-authentication`. Raw IMAP traffic remains outside the HTTP Egress
-  Gateway tunnel by design.
+- **Known gaps, explicitly not done here:** XOAUTH2 auth (Gmail/Workspace with password auth
+  disabled) and UID-based incremental cursor tracking (v1 re-fetches the whole `since_date`
+  day on every poll — idempotent, not lossy, but not efficient) are tracked as follow-ups, not
+  silently dropped.
 - **Tests:** `cargo test -p connector-imap --lib` — 4 unit tests, all passed
   (`parse_message` against static RFC822 byte fixtures, including malformed/minimal-header
   inputs that must not panic). `tests/imap_connector_integration_test.rs` — 2 tests against a
@@ -2892,9 +2892,9 @@ architectural decision.
   every test binary passed, 0 failed. `cargo clippy --workspace --all-targets --all-features
   -- -D warnings` — clean. `cargo fmt --all --check` — clean. `cargo deny check` / `cargo
   audit` — clean, same 3 pre-existing allow-listed advisories.
-- **Live verification:** the bounded cursor path is covered by the real Greenmail-backed connector
-  integration and the scheduler's checkpoint propagation tests; a customer-hosted mailbox is not
-  required for the deterministic cursor contract.
+- **Live verification:** (to be completed against the real `mail-watkinslabs-com` Agent after
+  redeploying `agent-scheduler` and `connector-imap` with this fix — the Agent stays disabled
+  until that verification confirms bounded, checkpoint-advancing polls.)
 - **PR:** (opened in this branch's PR)
 - **ADR:** [ADR-0034](../docs/adr/0034-imap-uid-cursor-chunked-backfill.md) — supersedes
   ADR-0033
@@ -9392,3 +9392,30 @@ execution remains awaiting confirmation until the source system reports it;
 the internal runtime API is shared-secret protected. Leased outbox rows publish
 at-least-once to RabbitMQ's `pipeline.execution` topic, and the reference HTTP
 command adapter requires idempotency and `If-Match` concurrency headers. See ADR-0193.
+
+## [2026-09-26] feature/0117-operational-platform-and-object-360 — Correction: IMAP connector follow-ups closed
+- **Type:** docs
+- **Branch:** feature/0117-operational-platform-and-object-360
+- **Summary:** Corrects the "Known gaps" line of the initial `connector-imap` entry. XOAUTH2 and
+  UID cursors were subsequently implemented by `feature/0042-imap-uid-cursor` and
+  `feature/imap-xoauth2-authentication`. Raw IMAP traffic remains outside the HTTP Egress
+  Gateway tunnel by design. Also corrects the `feature/0042-imap-uid-cursor` "Live verification"
+  line: the bounded cursor path is covered by the real Greenmail-backed connector integration and
+  the scheduler's checkpoint propagation tests; a customer-hosted mailbox is not required for the
+  deterministic cursor contract.
+- **Tests:** n/a (log correction only)
+- **PR:** (this branch's PR)
+- **ADR:** n/a
+
+## [2026-09-26] feature/0117-operational-platform-and-object-360 — Restore a green main: Rust 1.98, advisories, lint
+- **Type:** fix
+- **Branch:** feature/0117-operational-platform-and-object-360
+- **Summary:** CI pins Rust 1.98.0 and replaces the no-longer-published MinIO image with RustFS
+  (ADR-0209). Clears RUSTSEC-2026-0258 (h2 0.3, removed by moving the AWS SDK to its modern HTTP
+  client and replacing `oauth2`'s legacy `reqwest` 0.11 transport) and RUSTSEC-2026-0285 (rustls);
+  stale `deny.toml` waivers removed. Fixes new Rust 1.98 clippy lints and makes a date test that
+  had a hard-coded date relative to today, so it no longer expires out of the page's 7-day window.
+- **Tests:** full `scripts/ci-local.sh` against a real Postgres/RabbitMQ/ClickHouse/RustFS/SQL
+  Server/Greenmail stack — results in this branch's PR description.
+- **PR:** (this branch's PR)
+- **ADR:** [ADR-0209](adr/0209-rustfs-replaces-minio-image.md)

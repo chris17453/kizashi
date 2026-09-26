@@ -12,10 +12,10 @@ manually created branches.
 
 | Type          | Prefix     | Next number |
 |---------------|------------|-------------|
-| feature       | `feature/` | 0115         |
+| feature       | `feature/` | 0118         |
 | fix           | `fix/`     | 0022         |
 | debug         | `debug/`   | 0001        |
-| docs          | `docs/`    | 0005         |
+| docs          | `docs/`    | 0006         |
 | chore         | `chore/`   | 0007         |
 
 ## Branch log (append-only, newest last)
@@ -167,3 +167,7 @@ manually created branches.
 | 0004 | `docs/0004-adr-alert-fingerprint-dedup` | docs | 2026-07-20 | open | pending | |
 | 0113 | `feature/0113-alert-fingerprint-dedup` | feature | 2026-07-21 | open | pending | |
 | 0114 | `feature/0114-ontology-layer` | feature | 2026-07-22 | open | pending | |
+| 0115 | `feature/0115-yocho-core` | feature | 2026-09-26 | open | pending | Registered retroactively 2026-09-26 (registry had drifted) |
+| 0116 | `feature/0116-yocho-crypto` | feature | 2026-09-26 | open | pending | Registered retroactively 2026-09-26 |
+| 0117 | `feature/0117-operational-platform-and-object-360` | feature | 2026-09-26 | open | pending | Registered retroactively 2026-09-26; number also used earlier by feature/0117-ontology-saved-views (see features.md) |
+| 0005 | `docs/0005-yocho-integration-adrs` | docs | 2026-09-26 | open | pending | Registered retroactively 2026-09-26 |
