@@ -48,15 +48,17 @@ services:
       timeout: 5s
       retries: 10
 
+  # S3-compatible object store (ADR-0011 archival, backup-service). MinIO stopped publishing
+  # pullable images in 2025, so this runs RustFS (Apache-2.0, S3- and MinIO-API-compatible,
+  # including /minio/health/live) under the same service name so every `http://minio:9000`
+  # endpoint, script and Helm default keeps working unchanged. See ADR-0209.
   minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9101"
+    image: rustfs/rustfs:1.0.0
     environment:
-      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-kizashi}
-      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env, see .env.example}
+      RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:-kizashi}
+      RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env, see .env.example}
     ports:
       - "${MINIO_PORT:-9100}:9000"
-      - "${MINIO_CONSOLE_PORT:-9101}:9101"
     volumes:
       - minio_data:/data
     healthcheck:
