@@ -22,4 +22,4 @@ Parallel start: P0-1, P0-2, P0-5, P0-6. Then P0-3, P0-4. Then P0-7. Then P0-8.
 
 Everything in the plan's "Open items" except the eight Kizashi-integration items (closed by the
 ADRs above, as reversible defaults). Defaults used where Phase 0 needs a number: raw mail buffer
-TTL 30 days (ADR-0201); signal tiers hot 90 d / warm 2 y / cold indefinite (ADR-0206).
+TTL 90 days, operator-configurable per tenant and source (ADR-0201); signal tiers hot 90 d / warm 2 y / cold indefinite (ADR-0206).

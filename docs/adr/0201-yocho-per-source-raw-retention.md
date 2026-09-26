@@ -18,15 +18,21 @@ and storage, while signals are kept forever. The plan itself recommends a per-so
    `source_type`/`connector_id`). The most specific matching policy wins.
 2. Add a `purge_without_archive` flag on a policy. When set, the sweep hard-deletes expired rows
    without writing an archive. This is how the Yochō mail-content buffer works: raw transport
-   mail gets a short TTL (the "raw buffer TTL" open item; default **30 days** until decided) and
-   is not archived.
-3. Every other source keeps Kizashi's default: archive then delete, with reimport.
-4. The TTL buffer *is* `raw_records`. No second raw store is introduced.
-5. Deleting a raw row must never delete signals, skeletons or lineage metadata derived from it
+   mail is purged on TTL and not archived.
+3. **Raw retention is operator-configurable, never hard-coded.** TTL, scope (tenant, data class,
+   source) and the archive/purge choice are all set per tenant in the admin console and API,
+   versioned and audit-logged like every other retention policy change. The shipped default for
+   the Yochō raw buffer is **90 days**; tenants can raise or lower it. Changing it takes effect on
+   the next sweep with no redeploy.
+4. Every other source keeps Kizashi's default: archive then delete, with reimport.
+5. The TTL buffer *is* `raw_records`. No second raw store is introduced.
+6. Deleting a raw row must never delete signals, skeletons or lineage metadata derived from it
    (ADR-0205, ADR-0206). Lineage records that the raw content is gone, not a dangling pointer.
 
 ## Consequences
 
-- Raw replay (workbench) and re-clustering are bounded by the per-source TTL, as the plan expects.
+- Raw replay (workbench), labeling and re-clustering are bounded by the configured per-source TTL
+  (90 days by default), as the plan expects. The console shows each tenant's effective window so
+  analysts know how far raw replay reaches.
 - Every retention policy change is audit-logged, as today; the new columns are part of that row.
 - Compliance holds still override TTL; a held mail record is not purged.

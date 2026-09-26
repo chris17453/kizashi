@@ -8358,7 +8358,8 @@ rendered KPI links; live verification of `/incidents?status=active&view=board` c
 - **Branch:** docs/0005-yocho-integration-adrs
 - **Summary:** Adds the Yochō churn early-warning module plan (`docs/yocho.md`), closes its eight
   Kizashi-integration conflicts as reversible defaults in ADR-0200 … ADR-0208 (flat `crates/yocho-*`
-  layout in this workspace, multi-tenant signals, per-source raw retention, provider traits for
+  layout in this workspace, multi-tenant signals, operator-configurable per-source raw retention
+  (90-day default), provider traits for
   keys/models/training, Sensor webhook nudges, crypto-shredding scoped to Yochō data, a separate
   ClickHouse signal tier with promotion to Events, signal retention tiers, Podman-compatible
   compose, late-binding attribution), and a Phase 0 work breakdown (`docs/yocho-phase0.md`).
