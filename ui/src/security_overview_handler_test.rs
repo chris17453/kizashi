@@ -167,13 +167,17 @@ async fn activity_timeline_links_each_day_to_a_scoped_audit_log() {
     let (mut state, session_id, _tenant_id) =
         state_with_session(InMemorySessionStore::default()).await;
     let recent = Arc::new(InMemoryAuditLogClient::default());
-    *recent.recent.lock().unwrap() = vec![entry("2026-07-18T12:00:00Z")];
+    // Relative to now: the timeline only covers the last seven days, so a fixed calendar date
+    // silently falls out of the window and turns this test into a time bomb.
+    let day = chrono::Utc::now() - chrono::Duration::days(1);
+    *recent.recent.lock().unwrap() = vec![entry(&day.to_rfc3339())];
     state.config_audit_log_client = recent;
 
     let response = get_page(state, &session_id).await;
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(body.contains("href=\"/audit-log?date=2026-07-18\""));
+    let expected = format!("href=\"/audit-log?date={}\"", day.format("%Y-%m-%d"));
+    assert!(body.contains(&expected), "expected a scoped audit-log link: {expected}");
     assert!(body.contains("Select a day to inspect its exact events"));
 }
 

@@ -60,6 +60,7 @@ async fn tenant_provider_error(
     }
 }
 
+#[allow(clippy::result_large_err)]
 async fn client_for_tenant(
     state: &AuthState,
     provider: &str,
@@ -83,6 +84,7 @@ async fn client_for_tenant(
     Ok(state.oidc_clients.get(provider).cloned())
 }
 
+#[allow(clippy::result_large_err)]
 async fn tenant_id_for_name(
     state: &AuthState,
     tenant_name: Option<&str>,

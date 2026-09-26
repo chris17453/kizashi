@@ -3,8 +3,8 @@
 pub(crate) mod oidc_client_test;
 
 use async_trait::async_trait;
-use oauth2::basic::BasicClient;
 use common::execute_oauth2_request;
+use oauth2::basic::BasicClient;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
     PkceCodeVerifier, RedirectUrl, Scope, TokenResponse, TokenUrl,

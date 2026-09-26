@@ -2,8 +2,8 @@
 #[cfg(test)]
 mod entra_client_credentials_test;
 
-use oauth2::basic::BasicClient;
 use common::execute_oauth2_request;
+use oauth2::basic::BasicClient;
 use oauth2::{ClientId, ClientSecret, Scope, TokenResponse, TokenUrl};
 use thiserror::Error;
 

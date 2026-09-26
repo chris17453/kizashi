@@ -41,6 +41,7 @@ fn repo_error(value: PipelineDefinitionRepositoryError) -> Response {
 fn validate(value: &PipelineDefinition) -> Result<(), Response> {
     validate_pipeline_definition(value).map_err(|message| error(StatusCode::BAD_REQUEST, message))
 }
+#[allow(clippy::result_large_err)]
 async fn require_data_source(
     state: &PipelineDefinitionState,
     value: &PipelineDefinition,
